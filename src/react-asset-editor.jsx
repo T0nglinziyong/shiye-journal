@@ -1,5 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {materialKinds,materialRoles,materialTextures,isMaterialTexture} from './material-taxonomy.js';
+import {materialKindGroups,materialRoleGroups,materialTextureGroups,materialTaxonomyHelp,isMaterialTexture} from './material-taxonomy.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {tapeFlatCanvas} from './tape-flat-crop.js';
@@ -14,7 +14,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const sourceImage=useRef(null),[sourceSize,setSourceSize]=useState(null);
   const [sourceLoaded,setSourceLoaded]=useState(0);
   const [form,setForm]=useState({title:asset.title,kind:asset.kind,role:asset.role,
-    texture:isMaterialTexture(asset.texture)?asset.texture:'未确定',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
+    texture:asset.texture||'未确定',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
     contentTags:(asset.contentTags||[]).join('、'),styleTags:(asset.styleTags||[]).join('、'),
     materialTags:(asset.materialTags||[]).join('、'),tags:(asset.tags||[]).join('、'),
     seriesID:asset.seriesID||'',reviewStatus:asset.reviewStatus||'pendingReview',
@@ -70,6 +70,13 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const select=(label,key,choices)=><label key={key}>{label}<select id={`asset-${key}`}
     value={form[key]} onChange={event=>set(key,event.target.value)}>
     {choices.map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label>;
+  const taxonomy=(label,key,groups)=><label className="material-taxonomy-field" key={key} htmlFor={`asset-${key}`}>
+    {label}<select id={`asset-${key}`} aria-describedby={`asset-${key}-hint`} value={form[key]}
+      onChange={event=>set(key,event.target.value)}>
+      {key==='texture'&&form.texture&&!isMaterialTexture(form.texture)?<option value={form.texture}>{form.texture}（现有记录，未改动）</option>:null}
+      {groups.map(group=><optgroup key={group.label} label={group.label}>{group.options.map(([id,name])=><option key={id} value={id}>{name}</option>)}</optgroup>)}
+    </select><small id={`asset-${key}-hint`}>{materialTaxonomyHelp[key]}</small>
+  </label>;
   const lengthMM=Number(form.tapeAxis==='y'?form.height:form.width);
   const number=(value,fallback=0)=>Number.isFinite(Number(value))&&value!==''?Number(value):fallback;
   const slider=(label,key,{min=0,max=100,step=1,suffix='%' }={})=><label
@@ -132,8 +139,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
             onClick={()=>setTab(index)}>{name}</button>)}
       </div><div className="material-editor-controls">
         <div className="stack material-info-panel" hidden={tab!==0}>
-          {field('名称','title')}{select('类型','kind',materialKinds)}
-          {select('画面作用','role',materialRoles)}{select('材质','texture',materialTextures.map(value=>[value,value]))}
+          {field('名称','title')}{taxonomy('类型','kind',materialKindGroups)}
+          {taxonomy('主要画面作用','role',materialRoleGroups)}{taxonomy('材质','texture',materialTextureGroups)}
           {select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']])}
         </div>
         <div className="stack material-info-panel" hidden={tab!==1}>

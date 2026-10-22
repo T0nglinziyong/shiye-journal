@@ -1,3 +1,4 @@
+import {resolvedTextFontFamily} from './text-font-presets.js';
 import {textEffectInsets,textContentWidth,textFillStyle,paintTextGlyphs} from './text-effects.js';
 import {traceSmoothInk} from './ink-path-geometry.js';
 import {pressureInkOutline} from './pressure-ink.js';
@@ -59,7 +60,7 @@ export function straightStroke(stroke){if(stroke.points.length<2)return stroke;c
 export function segmentDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}
 export function resizeObject(start,cornerX,cornerY,dx,dy){const a=(start.rotation||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a),u=dx*c+dy*s,v=-dx*s+dy*c,delta=(cornerX*u*start.width+cornerY*v*start.height)/Math.max(1,start.width**2+start.height**2),scale=Math.min(20,Math.max(1+delta,4/start.width,4/start.height)),width=start.width*scale,height=start.height*scale,x=cornerX*(width-start.width)/2,y=cornerY*(height-start.height)/2;return {width,height,x:start.x+x*c-y*s,y:start.y+x*s+y*c};}
 export function textLineHeight(t){return (typeof t.fixedLineHeight==='number'?t.fixedLineHeight:t.lineHeight||t.fontSize*1.3)+(t.lineSpacing??t.additionalLineSpacing??0);}
-export function textFontFamily(t){const fallback=t.style==='hand'?'"Kaiti SC",STKaiti,cursive':t.style==='serif'?'"Songti SC",serif':t.style==='rounded'?'"Arial Rounded MT Bold",sans-serif':'sans-serif';return (t.fontName?JSON.stringify(t.fontName)+',':'')+fallback;}
+export const textFontFamily=resolvedTextFontFamily;
 export function textFont(t){return `${t.italic?'italic ':''}${t.bold?'bold ':''}${t.fontSize}px ${textFontFamily(t)}`;}
 export function textLines(t,measure){const lines=[];let y=0;for(const paragraph of String(t.content).split('\n')){let line='';for(const ch of Array.from(paragraph)){if(line&&measure(line+ch)>textContentWidth(t)){lines.push({text:line,y});y+=textLineHeight(t);line='';}line+=ch;}lines.push({text:line,y});y+=textLineHeight(t)+(t.paragraphSpacing||0);}return {lines,height:y};}
 export function drawSceneText(ctx,node,frameHeight=node.height){

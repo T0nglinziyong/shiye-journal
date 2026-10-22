@@ -1,3 +1,8 @@
+import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
+import {DEFAULT_TEXT_PRESET} from './text-font-presets.js';
+import {textEffectStyle,editTextEffectStyle} from './text-effect-presets.js';
+import {applySceneNodeChange} from './scene-edit-kernel.js';
+import {styleFor} from './scene-node-properties.js';
 import {commitSceneEditSession} from './scene-edit-session.js';
 import {editMaterialGeometry,restoreMaterialBaseline,replaceEditableMaterial,reshapeEditableTape} from './scene-material-edit.js';
 import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditableScene} from './scene-structure-edit.js';
@@ -637,8 +642,6 @@ function render(){
   if(renderInProgress){renderQueued=true;return;}
   renderInProgress=true;
   try{
-  if(state.route==='editor'&&state.activeProject?.drafts?.some(d=>d.textBlocks?.some(t=>t.style==='hand')))
-    void import('@fontsource/ma-shan-zheng/chinese-simplified-400.css');
   // Keep the import photo queue at the exact scroll position while the whole
   // view is replaced on every photo switch, load-progress update and confirm.
   // Do not scroll the selected photo into view: that causes backward jumps.
@@ -980,6 +983,15 @@ function bindPage({partial=false}={}){
 function updateEditorInspector(id,value){
   const d=current(),entry=d&&editorEntry(d).find(item=>item.value.id===state.selected);
   if(!d)return;
+  if(id.startsWith('inspector-effect-')){
+    if(entry?.kind!=='text')return;
+    const style=editTextEffectStyle(entry.value,id.slice('inspector-effect-'.length),value,d.canvas.height/d.physicalPageHeightMM);
+    checkpoint();applySceneNodeChange(d,entry.value.id,{style},{policy:USER_SCENE_POLICY});saveProject();if(!state.inspectorSession)render();return;
+  }
+  if(id==='inspector-text-effect'){
+    if(entry?.kind!=='text')return;
+    const style=textEffectStyle(value);checkpoint();applySceneNodeChange(d,entry.value.id,{style},{policy:USER_SCENE_POLICY});saveProject();if(!state.inspectorSession)render();return;
+  }
   if(id.startsWith('inspector-tape-')){
     if(entry?.kind!=='material'||!entry.value.tapeStrip)throw Error('请先选择胶带段');
     const record=asset(entry.value.assetID),node=entry.value,strip=node.tapeStrip;
@@ -1612,6 +1624,12 @@ async function runAppAction(action,id,value){try{
     state.canvasViewports?.set(state.activeProject.id+':'+current().id,{scale:1,x:0,y:0});
     render();break;
   }
+  case 'fabric-text-effect':{
+    const style=textEffectStyle(id),d=current(),entry=editorEntry(d).find(item=>item.value.id===state.selected);
+    if(entry?.kind==='text'){checkpoint();applySceneNodeChange(d,entry.value.id,{style},{policy:USER_SCENE_POLICY});saveProject();}
+    else state.textDefaults={style:DEFAULT_TEXT_PRESET,fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,...styleFor('text',style,d)};
+    render();break;
+  }
   case 'fabric-text-property':{
     const allowed=['style','fontSize','color','alignment','bold','italic','underline','strikethrough'];
     if(!allowed.includes(id))break;
@@ -1628,7 +1646,7 @@ async function runAppAction(action,id,value){try{
       checkpoint();applySceneNodePatch(current(),entry.value.id,{[id]:next,...(id==='style'?{fontName:null}:{})},{policy:USER_SCENE_POLICY});
       saveProject();
     }else{
-      state.textDefaults={style:'serif',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,[id]:next};
+      state.textDefaults={style:DEFAULT_TEXT_PRESET,fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,[id]:next};
       if(id==='style')state.textDefaults.fontName=null;
     }
     render();break;
@@ -2721,7 +2739,7 @@ function openSeriesEditor(id){
         createdAt:existing?.createdAt||new Date().toISOString(),
         title:values.title,introduction:values.introduction,
         styleTags:parseTags(values.styleTags),semanticTags:parseTags(values.semanticTags),
-        coverAssetIDs:values.coverAssetIDs,coverAssetID:values.coverAssetID,
+        coverAssetIDs:values.coverAssetIDs,coverAssetID:values.coverAssetID,coverLayout:values.coverLayout,
         updatedAt:new Date().toISOString()};
       await db.put('series',next);
       if(existing)state.series[state.series.indexOf(existing)]=next;else state.series.push(next);

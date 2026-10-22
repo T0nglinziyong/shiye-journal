@@ -128,8 +128,8 @@ try {
   // Custom covers and tags survive reload; cancellation does not save.
   await openSeries();await click('[data-act="series-detail"]','.series-contents');await click('#series-edit-title','#series-name');await fill('#series-style-tags','浏览器验收，植物、植物');
   const originalTitle=await evaluate('document.querySelector("#series-name").value');
-  await click('#series-auto-cover');await click('.cover-picker [data-cover]');await click('#series-save');await sleep(100);
-  const saved=(await storeRecords('series')).find(s=>s.title===originalTitle);assert.deepEqual(saved.styleTags,['浏览器验收','植物']);assert.equal(saved.coverAssetIDs.length,2);
+  await click('#series-auto-cover');const autoCoverCount=await evaluate('document.querySelectorAll(".cover-picker [aria-pressed=true]").length');await click('.cover-picker [data-cover]');await click('#series-save');await sleep(100);
+  const saved=(await storeRecords('series')).find(s=>s.title===originalTitle);assert.deepEqual(saved.styleTags,['浏览器验收','植物']);assert.equal(saved.coverAssetIDs.length,autoCoverCount-1);
   await command('Page.reload');await wait('.series-grid');await fill('[aria-label="搜索系列"]','浏览器验收');assert.equal(await evaluate('[...document.querySelectorAll("[data-act=series-detail]")].filter(e=>!e.hidden).length'),1);
   await click('[data-act="series-detail"]','.series-contents');await click('#series-edit-title','#series-name');await fill('#series-name','不应保存');await click('#series-cancel');assert.ok(!(await storeRecords('series')).some(s=>s.title==='不应保存'));
   const allMembers=await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length');

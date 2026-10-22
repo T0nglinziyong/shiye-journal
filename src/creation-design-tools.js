@@ -31,16 +31,19 @@ export function addDecoration(doc,item,assets,{finishNode}){
  const measured=target.type==='text'?measureSceneText(target):null;
  const contentWidth=measured?Math.min(box.w,measured.width):box.w;
  const extent=item.size?dimensions(doc.page,item.size,{parentID:parent,ratio:box.w/Math.max(box.h,1)}):{width:contentWidth/s,height:box.h/s};
- const width=extent.width*s,height=item.kind==='bracket'?extent.height*s:Math.max(1,Math.min(3*s,extent.height*s/6));
+ const motif=['circle','star'].includes(item.kind);
+ const width=(motif&&!item.size?(item.kind==='star'?7:9):extent.width)*s,height=motif?(item.size?extent.height*s:width):item.kind==='bracket'?extent.height*s:Math.max(1,Math.min(3*s,extent.height*s/6));
  const penWidth=item.style?.strokeWidthMm??(item.kind==='highlight'?Math.max(.5,Math.min(8,(target.fontSize||12)/s*.45)):.55);
  let points;
- if(item.kind==='bracket')points=[[width*.15,0],[0,0],[0,height],[width*.15,height]];
+ if(item.kind==='circle'){const phase=rng()*Math.PI*2;points=Array.from({length:41},(_,i)=>{const a=i/40*Math.PI*2;const wobble=1+.025*Math.sin(3*a+phase);return [width/2+Math.cos(a)*width*.46*wobble,height/2+Math.sin(a)*height*.46*wobble];});}
+ else if(item.kind==='star')points=Array.from({length:11},(_,i)=>{const a=-Math.PI/2+i*Math.PI/5,r=i%2===0?.48:.21;return [width/2+Math.cos(a)*width*r,height/2+Math.sin(a)*height*r];});
+ else if(item.kind==='bracket')points=[[width*.15,0],[0,0],[0,height],[width*.15,height]];
  else points=Array.from({length:7},(_,i)=>[width*i/6,(rng()-.5)*height*.35]);
  const node={id:item.id,agentKey:item.id,type:'ink',points:points.map(([x,y])=>({x,y,p:.5})),width:penWidth*s,color:item.kind==='highlight'?'#E8D66B':'#546E7A',penStyle:item.kind==='highlight'?'marker':'ballpoint',layoutRotation:0,zIndex:500,opacity:item.kind==='highlight'?.45:1,blendMode:item.kind==='highlight'?'multiply':'normal'};
  const style={...item.style,strokeWidthMm:penWidth};Object.assign(node,changedNodeProperties(doc.page,node,{style}));
  doc=insertSceneNode(doc,node,assets,parent);
  const align=target.alignment||'left',fractionX=measured?(align==='center'?.5:align==='right'?1-contentWidth/(2*box.w):contentWidth/(2*box.w)):.5;
  const pad=textEffectInsets(target),fractionY=item.kind==='highlight'?(pad.top+(target.fontSize||box.h)*.62)/box.h:1;
- const placement=item.place||(item.kind==='bracket'?{reference:'node:'+target.id,referenceAnchor:'middle-left',anchor:'middle-right',offset:{value:[-1.5,0],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'}:{reference:'node:'+target.id,at:[fractionX,fractionY],unit:'ratio',anchor:'center',offset:{value:item.kind==='underline'?[0,1.5]:[0,0],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'});
+ const placement=item.place||(motif?{reference:'node:'+target.id,referenceAnchor:'top-right',anchor:'center',offset:{value:[2,-1],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'}:item.kind==='bracket'?{reference:'node:'+target.id,referenceAnchor:'middle-left',anchor:'middle-right',offset:{value:[-1.5,0],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'}:{reference:'node:'+target.id,at:[fractionX,fractionY],unit:'ratio',anchor:'center',offset:{value:item.kind==='underline'?[0,1.5]:[0,0],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'});
  return finishNode(doc,item.id,{place:placement,order:item.order||{[item.kind==='highlight'?'before':'after']:target.id}},assets,{created:true});
 }

@@ -1,3 +1,4 @@
+import {DEFAULT_TEXT_PRESET} from './text-font-presets.js';
 import {mountLiveInkStroke} from './ink-live-svg.js';
 import {materialKinds} from './material-taxonomy.js';
 import {configureInkBacking} from './ink-raster-scale.js';
@@ -147,7 +148,7 @@ export function mountCanvasEditor(c){
     if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
     if(['material','layers','paper'].includes(mode))return;
     if(mode==='text'||kind==='text'){
-      const t=kind==='text'?s:(state.textDefaults||={style:'serif',fontSize:40,color:'#30463d'});
+      const t=kind==='text'?s:(state.textDefaults||={style:DEFAULT_TEXT_PRESET,fontSize:40,color:'#30463d'});
       const patch=(key,value)=>{
         if(kind!=='text'){state.textDefaults={...t,[key]:value,...(key==='style'?{fontName:null}:{})};contextTools();return;}
         // Never tear down a brand-new empty textarea to change font/size:

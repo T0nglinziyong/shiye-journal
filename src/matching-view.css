@@ -98,17 +98,20 @@
   .matching-page .match-previews .match-variant{padding:7px}
 }
 
-/* Six peer controls share a compact two-row grid on all supported screens. */
+/* Six native controls: three columns on wide screens, two on phones.
+   Typography is quieter without reducing the 44px touch target. */
 .match-creative-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
-.match-creative-controls>label{display:flex;flex-direction:column;gap:6px;min-width:0}
-.match-creative-controls select{width:100%;max-width:100%;min-width:0;min-height:44px;box-sizing:border-box;text-overflow:ellipsis}
+.match-creative-controls>label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;font-weight:500;line-height:1.4;color:#667461}
+.match-creative-controls select{width:100%;max-width:100%;min-width:0;min-height:44px;box-sizing:border-box;text-overflow:ellipsis;font-family:inherit;font-size:14px;font-weight:400;line-height:1.4;padding:10px 28px 10px 10px;color:#334536;background-color:#fffefa}
+.match-creative-controls option{font-size:14px;font-weight:400}
+.match-creative-controls select:focus-visible{outline:2px solid #65846a;outline-offset:2px}
 .match-intent-label{display:flex;flex-direction:column;gap:6px}
 .matching-page .match-intent-label textarea{min-height:64px;height:64px;resize:vertical}
 @media(max-width:680px){
   .matching-page .match-direction{padding:14px}
   .matching-page .match-direction>h2{font-size:18px;margin:0 0 6px}
   .matching-page .match-direction>p{font-size:13px;margin:0 0 10px}
-  .match-creative-controls{gap:12px 8px;margin:12px 0}
-  .match-creative-controls>label,.match-intent-label{font-size:13px}
-  .match-creative-controls select{padding:8px 4px;font-size:14px}
+  .match-creative-controls{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px;margin:12px 0}
+  .match-creative-controls>label{font-size:12px}.match-intent-label{font-size:13px}
+  .match-creative-controls select{padding:10px 24px 10px 10px;font-size:14px}
 }

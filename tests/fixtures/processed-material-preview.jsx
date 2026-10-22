@@ -1,0 +1,23 @@
+import React,{useState,useEffect} from 'react';
+import {createRoot} from 'react-dom/client';
+import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
+import {MaterialPieceImage} from '/src/fabric-editor-controls.jsx';
+import {mountPrivateImages,imagePlaceholder} from '/src/lazy-private-images.js';
+import {drawSceneText,textFont} from '/src/editor-tools-model.js';
+const c=document.createElement('canvas');c.width=300;c.height=100;const x=c.getContext('2d');for(const [i,color] of ['#FF0000','#00FF00','#0000FF'].entries()){x.fillStyle=color;x.fillRect(i*100,0,100,100);}const pinned=await new Promise(r=>c.toBlob(r));
+x.fillStyle='#FF8800';x.fillRect(0,0,300,100);const latest=await new Promise(r=>c.toBlob(r));
+const reads=[];const unmount=mountPrivateImages({root:document.body,db:{previewBlob:async id=>{reads.push(id);return id==='pinned'?pinned:latest;}},urls:new Map(),onError:error=>{window.__previewError=error.message;}});
+const base={id:'ai-piece',type:'material',sourceBlobId:'pinned',width:100,height:100,cropRect:{x:2/3,y:0,width:1/3,height:1},opacity:1};
+const asset={id:'library',blobId:'latest',title:'Original',kind:'paper'};
+function Demo(){const [item,setItem]=useState(base),[used,setUsed]=useState(true);
+ useEffect(()=>{window.__previewFixture={reads,setItem:(change)=>setItem({...base,...change}),setUsed};},[]);
+ return <main><h1>已使用裁片 / 原始素材</h1><div className="sample"><MaterialPieceImage asset={asset} item={used?item:undefined} source={imagePlaceholder}/></div><canvas id="font-sample" width="600" height="260"/><p>艺术手写与普通字体对照（合成）</p></main>;
+}
+const style=document.createElement('style');style.textContent='body{margin:0;background:#f6f2e9;color:#344333;font:14px sans-serif}main{max-width:700px;margin:auto;padding:20px}h1{font-size:22px}.sample{background:#fff;width:240px;height:180px;display:grid;place-items:center}.material-piece-image{position:relative;display:grid;place-items:center;width:220px;height:160px}.material-piece-image img,.material-piece-image canvas{max-width:100%;max-height:100%;object-fit:contain}#font-sample{max-width:100%;height:auto;margin-top:25px}';document.head.append(style);
+createRoot(document.querySelector('#root')).render(<Demo/>);
+const node={id:'sample',type:'text',style:'hand',fontSize:48,width:560,height:100,content:'艺术手帐 新的一页',color:'#334D4A',alignment:'center'};
+const loaded=await document.fonts.load(textFont(node),node.content);await document.fonts.ready;
+const [a,b]=await Promise.all([node,{...node,style:'sans'}].map(async n=>{const c=document.createElement('canvas');c.width=600;c.height=120;const t=c.getContext('2d');t.translate(300,60);drawSceneText(t,n);return c;}));
+for(let i=0;i<100&&!document.querySelector('#font-sample');i++)await new Promise(r=>setTimeout(r,10));
+const preview=document.querySelector('#font-sample').getContext('2d');preview.drawImage(a,0,0);preview.drawImage(b,0,130);
+window.__fontEvidence={families:loaded.map(f=>({family:f.family,status:f.status})),different:a.toDataURL()!==b.toDataURL()};window.__previewReady=true;

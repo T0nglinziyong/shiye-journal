@@ -38,6 +38,7 @@ export function styleFor(type,style,page,node={}){
 export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_SCENE_POLICY,confirmation}={}){
  const next=structuredClone(node),s=sceneScale(page);
  Object.assign(next,styleFor(node.type,change.style,page,node));
+ if(node.type==='text'&&change.style?.fontPreset!==undefined&&change.style.fontFamily===undefined)next.fontName=null;
  if(change.content!==undefined){if(node.type!=='text')throw Error('content 只适用于文字');next.content=change.content;}
  if(change.name!==undefined){if(node.type!=='group')throw Error('name 只适用于组合');next.name=change.name;}
  if(change.hidden!==undefined){next.hidden=change.hidden;next.isHidden=change.hidden;if(!change.hidden)next.isParked=false;}

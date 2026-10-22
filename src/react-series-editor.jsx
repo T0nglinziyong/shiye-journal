@@ -1,3 +1,5 @@
+import {SeriesCover} from './react-series-cover.jsx';
+import {seriesCoverLayouts,resolvedSeriesCoverLayout} from './series-cover-layout.js';
 import React,{useRef,useState} from 'react';
 import {seriesCovers} from './library-model.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
@@ -8,8 +10,9 @@ export function SeriesEditorDialog({series,members,assets,source,onClose,onSave,
     [semantics,setSemantics]=useState((series?.semanticTags||[]).join('、')),
     [automatic,setAutomatic]=useState(series?.coverAssetIDs==null),
     [chosen,setChosen]=useState(()=>series?seriesCovers(series,assets).map(asset=>asset.id):[]),
+    [layout,setLayout]=useState(resolvedSeriesCoverLayout(series?.coverLayout)),
     [busy,setBusy]=useState(false),[error,setError]=useState('');
-  const formState=JSON.stringify({title,about,styles,semantics,automatic,chosen});
+  const formState=JSON.stringify({title,about,styles,semantics,automatic,chosen,layout});
   const initial=useRef(formState);
   useUnsavedInput('系列信息',formState!==initial.current);
   const choose=id=>{
@@ -24,7 +27,7 @@ export function SeriesEditorDialog({series,members,assets,source,onClose,onSave,
     setBusy(true);setError('');
     try{await onSave({title:title.trim(),introduction:about.trim(),styleTags:styles,
       semanticTags:semantics,coverAssetIDs:automatic?null:[...chosen],
-      coverAssetID:automatic?null:chosen[0]||null});onClose();}
+      coverAssetID:automatic?null:chosen[0]||null,coverLayout:layout});onClose();}
     catch(cause){setError(cause.message||'保存失败');}
     finally{setBusy(false);}
   };
@@ -43,17 +46,22 @@ export function SeriesEditorDialog({series,members,assets,source,onClose,onSave,
         <label>内容标签<input id="series-semantic-tags" value={semantics}
           onChange={event=>setSemantics(event.target.value)}/></label>
         <p>用逗号分隔多个标签，搜索系列时也能找到它们。</p>
-        <h3>系列封面</h3><p>最多选择 5 件素材，共同组成封面。</p>
+        <h3>系列封面</h3><p>自动展示前 4 件；手选最多 5 件。首选素材作为重点，完整显示，不裁去主体。</p>
+        <div className="series-editor-cover-preview"><SeriesCover preview priority
+          series={{id:series?.id||'__new-series__',title,coverAssetIDs:automatic?null:chosen,coverLayout:layout}}
+          assets={assets} source={source}/></div>
+        <div className="series-cover-settings"><label htmlFor="series-cover-layout">封面排布<select id="series-cover-layout" value={layout}
+          onChange={event=>setLayout(event.target.value)}>{seriesCoverLayouts.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
         <button type="button" className="btn" id="series-auto-cover" onClick={()=>{
-          setAutomatic(true);setChosen(members.slice(0,3).map(asset=>asset.id));
-        }}>使用自动封面（前 3 件）</button>
-        <p id="series-cover-state">{automatic?'自动封面':`已选择 ${chosen.length} / 5`}</p>
+          setAutomatic(true);setChosen(seriesCovers({...series,id:series?.id||'__new-series__',coverAssetIDs:null},assets).map(asset=>asset.id));
+        }}>恢复自动选材</button></div>
+        <p id="series-cover-state">{automatic?'自动选材 · 展示前 4 件，按上方排布方式组合':`已选择 ${chosen.length} / 5`}</p>
         <div className="mini-assets cover-picker">{members.map(asset=><button type="button"
           className={`mini-asset ${chosen.includes(asset.id)?'selected':''}`} key={asset.id}
           data-cover={asset.id} aria-pressed={chosen.includes(asset.id)} onClick={()=>choose(asset.id)}>
           {source(asset.blobId)||asset.staticPath?<img src={source(asset.blobId)||asset.staticPath}
             data-asset-image-id={asset.id} alt={asset.title}/>:<span>无预览</span>}
-          <span>{asset.title}</span>
+          {chosen.includes(asset.id)?<b className="cover-order" aria-hidden="true">{chosen.indexOf(asset.id)+1}</b>:null}<span>{asset.title}</span>
         </button>)}</div>
         {!members.length?<p>先向系列添加素材，再选择封面。</p>:null}
         <p id="series-error" role="alert">{error}</p>

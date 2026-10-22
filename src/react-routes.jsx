@@ -1,3 +1,5 @@
+import {DEFAULT_TEXT_PRESET,textFontPresets} from './text-font-presets.js';
+import {textEffectPresets,textEffectName} from './text-effect-presets.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -39,7 +41,7 @@ import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
-import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
+import {SeriesCover} from './react-series-cover.jsx';
 import {importDefaultTitle} from './import-default-names.js';
 
 function RouteImage({asset,source,priority=false}){
@@ -48,35 +50,6 @@ function RouteImage({asset,source,priority=false}){
     priority={priority} alt={asset.title}/><OrganizationBadge id={asset.id}/></>:<span>无预览</span>;
 }
 
-function SeriesCover({series,assets,seriesCovers,source,priority,account}){
-  const coverRef=useRef(null);
-  const [snapshot,setSnapshot]=useState(null);
-  const members=seriesCovers(series,assets);
-  const key=JSON.stringify([account,series.id,seriesCoverSignature(series,assets),
-    members.map(asset=>source(asset.blobId)||asset.staticPath||'')]);
-  useEffect(()=>{
-    const cover=coverRef.current;
-    if(!cover)return;
-    let cancelled=false;
-    const start=()=>void loadSeriesCoverSnapshot({cover,series,assets,account})
-      .then(url=>{if(!cancelled&&url)setSnapshot({key,url});})
-      .catch(()=>{});
-    if(priority||typeof IntersectionObserver!=='function')start();
-    else{
-      const observer=new IntersectionObserver(entries=>{
-        if(entries.some(entry=>entry.isIntersecting)){observer.disconnect();start();}
-      },{rootMargin:'260px'});
-      observer.observe(cover);
-      return ()=>{cancelled=true;observer.disconnect();};
-    }
-    return ()=>{cancelled=true;};
-  },[key]);
-  return <div className="series-cover" ref={coverRef}>
-    {members.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority={priority}/>)}
-    {snapshot?.key===key?<img className="series-cover-snapshot" alt="" src={snapshot.url}
-      loading={priority?'eager':'lazy'} decoding="async"/>:null}
-  </div>;
-}
 
 function DetailLinkIcon({kind}){
   const lines=kind==='folder'?<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></>
@@ -782,7 +755,7 @@ export function SeriesPage({series,assets,display,seriesCovers,source,account,on
           aria-pressed={active?selection.selected.has(entry.id):undefined}
           holdDisabled={active} onHold={()=>setSeriesMenuID(entry.id)}
           onActivate={event=>selectEntry(event,entry)}>
-          <SeriesCover series={entry} assets={assets} seriesCovers={seriesCovers}
+          <SeriesCover series={entry} assets={assets}
             source={source} priority={index<2} account={account}/>
           <div className="card-body"><h3>{entry.title} <span aria-hidden="true">→</span></h3><p>{members.length} 件素材</p></div>
         </PressCard>;
@@ -817,7 +790,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
   },[]);
   const model=seriesContentsModel(state);
   if(!model)return <p>系列已移走</p>;
-  const {series,filter,all,members,covers}=model;
+  const {series,filter,all,members}=model;
   const selectedOnly=selectionActive(selection,'asset')&&selection.showOnlySelected;
   const pageKey='series:'+series.id+(selectedOnly?':selected':'');
   const sourceItems=selectedOnly?members.filter(asset=>selection.selected.has(asset.id)):members;
@@ -835,7 +808,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
       <div className="actions" id="series-actions"><SelectionToggle mode="asset"
         selection={selection} onToggle={onSelectionToggle}/></div></div>
     <div className="view-head series-heading"><div className="series-identity">
-      <div className="series-detail-cover">{covers.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority/>)}</div>
+      <div className="series-detail-cover series-detail-composed"><SeriesCover series={series} assets={state.assets} source={source} priority account={state.accountId||'browser'}/></div>
       <div className="series-copy"><div className="eyebrow">COLLECTION</div>
         <h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签"
           onClick={onEditSeries}>{series.title} <span aria-hidden="true">✎</span></button></h1>
@@ -1068,7 +1041,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
         onChange={event=>onChange('inspector-text',event.target.value)}/></label>
       <div className="form-grid">
-        {choice('inspector-font','字体',item.style||'serif',[[ 'serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']])}
+        {choice('inspector-font','字体',item.style||DEFAULT_TEXT_PRESET,textFontPresets.map(({id,label})=>[id,label]))}
         {field('inspector-font-size','字号',item.fontSize,'number',{min:5,max:400,step:1})}
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
@@ -1082,6 +1055,18 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         {field('inspector-paragraph-spacing','段距',item.paragraphSpacing??0,'range',{min:0,max:80,step:.5})}
         {choice('inspector-fixed-line-height','行高',item.fixedLineHeight??'',[
           ['','自动'],...([1,1.2,1.5,2].map(ratio=>[Math.round((item.fontSize||40)*ratio),`${ratio} 倍`]))])}
+        {choice('inspector-text-effect','艺术字效果',textEffectName(item),textEffectPresets)}
+        {item.textOutline?<>
+          {field('inspector-effect-outline-color','描边颜色',item.textOutline.color,'color')}
+          {field('inspector-effect-outline-width','描边宽度 mm',item.textOutline.width*draft.physicalPageHeightMM/draft.canvas.height,'number',{min:.01,max:5,step:.1})}
+          {field('inspector-effect-outline-x','轮廓水平偏移 mm',item.textOutline.offsetX*draft.physicalPageHeightMM/draft.canvas.height,'number',{min:-8,max:8,step:.1})}
+          {field('inspector-effect-outline-y','轮廓垂直偏移 mm',item.textOutline.offsetY*draft.physicalPageHeightMM/draft.canvas.height,'number',{min:-8,max:8,step:.1})}
+        </>:null}
+        {item.textGradient?<>
+          {field('inspector-effect-gradient-start','渐变起始颜色',item.textGradient.stops[0].color,'color')}
+          {field('inspector-effect-gradient-end','渐变结束颜色',item.textGradient.stops.at(-1).color,'color')}
+          {field('inspector-effect-gradient-angle','渐变方向 °',item.textGradient.angleDeg,'range',{min:-180,max:180,step:5})}
+        </>:null}
         {field('inspector-font-name','指定字体',item.fontName||'','text',{placeholder:'留空使用上方字体'})}
       </div>
     </>:null}

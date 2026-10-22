@@ -1,3 +1,5 @@
+import {DEFAULT_TEXT_PRESET,textFontPresets} from './text-font-presets.js';
+import {textEffectPresets,textEffectName} from './text-effect-presets.js';
 import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {materialKinds} from './material-taxonomy.js';
 import {createPortal} from 'react-dom';
@@ -6,7 +8,7 @@ import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './ed
 import {primitive} from './domain.js';
 import {iconMarkup} from './icons.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
-import {mountPieceThumbnail} from './material-piece-thumbnail.js';
+import {mountPieceThumbnail,materialPieceSignature,materialPieceSource} from './material-piece-thumbnail.js';
 import {sceneLayerEntries} from './scene-v2.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 
@@ -128,17 +130,14 @@ function ShapePicker({draft,onPick}){
 }
 
 export function MaterialPieceImage({asset,item,source}){
-  const card=useRef(null),src=asset&&(source(asset.blobId)||asset.staticPath);
-  // AI layout may use a cropped view of the original. The picker represents
-  // the library asset; only an actual scissors fragment gets a piece preview.
-  const piece=item?.splitParentId?item:null;
-  const geometry=JSON.stringify([piece?.cropRect,piece?.materialMask]);
-  useEffect(()=>{
-    if(!card.current||!src||!piece)return;
-    return mountPieceThumbnail(card.current,piece);
-  },[src,item?.id,geometry]);
-  return <div ref={card} className="material-piece-image">
-    {src?<TapeAssetImage asset={asset} src={src} alt=""/>:<span>无预览</span>}
+  const card=useRef(null),src=materialPieceSource(asset,item,source);
+  const geometry=materialPieceSignature(item);
+  useLayoutEffect(()=>{
+    if(!card.current||!src||!item)return;
+    return mountPieceThumbnail(card.current,item);
+  },[src,geometry]);
+  return <div ref={card} className="material-piece-image" data-piece-id={item?.id}>
+    {src?(item?<img src={src} alt="" loading="eager" decoding="async" aria-hidden="true" style={{position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none'}}/>:<TapeAssetImage asset={asset} src={src} alt=""/>):<span>无预览</span>}
   </div>;
 }
 
@@ -363,7 +362,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const selectedKind=selected?.kind;
   const editObject=(id,value)=>onInspectorChange(id,value);
   const textMode=selectedKind==='text'||activeTool==='text';
-  const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'serif',fontSize:40,color:'#30463d',alignment:'left'};
+  const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:DEFAULT_TEXT_PRESET,fontSize:40,color:'#30463d',alignment:'left'};
   const textProperty=(key,value)=>onAction('fabric-text-property',key,value);
   const shapeProperty=(key,value)=>onAction('fabric-shape-property',key,value);
   const arrangeButton=<button type="button" data-popover-anchor="arrange"
@@ -401,8 +400,8 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           title={slotIndex(activeTool,'color')===index?'再次点击可修改颜色':''}
           onClick={event=>toggleSlot(activeTool,'color',index,event)}/>):null}
       </>:textMode?<>
-        <div className="canvas-text-format"><select aria-label="字体" value={text.style||'serif'} onChange={event=>textProperty('style',event.target.value)}>
-          {['serif','sans','rounded','hand'].map((id,index)=><option key={id} value={id}>{['宋体','黑体','圆体','手写体'][index]}</option>)}
+        <div className="canvas-text-format"><select aria-label="字体" value={text.style||DEFAULT_TEXT_PRESET} onChange={event=>textProperty('style',event.target.value)}>
+          {textFontPresets.map(({id,label})=><option key={id} value={id}>{label}</option>)}
         </select><div className="canvas-font-size-stepper" aria-label="调整字号">
           <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
           <FontSizeInput key={selectedNode?.id||'new-text'} value={text.fontSize||40}
@@ -505,7 +504,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         onClick={()=>{textProperty('alignment',id);close();}}>{(text.alignment||'left')===id?'✓ ':''}{label}</button>)}
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}
     </div>:null}
-    {menu.kind==='text-style'?<div className="stack">{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
+    {menu.kind==='text-style'?<div className="stack"><label>艺术字效果<select aria-label="艺术字效果" value={textEffectName(text)} onChange={event=>{onAction('fabric-text-effect',event.target.value);close();}}>{textEffectPresets.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
       .map(([id,label])=><button key={id} type="button" aria-checked={!!text[id]}
         onClick={()=>{textProperty(id,!text[id]);close();}}>{text[id]?'✓ ':''}{label}</button>)}
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}

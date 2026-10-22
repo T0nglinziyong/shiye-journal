@@ -281,3 +281,8 @@
   padding:7px 4px;border-top:1px solid #dce5dc;font-size:12px}
 .scene-layer-parked>button{text-align:left;min-height:30px;padding:4px 7px;
   border-radius:8px;background:#f3f7f1}
+
+/* Keep lazy-loaded raw sources measurable but invisible; only the processed
+   Scene instance is visible in used/standby cards. */
+.material-piece-image{position:relative}
+.material-piece-image[data-piece-preview="error"]::after{content:"裁片预览暂不可用";font-size:11px;color:#68766d}

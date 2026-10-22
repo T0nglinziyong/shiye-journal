@@ -23,7 +23,7 @@ function cacheFlatView(key,value){
     flatViews.delete(first);
   }
 }
-export function TapeAssetImage({asset,src,alt='',loading='lazy',priority=false,onFlatCrop}){
+export function TapeAssetImage({asset,src,alt='',loading='lazy',priority=false,onFlatCrop,maxPreviewSize}){
   const image=useRef(null),canvas=useRef(null),[ready,setReady]=useState(false);
   const [loaded,setLoaded]=useState(0);
   const crop=JSON.stringify(asset?.tapeFlatCrop??null),axis=asset?.tapeAxis==='y'?'y':
@@ -31,7 +31,7 @@ export function TapeAssetImage({asset,src,alt='',loading='lazy',priority=false,o
   const tape=asset?.kind==='tape';
   useLayoutEffect(()=>{
     if(!tape)return;
-    const maxSize=priority?640:480,key=JSON.stringify([src,axis,crop,maxSize]);
+    const maxSize=maxPreviewSize|| (priority?640:480),key=JSON.stringify([src,axis,crop,maxSize]);
     const original=image.current,view=canvas.current;
     if(!view)return;
     const paint=flat=>{
@@ -52,7 +52,7 @@ export function TapeAssetImage({asset,src,alt='',loading='lazy',priority=false,o
       cacheFlatView(key,flat);paint(flat);
     }catch{/* Keep a blank placeholder instead of showing the untrimmed PNG. */}},
     {minIdleMs:priority?250:700});
-  },[src,tape,crop,axis,loaded]);
+  },[src,tape,crop,axis,loaded,maxPreviewSize]);
   return <><img ref={image} data-asset-image-id={asset?.id} loading={priority?'eager':loading}
     fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={alt}
     aria-hidden={tape||undefined} onLoad={()=>setLoaded(value=>value+1)}

@@ -1,3 +1,4 @@
+import {textFontFamily} from './editor-tools-model.js';
 import {previewImageFormat} from './offline-preview.js';
 import {sceneRenderEntries} from './craft-display.js';
 import {materialMaskGeometry} from './material-mask.js';
@@ -46,9 +47,7 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
       const lines=textLines(value,fallback).lines;
       // The original UTF-8 text stays editable in project.shiyeproject.json.
       // A generic serif/sans fallback alone often renders CJK as tofu boxes.
-      const family=value.style==='serif'?'Noto Serif CJK SC, Source Han Serif SC, Songti SC, SimSun, serif':
-        value.style==='hand'?'Ma Shan Zheng, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, cursive':
-        'Noto Sans CJK SC, Source Han Sans SC, PingFang SC, Microsoft YaHei, sans-serif';
+      const family=xml(textFontFamily(value));
       const alignment=value.alignment||'left',anchor=alignment==='center'?'middle':alignment==='right'?'end':'start';
       const tx=alignment==='center'?0:alignment==='right'?w/2:-w/2;
       const top=-h/2+font;

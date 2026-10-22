@@ -1,9 +1,10 @@
-// Mirrors MaterialSeries.resolvedCoverIDs. An empty/obsolete explicit cover
-// falls back to the first three current members, without changing membership.
-export function seriesCovers(series, assets) {
-  const members = assets.filter(a => a.seriesID === series.id && !a.isProjectInternal);
-  const chosen = (series.coverAssetIDs || []).filter(id => members.some(a => a.id === id)).slice(0, 5);
-  return (chosen.length ? chosen : members.slice(0, 3).map(a => a.id)).map(id => members.find(a => a.id === id));
+import {SERIES_AUTO_COVER_COUNT} from './series-cover-layout.js';
+// Explicit cover order is retained, deduplicated and restricted to visible
+// current membership. Automatic covers show up to four items, not a thin strip.
+export function seriesCovers(series,assets){
+ const members=assets.filter(a=>a.seriesID===series.id&&!a.isProjectInternal),byID=new Map(members.map(a=>[a.id,a]));
+ const chosen=[...new Set(series.coverAssetIDs||[])].filter(id=>byID.has(id)).slice(0,5);
+ return (chosen.length?chosen:members.slice(0,SERIES_AUTO_COVER_COUNT).map(a=>a.id)).map(id=>byID.get(id));
 }
 export function parseTags(text) {
   return [...new Set(String(text || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean))];

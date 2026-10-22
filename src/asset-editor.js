@@ -4,8 +4,10 @@ import {normalizeTapeFlatCrop} from './tape-flat-crop.js';
 
 export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
+  // Existing descriptive metadata is preserved verbatim unless the user explicitly
+  // chooses a new value; no guessed material conversion or account-wide rewrite.
   const texture=String(values.texture||'').trim()||'未确定';
-  if(!isMaterialKind(values.kind)||!isMaterialRole(values.role)||!isMaterialTexture(texture))
+  if(!isMaterialKind(values.kind)||!isMaterialRole(values.role)||(!isMaterialTexture(texture)&&texture!==old.texture))
     throw Error('素材类型、画面作用或材质不在预设范围内');
   const dimension=value=>{if(value==='')return null;const n=Number(value);if(!Number.isFinite(n)||n<=0)throw Error('实物宽高必须是正数或留空');return n;};
   const width=dimension(values.width),height=dimension(values.height);
