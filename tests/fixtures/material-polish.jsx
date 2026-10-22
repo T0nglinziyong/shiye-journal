@@ -28,7 +28,7 @@ function App(){
   reset:()=>setPiece(basePiece),mask:()=>setPiece({...piece,vectorMask:{outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[.35,.35],[.65,.35],[.65,.65],[.35,.65]]]}}),
   flip:()=>setPiece({...piece,cropRect:null,width:120,height:80,isFlippedHorizontally:true}),
   fontStatus:()=>({status:font,faces:[...document.fonts].filter(f=>f.family.includes('Ma Shan')).map(f=>({family:f.family,status:f.status})),family:journalFontFamily(node)}),
-  snapshot:async(selector,layout)=>loadSeriesCoverSnapshot({cover:document.querySelector(selector),series:{id:selector,coverLayout:layout},assets,cache,account:'fixture'}),
+  snapshot:async(selector,layout)=>loadSeriesCoverSnapshot({cover:document.querySelector(selector),series:{id:'series',coverLayout:layout},assets,cache,account:'fixture'}),
   fontPixels:()=>{const draw=style=>{const c=document.createElement('canvas');c.width=360;c.height=100;const x=c.getContext('2d');x.translate(180,50);drawSceneText(x,{...node,style,fontName:null,width:340,height:90,alignment:'center',textOutline:null,textGradient:null,shadow:null});return c.toDataURL();};return {hand:draw('hand'),serif:draw('serif')};}};
  },[scene,piece,mode,font]);
  return <main><h1>素材与艺术字 · 合成回归</h1><section className="matching-page"><div className="match-creative-controls">{['视觉风格','用途','内容','工艺','页面','形式'].map(label=><label key={label}>{label}<select aria-label={label}><option>随材而定</option></select></label>)}</div></section>

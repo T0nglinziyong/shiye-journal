@@ -21,8 +21,24 @@ try{
  await b.evaluate('window.__polish.setMode("fan")');await b.sleep(80);assert.equal(await b.evaluate('document.querySelector("#matrix [data-cover-layout]").dataset.coverLayout'),'fan');assert.notEqual(await b.evaluate('window.__polish.snapshot("#matrix","fan")'),saved);
  // A missing image must keep its empty slot and not shift a later source.
  await b.evaluate('window.__polish.setMode("grid")');await b.sleep(50);
- const missing=await b.evaluate(`(async()=>{const cover=document.querySelector('#matrix');cover.querySelector('[data-cover-index="0"] img').remove();const {loadSeriesCoverSnapshot}=await import('/src/series-cover-snapshot.js');const url=await loadSeriesCoverSnapshot({cover,series:{id:'missing',coverLayout:'grid'},assets:window.__polish.assets,cache:window.__polish.cache,account:'fixture'});const image=new Image();image.src=url;await image.decode();const c=document.createElement('canvas');c.width=360;c.height=300;c.getContext('2d').drawImage(image,0,0);const pixel=(x,y)=>Array.from(c.getContext('2d').getImageData(x,y,1,1).data);return {empty:pixel(65,78),next:pixel(180,78)};})()`);
- assert.ok(missing.empty[0]>240&&missing.empty[1]>240&&missing.empty[2]>240);assert.ok(missing.next[0]<40||missing.next[2]<40,JSON.stringify(missing));
+ const missing=await b.evaluate(`(async()=>{
+  // Do not remove nodes owned by React. A separate connected fixture also
+  // ensures this incomplete cover cannot reuse the normal series cache key.
+  const cover=document.querySelector('#matrix').cloneNode(true);cover.id='missing-cover-fixture';cover.style.cssText='position:absolute;left:-10000px;width:360px;height:300px';document.body.append(cover);
+  try{
+   cover.querySelector('[data-cover-index="0"] img').remove();
+   const {loadSeriesCoverSnapshot}=await import('/src/series-cover-snapshot.js');
+   const assets=window.__polish.assets.map(asset=>({...asset,seriesID:'missing'}));
+   const url=await loadSeriesCoverSnapshot({cover,series:{id:'missing',coverLayout:'grid'},assets,cache:window.__polish.cache,account:'fixture'});
+   const image=new Image();image.src=url;await image.decode();const c=document.createElement('canvas');c.width=360;c.height=300;c.getContext('2d').drawImage(image,0,0);
+   const pixel=(x,y)=>Array.from(c.getContext('2d').getImageData(x,y,1,1).data);
+   return {empty:pixel(65,78),nextLeft:pixel(160,78),nextRight:pixel(200,78)};
+  }finally{cover.remove();}
+ })()`);
+ assert.ok(missing.empty.slice(0,3).every(channel=>channel>240),JSON.stringify(missing));
+ // WebP is lossy: sample the interiors of both colors, not their shared edge.
+ assert.ok(missing.nextLeft[0]>180&&missing.nextLeft[1]<40&&missing.nextLeft[2]<70,JSON.stringify(missing));
+ assert.ok(missing.nextRight[2]>180&&missing.nextRight[1]<40&&missing.nextRight[0]<70,JSON.stringify(missing));
  for(const name of ['outline','offset','gradient','gradient-outline','shadow']){
   await b.click(`[data-text-effect="${name}"]`);await b.sleep(100);const node=await b.evaluate('window.__polish.scene.layers[0]');
   if(name.includes('outline')||name==='offset')assert.ok(node.textOutline);
