@@ -1,5 +1,7 @@
 # 拾页 GPT 创作包 · 统一协议 2
 
+scene.json 是唯一作品；任何预览都必须从同一 Scene 通过真实 Node Canvas 或经过验证的浏览器 Canvas 渲染，不得用示意图替代。字段不清时按需查 api/commands.schema.json，普通参数优先 describe。最终必须实际打开 output/preview.png，并交付 output/project.shiyeproject.json；缺少有效 PNG 不得声称创作完成。
+
 **目标：完成一页有个人表达、可继续编辑的手帐，而不是把素材和几段小字摆成展示板。** 本包不要求使用固定数量的素材工艺、画笔或图形。优先解决真实画面问题。
 
 ## 快速路线
