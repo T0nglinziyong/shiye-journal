@@ -9,7 +9,7 @@ export function seriesCoverLayout(count,mode='auto'){
  if(n===1)return {kind,slots:[{x:.5,y:.5,w:.84,h:.88,rotation:0,z:1}]};
  if(kind==='fan')return {kind,slots:Array.from({length:n},(_,i)=>{
   const f=i/(n-1),rotation=(f-.5)*(n===2?16:n===3?24:36),center=Math.abs(f-.5);
-  return {x:(n===2?.36:n===3?.30:.25)+f*(n===2?.28:n===3?.40:.50),y:.5+center*.05,w:n===2?.53:n===3?.46:.33,h:n<=3?.76:.68,rotation,z:n-Math.abs(i-(n-1)/2)};
+  return {x:(n===2?.36:n===3?.30:.25)+f*(n===2?.28:n===3?.40:.50),y:.5+center*.05,w:n===2?.53:n===3?.46:.33,h:n<=3?.76:.68,rotation,z:Math.round(n-Math.abs(i-(n-1)/2))};
  })};
  const columns=n<=4?2:3,rows=Math.ceil(n/columns),w=columns===2?.43:.28,h=rows===1?.80:.42;
  return {kind,slots:Array.from({length:n},(_,i)=>{const row=Math.floor(i/columns),inRow=Math.min(columns,n-row*columns),col=i%columns;return {x:.5+(col-(inRow-1)/2)*(columns===2?.48:.32),y:rows===1?.5:.26+row*.48,w,h,rotation:0,z:1};})};
