@@ -1,6 +1,6 @@
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {journalFontPresets} from './journal-fonts.js';
-import {TextEffectsPanel} from './react-text-effects.jsx';
+import {PaintEffectsPanel} from './react-text-effects.jsx';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -1063,6 +1063,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
   const item=selected.value;
   if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
     <h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
+    <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
   </div>;
   return <div className="stack editor-inspector-fields">
@@ -1076,7 +1077,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
       </div>
-      <TextEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-text-effects',style)}/>
+      <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
       <div className="editor-inspector-checks">{check('inspector-bold','粗体',item.bold)}{check('inspector-italic','斜体',item.italic)}
         {check('inspector-underline','下划线',item.underline)}{check('inspector-strikethrough','删除线',item.strikethrough)}</div>
       <div className="editor-inspector-geometry">
@@ -1091,6 +1092,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </>:null}
     {selected.kind==='shape'?<>
       <h3>图形外观</h3>
+      <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
       {item.vectorLayers?.length?<div className="editor-inspector-vector"><p className="muted">多色矢量 · {item.vectorLayers.length} 层，路径保持独立</p>
         {item.vectorLayers.map((layer,index)=><div className="form-grid" key={index}>
           {field(`inspector-vector-fill-${index}`,`第 ${index+1} 层颜色`,layer.fill||'#ffffff','color')}

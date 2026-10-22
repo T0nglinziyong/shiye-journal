@@ -24,11 +24,11 @@ async function setup(){
 test('new offline text defaults to artistic preset while explicit font and body preset remain authoritative',async()=>{
  const {run}=await setup();const made=run([text,{...text,id:'body',style:{fontPreset:'sans'}}]);
  assert.equal(findSceneNode(made.page,'title').style,'hand');assert.equal(findSceneNode(made.page,'body').style,'sans');
- const named=run([{op:'text.update',target:'title',style:{fontFamily:'Example Explicit Font'}}],made);
+ const named=run([{op:'layer.update',target:'title',style:{fontFamily:'Example Explicit Font'}}],made);
  assert.equal(findSceneNode(named.page,'title').fontName,'Example Explicit Font');
- const changed=run([{op:'text.update',target:'title',style:{fontPreset:'hand'}}],named);
+ const changed=run([{op:'layer.update',target:'title',style:{fontPreset:'hand'}}],named);
  assert.equal(findSceneNode(changed.page,'title').fontName,null);
- const explicit=run([{op:'text.update',target:'title',style:{fontPreset:'hand',fontFamily:'Specific Font'}}],changed);
+ const explicit=run([{op:'layer.update',target:'title',style:{fontPreset:'hand',fontFamily:'Specific Font'}}],changed);
  assert.equal(findSceneNode(explicit.page,'title').fontName,'Specific Font');
 });
 for(const kind of ['ellipse','star','sparkle','dots'])test(`AI ${kind} graphic is editable, deterministic, linked and cannot allocate physical inventory`,async()=>{
@@ -36,7 +36,7 @@ for(const kind of ['ellipse','star','sparkle','dots'])test(`AI ${kind} graphic i
  const first=run(ops),second=run(ops);assert.deepEqual(findSceneNode(first.page,'accent'),findSceneNode(second.page,'accent'));
  const accent=findSceneNode(first.page,'accent');assert.equal(accent.type,'shape');assert.equal(accent.kind,kind);assert.equal(accent.stroke,'#C48860');
  assert.equal(accent.layoutConstraint.place.reference,'node:title');
- const before=worldBox(first.page,'accent');const moved=run([{op:'layer.place',target:'title',place:{...local,at:[.3,.6]}}],first);
+ const before=worldBox(first.page,'accent');const moved=run([{op:'layer.update',target:'title',place:{...local,at:[.3,.6]}}],first);
  const after=worldBox(moved.page,'accent');assert.ok(Math.abs(after.cx-before.cx)>1);near(after.rotation,23);
  const saved=JSON.stringify(moved.page);for(let i=0;i<5;i++)solveSceneLayout(moved.page);assert.equal(JSON.stringify(moved.page),saved);
  attachSceneV2(moved.page);assert.equal(buildMaterialLedger(moved.page,assets).units.length,1);

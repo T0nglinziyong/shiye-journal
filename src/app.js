@@ -1614,11 +1614,11 @@ async function runAppAction(action,id,value){try{
     state.canvasViewports?.set(state.activeProject.id+':'+current().id,{scale:1,x:0,y:0});
     render();break;
   }
-  case 'fabric-text-effects':{
+  case 'fabric-paint-effects':{
     const d=current(),entry=editorEntry(d).find(item=>item.value.id===state.selected),style=id;
-    if(!style||typeof style!=='object'||Object.keys(style).some(key=>!['outline','gradient','shadow'].includes(key)))throw Error('文字效果参数无效');
-    const values=styleFor('text',style,d,entry?.value||state.textDefaults||{});
-    if(entry?.kind==='text'){assertSceneEditable(d,entry.value.id);checkpoint();applySceneNodePatch(d,entry.value.id,values,{policy:USER_SCENE_POLICY});saveProject();}
+    if(!style||typeof style!=='object'||Object.keys(style).some(key=>!['outline','gradient','shadow'].includes(key)))throw Error('绘制效果参数无效');
+    const type=['text','shape','ink'].includes(entry?.kind)?entry.kind:'text',values=styleFor(type,style,d,entry?.value||state.textDefaults||{});
+    if(entry&&['text','shape','ink'].includes(entry.kind)){assertSceneEditable(d,entry.value.id);checkpoint();applySceneNodePatch(d,entry.value.id,values,{policy:USER_SCENE_POLICY});saveProject();}
     else state.textDefaults={style:'hand',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,...values};
     render();break;
   }

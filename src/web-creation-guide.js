@@ -4,7 +4,7 @@ export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 保留 source 原样；scene.json 的 page 是唯一权威的原生 Scene v2，工具和 Craft Plan 只是编辑它的输入。最终同时交付这一场景的完整 JSON 和 PNG。
 文件速查：先读 task/BRIEF.txt、task/GUIDE.txt、examples/instructions.json，并看 materials/ 图片。常用能力是素材排版与裁切、可编辑文字、图形和荧光笔；直接写简短 instructions.json。task/context.json 保留完整任务来源。schema/convenient-page.json 是简版页面字段；多片裁剪、余料或穿插才查 schema/craft-plan.json；使用高级工具才查 schema/tools.json；直接编辑完整 Scene 才查 schema/output.json。不要逐个通读 schema/。
 1. 先读 task/BRIEF.txt、task/GUIDE.txt 并逐件查看 materials/ 图片；task/context.json 保留完整任务来源，只有需要精确来源字段时才读。已有 scene.json 是当前作品，不用 examples/ 覆盖。schema/ 与 task/SCENE_REFERENCE.txt 按需查阅，不要为熟悉任务全文读取。
-2. 先根据素材印刷字、轮廓和可写面确定本页真正要表达的内容，并同时安排主体、文字段落、图形、圆形与荧光笔等笔迹。文字内容不是最后填进剩余空隙的占位符；灵感随写也应把想法展开，避免几句口号加大块未完成的留白。不要为了增加数量而添加无作用的装饰。可以在脑中比较不同图文关系，但不必制作粗排候选图；完整场景的真实预览才决定成品质量。
+2. 先根据素材印刷字、轮廓和可写面确定本页真正要表达的内容，并同时安排主体、文字段落、图形、圆形与荧光笔等笔迹。文字内容不是最后填进剩余空隙的占位符；灵感随写也应把想法展开，避免几句口号加大块未完成的留白。不要吝啬有意义的装饰：主体形成后主动尝试图形、手绘、文字变化和小素材在多个区域的呼应，再看真实预览调整。只对具体的遮挡、拥挤或层级冲突删减，不默认极简；不以工具数量评分。可以在脑中比较不同图文关系，但不必制作粗排候选图；完整场景的真实预览才决定成品质量。
 3. 优先在简短的 instructions.json 里一次写齐图层意图、书写内容及每件素材的 materialDecisions，直接运行 node runtime/preview.cjs instructions.json 编译并预览；参考 examples/instructions.json。只需编译时可运行 node runtime/compile.cjs instructions.json。图层 id、素材 piece、完整使用操作和未指定的默认位置属性由编译器补齐，只有需要跨图层引用时才显式编号。图形 kind 不限于示例圆形，矩形、星形、标签、箭头、方格和自由矢量等见 schema/convenient-page.json。编译器负责展开素材真实尺寸、来源字段和原生 Scene，不要手写这些冗长字段。materialDecisions 为 [{"asset":"m1","choice":"intact|crafted|omitted","reason":"与实际画面一致的具体理由"}]，每个 alias 一条；漏写时 pack 会拒绝。已有 scene.json 的局部修订直接改对应节点，或用 commands.json 与 node runtime/apply.cjs。局部修订后运行无参数的 preview，不再用旧 instructions.json 重编整页。按需阅读 task/CRAFT_CATALOG.txt；完整使用也可以是最佳选择，不按加工数量评分。需要多片裁剪时查 schema/craft-plan.json；精确操作查 task/SCENE_REFERENCE.txt。
 4. preview 生成 output/preview.png；不需 HTML。缺少 Node Canvas 时执行一次 npm install 后重试。实际查看 output/preview.png 的整幅和存在问题的局部，对照 output/scene-summary.json 的 quality.reading：文字是否足够表达本页、纸面是否像最终状态、留白是否有意、图形与荧光笔是否真正参与叙事、素材与文字是否互相遮挡。只修改发现问题的图层并重新 preview；不为凑轮次重复渲染。构图预览.svg 仅供粗略参考，不得伪造视觉验收。
 5. 运行 node runtime/pack.cjs 核对逐件取舍及最终 Scene 与 PNG 摘要，生成单行紧凑的 output/project.shiyeproject.json 和 delivery-manifest.json。文件模式交付 JSON 与 PNG 两个可下载文件；复制文本模式交付 PNG 链接与完整 JSON 代码块。勿用日志、ZIP 或旧预览代替成品。发送前重新打开最终文件，核对标题、正文、素材位置与 PNG 一致；改动后必须重新 preview 和 pack。
@@ -37,6 +37,6 @@ export function webArtDirection(source){return [
   '【本次视觉方向】',source.styles.map(s=>s+'：'+visualStyleBrief(s)).join('；'),
   '具体图文构思沿用本包共用的“构图与内容”指导，不另套模板。复用布局时重新选择主次；印章、曲线文字或镂空按需要使用，不按复杂度评分。',
   creativeTypographyGuide(source.baseDraft,{publicCommands:true}),
-  '【分阶段创作】文字、图形、素材都是核心构成。先稳定主块（大素材、艺术标题、段落或主图形）并预留正常字号正文，再完善内容，接着必须主动审视小素材、胶带、图形、笔迹和局部强调的作用。素材少时由文字块和数字图形担当主体，不只贴一件素材配两句小字。除非明确要求大留白，最终应充实、疏密有序；大片无作用空区回到主块/文字/图形重排，不能用随机小装饰填平。按 design/SKILL.md、PLAYBOOK.md、LETTERING.md 执行并用真实 PNG 依 REVIEW.md 复核，design-check 不能代替看图。',
+  '【分阶段创作】文字、图形、素材都是核心构成。先稳定主块（大素材、艺术标题、段落或主图形）并预留正常字号正文，再完善内容，接着主动完成丰富的细节层，尝试小素材、胶带、图形、笔迹和局部强调的不同组合；不要只审视而不执行，也不要以保持简洁为由过早收手。素材少时由文字块和数字图形担当主体，不只贴一件素材配两句小字。除非明确要求大留白，最终应充实、疏密有序；大片无作用空区回到主块/文字/图形重排，不能用随机小装饰填平。按 design/SKILL.md、PLAYBOOK.md、LETTERING.md 执行并用真实 PNG 依 REVIEW.md 复核，design-check 不能代替看图。',
   '【内部看图自评，不要在最终回复中输出】检查实际画面，先缩看整页焦点与动线，再放大核对文字、素材边缘、层次和第二处值得看的细节。检查是否只是逐项说明图片、通用鸡汤或空泛标题；按本次文字策略修订。纯粹拼贴不新增文字。若发现问题，修改对应 Scene 节点并重新 preview；最终 Scene 与 PNG 摘要必须一致，不用旧预览验收新图层。'
 ].join('\n\n');}

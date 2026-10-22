@@ -39,7 +39,30 @@ const detail=[
  {op:'graphic.add',id:'dot-1',geometry:{kind:'ellipse'},place:place(24,80),size:{width:6,height:6,unit:'mm'},style:{fill:'#7E9A89'}},
  {op:'graphic.add',id:'dot-2',geometry:{kind:'ellipse'},place:place(126,125),size:{width:4,height:4,unit:'mm'},style:{fill:'#C78354'}},
  {op:'graphic.add',id:'leaf-vein',geometry:{kind:'stroke',points:[{x:0,y:0},{x:8,y:-15},{x:15,y:-31}],unit:'mm'},place:place(104,147,26),style:{stroke:'#E9EEE3',strokeWidthMm:.6,penStyle:'ballpoint'}},
- {op:'material.decision',asset:'m1',choice:'intact',reason:'单张蓝纸承托小段随写，其余版式由文字与数字图形组织。'}
+ {op:'layer.update',target:'backdrop',size:{width:108,height:70,unit:'mm'},style:{stroke:null,gradient:{angleDeg:20,stops:[{offset:0,color:'#DFDBC5'},{offset:1,color:'#EEE4D4'}]}}},
+ {op:'layer.update',target:'small-label',content:'灵感练习  /  01',style:{fontPreset:'hand'}},
+ {op:'text.reflow',target:'title',content:'大胆试试',gapMm:1.3,style:{fontSizePt:32},letters:[{index:0,style:{fontPreset:'hand'}},{index:2,style:{fontPreset:'hand',gradient:{angleDeg:90,stops:[{offset:0,color:'#C78354'},{offset:1,color:'#687A9E'}]}},rotationDeg:3},{index:3,style:{fontPreset:'serif'},rotationDeg:-4}]},
+ {op:'layer.update',target:'body',place:place(76,94),style:{fontSizePt:13,fontPreset:'hand',lineHeight:1.4}},
+ {op:'layer.update',target:'keyword-mark',size:{reference:'node:keyword',width:.85,unit:'ratio',behavior:'linked'}},
+ {op:'layer.update',target:'main-leaf',style:{gradient:{angleDeg:45,stops:[{offset:0,color:'#C2CF9F'},{offset:1,color:'#477A70'}]},outline:{color:'#FFF9E7',widthMm:1,offsetMm:[1,1]},stroke:'#526E65'}},
+ {op:'graphic.add',id:'star-top',geometry:{kind:'star'},place:place(123,34,17),size:{width:11,height:11,unit:'mm'},style:{fill:'#D9AE73',stroke:'#AA7958',strokeWidthMm:.3}},
+ {op:'layer.duplicate',target:'star-top',id:'star-echo',place:place(24,53,-15)},
+ {op:'layer.update',target:'star-echo',size:{width:6,height:6,unit:'mm'},style:{fill:null,stroke:'#8DA695',strokeWidthMm:.55}},
+ {op:'graphic.add',id:'sparkles',geometry:{kind:'sparkle'},place:place(119,58),size:{width:7,height:10,unit:'mm'},style:{fill:'#8DA695',stroke:null}},
+ {op:'graphic.add',id:'title-marks',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:4},{x:3,y:0},{x:5,y:4}]},place:place(29,39,-25),style:{stroke:'#B98C60',strokeWidthMm:.7,penStyle:'pressure'}},
+ {op:'text.add',id:'mid-title',content:'先留下，再慢慢改',place:place(68,122,-3),size:{width:100,unit:'mm'},style:{fontSizePt:17,fontPreset:'hand',color:'#AA7958',textAlign:'center',outline:{color:'#F8F4EA',widthMm:.3}}},
+ {op:'graphic.add',id:'mid-line',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:12,y:.8},{x:25,y:-.4},{x:55,y:0}]},place:{reference:'node:mid-title',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,1],unit:'mm'},behavior:'linked'},style:{stroke:'#8DA695',strokeWidthMm:.55,penStyle:'pressure'}},
+ {op:'material.cut',target:'paper',mode:'remove',region:{shape:'edge',edge:'left',amount:2,space:'source',unit:'mm'}},
+ {op:'text.add',id:'paper-number',content:'02',place:place(22,139,-6),size:{width:10,unit:'mm'},style:{fontSizePt:15,fontPreset:'serif',fontWeight:'bold',color:'#B98C60'}},
+ {op:'graphic.add',id:'paper-circle',geometry:{kind:'ellipse'},place:{reference:'node:paper-number',referenceAnchor:'center',behavior:'linked'},size:{reference:'node:paper-number',width:1.2,height:1.05,unit:'ratio',behavior:'linked'},style:{fill:null,stroke:'#B98C60',strokeWidthMm:.4}},
+ {op:'layer.duplicate',target:'main-leaf',id:'leaf-small',place:place(72,167,-30)},
+ {op:'layer.update',target:'leaf-small',size:{width:13,height:20,unit:'mm'},style:{outline:null,opacity:.8}},
+ {op:'graphic.add',id:'leaf-veins',geometry:{kind:'path',viewBox:[0,0,30,40],paths:[{d:'M5 32 L15 25 L13 12 M15 25 L25 24 M10 30 L7 20',style:{fill:null,stroke:'#E9EEE3'}}]},place:place(103,150,26),size:{width:23,height:32,unit:'mm'},style:{fill:null,stroke:'#E9EEE3',strokeWidthMm:.5}},
+ {op:'graphic.add',id:'leaf-dots',geometry:{kind:'dots'},place:place(119,170),size:{width:17,height:10,unit:'mm'},style:{fill:'#B98C60',stroke:'#B98C60',strokeWidthMm:.4,opacity:.7}},
+ {op:'layer.update',target:'dot-1',style:{stroke:null}},
+ {op:'layer.update',target:'dot-2',place:place(132,110),style:{stroke:null}},
+ {op:'text.add',id:'closing-note',content:'把好奇留在纸上，把答案交给明天。',place:place(74,197),size:{width:126,unit:'mm'},style:{fontSizePt:9.5,fontPreset:'hand',color:'#6D827C',textAlign:'center'}},
+ {op:'material.decision',asset:'m1',choice:'crafted',reason:'裁去窄边后承托随写，纸角编号与圈线连接正文；文字、图形、主叶与细节共同完成整页。'}
 ];
 const firstRevision=run('info').sceneRevision;
 for(const [phase,operations] of [['structure',structure],['detail',detail]]){

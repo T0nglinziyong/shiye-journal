@@ -1,3 +1,6 @@
+import {detachSceneLayout} from './scene-layout.js';
+import {recordManagedChanges} from './craft-fingerprint.js';
+import {duplicateCreationNode} from './creation-duplicate.js';
 // Specialized capabilities still use the same public properties and Scene.
 import {creationNode,creationNodes,creationLocation,sceneScale,editScene,insertSceneNode,patchSceneNode} from './creation-scene-core.js';
 import {dimension,changedNodeProperties} from './creation-node-update.js';
@@ -32,32 +35,28 @@ export function applyCreationAdvanced(doc,item,assets,context){
   if(target.type!=='material'||target.tapeStrip)throw Error('轮廓加工需要普通实体素材');
   return processMaterial(doc,item.target,[{op:'mask',shape:item.shape,...(item.radiusRatio===undefined?{}:{radius:item.radiusRatio}),...(item.depthRatio===undefined?{}:{depth:item.depthRatio}),...(item.waves===undefined?{}:{waves:item.waves})}],assets);
  }
- if(item.op==='material.trim')return processMaterial(doc,item.target,[{op:'trim',edge:item.edge,quantity:item.quantity}],assets);
- if(item.op==='material.diagonal'){
-  if(target.type!=='material'||target.tapeStrip)throw Error('斜裁需要普通实体素材');
-  const line=item.line,convert=point=>line.unit==='ratio'?point:[point[0]*s/target.width,point[1]*s/target.height];
-  return processMaterial(doc,item.target,[{op:'diagonal',from:convert(line.from),to:convert(line.to),keep:item.keep}],assets);
- }
  if(item.op==='material.restore'){
   if(target.type!=='material'||target.tapeStrip)throw Error('恢复需要普通实体素材');
   // Window names describe derived geometry and cannot survive its removal.
-  delete target.craftWindowIDs;delete target.craftDisplaySlices;delete target.vectorMask;
+  const before=attachSceneV2(structuredClone(doc.page));
+  delete target.craftWindowIDs;delete target.craftDisplaySlices;delete target.vectorMask;recordManagedChanges(before,attachSceneV2(doc.page));
   return processMaterial(doc,item.target,[{op:'whole'}],assets,'replace');
  }
  if(item.op==='material.replace'){
   const asset=assetFor(doc,assets,item.asset);
   // source-dependent window identities are invalid after replacement.
-  delete target.craftWindowIDs;
+  const before=attachSceneV2(structuredClone(doc.page));delete target.craftWindowIDs;recordManagedChanges(before,attachSceneV2(doc.page));
   doc=editScene(doc,[{op:'replace-material',id:target.id,assetID:asset.id}],assets);
   return finishNode(doc,item.target,item,assets);
  }
  if(item.op==='layer.mask'){
-  if(target.type==='material')throw Error('素材显示遮罩请使用 material.mask');
   if(target.type==='ink')throw Error('请将笔迹编组后设置组合遮罩');
-  if(item.region.space!=='local')throw Error('数字节点遮罩使用 local 坐标');
-  const box=worldBox(doc.page,target.id),region=creationRegionGeometry(item.region,{sourceSize:[box.w/s,box.h/s],localSize:[box.w/s,box.h/s],crop:{x:0,y:0,width:1,height:1},output:'localRatio'});
+  if(item.mode==='clear')return patchSceneNode(doc,item.target,{vectorMask:undefined,vectorMaskHistory:undefined},assets);
+  if(target.type!=='material'&&item.region.space!=='local')throw Error('数字节点遮罩使用 local 坐标');
+  const box=worldBox(doc.page,target.id),asset=target.type==='material'?assets.find(a=>a.id===target.assetID):null;
+  const region=creationRegionGeometry(item.region,{sourceSize:asset?[asset.physicalWidthMM,asset.physicalHeightMM]:[box.w/s,box.h/s],localSize:[box.w/s,box.h/s],crop:asset?(target.cropRect||{x:0,y:0,width:1,height:1}):{x:0,y:0,width:1,height:1},output:'localRatio'});
   const old=target.vectorMask?normalizeGeometry([[target.vectorMask.outer,...(target.vectorMask.holes||[])]]):rectangleGeometry(0,0,1,1);
-  const shape=item.mode==='subtract'?geometryDifference(old,region):item.mode==='intersect'?geometryIntersection(old,region):region;
+  const shape=item.mode==='subtract'?geometryDifference(old,region):item.mode==='intersect'?geometryIntersection(old,region):geometryIntersection(rectangleGeometry(0,0,1,1),region);
   const {outer,holes}=geometryToMask(shape,1,1);return patchSceneNode(doc,item.target,{vectorMask:{outer,holes}},assets);
  }
  if(item.op==='material.glyphKnockout'){
@@ -88,40 +87,11 @@ export function applyCreationAdvanced(doc,item,assets,context){
   const relation={kind:r.kind,target:ref.creativePieceID||ref.id,...(other?{target2:other.creativePieceID||other.id}:{}),...(r.edge?{edge:r.edge}:{}),...(r.exposedMm===undefined?{}:{exposed_mm:r.exposedMm}),along_mm:r.alongMm||0,rotation_offset:r.rotationDeg||0,offset_mm:offset,...(r.from?{anchor_from:r.from}:{}),...(r.to?{anchor_to:r.to}:{}),...(r.contactMm===undefined?{}:{contact_mm:r.contactMm})};
   const objects=[target,ref,other].filter(Boolean).map(n=>{const b=worldBox(doc.page,n.id);return {...n,x:b.cx,y:b.cy,rotation:b.rotation};});
   const result=solveCraftRelations(objects,[{piece:target.creativePieceID||target.id,relation}],s).get(target.creativePieceID||target.id);
-  delete target.layoutConstraint;setWorldPosition(doc.page,target.id,result);target.materialRelation=relation;
+  const before=attachSceneV2(structuredClone(doc.page));
+  delete target.layoutConstraint;setWorldPosition(doc.page,target.id,result);target.materialRelation=relation;recordManagedChanges(before,attachSceneV2(doc.page));
   return finishNode(doc,target.id,{order:r.kind==='bridge'?{after:(other?.zIndex||0)>(ref.zIndex||0)?other.id:ref.id}:{before:ref.id}},assets);
  }
- if(item.op==='layer.repeat'){
-  if(target.type!=='shape')throw Error('重复盖印只接受数字图形，不复制实体素材');
-  const snapshot=structuredClone(target);
-  for(const copy of item.copies){
-   const node=structuredClone(snapshot);node.id=copy.id;node.agentKey=copy.id;
-   for(const key of ['key','aiManaged','layoutConstraint'])delete node[key];
-   doc=insertSceneNode(doc,node,assets);
-   if(copy.parent){const parent=creationNode(doc,copy.parent);if(parent.type!=='group')throw Error('父级必须是组合');doc=editScene(doc,[{op:'move',id:node.id,parent:parent.id}],assets);}
-   doc=finishNode(doc,node.id,copy,assets,{created:true});
-  }
-  return doc;
- }
- if(item.op==='layout.reuse'){
-  if(target.type!=='group')throw Error('layout.reuse 引用一个现有组合；外部模板请使用 group.compose 的统一子命令');
-  const source=structuredClone(target),nodes=creationNodes([source]),ids=new Map(),aliases=new Map(doc.source.materials.map(row=>[row.assetID,row.alias]));
-  for(const n of nodes){assertSceneEditable(attachSceneV2(doc.page),n.id);const newID=n.id===target.id?item.id:item.id+'-'+(n.creativePieceID||n.agentKey||n.key||n.id);if(newID.length>128)throw Error('复用后编号过长，请缩短组合编号');for(const key of [n.id,n.key,n.agentKey,n.creativePieceID].filter(Boolean))ids.set(key,newID);}
-  for(const n of nodes){
-   const originalID=n.id;n.id=ids.get(n.id);delete n.aiManaged;delete n.key;delete n.agentKey;
-   if(n.type==='material'){
-    const mapped=item.materialMap?.[aliases.get(n.assetID)];if(!mapped)throw Error('实体复用必须显式 materialMap：'+aliases.get(n.assetID));
-    const asset=assetFor(doc,assets,mapped),fresh=itemFromAsset(asset,doc.page,n.x,n.y,n.zIndex);fresh.rotation=n.rotation||0;
-    const identity={id:n.id,type:'material',creativePieceID:n.id};Object.keys(n).forEach(key=>delete n[key]);Object.assign(n,fresh,identity);
-    n.generationBaseline={...n.generationBaseline,rotation:n.rotation};
-   }else{
-    n.agentKey=n.id;if(n.type==='group')n.name=originalID===target.id?item.id:n.name;
-    if(n.layoutConstraint?.place?.reference?.startsWith('node:')){const old=n.layoutConstraint.place.reference.slice(5);if(ids.has(old))n.layoutConstraint.place.reference='node:'+ids.get(old);}
-    if(n.type==='text')Object.assign(n,changedNodeProperties(doc.page,n,{}));
-   }
-  }
-  doc=insertSceneNode(doc,source,assets,item.parent);return finishNode(doc,source.id,item,assets,{created:true});
- }
+ if(item.op==='layer.duplicate')return duplicateCreationNode(doc,item,assets,context);
  if(item.op==='layout.align'){
   alignNodes(doc,item);return doc;
  }
@@ -142,5 +112,5 @@ function alignNodes(doc,item){
   const indices=ids.map((_,i)=>i).sort((a,b)=>bounds[a].center-bounds[b].center),gap=(right-left-bounds.reduce((sum,b)=>sum+2*b.extent,0))/(ids.length-1);
   if(gap<0)throw Error('分布区域不足，不缩放实体素材');desired=[];let x=left;for(const i of indices){desired[i]=x+bounds[i].extent;x+=2*bounds[i].extent+gap;}
  }else desired=bounds.map(b=>item.align==='start'?left+b.extent:item.align==='end'?right-b.extent:(left+right)/2);
- for(const [i,b] of boxes.entries()){delete paths[i].node.layoutConstraint;const delta=desired[i]-bounds[i].center;setWorldPosition(doc.page,ids[i],{x:b.cx+(axis==='x'?c:-sn)*delta,y:b.cy+(axis==='x'?sn:c)*delta,rotation:b.rotation});}
+ for(const [i,b] of boxes.entries()){detachSceneLayout(doc.page,ids[i],'place');const delta=desired[i]-bounds[i].center;setWorldPosition(doc.page,ids[i],{x:b.cx+(axis==='x'?c:-sn)*delta,y:b.cy+(axis==='x'?sn:c)*delta,rotation:b.rotation});}
 }

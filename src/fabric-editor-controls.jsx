@@ -1,5 +1,5 @@
 import {journalFontPresets} from './journal-fonts.js';
-import {TextEffectsPanel} from './react-text-effects.jsx';
+import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {materialPreviewKey} from './material-paint.js';
 import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {materialKinds} from './material-taxonomy.js';
@@ -507,7 +507,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         onClick={()=>{textProperty('alignment',id);close();}}>{(text.alignment||'left')===id?'✓ ':''}{label}</button>)}
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}
     </div>:null}
-    {menu.kind==='text-style'?<div className="stack"><TextEffectsPanel node={text} page={draft} onChange={style=>onAction('fabric-text-effects',style)}/>{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
+    {menu.kind==='text-style'?<div className="stack"><PaintEffectsPanel node={text} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
       .map(([id,label])=><button key={id} type="button" aria-checked={!!text[id]}
         onClick={()=>{textProperty(id,!text[id]);close();}}>{text[id]?'✓ ':''}{label}</button>)}
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}

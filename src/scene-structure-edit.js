@@ -2,7 +2,7 @@
 // used for pointermove or intermediate pen samples. Existing tree primitives
 // keep their geometry rules; rollback restores object and array identities.
 import {attachSceneV2,assertSceneEditable,findSceneNode,groupSceneLayers,ungroupSceneLayers,moveSceneNode,removeSceneNode} from './scene-v2.js';
-import {solveSceneLayout,validateSceneLayout} from './scene-layout.js';
+import {solveSceneLayout,validateSceneLayout,LAYOUT_GEOMETRY_KEYS} from './scene-layout.js';
 import {AI_SCENE_POLICY,requireScenePolicy,assertSceneCapability,assertPolicyOwnership} from './scene-edit-policy.js';
 import {spatialPath,transformPoint,inverseMatrix} from './scene-spatial.js';
 
@@ -18,7 +18,7 @@ export function sceneStructureTransaction(page,change,{policy=AI_SCENE_POLICY}={
  try{const result=change();validateSceneLayout(page);solveSceneLayout(page);
   // A geometry/structure edit can also move a linked object which was not
   // explicitly selected. Apply the same ownership and lock rules as patches.
-  const layoutKeys=['x','y','rotation','localTransform','points','layoutRotation','layoutConstraint'];
+  const layoutKeys=LAYOUT_GEOMETRY_KEYS;
   for(const [node,state] of states){
    const current=findSceneNode(page,node.id);
    if(!state.layoutConstraint||!current||layoutKeys.every(key=>JSON.stringify(current[key])===JSON.stringify(state[key])))continue;

@@ -1,3 +1,5 @@
+import {validateLettering} from './scene-lettering.js';
+import {validateGraphicEffects} from './graphic-effects.js';
 import {validateTextEffects} from './text-effects.js';
 // Scene v2: THE persisted editable layer tree. No parallel persisted arrays.
 // Existing editor/craft algorithms receive ephemeral leaf collection views,
@@ -352,7 +354,7 @@ export function validateSceneExtensions(d){
  const seen=new Set();let count=0;
  function walk(nodes,depth){if(!Array.isArray(nodes)||depth>SCENE_MAX_GROUP_DEPTH||nodes.length>5000)throw Error('Scene 图层树过深或过大');
   for(const node of nodes){if(!node||!kinds.has(node.type)||typeof node.id!=='string'||!node.id||seen.has(node.id))throw Error('Scene 图层类型或编号重复');seen.add(node.id);count++;if(count>10000)throw Error('Scene 图层总数超限');
-   sceneLayerStyle(node);validateTextEffects(node);
+   sceneLayerStyle(node);validateTextEffects(node);validateGraphicEffects(node);
    if(node.vectorMaskHistory!==undefined){
     if(!Array.isArray(node.vectorMaskHistory)||node.vectorMaskHistory.length>32||
       node.vectorMaskHistory.some(step=>!step||!['hide','show'].includes(step.mode)||
@@ -367,6 +369,7 @@ export function validateSceneExtensions(d){
      !num(node.shadow.offsetX,-100000,100000)||!num(node.shadow.offsetY,-100000,100000)))throw Error('图层阴影参数无效');
    if(node.zIndex!==undefined&&!num(node.zIndex,-100000,100000))throw Error('图层排序值无效');
    if(node.type==='group'){
+     validateLettering(node);
      if(!Array.isArray(node.children)||node.children.length>1000||
        ['scale','scaleX','scaleY','width','height','assetID'].some(key=>node[key]!==undefined))throw Error('组合不能单独存储缩放或素材宽高');
      if(node.localTransform)assertRigidMatrix(node.localTransform);

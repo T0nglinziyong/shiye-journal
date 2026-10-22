@@ -37,7 +37,7 @@ test('outline paints full glyph boundaries and gradient paints real multiple col
  assert.ok(ink(border)>ink(plain));assert.notDeepEqual(border,offset);let red=0,blue=0;for(let i=0;i<grad.length;i+=4)if(grad[i+3]>200){if(grad[i]>grad[i+2]+20)red++;if(grad[i+2]>grad[i]+20)blue++;}assert.ok(red>10&&blue>10,JSON.stringify({red,blue}));
 });
 test('effects are real native Scene fields shared by create/update, manual update and import',async()=>{
- const {run,assets}=await fixture(),original=run([text]);const viaText=run([{op:'text.update',target:'word',style:{outline,gradient}}],original),viaLayer=run([{op:'layer.update',target:'word',style:{outline,gradient}}],original),created=run([{...text,style:{...text.style,outline,gradient}}]);
+ const {run,assets}=await fixture(),original=run([text]);const viaText=run([{op:'layer.update',target:'word',style:{outline,gradient}}],original),viaLayer=run([{op:'layer.update',target:'word',style:{outline,gradient}}],original),created=run([{...text,style:{...text.style,outline,gradient}}]);
  assert.deepEqual(node(viaText),node(viaLayer));for(const k of ['height','width','textGradient','textOutline','fontSize'])assert.deepEqual(node(viaText)[k],node(created)[k]);
  const manual=structuredClone(original.page);applySceneNodeChange(manual,'word',{style:{outline,gradient}},{policy:USER_SCENE_POLICY});assert.deepEqual(manual.layers[0].textOutline,node(created).textOutline);
  const reopened=importEditableWork(JSON.stringify(created),assets).drafts[0];assert.deepEqual(reopened.layers[0].textGradient,gradient);
@@ -45,7 +45,7 @@ test('effects are real native Scene fields shared by create/update, manual updat
 });
 test('invalid unsorted colors, non-text effects and excessive offsets fail atomically',async()=>{
  const {run}=await fixture(),initial=run([text]),before=JSON.stringify(initial);
- for(const bad of [{...gradient,stops:[{offset:1,color:'#000000'},{offset:0,color:'#FFFFFF'}]},{...gradient,stops:[{offset:0,color:'url(private)'},{offset:1,color:'#FFFFFF'}]}])assert.throws(()=>run([{op:'text.update',target:'word',style:{gradient:bad}}],initial));
+ for(const bad of [{...gradient,stops:[{offset:1,color:'#000000'},{offset:0,color:'#FFFFFF'}]},{...gradient,stops:[{offset:0,color:'url(private)'},{offset:1,color:'#FFFFFF'}]}])assert.throws(()=>run([{op:'layer.update',target:'word',style:{gradient:bad}}],initial));
  assert.equal(JSON.stringify(initial),before);assert.throws(()=>validateTextEffects({type:'shape',textGradient:gradient}));assert.throws(()=>validateTextEffects({type:'text',textOutline:{width:2,color:'#000000',offsetX:Infinity,offsetY:0}}));
 });
 test('effects preserve a conservative layout frame and reflow linked followers without angle drift',async()=>{
@@ -56,7 +56,7 @@ test('effects preserve a conservative layout frame and reflow linked followers w
 test('lettering creates independent editable text children with per-character fonts and effects',async()=>{
  const {run,assets}=await fixture();const d=run([{op:'text.lettering',id:'title',content:'去玩',place:at(),style:{fontSizePt:26,outline},letters:[{index:0,style:{fontPreset:'serif'}},{index:1,style:{fontPreset:'sans',gradient},rotationDeg:5,offsetMm:[0,1]}]}]);
  const title=node(d,'title');assert.equal(title.type,'group');assert.equal(title.children.length,2);assert.equal(node(d,'title-g1').style,'serif');assert.equal(node(d,'title-g2').style,'sans');assert.equal(node(d,'title-g2').rotation,5);assert.ok(node(d,'title-g2').textGradient);
- const changed=run([{op:'text.update',target:'title-g2',content:'看',style:{color:'#112233',gradient:null}}],d);assert.equal(node(changed,'title-g1').content,'去');assert.equal(node(changed,'title-g2').content,'看');assert.equal(importEditableWork(JSON.stringify(changed),assets).drafts[0].layers[0].children[1].content,'看');
+ const changed=run([{op:'layer.update',target:'title-g2',content:'看',style:{color:'#112233',gradient:null}}],d);assert.equal(node(changed,'title-g1').content,'去');assert.equal(node(changed,'title-g2').content,'看');assert.equal(importEditableWork(JSON.stringify(changed),assets).drafts[0].layers[0].children[1].content,'看');
 });
 test('lettering respects graphemes and rejects invalid indices or duplicate IDs before any commit',async()=>{
  const {run}=await fixture();const a=run([{op:'text.lettering',id:'t',content:'e\u0301好',place:at()}]);assert.equal(node(a,'t').children.length,2);assert.equal(node(a,'t-g1').content,'e\u0301');
@@ -66,8 +66,8 @@ test('ordinary stroke geometry is deterministic, explicitly ordered behind text 
  const {run}=await fixture();const ops=[{op:'group.compose',id:'card',layoutBox:{width:80,height:80,unit:'mm'},place:{...at(),rotationDeg:20},children:[{...text,place:{reference:'parent',at:[.5,.5],unit:'ratio'}},{op:'graphic.add',id:'mark',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:word',width:.85,unit:'ratio'},place:{reference:'node:word',at:[.5,.45],unit:'ratio',anchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker',opacity:.45,blendMode:'multiply'},order:{before:'word'}}]}];
  const a=run(ops),b=run(ops);assert.deepEqual(node(a,'mark').points,node(b,'mark').points);assert.equal(node(a,'mark').type,'ink');assert.equal(node(a,'mark').penStyle,'marker');assert.equal(node(a,'card').children[0].id,'mark');
  near(worldBox(a.page,'mark').rotation,worldBox(a.page,'word').rotation);const x=worldBox(a.page,'mark').cx;
- const moved=run([{op:'layer.place',target:'word',place:{reference:'parent',at:[.7,.5],unit:'ratio'}}],a);assert.notEqual(worldBox(moved.page,'mark').cx,x);
- const multiline=run([{op:'text.update',target:'word',content:'两行\n文字'},{op:'graphic.add',id:'bad',parent:'card',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:word',width:.85,unit:'ratio'},place:{reference:'node:word',at:[.5,.45],unit:'ratio',anchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker',opacity:.45,blendMode:'multiply'},order:{before:'word'}}],a);assert.equal(node(multiline,'bad').type,'ink'); // No semantic keyword/decoration command remains.
+ const moved=run([{op:'layer.update',target:'word',place:{reference:'parent',at:[.7,.5],unit:'ratio'}}],a);assert.notEqual(worldBox(moved.page,'mark').cx,x);
+ const multiline=run([{op:'layer.update',target:'word',content:'两行\n文字'},{op:'graphic.add',id:'bad',parent:'card',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:word',width:.85,unit:'ratio'},place:{reference:'node:word',at:[.5,.45],unit:'ratio',anchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker',opacity:.45,blendMode:'multiply'},order:{before:'word'}}],a);assert.equal(node(multiline,'bad').type,'ink'); // No semantic keyword/decoration command remains.
 });
 test('Fabric and export use the same painter; text scaling preserves effect units',async()=>{
  const {run}=await fixture(),d=run([{...text,content:'ABC',style:{...text.style,outline,gradient}}]),n=node(d),bridge=createFabricSceneBridge(fabric),object=await bridge.fromNode(n);

@@ -33,7 +33,7 @@ test('public AI commands and manual common changes use identical complete text g
  const initial=webSceneDocument(handoff.source,handoff.source.baseDraft),batch=ops=>({protocolVersion:2,transactionId:'shared',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:ops});
  const created=applyCreationV2Batch(initial,batch([{op:'text.add',id:'text',content:'初始中文 English',size:{width:70,height:20,unit:'mm'},style:{fontSizePt:12,lineHeight:1.4},place:{reference:'page',unit:'mm',at:[90,90]}}]),assets);
  for(const change of [{content:'新的中文和英文内容 '.repeat(6)},{style:{fontSizePt:22}},{size:{width:35,unit:'mm'}},{style:{fontSizePt:18,lineHeight:1.8,letterSpacingMm:.2},size:{height:60,unit:'mm'}}]){
-  const ai=applyCreationV2Batch(created,batch([{op:'text.update',target:'text',...change}]),assets),manual=structuredClone(created.page);
+  const ai=applyCreationV2Batch(created,batch([{op:'layer.update',target:'text',...change}]),assets),manual=structuredClone(created.page);
   applySceneNodeChange(manual,'text',change,user);
   const a=structuredClone(findSceneNode(ai.page,'text')),b=structuredClone(findSceneNode(manual,'text'));delete a.aiManaged;delete b.aiManaged;
   assert.deepEqual(b,a);
