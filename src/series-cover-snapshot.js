@@ -29,7 +29,7 @@ async function drawCover(images,series,assets){
   const {width,height}=SERIES_COVER_SIZE,canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
   const ctx=canvas.getContext('2d');if(!ctx)return null;
   const members=seriesCovers(series,assets);
-  const views=images.map((img,i)=>{const asset=members[i];if(asset?.kind!=='tape')return img;
+  const views=images.map((img,i)=>{const asset=members[i];if(!img)return null;if(asset?.kind!=='tape')return img;
     const axis=asset.tapeAxis||(asset.physicalWidthMM>=asset.physicalHeightMM?'x':'y');return tapeFlatCanvas(img,axis,asset.tapeFlatCrop,{maxSize:360})?.canvas||img;});
   paintSeriesCover(ctx,views,seriesCoverLayout(views.length,series.coverLayout),{width,height});
   return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));
@@ -45,10 +45,11 @@ export async function loadSeriesCoverSnapshot({cover,series,assets,account='brow
     if(scope!==account)return null;
     url=URL.createObjectURL(saved);live.set(key,url);return url;
   }
-  const images=[...cover.querySelectorAll('img:not(.series-cover-snapshot)')];
-  if(!images.length)return null;
-  const ready=await Promise.all(images.map(waitForCoverImage));
-  if(!cover.isConnected||ready.some(img=>!img)||scope!==account)return null;
+  const slots=[...cover.querySelectorAll('[data-cover-index]')];
+  const images=slots.map(slot=>slot.querySelector('img'));
+  if(!images.some(Boolean))return null;
+  const ready=await Promise.all(images.map(img=>img?waitForCoverImage(img):null));
+  if(!cover.isConnected||ready.some((img,i)=>images[i]&&!img)||scope!==account)return null;
   const blob=await drawCover(ready,series,assets);
   if(!(blob instanceof Blob)||!blob.size)return null;
   await cache.put('series-cover:'+account,key,blob).catch(()=>{});
