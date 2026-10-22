@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {loadOfflineMaterialCover,mapOfflineExportLimited,offlineExportCacheKey,prepareOfflineMaterialPreview,prefetchOfflineImportImages,OFFLINE_EXPORT_SOURCE_EDGE,OFFLINE_IMPORT_IMAGE_EDGE} from '../src/offline-export-assets.js';
+import {loadOfflineMaterialCover,loadOfflineMaterialOriginal,mapOfflineExportLimited,offlineExportCacheKey,prepareOfflineMaterialPreview,prefetchOfflineImportImages,OFFLINE_EXPORT_SOURCE_EDGE,OFFLINE_IMPORT_IMAGE_EDGE} from '../src/offline-export-assets.js';
 
 const WEBP=new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32]);
 const mkAsset=(extra={})=>({id:'asset-a',blobId:'cutout-01',title:'透明贴纸',kind:'sticker',
@@ -52,6 +52,14 @@ test('a newly imported local cutout can be exported before its cloud cover exist
   });
   assert.equal(loaded,cutout);
   assert.deepEqual(calls,['preview','local']);
+});
+
+test('editable export reads a newly imported cutout while the cloud row is not ready',async()=>{
+ const image=new Blob([WEBP],{type:'image/webp'}),url=URL.createObjectURL(image);
+ try{
+  const result=await loadOfflineMaterialOriginal(mkAsset(),{readStored:async()=>{throw Error('cloud row pending');},localURL:()=>url,loadRemote:async()=>{throw Error('not uploaded');}});
+  assert.equal(result.size,image.size);
+ }finally{URL.revokeObjectURL(url);}
 });
 
 test('corrupt cached bytes never enter a ZIP',async()=>{

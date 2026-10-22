@@ -124,7 +124,7 @@ import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {isUntouchedLegacyExample} from './legacy-builtins.js';
 import {applyToolCalls,validateScenePhysical} from './creative.js';
-import {loadOfflineMaterialCover,mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
+import {loadOfflineMaterialCover,loadOfflineMaterialOriginal,mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
 import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
 import {matchingRecommendations} from './matching-view.js';
@@ -1246,7 +1246,7 @@ async function runAppAction(action,id,value){try{
   }
   if(state.route==='editor'&&state.inspectorSession&&
     !/^fabric-inspector-/.test(action)&&
-    !['fabric-tool','fabric-text-property','fabric-shape-property',
+    !['fabric-tool','fabric-text-property','fabric-shape-property','fabric-paint-effects',
       'fabric-remove-vector-mask','fabric-replace-material','duplicate','flip',
       'front','delete-object','fabric-fit-view','zoom-in','zoom-out','undo','redo',
       'back-works','editor-done'].includes(action)){
@@ -2040,6 +2040,7 @@ async function runAppAction(action,id,value){try{
       paperSize:state.paperSize,paperOrientation:state.paperOrientation,
       orientation:state.paperOrientation,wholePaper:state.wholePaper,balanceLight:state.balanceLight,
       recognition:state.importRecognition||state.preferences.recognition,
+      mergeSharedCarrier:state.importMergeSharedCarrier!==false,
       recognitionShapeRegularization:state.importShapeRegularization!==false,
       recognitionApertures:state.importApertures!==false,
       materialColorMode:state.importMaterialColorMode||'auto',
@@ -2221,8 +2222,10 @@ async function exportOfflineCreation(){
         }
         // The editable Scene renders the same source pixels as the App. A
         // 480px cover cannot support reliable source crops or cut-out windows.
-        let blob=chosen.staticPath?await fetch(chosen.staticPath).then(response=>{if(!response.ok)throw Error('内置素材原图无法读取');return response.blob();}):(await db.get('blobs',chosen.blobId))?.data;
-        if(!blob&&chosen.blobId){const url=await privateImages.load(chosen.blobId,true);blob=await fetch(url).then(response=>response.blob());}
+        let blob=chosen.staticPath?await fetch(chosen.staticPath).then(response=>{if(!response.ok)throw Error('内置素材原图无法读取');return response.blob();}):await loadOfflineMaterialOriginal(chosen,{
+          readStored:id=>db.get('blobs',id),localURL:id=>urls.get(id),
+          loadRemote:async id=>{const url=await privateImages.load(id,true);const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('云端素材原图无法读取');return response.blob();},
+          signal:controller.signal});
         if(!(blob instanceof Blob)||!blob.size)throw Error('素材「'+chosen.title+'」的原图不可用');
         const bytes=new Uint8Array(await blob.arrayBuffer());
         report.covers++;
@@ -2770,7 +2773,7 @@ function openProjectMetadata(){
 async function restoreTrash(id){if(!await changeTrash({db,state,ids:[id],recover:true,awaitStage:awaitTrashStages}))return;render();toast('已恢复');}
 function saveActiveImportRecord(){
   const rec=state.importRecords[state.importIndex];if(!rec)return;
-  Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
+  Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importMergeSharedCarrier:state.importMergeSharedCarrier,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
 }
 const importPrefetchJobs=new WeakMap();
 let importBatchRevision=0;
@@ -2801,7 +2804,7 @@ function importPrefetchSettings(rec){
     recognition:rec.recognition||state.preferences.recognition,candidateDiscovery:rec.candidateDiscovery||state.preferences.candidateDiscovery||'unified',pixels:state.preferences.recognitionPixels||900,
     denoise:state.preferences.recognitionDenoise===true,localContrast:state.preferences.recognitionLocalContrast===true,
     chromaEdges:state.preferences.recognitionChromaEdges!==false,shapeRegularization:rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false),
-    apertures:rec.importApertures??(state.preferences.recognitionApertures!==false),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,materialColorMode:rec.importMaterialColorMode||state.preferences.materialColorMode||'auto',mode:state.importMode};
+    apertures:rec.importApertures??(state.preferences.recognitionApertures!==false),mergeSharedCarrier:rec.importMergeSharedCarrier??(state.preferences.mergeSharedCarrier!==false),materialColorMode:rec.importMaterialColorMode||state.preferences.materialColorMode||'auto',mode:state.importMode};
 }
 function updateImportPrefetchLabel(rec){
   const index=state.importRecords.indexOf(rec),label=index>=0?view.querySelector(`.queue-item[data-id="${index}"] small`):null;
@@ -2874,7 +2877,7 @@ async function switchImportRecord(index,skipSave=false){
   if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;
   const generation=state.importLoadGeneration=(state.importLoadGeneration||0)+1,isCurrent=()=>state.route==='import'&&state.importLoadGeneration===generation;
   state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
-  state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
+  state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importMergeSharedCarrier=rec.importMergeSharedCarrier??(state.preferences.mergeSharedCarrier!==false);state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
   state.paperCorners=rec.corners||null;
   state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;discardPaperPreview();
   const progress=message=>{state.importProcessing=message;const status=view.querySelector('.import-processing');if(status)status.textContent=message;};
@@ -3014,7 +3017,7 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,candidateDiscovery:state.preferences.candidateDiscovery||'unified',recognitionPixels:state.preferences.recognitionPixels,
     recognitionSource:state.correctedBitmap&&state.paperCorners?{bitmap:state.importBitmap,corners:state.paperCorners}:null,
-    recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
+    recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.importMergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘识别未完成，正在检查候选结果…')
@@ -3068,7 +3071,7 @@ async function changeImportRecognitionSetting(key,value){
   }
   state[key]=!!value;
   if(record)record[key]=state[key];
-  state.importProcessing=shape?'正在按新参数细化轮廓…':
+  state.importProcessing=shape?'正在按新参数细化轮廓…':key==='importMergeSharedCarrier'?'正在重新检查共同载体…':
     state.importMode==='snapshot'?'正在调整页面颜色…':'正在均衡光照并重新识别…';
   saveActiveImportRecord();render();
   try{if(state.importMode!=='snapshot')await previewCrop();}
