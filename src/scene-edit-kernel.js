@@ -1,3 +1,4 @@
+import {validateTextEffects} from './text-effects.js';
 // Shared in-memory editing kernel. No file IO, network, React, Fabric or CLI.
 // Only touched nodes are copied on the frequent property-update path.
 import {assertSceneEditable,findSceneNode,validateVectorMask} from './scene-v2.js';
@@ -7,13 +8,14 @@ import {changedNodeProperties} from './scene-node-properties.js';
 import {reflowSceneText} from './scene-text-layout.js';
 import {AI_SCENE_POLICY,requireScenePolicy,assertPolicyPatch,assertPolicyOwnership} from './scene-edit-policy.js';
 
-const textFields=new Set(['content','width','height','fontSize','fontName','style','bold','italic','lineSpacing','fixedLineHeight','paragraphSpacing','letterSpacing','curveHeight','textLayout']);
+const textFields=new Set(['content','width','height','fontSize','fontName','style','bold','italic','lineSpacing','fixedLineHeight','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']);
 const forbidden=new Set(['id','type','children','assetID','sourceBlobId','sourceStaticPath','materialUnitIndex','craftProvenance','generationBaseline','aiManaged','managedFingerprint','manualVisualCopy','manualGeometryOverride']);
 const common=new Set(['x','y','rotation','width','height','opacity','blendMode','shadow','hidden','isHidden','isParked','locked','isLocked','zIndex','vectorMask','vectorMaskHistory','localTransform','layoutBox','layoutRotation']);
-const typed={text:new Set(['content','fontSize','fontName','style','color','alignment','bold','italic','underline','strikethrough','lineSpacing','fixedLineHeight','lineHeight','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight','textLayout']),shape:new Set(['kind','fill','stroke','lineWidth','fillOpacity','strokeOpacity','strokeDash','cornerRadius','vectorPaths','vectorLayers','svgPaths','svgViewBox']),ink:new Set(['points','color','penStyle']),material:new Set(['isFlippedHorizontally','materialRelation','craftDisplaySlices']),group:new Set(['name'])};
+const typed={text:new Set(['content','fontSize','fontName','style','color','alignment','bold','italic','underline','strikethrough','lineSpacing','fixedLineHeight','lineHeight','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']),shape:new Set(['kind','fill','stroke','lineWidth','fillOpacity','strokeOpacity','strokeDash','cornerRadius','vectorPaths','vectorLayers','svgPaths','svgViewBox']),ink:new Set(['points','color','penStyle']),material:new Set(['isFlippedHorizontally','materialRelation','craftDisplaySlices']),group:new Set(['name'])};
 const copy=value=>structuredClone(value);
 function replace(target,value){for(const key of Object.keys(target))if(!Object.hasOwn(value,key))delete target[key];Object.assign(target,value);}
 function finiteNode(node){
+ validateTextEffects(node);
  if(!Object.hasOwn(typed,node.type))throw Error('图层需要明确且有效的 type');
  for(const key of ['x','y','rotation','width','height','fontSize','lineWidth','opacity'])if(node[key]!==undefined&&(!Number.isFinite(node[key])||Math.abs(node[key])>100000))throw Error('图层数值无效：'+key);
  for(const key of ['width','height','fontSize'])if(node[key]!==undefined&&node[key]<=0)throw Error('图层尺寸必须为正：'+key);

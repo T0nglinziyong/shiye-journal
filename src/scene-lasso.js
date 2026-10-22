@@ -1,3 +1,4 @@
+import {scaleTextEffects} from './text-effects.js';
 import {copyEditableScene,editSceneStructure,sceneStructureTransaction} from './scene-structure-edit.js';
 import {applyScenePatchBatch,sceneWorldValues} from './scene-edit-kernel.js';
 import {AI_SCENE_POLICY} from './scene-edit-policy.js';
@@ -86,6 +87,7 @@ export function transformSceneLasso(draft,ids,center,scale,degrees,{to=center,po
     else{
       values={...around(node),width:node.width*scale,height:node.height*scale,rotation:(node.rotation||0)+degrees};
       if(node.type==='text'){
+        if(node.textOutline){const effect={textOutline:structuredClone(node.textOutline)};scaleTextEffects(effect,scale);values.textOutline=effect.textOutline;}
         for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])if(Number.isFinite(node[field]))values[field]=node[field]*scale;
         if(node.textLayout)values.textLayout={...node.textLayout,minimumHeight:node.textLayout.minimumHeight*scale};
       }

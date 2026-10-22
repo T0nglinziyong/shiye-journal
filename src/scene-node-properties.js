@@ -1,3 +1,4 @@
+import {validateTextEffects} from './text-effects.js';
 // Public property language -> canonical Scene data, followed by ONE reflow.
 // Called by all create/update paths before anchors and linked dependencies.
 import {creationReferenceBox} from './creation-placement.js';
@@ -21,13 +22,13 @@ export function styleFor(type,style,page,node={}){
  if(!style)return {};
  const s=sceneScale(page),mapping={opacity:'opacity',blendMode:'blendMode',shadow:'shadow'};
  if(type==='material')mapping.flipHorizontal='isFlippedHorizontally';
- if(type==='text')Object.assign(mapping,{color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
+ if(type==='text')Object.assign(mapping,{outline:'textOutline',gradient:'textGradient',color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
  if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{color:'color',strokeWidthMm:'width',penStyle:'penStyle'});
  const result={};
  for(const [key,value] of Object.entries(style)){
   if(!mapping[key])throw Error(type+' 不支持 style.'+key);
-  result[mapping[key]]=key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
+  result[mapping[key]]=key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
    key==='lineHeight'?value*(style.fontSizePt===undefined?(node.fontSize||12*25.4/72*s):style.fontSizePt*25.4/72*s):
    ['strokeWidthMm','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'].includes(key)?value*s:
    key==='shadow'?(value===null?null:{offsetX:value.offsetMm[0]*s,offsetY:value.offsetMm[1]*s,blur:value.blurMm*s,color:value.color}):value;
@@ -68,6 +69,7 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
   if(change.size?.width!==undefined)next.width=dimension(page,change.size,'width',parentID)*s;
   reflowSceneText(next,{...(change.size?.height===undefined?{}:{minimumHeight:dimension(page,change.size,'height',parentID)*s}),...(change.style?.lineHeight===undefined?{}:{lineHeightRatio:change.style.lineHeight})});
  }
+ validateTextEffects(next);
  const values={};for(const [key,value] of Object.entries(next))if(JSON.stringify(node[key])!==JSON.stringify(value))values[key]=value;
  return values;
 }

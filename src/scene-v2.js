@@ -1,3 +1,4 @@
+import {validateTextEffects} from './text-effects.js';
 // Scene v2: THE persisted editable layer tree. No parallel persisted arrays.
 // Existing editor/craft algorithms receive ephemeral leaf collection views,
 // whose supported mutations write through to the same tree.
@@ -351,7 +352,7 @@ export function validateSceneExtensions(d){
  const seen=new Set();let count=0;
  function walk(nodes,depth){if(!Array.isArray(nodes)||depth>SCENE_MAX_GROUP_DEPTH||nodes.length>5000)throw Error('Scene 图层树过深或过大');
   for(const node of nodes){if(!node||!kinds.has(node.type)||typeof node.id!=='string'||!node.id||seen.has(node.id))throw Error('Scene 图层类型或编号重复');seen.add(node.id);count++;if(count>10000)throw Error('Scene 图层总数超限');
-   sceneLayerStyle(node);
+   sceneLayerStyle(node);validateTextEffects(node);
    if(node.vectorMaskHistory!==undefined){
     if(!Array.isArray(node.vectorMaskHistory)||node.vectorMaskHistory.length>32||
       node.vectorMaskHistory.some(step=>!step||!['hide','show'].includes(step.mode)||
