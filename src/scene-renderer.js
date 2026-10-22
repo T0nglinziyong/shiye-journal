@@ -1,11 +1,11 @@
+import {prepareJournalFont} from './journal-fonts.js';
+import {paintMaterialImage} from './material-paint.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {validateSceneExtensions,sceneLayerStyle,applyVectorMask} from './scene-model.js';
-import {clipMaterial} from './material-mask.js';
 import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textFontFamily,drawSceneText} from './editor-tools-model.js';
 import {craftSceneHash} from './craft-fingerprint.js';
 import {SCENE_MAX_GROUP_DEPTH} from './scene-v2.js';
-import {paintTapeStrip} from './tape-strip.js';
 import {groupMatrix,inverseMatrix} from './scene-spatial.js';
 
 export const SCENE_RENDERER_VERSION='shiye-scene-v2';
@@ -23,7 +23,8 @@ export async function prepareSceneFonts(draft){
  collect(draft.layers);
  const requested=[...new Set(texts.map(textFontFamily))];
  if(!fonts)return {status:'environment-unavailable',families:requested};
- await Promise.all(texts.map(t=>fonts.load(textFont(t),String(t.content||'示例'))));
+ const loads=await Promise.all(texts.map(t=>prepareJournalFont(t)));
+ if(loads.includes('web-artistic-unavailable'))return {status:'artistic-font-unavailable',families:requested,note:'艺术字体加载失败，当前使用环境后备字体'};
  return {status:'environment-fonts-loaded',families:requested,note:'同一字体名称不证明跨设备字体文件一致'};
 }
 export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createCanvas=()=>document.createElement('canvas'),loadShapeImage=decodeSceneImage,waitForFonts=true,backgroundYield}={}){
@@ -38,13 +39,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
    const sourceKey=item.sourceBlobId||item.sourceStaticPath||item.assetID;
    if(!decoded.has(sourceKey))decoded.set(sourceKey,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
    const image=await decoded.get(sourceKey);if(!image)throw Error('缺少素材图像：'+item.assetID);
-   const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!(w>0&&h>0))throw Error('素材图像尺寸无效');
-   target.scale(item.isFlippedHorizontally?-1:1,1);
-   const style=sceneLayerStyle(item);if(style.mask)applyVectorMask(target,style.mask,item.width,item.height);
-   if(item.tapeStrip){paintTapeStrip(target,item,image);return;}
-   clipMaterial(target,item);
-   const crop=item.cropRect||{x:0,y:0,width:1,height:1};
-   target.drawImage(image,crop.x*w,crop.y*h,crop.width*w,crop.height*h,-item.width/2,-item.height/2,item.width,item.height);
+   paintMaterialImage(target,item,image);
  };
  const drawLeaf=async(kind,item,target)=>{
    target.save();

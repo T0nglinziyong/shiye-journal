@@ -27,6 +27,7 @@ export function addLettering(doc,item,assets,{finishNode}){
 function random(seed){let n=seed>>>0;return()=>{n=(Math.imul(1664525,n)+1013904223)>>>0;return n/4294967296;};}
 export function addDecoration(doc,item,assets,{finishNode}){
  const target=creationNode(doc,item.target),path=spatialPath(doc.page.layers,target.id),parent=path.ancestors.at(-1)?.id,box=worldBox(doc.page,target.id),s=sceneScale(doc.page),rng=random(item.seed??42);
+ if(['circle','star','sparkle','dots'].includes(item.kind))return addOrnament(doc,item,assets,{finishNode,target,parent,box,s,rng});
  if(item.kind==='highlight'&&(target.type!=='text'||String(target.content).includes('\n')||target.type==='text'&&measureSceneText(target).lines.length!==1))throw Error('关键词高亮需要一个单行短文字图层；不是自动词语识别');
  const measured=target.type==='text'?measureSceneText(target):null;
  const contentWidth=measured?Math.min(box.w,measured.width):box.w;
@@ -43,4 +44,20 @@ export function addDecoration(doc,item,assets,{finishNode}){
  const pad=textEffectInsets(target),fractionY=item.kind==='highlight'?(pad.top+(target.fontSize||box.h)*.62)/box.h:1;
  const placement=item.place||(item.kind==='bracket'?{reference:'node:'+target.id,referenceAnchor:'middle-left',anchor:'middle-right',offset:{value:[-1.5,0],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'}:{reference:'node:'+target.id,at:[fractionX,fractionY],unit:'ratio',anchor:'center',offset:{value:item.kind==='underline'?[0,1.5]:[0,0],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'});
  return finishNode(doc,item.id,{place:placement,order:item.order||{[item.kind==='highlight'?'before':'after']:target.id}},assets,{created:true});
+}
+
+function addOrnament(doc,item,assets,{finishNode,target,parent,box,s,rng}){
+ const ring=item.kind==='circle',dots=item.kind==='dots',base=ring?{width:box.w/s+4,height:box.h/s+4}:dots?{width:10,height:2}:{width:6,height:6};
+ const extent=item.size?dimensions(doc.page,item.size,{parentID:parent,ratio:base.width/base.height}):base,w=extent.width*s,h=extent.height*s;
+ const width=(item.style?.strokeWidthMm??(dots?1.1:.45))*s;
+ const ink=(id,points)=>{const node={id,agentKey:id,type:'ink',points:points.map(([x,y])=>({x,y,p:.5})),width,color:'#78918A',penStyle:'ballpoint',opacity:.85,blendMode:'normal',layoutRotation:0,zIndex:500};Object.assign(node,changedNodeProperties(doc.page,node,{style:item.style}));return node;};
+ let node;
+ if(dots){const children=[-.35,0,.35].map((x,i)=>ink(item.id+'-dot'+(i+1),[[x*w,(i===1?-.15:.15)*h]]));node={id:item.id,type:'group',name:'圆点呼应',children,localTransform:[1,0,0,1,0,0],layoutBox:{width:w,height:Math.max(h,width)},opacity:1,blendMode:'normal',zIndex:500};}
+ else{
+  const count=ring?48:item.kind==='star'?10:8;
+  const points=Array.from({length:count},(_,i)=>{const a=-Math.PI/2+i*Math.PI*2/count,r=ring?1+(rng()-.5)*.012:i%2?(item.kind==='star'?.44:.20):1;return [Math.cos(a)*w/2*r,Math.sin(a)*h/2*r];});points.push(points[0]);node=ink(item.id,points);
+ }
+ doc=insertSceneNode(doc,node,assets,parent);
+ const place=item.place||{reference:'node:'+target.id,referenceAnchor:ring?'center':'top-right',anchor:ring?'center':'bottom-left',offset:{value:ring?[0,0]:[1.5,-1.5],unit:'mm'},rotationSpace:'reference',rotationDeg:0,behavior:'linked'};
+ return finishNode(doc,item.id,{place,order:item.order||{after:target.id}},assets,{created:true});
 }

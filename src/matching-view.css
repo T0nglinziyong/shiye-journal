@@ -112,3 +112,9 @@
   .match-creative-controls>label,.match-intent-label{font-size:13px}
   .match-creative-controls select{padding:8px 4px;font-size:14px}
 }
+
+/* Decision content is secondary UI, not a headline. Keep touch targets large. */
+.match-creative-controls>label{font-size:12px;font-weight:500;line-height:1.5;color:#6a756d}
+.match-creative-controls select{font-size:14px;font-weight:400;line-height:1.4;padding:9px 10px;color:#354b40}
+.match-creative-controls select option{font-size:14px;font-weight:400}
+@media(max-width:680px){.match-creative-controls>label{font-size:12px}.match-creative-controls select{font-size:14px;padding:9px 4px}}

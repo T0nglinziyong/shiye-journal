@@ -1,3 +1,6 @@
+import {SeriesArtwork} from './react-series-artwork.jsx';
+import {journalFontPresets} from './journal-fonts.js';
+import {TextEffectsPanel} from './react-text-effects.jsx';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -72,7 +75,7 @@ function SeriesCover({series,assets,seriesCovers,source,priority,account}){
     return ()=>{cancelled=true;};
   },[key]);
   return <div className="series-cover" ref={coverRef}>
-    {members.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority={priority}/>)}
+    <SeriesArtwork members={members} mode={series.coverLayout} source={source} priority={priority}/>
     {snapshot?.key===key?<img className="series-cover-snapshot" alt="" src={snapshot.url}
       loading={priority?'eager':'lazy'} decoding="async"/>:null}
   </div>;
@@ -835,7 +838,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
       <div className="actions" id="series-actions"><SelectionToggle mode="asset"
         selection={selection} onToggle={onSelectionToggle}/></div></div>
     <div className="view-head series-heading"><div className="series-identity">
-      <div className="series-detail-cover">{covers.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority/>)}</div>
+      <div className="series-detail-cover"><SeriesArtwork members={covers} mode={series.coverLayout} source={source} priority/></div>
       <div className="series-copy"><div className="eyebrow">COLLECTION</div>
         <h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签"
           onClick={onEditSeries}>{series.title} <span aria-hidden="true">✎</span></button></h1>
@@ -1068,11 +1071,12 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
         onChange={event=>onChange('inspector-text',event.target.value)}/></label>
       <div className="form-grid">
-        {choice('inspector-font','字体',item.style||'serif',[[ 'serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']])}
+        {choice('inspector-font','字体',item.style||'hand',journalFontPresets)}
         {field('inspector-font-size','字号',item.fontSize,'number',{min:5,max:400,step:1})}
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
       </div>
+      <TextEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-text-effects',style)}/>
       <div className="editor-inspector-checks">{check('inspector-bold','粗体',item.bold)}{check('inspector-italic','斜体',item.italic)}
         {check('inspector-underline','下划线',item.underline)}{check('inspector-strikethrough','删除线',item.strikethrough)}</div>
       <div className="editor-inspector-geometry">

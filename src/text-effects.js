@@ -36,3 +36,12 @@ export function paintTextGlyphs(ctx,node,text,x,y){
 }
 // Font/geometry scaling must scale physical outline offsets exactly once.
 export function scaleTextEffects(node,factor){if(node.textOutline)node.textOutline={...node.textOutline,width:node.textOutline.width*factor,offsetX:node.textOutline.offsetX*factor,offsetY:node.textOutline.offsetY*factor};}
+
+// Public effects use physical millimetres; provider tools and Command style
+// share this shape and the same styleFor conversion (never raw Scene units).
+const pair={type:'array',items:num(-100,100),minItems:2,maxItems:2};
+export const publicTextEffectSchema={type:'object',additionalProperties:false,minProperties:1,properties:{
+ outline:{anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['color','widthMm'],properties:{color,widthMm:num(.01,8),offsetMm:pair}}]},
+ gradient:textGradientSchema,
+ shadow:{anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['color','offsetMm','blurMm'],properties:{color,offsetMm:pair,blurMm:num(0,30)}}]}
+}};

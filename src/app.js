@@ -1,3 +1,6 @@
+import {configureJournalFontLoader} from './journal-fonts.js';
+import {styleFor} from './scene-node-properties.js';
+configureJournalFontLoader(()=>import('@fontsource/ma-shan-zheng/chinese-simplified-400.css'));
 import {commitSceneEditSession} from './scene-edit-session.js';
 import {editMaterialGeometry,restoreMaterialBaseline,replaceEditableMaterial,reshapeEditableTape} from './scene-material-edit.js';
 import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditableScene} from './scene-structure-edit.js';
@@ -50,6 +53,7 @@ import './canvas-editor-fixes.css';
 import './tape-ui.css';
 import './mobile-material-ui.css';
 import './ui-consistency.css';
+import './material-polish.css';
 import {createAssetOrganization} from './asset-organization.js';
 import {AssetOrganizationContext} from './react-organization.jsx';
 import {classificationQueue} from './classification-queue.js';
@@ -637,8 +641,6 @@ function render(){
   if(renderInProgress){renderQueued=true;return;}
   renderInProgress=true;
   try{
-  if(state.route==='editor'&&state.activeProject?.drafts?.some(d=>d.textBlocks?.some(t=>t.style==='hand')))
-    void import('@fontsource/ma-shan-zheng/chinese-simplified-400.css');
   // Keep the import photo queue at the exact scroll position while the whole
   // view is replaced on every photo switch, load-progress update and confirm.
   // Do not scroll the selected photo into view: that causes backward jumps.
@@ -1612,6 +1614,14 @@ async function runAppAction(action,id,value){try{
     state.canvasViewports?.set(state.activeProject.id+':'+current().id,{scale:1,x:0,y:0});
     render();break;
   }
+  case 'fabric-text-effects':{
+    const d=current(),entry=editorEntry(d).find(item=>item.value.id===state.selected),style=id;
+    if(!style||typeof style!=='object'||Object.keys(style).some(key=>!['outline','gradient','shadow'].includes(key)))throw Error('文字效果参数无效');
+    const values=styleFor('text',style,d,entry?.value||state.textDefaults||{});
+    if(entry?.kind==='text'){assertSceneEditable(d,entry.value.id);checkpoint();applySceneNodePatch(d,entry.value.id,values,{policy:USER_SCENE_POLICY});saveProject();}
+    else state.textDefaults={style:'hand',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,...values};
+    render();break;
+  }
   case 'fabric-text-property':{
     const allowed=['style','fontSize','color','alignment','bold','italic','underline','strikethrough'];
     if(!allowed.includes(id))break;
@@ -1628,7 +1638,7 @@ async function runAppAction(action,id,value){try{
       checkpoint();applySceneNodePatch(current(),entry.value.id,{[id]:next,...(id==='style'?{fontName:null}:{})},{policy:USER_SCENE_POLICY});
       saveProject();
     }else{
-      state.textDefaults={style:'serif',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,[id]:next};
+      state.textDefaults={style:'hand',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,[id]:next};
       if(id==='style')state.textDefaults.fontName=null;
     }
     render();break;
@@ -2721,7 +2731,7 @@ function openSeriesEditor(id){
         createdAt:existing?.createdAt||new Date().toISOString(),
         title:values.title,introduction:values.introduction,
         styleTags:parseTags(values.styleTags),semanticTags:parseTags(values.semanticTags),
-        coverAssetIDs:values.coverAssetIDs,coverAssetID:values.coverAssetID,
+        coverAssetIDs:values.coverAssetIDs,coverAssetID:values.coverAssetID,coverLayout:values.coverLayout,
         updatedAt:new Date().toISOString()};
       await db.put('series',next);
       if(existing)state.series[state.series.indexOf(existing)]=next;else state.series.push(next);

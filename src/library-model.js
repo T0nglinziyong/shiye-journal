@@ -1,9 +1,8 @@
-// Mirrors MaterialSeries.resolvedCoverIDs. An empty/obsolete explicit cover
-// falls back to the first three current members, without changing membership.
+// Cover selection never changes membership; at most five source thumbnails.
 export function seriesCovers(series, assets) {
   const members = assets.filter(a => a.seriesID === series.id && !a.isProjectInternal);
   const chosen = (series.coverAssetIDs || []).filter(id => members.some(a => a.id === id)).slice(0, 5);
-  return (chosen.length ? chosen : members.slice(0, 3).map(a => a.id)).map(id => members.find(a => a.id === id));
+  return (chosen.length ? chosen : members.slice(0, 5).map(a => a.id)).map(id => members.find(a => a.id === id));
 }
 export function parseTags(text) {
   return [...new Set(String(text || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean))];
