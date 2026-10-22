@@ -39,7 +39,7 @@ async function withPackage(assets,fn,{p=project('统一创作测试'),canvas=tru
 test('current ZIP creates editable Scene, recovers stale locks and verifies real PNG bytes',async()=>{
  const assets=[paper()];await withPackage(assets,async({files,dir,run,ok,read,write,batch})=>{
   for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
-  const commands=batch([material('hero','m1',mm(60,70)),text('title','一张蓝纸的今天',60,20,70,22),{op:'shape.add',id:'dot',kind:'ellipse',place:mm(85,38),size:{width:8,height:8,unit:'mm'},style:{fill:'#d5e2d6'}},decision('m1')]);
+  const commands=batch([material('hero','m1',mm(60,70)),text('title','一张蓝纸的今天',60,20,70,22),{op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:mm(85,38),size:{width:8,height:8,unit:'mm'},style:{fill:'#d5e2d6'}},decision('m1')]);
   await write('work/commands.json',commands);
   const lock=join(dir,'work/.scene-write-lock');await mkdir(lock);await writeFile(join(lock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));await utimes(lock,new Date(Date.now()-120000),new Date(Date.now()-120000));
   ok('apply','work/commands.json');assert.equal(ok('apply','work/commands.json').replayed,true);ok('preview');ok('pack');
@@ -59,8 +59,8 @@ test('one public protocol exposes executable help and delivers mask vector ink t
   assert.equal((await read('work/commands.json')).protocolVersion,2);ok('begin','work/next.json','--protocol=2');assert.equal((await read('work/next.json')).protocolVersion,2);
   await apply([material('photo','m1',ratio(.5,.4)),{op:'material.crop',target:'photo',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.5,1]}},{op:'material.mask',target:'photo',region:{shape:'ellipse',space:'local',unit:'ratio',box:[0,0,1,1]},mode:'replace'},
    {op:'text.add',id:'caption',content:'这张照片让我想起今天。',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,5],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
-   {op:'vector.add',id:'triangle',viewBox:[0,0,10,10],paths:[{d:'M0 10 L5 0 L10 10 Z',style:{fill:'#aabbcc'}}],place:ratio(.2,.2),size:{width:10,height:10,unit:'mm'}},
-   {op:'ink.add',id:'stroke',points:[{x:0,y:0},{x:20,y:0}],unit:'mm',place:ratio(.5,.8),style:{strokeWidthMm:2,color:'#334d4a',penStyle:'marker'}},decision('m1','crafted')]);
+   {op:'graphic.add',id:'triangle',geometry:{kind:'path',paths:[{d:'M0 10 L5 0 L10 10 Z',style:{fill:'#aabbcc'}}],viewBox:[0,0,10,10]},place:ratio(.2,.2),size:{width:10,height:10,unit:'mm'}},
+   {op:'graphic.add',id:'stroke',geometry:{kind:'stroke',points:[{x:0,y:0},{x:20,y:0}],unit:'mm'},place:ratio(.5,.8),style:{strokeWidthMm:2,stroke:'#334d4a',penStyle:'marker'}},decision('m1','crafted')]);
   ok('preview');ok('pack');const output=await read('output/project.shiyeproject.json'),m=output.page.layers.find(n=>n.type==='material');assert.ok(m.vectorMask);assert.equal(m.materialMask??null,null);assert.equal(m.cropRect.width,.5);
   for(const type of ['material','text','shape','ink'])assert.equal(output.page.layers.filter(n=>n.type===type).length,1);
   assert.equal((await readFile(join(dir,'output/project.shiyeproject.json'),'utf8')).includes('\n'),false);
@@ -111,14 +111,14 @@ test('unified commands keep partition offcut windows weave and editable text wit
    {op:'material.window',target:'frame',windowId:'b',region:{shape:'rect',space:'local',unit:'ratio',box:[.75,.2,.15,.6]}},
    {op:'material.weave',strip:'strip',through:[{target:'frame',window:'a',sideAfter:'front'},{target:'frame',window:'b',sideAfter:'back'}]},
    text('caption','几片纸之间，也有今天的小故事。',145,175,95,20),
-   {op:'ink.add',id:'highlight',unit:'mm',place:mm(141,188),points:[{x:0,y:0},{x:68,y:0}],style:{strokeWidthMm:3,color:'#e8d66b',penStyle:'marker'}},
+   {op:'graphic.add',id:'highlight',geometry:{kind:'stroke',points:[{x:0,y:0},{x:68,y:0}],unit:'mm'},place:mm(141,188),style:{strokeWidthMm:3,stroke:'#e8d66b',penStyle:'marker'}},
    ...['m1','m2','m3'].map(alias=>decision(alias,'crafted'))]);
   assert.ok((await read('scene.json')).page.layers.some(node=>node.isParked));ok('preview');ok('pack');assert.ok(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length>=4);
  },{p});
 });
 test('fixed recipes contain valid operation snippets rather than task-specific transactions',async()=>{
  const a=unzipSync(new Uint8Array(await (await makeTask([paper()],'甲')).blob.arrayBuffer())),b=unzipSync(new Uint8Array(await (await makeTask([paper()],'乙')).blob.arrayBuffer()));
- for(const path of ['START_HERE.md','design/CRAFT_GUIDE.md','design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/LETTERING.md','design/RECIPES.md','api/fixed-release.json'])assert.deepEqual(a[path],b[path],path);
+ for(const path of ['START_HERE.md','design/CRAFT_GUIDE.md','design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/LETTERING.md','design/GRAPHICS.md','design/RECIPES.md','api/fixed-release.json'])assert.deepEqual(a[path],b[path],path);
  for(const path of ['design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/LETTERING.md']){
   const prose=new TextDecoder().decode(a[path]);assert.doesNotMatch(prose,/4849|4850|4851|4852|4853|教程视频/);
   assert.match(prose,/文字|正文/);
@@ -150,7 +150,7 @@ test('eight required materials survive revisions grouping preview delivery and r
  const assets=Array.from({length:8},(_,i)=>paper('required-'+i,20,24)),p=project('八件素材双页',{mode:'spread',ratio:'b6'});p.requiredAssetIDs=assets.map(a=>a.id);
  await withPackage(assets,async({dir,ok,read,apply})=>{
   await apply([...assets.map((a,i)=>material('piece-'+i,'m'+(i+1),mm(25+(i%4)*44,40+Math.floor(i/4)*43))),...assets.map((a,i)=>decision('m'+(i+1)))]);
-  await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'shape.add',id:'accent',kind:'ellipse',place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'},order:{after:'title'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.place',target:'heading-group',place:mm(115,20)}]);
+  await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'graphic.add',id:'accent',geometry:{kind:'ellipse'},place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'},order:{after:'title'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.place',target:'heading-group',place:mm(115,20)}]);
   await apply([{op:'text.update',target:'note',style:{fontSizePt:11},place:mm(185,142),content:'八件小东西有各自的位置。\n把它们放在一起，今天就有了形状。'}]);ok('preview');ok('pack');assert.equal((await read('scene.json')).materialDecisions.length,8);assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,8);
  },{p});
 });

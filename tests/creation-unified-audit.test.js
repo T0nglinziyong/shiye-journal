@@ -40,13 +40,13 @@ test('parameter errors point at the requested operation and reject meaningless s
  assert.throws(()=>validateCreationV2Commands(tx([{op:'text.add',id:'note',content:'test',place:at,size:{width:30,unit:'mm'},style:{fill:'#ffffff'}}])),e=>e.path.includes('/operations/0')&&e.message.includes('describe'));
  assert.throws(()=>validateCreationV2Commands(tx([{op:'material.decision',asset:'m1',choice:'intact',reason:'太短'}])),/reason/);
 });
-test('real ink.add rotates once vector stroke and shadow persist and text height is honored',async()=>{
+test('unified stroke geometry rotates once vector stroke and shadow persist and text height is honored',async()=>{
  const {doc,assets}=await fixture();
  const d=applyCreationV2Batch(doc,tx([
-  {op:'ink.add',id:'ink',unit:'mm',points:[{x:0,y:0},{x:20,y:0}],place:{...at,rotationDeg:30},style:{strokeWidthMm:1,color:'#334455',penStyle:'ballpoint'}},
-  {op:'vector.add',id:'vec',viewBox:[0,0,10,10],paths:[{d:'M1 1 L9 9',style:{stroke:'#334455'}}],place:at,size:{width:20,height:20,unit:'mm'},style:{strokeWidthMm:2,shadow:{offsetMm:[1,2],blurMm:1,color:'#222222'}}},
+  {op:'graphic.add',id:'ink',geometry:{kind:'stroke',points:[{x:0,y:0},{x:20,y:0}],unit:'mm'},place:{...at,rotationDeg:30},style:{strokeWidthMm:1,stroke:'#334455',penStyle:'ballpoint'}},
+  {op:'graphic.add',id:'vec',geometry:{kind:'path',paths:[{d:'M1 1 L9 9',style:{stroke:'#334455'}}],viewBox:[0,0,10,10]},place:at,size:{width:20,height:20,unit:'mm'},style:{strokeWidthMm:2,shadow:{offsetMm:[1,2],blurMm:1,color:'#222222'}}},
   {op:'text.add',id:'txt',content:'test',place:at,size:{width:30,height:20,unit:'mm'},style:{fontSizePt:10}},
-  {op:'layer.update',target:'ink',style:{strokeWidthMm:2,color:'#112233'}}
+  {op:'layer.update',target:'ink',style:{strokeWidthMm:2,stroke:'#112233'}}
  ]),assets);
  const ink=d.page.layers.find(n=>n.id==='ink'),[a,b]=ink.points;assert.ok(Math.abs(Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI-30)<1e-7);assert.ok(Math.abs(worldBox(d.page,'ink').rotation-30)<1e-7);
  const vec=d.page.layers.find(n=>n.id==='vec');assert.equal(vec.shadow.color,'#222222');assert.ok(vec.lineWidth>0);assert.match(shapeSVG(vec),/stroke-width=/);
@@ -55,7 +55,7 @@ test('real ink.add rotates once vector stroke and shadow persist and text height
 test('group.compose supports local revisions but cannot modify external objects',async()=>{
  const {doc,assets}=await fixture();
  const made=applyCreationV2Batch(doc,tx([{op:'group.compose',id:'g',layoutBox:{width:60,height:50,unit:'mm'},place:{...at,rotationDeg:20},children:[
-  {op:'shape.add',id:'dot',kind:'ellipse',place:{reference:'parent',at:[.5,.5],unit:'ratio'},size:{width:10,height:10,unit:'mm'}},{op:'layer.update',target:'dot',style:{fill:'#abcdef'}}
+  {op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:{reference:'parent',at:[.5,.5],unit:'ratio'},size:{width:10,height:10,unit:'mm'}},{op:'layer.update',target:'dot',style:{fill:'#abcdef'}}
  ]}]),assets);
  assert.equal(made.page.layers[0].children[0].fill,'#abcdef');
  assert.throws(()=>applyCreationV2Batch(made,tx([{op:'group.compose',id:'bad',place:at,children:[{op:'layer.delete',target:'dot'}]}]),assets),/外部对象/);
@@ -77,7 +77,7 @@ for(const renderer of ['node','browser'])test(`exported ZIP current protocol che
   const run=(...args)=>spawnSync(process.execPath,['runtime/shiye.cjs',...args],{cwd:dir,encoding:'utf8',timeout:60000,env:{...process.env,SHIYE_RENDERER:renderer,...(process.env.CI?{SHIYE_CHROMIUM_NO_SANDBOX:'1'}:{})}});
   const info=run('info');assert.equal(info.status,0,info.stderr);assert.deepEqual(JSON.parse(info.stdout).supportedProtocolVersions,[2]);assert.equal(run('describe','place').status,0);
   const draft=run('begin','work/audit.json');assert.equal(draft.status,0,draft.stderr);const batch=JSON.parse(await readFile(join(dir,'work/audit.json'),'utf8'));
-  batch.operations=[{op:'material.add',id:'paper',asset:'m1',place:at},{op:'material.window',target:'paper',windowId:'hole',region:{shape:'ellipse',space:'local',unit:'ratio',box:[.3,.3,.3,.3]}},{op:'text.lettering',id:'title',content:'GO',place:{reference:'page',at:[.5,.16],unit:'ratio'},style:{fontSizePt:24,outline:{color:'#35516A',widthMm:.4},gradient:{angleDeg:90,stops:[{offset:0,color:'#E58A50'},{offset:1,color:'#556EA4'}]}},letters:[{index:1,style:{fontPreset:'serif'}}]},{op:'draw.decorate',id:'title-mark',target:'title',kind:'underline'},{op:'material.decision',asset:'m1',choice:'crafted',reason:'在纸张中央开出圆窗，露出下层并保留实体来源。'}];await writeFile(join(dir,'work/audit.json'),JSON.stringify(batch));
+  batch.operations=[{op:'material.add',id:'paper',asset:'m1',place:at},{op:'material.window',target:'paper',windowId:'hole',region:{shape:'ellipse',space:'local',unit:'ratio',box:[.3,.3,.3,.3]}},{op:'text.lettering',id:'title',content:'GO',place:{reference:'page',at:[.5,.16],unit:'ratio'},style:{fontSizePt:24,outline:{color:'#35516A',widthMm:.4},gradient:{angleDeg:90,stops:[{offset:0,color:'#E58A50'},{offset:1,color:'#556EA4'}]}},letters:[{index:1,style:{fontPreset:'serif'}}]},{op:'graphic.add',id:'title-mark',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:title',width:.85,unit:'ratio'},place:{reference:'node:title',at:[.5,1],unit:'ratio',anchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked',offset:{value:[0,1.5],unit:'mm'}},style:{stroke:'#546E7A',strokeWidthMm:.55,penStyle:'ballpoint',opacity:1,blendMode:'normal'},order:{after:'title'}},{op:'material.decision',asset:'m1',choice:'crafted',reason:'在纸张中央开出圆窗，露出下层并保留实体来源。'}];await writeFile(join(dir,'work/audit.json'),JSON.stringify(batch));
   const before=await readFile(join(dir,'scene.json'),'utf8');const fonts=run('fonts');assert.equal(fonts.status,0,fonts.stderr);assert.ok(JSON.parse(fonts.stdout).presets.includes('hand'));const audit=run('design-check');assert.equal(audit.status,0,audit.stderr);assert.equal(JSON.parse(audit.stdout).visualReviewPerformed,false);assert.equal(await readFile(join(dir,'scene.json'),'utf8'),before);const check=run('check','work/audit.json');assert.equal(check.status,0,check.stderr);assert.equal(await readFile(join(dir,'scene.json'),'utf8'),before);
   for(const args of [['apply','work/audit.json'],['preview'],['review','--result','pass'],['pack']]){const result=run(...args);assert.equal(result.status,0,args.join(' ')+': '+result.stderr);}
   const manifest=JSON.parse(await readFile(join(dir,'output/manifest.json'),'utf8'));assert.match(manifest.rendererBackend,renderer==='browser'?/^browser-canvas\//:/^node-canvas@/);

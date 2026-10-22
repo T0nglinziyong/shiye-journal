@@ -1,6 +1,6 @@
 // The executable public language. This is not a legacy-operation adapter.
 import base from '../creation-contract/static/api/common.schema.json' with {type:'json'};
-import {commonShapes,advancedShapes} from './editor-tools-model.js';
+import {graphicPresetKinds} from './graphic-geometry.js';
 const ref=name=>({$ref:'#/$defs/'+name});
 const obj=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const num=(minimum=-100000,maximum=100000)=>({type:'number',minimum,maximum});
@@ -30,7 +30,7 @@ const styleNames={
  material:[...commonStyles,'flipHorizontal'],group:commonStyles,
  text:[...commonStyles,'outline','gradient','color','fontFamily','fontSizePt','fontPreset','fontWeight','italic','underline','strikethrough','textAlign','lineHeight','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'],
  shape:[...commonStyles,'fill','stroke','strokeWidthMm','fillOpacity','strokeOpacity','strokeDash','cornerRadiusRatio'],
- ink:[...commonStyles,'color','strokeWidthMm','penStyle']
+ graphic:[...commonStyles,'fill','stroke','strokeWidthMm','fillOpacity','strokeOpacity','strokeDash','cornerRadiusRatio','penStyle']
 };
 for(const [kind,names] of Object.entries(styleNames))d['Style_'+kind]={...obj(Object.fromEntries(names.map(key=>[key,d.Style.properties[key]]))),minProperties:1};
 d.PathStyle={...obj(Object.fromEntries(['fill','stroke','opacity'].map(key=>[key,d.Style.properties[key]]))),minProperties:1};
@@ -44,10 +44,12 @@ d.Edge.allOf=[{if:{properties:{style:{const:'torn'}}},then:{required:['seed']}}]
 d.TapePath=obj({points:arr(ref('Vec2'),2,128),unit:{const:'mm'}},['points','unit']);
 d.TapeTexture=obj({mode:en('sample','repeat','stretch'),offsetMm:num(0,100000),windowMm:num(.001,100000),repeatRangeMm:{type:'array',minItems:2,maxItems:2,items:num(0,100000)},reverse:bool});
 d.TapeCaps=obj({start:en('square','angled','torn'),end:en('square','angled','torn'),depthMm:num(0,100)});
-d.GeometryUpdate={oneOf:[
- obj({kind:{const:'vector'},paths:ref('VectorPaths'),viewBox:ref('ViewBox')},['kind','paths','viewBox']),
- obj({kind:{const:'ink'},points:ref('InkPoints'),unit:{const:'mm'}},['kind','points','unit']),
- obj({kind:{const:'shape'},shape:{enum:[...commonShapes,...advancedShapes].map(([name])=>name==='rectangle'?'rect':name).filter(name=>name!=='vector')}},['kind','shape'])
+// The SAME geometry is accepted by creation and updates. No target/placement
+// shortcut, no decoration type, and no legacy shape/vector/ink wrapper fields.
+d.GraphicGeometry={oneOf:[
+ obj({kind:{enum:graphicPresetKinds}},['kind']),
+ obj({kind:{const:'path'},paths:ref('VectorPaths'),viewBox:ref('ViewBox')},['kind','paths','viewBox']),
+ obj({kind:{const:'stroke'},points:ref('InkPoints'),unit:{const:'mm'}},['kind','points','unit'])
 ]};
 d.Relation={oneOf:[
  obj({kind:{const:'peek'},reference:ref('Reference'),edge:en('top','right','bottom','left'),exposedMm:num(0,1000),alongMm:num(-1000,1000),rotationDeg:num(-180,180)},['kind','reference','edge','exposedMm']),
@@ -56,7 +58,7 @@ d.Relation={oneOf:[
 ]};
 const publicCommon={place:ref('Place'),size:ref('Size'),style:ref('Style'),order:ref('Order')};
 const create=(type,extras={})=>({id,parent:id,place:ref('Place'),size:ref('Size'),style:ref('Style_'+type),order:ref('Order'),...extras});
-const change={target:id,...publicCommon,content:str(),geometry:ref('GeometryUpdate'),layoutBox:ref('LayoutBox'),hidden:bool,locked:bool,name:str(100)};
+const change={target:id,...publicCommon,content:str(),geometry:ref('GraphicGeometry'),layoutBox:ref('LayoutBox'),hidden:bool,locked:bool,name:str(100)};
 const noSize=props=>{const p={...props};delete p.size;return p;};
 const point={reference:'page',at:[50,60],unit:'mm'};
 const relative={reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'}};
@@ -69,11 +71,8 @@ function add(name,summary,properties,required,example,notes=[],extra={}){
 add('material.add','放置完整实体素材。',noSize(create('material',{asset:id})),['id','asset','place'],{id:'photo',asset:'m1',place:point},['保留来源物理尺寸；不能用 size 缩放。']);
 add('text.add','创建可编辑文字；先测量，再按锚点定位。',create('text',{content:str()}),['id','content','size','place'],{id:'caption',content:'今天的小记。',size,place:relative,style:{fontSizePt:11}},['size.width 必填；height 是持续保存的最小高度，正文变化仍可增长。']);
 add('text.update','修改文字，使用与创建相同的属性和重排逻辑。',{target:id,...publicCommon,content:str(),hidden:bool,locked:bool,style:ref('Style_text')},['target'],{target:'caption',style:{fontSizePt:14}},[],{anyOf:['content','size','style','place','order','hidden','locked'].map(key=>({required:[key]}))});
-add('shape.add','创建基础图形。',create('shape',{kind:d.GeometryUpdate.oneOf[2].properties.shape}),['id','kind','size','place'],{id:'dot',kind:'ellipse',size:{width:8,height:8,unit:'mm'},place:point,style:{fill:'#A8BCD5'}});
-add('vector.add','创建可编辑多路径矢量。',create('shape',{paths:ref('VectorPaths'),viewBox:ref('ViewBox')}),['id','paths','viewBox','size','place'],{id:'triangle',paths:[{d:'M0 10 L5 0 L10 10 Z',style:{fill:'#A8BCD5'}}],viewBox:[0,0,10,10],size:{width:10,unit:'mm'},place:point},['路径局部 viewBox 坐标不是页面坐标；全局样式与基础图形共用。']);
-add('ink.add','创建保留压感点的笔迹。',noSize(create('ink',{points:ref('InkPoints'),unit:{const:'mm'}})),['id','points','unit','place','style'],{id:'underline',points:[{x:0,y:0},{x:30,y:1}],unit:'mm',place:point,style:{color:'#334D4A',strokeWidthMm:1,penStyle:'pressure'}});
+add('graphic.add','创建基础图形、自由矢量或压感笔迹；主图和点缀使用同一入口。',create('graphic',{geometry:ref('GraphicGeometry')}),['id','geometry','place'],{id:'star',geometry:{kind:'star'},place:{reference:'node:photo',referenceAnchor:'top-right',anchor:'bottom-left',offset:{value:[2,-2],unit:'mm'},behavior:'linked'},size:{width:8,height:8,unit:'mm'},style:{fill:'#E7C57F',stroke:'#526E65',strokeWidthMm:.4}},['所有绘画颜色用 style.fill/stroke；笔迹不再改用 color。基础图形和 path 要指定 size；stroke 的 points 单位 mm，省略 size 使用实际路径尺寸。','相对位置只用 place.reference；参考尺寸只用 size.reference。没有 target、placement、自动点缀或用途专属默认位置。','创建后 layer.update 使用相同 geometry/size/style；笔迹保留可编辑压力点，shape/path 保留可编辑矢量。修改不会自动切换 Scene 节点类型。'],{allOf:[{if:{properties:{geometry:{properties:{kind:{not:{const:'stroke'}}},required:['kind']}},required:['geometry']},then:{required:['size']}}]});
 add('text.lettering','一次创建逐字可编辑的艺术标题，每字可用不同字体/颜色/描边/渐变；不栅格化。',{id,parent:id,content:str(128),place:ref('Place'),style:ref('Style_text'),gapMm:num(0,20),letters:arr(obj({index:{type:'integer',minimum:0,maximum:31},style:ref('Style_text'),rotationDeg:num(-45,45),offsetMm:ref('Vec2')},['index']),0,32),order:ref('Order')},['id','content','place'],{id:'title',content:'出发',place:point,style:{fontSizePt:24,color:'#35516A',outline:{color:'#FFFFFF',widthMm:.6}},letters:[{index:1,style:{fontPreset:'serif',gradient:{angleDeg:90,stops:[{offset:0,color:'#D18A5B'},{offset:1,color:'#6B4C8C'}]}},rotationDeg:4}]},['生成 id-g1、id-g2 等独立 text 子节点；后续仍用 text.update/layer.update。适用于短标题，不替代长正文或复杂连写语言的整词排版。字体以当前环境可用者为准；用 fonts 查询。']);
-add('draw.decorate','根据目标生成可编辑下划线、高亮、括号、圈线、星星、闪光或圆点组，不再手算周边坐标。',{id,target:id,kind:en('underline','highlight','bracket','circle','star','sparkle','dots'),size:ref('Size'),place:ref('Place'),style:ref('Style_ink'),order:ref('Order'),seed:{type:'integer',minimum:0,maximum:2147483647}},['id','target','kind'],{id:'emphasis',target:'caption',kind:'underline',style:{color:'#B99355',strokeWidthMm:.6},seed:42},['circle 默认环绕目标，star/sparkle/dots 默认点缀在目标右上方，可用 place 改方向；默认位置跟随目标，尺寸按创建时计算；目标文字长度变化后可重新创建或精修 geometry。highlight 目标应是单独的单行关键词文本框；不会识别句内词语。几何点为普通 ink，可继续编辑。']);
 add('layer.place','用通用 place 定位任意空间节点。',{target:id,place:ref('Place')},['target','place'],{target:'caption',place:relative});
 add('layer.update','局部修改公共属性与类型化内容，统一重排和 linked 求解。',change,['target'],{target:'caption',style:{fontSizePt:14}},['content 只用于文字；geometry 用于图形/矢量/笔迹。未提供字段保持不变。'],{anyOf:Object.keys(change).filter(key=>key!=='target').map(key=>({required:[key]}))});
 add('layer.reparent','移入或移出父组，保持世界位置。',{target:id,parent:{anyOf:[id,{type:'null'}]},preserveWorld:{const:true},order:ref('Order')},['target','parent'],{target:'photo',parent:'card',preserveWorld:true});

@@ -25,14 +25,14 @@ async function setup(asset=paper(),p=project('统一命令')){
 test('published schema exposes current capabilities and rejects deferred geometry',()=>{
  assert.throws(()=>validateCreationV2Commands(batch([{op:'layout.arrange',targets:['a'],rule:{type:'grid'},container:'page'}])),/commands|操作/);
  assert.throws(()=>validateCreationV2Commands(batch([{op:'page.update',physicalSizeMm:[100,200]}])),/commands/);
- assert.throws(()=>validateCreationV2Commands(batch([{op:'shape.add',id:'a',kind:'rect',place:{...at,referenceBounds:'visible'},size:{width:10,height:10,unit:'mm'}}])),/commands/);
+ assert.throws(()=>validateCreationV2Commands(batch([{op:'graphic.add',id:'a',geometry:{kind:'rect'},place:{...at,referenceBounds:'visible'},size:{width:10,height:10,unit:'mm'}}])),/commands/);
  validateCreationV2Commands(batch([{op:'layout.arrange',targets:['a','b'],rule:{direction:'horizontal',gapMm:4},container:'page'}]));
 });
 test('page and relative commands create editable native Scene nodes',async()=>{
  const {run}=await setup(paper('photo-1',30,20));
  const result=run([add('photo',{...at,at:[.5,.4]}),{op:'text.add',id:'caption',content:'今天看见的一角',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
   {op:'text.update',target:'caption',content:'今天看见的一角。',style:{fontSizePt:14,lineHeight:1.45}},
-  {op:'shape.add',id:'dot',kind:'ellipse',place:{reference:'page',at:[20,20],unit:'mm'},size:{width:5,height:5,unit:'mm'},style:{fill:'#aabbcc',shadow:{offsetMm:[1,2],blurMm:1,color:'#112233'}}}]);
+  {op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:{reference:'page',at:[20,20],unit:'mm'},size:{width:5,height:5,unit:'mm'},style:{fill:'#aabbcc',shadow:{offsetMm:[1,2],blurMm:1,color:'#112233'}}}]);
  const nodes=result.page.layers,photo=nodes.find(n=>n.creativePieceID==='photo'),caption=nodes.find(n=>n.agentKey==='caption'),dot=nodes.find(n=>n.id==='dot');
  assert.ok(photo&&caption&&dot);assert.equal(caption.content,'今天看见的一角。');assert.ok(caption.fixedLineHeight>caption.fontSize);assert.ok(caption.y>photo.y);assert.equal(dot.kind,'ellipse');assert.equal(dot.shadow.color,'#112233');
  const revised=run([{op:'group.create',id:'note-group',targets:['caption','dot']},{op:'layer.reorder',target:'dot',order:{before:'caption'}},{op:'group.ungroup',target:'note-group'},{op:'page.update',paperColor:'#eeeeee'}],result);
@@ -48,7 +48,7 @@ test('group.compose creates local children and linked captions survive reopen',a
 test('create update and reparent share parent-relative sizes and sibling order',async()=>{
  const {run}=await setup(paper('ordered',20,20));
  const next=run([{op:'group.compose',id:'frame',layoutBox:{width:100,height:80,unit:'mm'},place:at,children:[
-  {op:'shape.add',id:'back',kind:'rect',size:{reference:'parent',width:.5,height:.5,unit:'ratio'},place:local},
+  {op:'graphic.add',id:'back',geometry:{kind:'rect'},size:{reference:'parent',width:.5,height:.5,unit:'ratio'},place:local},
   {...add('photo',local),order:{edge:'back'}},{op:'text.add',id:'note',content:'记录',size:{width:30,unit:'mm'},place:local,order:{after:'photo'}}
  ]},{op:'text.update',target:'note',content:'重新记录',order:{edge:'front'}},{op:'layer.reparent',target:'back',parent:null,order:{edge:'back'}}]);
  const frame=next.page.layers.find(n=>n.id==='frame');assert.deepEqual(frame.children.map(n=>n.creativePieceID||n.agentKey||n.key),['photo','note']);assert.equal(next.page.layers[0].id,'back');assert.ok(Math.abs(next.page.layers[0].width/next.page.canvas.height*next.page.physicalPageHeightMM-50)<.01);assert.equal(frame.children.at(-1).content,'重新记录');
@@ -61,7 +61,7 @@ test('deleting a referenced layer requires explicit link detachment',async()=>{
 });
 test('linked ink stays editable while following a moved reference',async()=>{
  const {run}=await setup(paper('ink-anchor',20,20));
- const made=run([add('paper',{...at,at:[.4,.4]}),{op:'ink.add',id:'mark',unit:'mm',points:[{x:0,y:0},{x:20,y:2}],place:{reference:'node:paper',referenceAnchor:'bottom-center',anchor:'top-center',behavior:'linked'},style:{strokeWidthMm:2,color:'#ffb344',penStyle:'marker'}}]);
+ const made=run([add('paper',{...at,at:[.4,.4]}),{op:'graphic.add',id:'mark',geometry:{kind:'stroke',points:[{x:0,y:0},{x:20,y:2}],unit:'mm'},place:{reference:'node:paper',referenceAnchor:'bottom-center',anchor:'top-center',behavior:'linked'},style:{strokeWidthMm:2,stroke:'#ffb344',penStyle:'marker'}}]);
  const old=worldBox(made.page,'mark'),next=run([{op:'layer.place',target:'paper',place:{...at,at:[.6,.6]}}],made);assert.ok(worldBox(next.page,'mark').cx>old.cx+10);assert.ok(next.page.layers.find(n=>n.id==='mark').layoutConstraint);
 });
 test('split consumes the real parent and allocates its offcut',async()=>{
@@ -70,7 +70,7 @@ test('split consumes the real parent and allocates its offcut',async()=>{
  const ledger=buildMaterialLedger(next.page,assets);assert.equal(ledger.units[0].sourceAreaMM2,8000);assert.equal(ledger.units[0].remainingAreaMM2,0);assert.equal(ledger.units[0].allocations.filter(n=>!n.parked).length,2);
 });
 test('split inside rotated group preserves the local frame and occupancy',async()=>{
- const {run,assets}=await setup();const next=run([{op:'group.compose',id:'paper-group',layoutBox:{width:120,height:120,unit:'mm'},place:{...at,rotationDeg:15},children:[add('parent',local),{op:'shape.add',id:'mark',kind:'ellipse',size:{width:4,height:4,unit:'mm'},place:{...local,at:[.8,.8]}}]},
+ const {run,assets}=await setup();const next=run([{op:'group.compose',id:'paper-group',layoutBox:{width:120,height:120,unit:'mm'},place:{...at,rotationDeg:15},children:[add('parent',local),{op:'graphic.add',id:'mark',geometry:{kind:'ellipse'},size:{width:4,height:4,unit:'mm'},place:{...local,at:[.8,.8]}}]},
   {op:'material.split',target:'parent',pieces:[{id:'left',region:rect([0,0,.4,1])},{id:'right',region:rect([.5,0,.4,1])}]}]);
  const group=next.page.layers.find(n=>n.id==='paper-group');assert.ok(group.children.some(n=>n.creativePieceID==='left'));assert.ok(group.children.some(n=>n.creativePieceID==='right'));assert.equal(group.children.some(n=>n.creativePieceID==='parent'),false);assert.equal(buildMaterialLedger(next.page,assets).units[0].allocations.filter(n=>!n.parked).length,2);
 });

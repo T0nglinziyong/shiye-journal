@@ -31,12 +31,10 @@ test('new offline text defaults to artistic preset while explicit font and body 
  const explicit=run([{op:'text.update',target:'title',style:{fontPreset:'hand',fontFamily:'Specific Font'}}],changed);
  assert.equal(findSceneNode(explicit.page,'title').fontName,'Specific Font');
 });
-for(const kind of ['circle','star','sparkle','dots'])test(`AI ${kind} decoration is editable, seeded, linked and cannot allocate physical inventory`,async()=>{
- const {run,assets}=await setup();const ops=[{op:'group.compose',id:'card',layoutBox:{width:90,height:100,unit:'mm'},place:{...at,rotationDeg:23},children:[{...text,place:local},{op:'material.add',id:'paper',asset:'m1',place:{...local,at:[.8,.8]}},{op:'draw.decorate',id:'accent',target:'title',kind,seed:17,style:{color:'#C48860',strokeWidthMm:.6}}]}];
+for(const kind of ['ellipse','star','sparkle','dots'])test(`AI ${kind} graphic is editable, deterministic, linked and cannot allocate physical inventory`,async()=>{
+ const {run,assets}=await setup();const ops=[{op:'group.compose',id:'card',layoutBox:{width:90,height:100,unit:'mm'},place:{...at,rotationDeg:23},children:[{...text,place:local},{op:'material.add',id:'paper',asset:'m1',place:{...local,at:[.8,.8]}},{op:'graphic.add',id:'accent',geometry:{kind},size:{width:8,height:8,unit:'mm'},place:{reference:'node:title',referenceAnchor:'top-right',rotationSpace:'reference',rotationDeg:0,behavior:'linked'},style:{stroke:'#C48860',strokeWidthMm:.6}}]}];
  const first=run(ops),second=run(ops);assert.deepEqual(findSceneNode(first.page,'accent'),findSceneNode(second.page,'accent'));
- const accent=findSceneNode(first.page,'accent');assert.equal(accent.type,kind==='dots'?'group':'ink');
- if(kind==='dots'){assert.equal(accent.children.length,3);assert.ok(accent.children.every(n=>n.points.length===1&&n.color==='#C48860'));}
- else {assert.ok(accent.points.length>7);assert.deepEqual(accent.points[0],accent.points.at(-1));}
+ const accent=findSceneNode(first.page,'accent');assert.equal(accent.type,'shape');assert.equal(accent.kind,kind);assert.equal(accent.stroke,'#C48860');
  assert.equal(accent.layoutConstraint.place.reference,'node:title');
  const before=worldBox(first.page,'accent');const moved=run([{op:'layer.place',target:'title',place:{...local,at:[.3,.6]}}],first);
  const after=worldBox(moved.page,'accent');assert.ok(Math.abs(after.cx-before.cx)>1);near(after.rotation,23);
@@ -47,7 +45,7 @@ for(const kind of ['circle','star','sparkle','dots'])test(`AI ${kind} decoration
 });
 test('circle can use explicit placement and size without silently rewriting the target',async()=>{
  const {run}=await setup();const made=run([text]);const original=structuredClone(findSceneNode(made.page,'title'));
- const next=run([{op:'draw.decorate',id:'circle',kind:'circle',target:'title',size:{width:12,height:18,unit:'mm'},place:{reference:'page',at:[30,40],unit:'mm'},seed:42}],made);
+ const next=run([{op:'graphic.add',id:'circle',geometry:{kind:'ellipse'},size:{width:12,height:18,unit:'mm'},place:{reference:'page',at:[30,40],unit:'mm'},style:{stroke:'#78918A',strokeWidthMm:.5,fill:null},order:{after:'title'}}],made);
  const updated=structuredClone(findSceneNode(next.page,'title'));for(const n of [updated,original]){delete n.aiManaged;delete n.zIndex;}assert.deepEqual(updated,original);near(worldBox(next.page,'circle').cx,30*next.page.canvas.height/next.page.physicalPageHeightMM);
 });
 test('provider text preserves artistic defaults and effects across content changes, supports explicit clearing',()=>{

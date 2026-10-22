@@ -1,4 +1,5 @@
-import {addLettering,addDecoration} from './creation-design-tools.js';
+import {initialGraphicNode} from './graphic-geometry.js';
+import {addLettering} from './creation-design-tools.js';
 import {applyScenePagePatch} from './scene-edit-kernel.js';
 import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -129,28 +130,19 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   const s=scale(doc.page);
   for(const id of [item.target,item.strip,...(item.targets||[])].filter(Boolean))assertSceneEditable(attachSceneV2(doc.page),requireNode(doc,id).id);
   if(item.op==='text.lettering')doc=addLettering(doc,item,assets,{finishNode});
-  else if(item.op==='draw.decorate')doc=addDecoration(doc,item,assets,{finishNode});
   else if(item.op==='material.add'){
    if(find(doc,item.id))throw Error('图层编号已经存在：'+item.id);
    const asset=assetFor(doc,assets,item.asset),position=placeFor(doc,item.place,asset.physicalWidthMM,asset.physicalHeightMM,0,item.parent);
    doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm'}]},assets);
    addToParent(doc,item.id,item.parent);doc=finishNode(doc,item.id,item,assets,{created:true});
-  }else if(['text.add','shape.add','vector.add','ink.add'].includes(item.op)){
+  }else if(['text.add','graphic.add'].includes(item.op)){
    const common={id:item.id,agentKey:item.id,x:doc.page.canvas.width/2,y:doc.page.canvas.height/2,rotation:0,zIndex:500,opacity:1,blendMode:'normal'};
    let node;
    if(item.op==='text.add'){
     if(item.size.width===undefined)throw Error('文字创建需要 size.width');
     node={...common,type:'text',content:item.content,width:dimension(doc.page,item.size,'width',item.parent)*s,height:1,fontSize:12*25.4/72*s,color:'#334D4A',style:'hand',alignment:'left'};
-   }else if(item.op==='ink.add'){
-    const style=item.style;if(!(style.strokeWidthMm>0)||!style.color)throw Error('笔迹需要正 strokeWidthMm 和 color');
-    node={id:item.id,agentKey:item.id,type:'ink',points:item.points.map(p=>({x:p.x*s,y:p.y*s,p:p.pressure??.5})),width:style.strokeWidthMm*s,color:style.color,penStyle:style.penStyle||'ballpoint',zIndex:500,opacity:1,blendMode:'normal',layoutRotation:0};
-   }else{
-    const result=dimensions(doc.page,item.size,{parentID:item.parent,ratio:item.op==='vector.add'?item.viewBox[2]/item.viewBox[3]:1});
-    node={...common,type:'shape',kind:item.op==='vector.add'?'vector':item.kind==='rect'?'rectangle':item.kind,width:result.width*s,height:result.height*s,fill:null,stroke:null,lineWidth:0};
-    if(item.op==='vector.add')Object.assign(node,{svgPaths:[],svgViewBox:item.viewBox});
-   }
-   const change=item.op==='vector.add'?{...item,geometry:{kind:'vector',paths:item.paths,viewBox:item.viewBox}}:item;
-   Object.assign(node,changedNodeProperties(doc.page,node,change,item.parent));
+   }else node=initialGraphicNode(item.id,item.geometry,s);
+   Object.assign(node,changedNodeProperties(doc.page,node,item,item.parent));
    doc=insertSceneNode(doc,node,assets);addToParent(doc,item.id,item.parent);doc=finishNode(doc,item.id,{place:item.place,order:item.order},assets,{created:true});
   }else if(item.op==='text.update'||item.op==='layer.update'){
    if(item.op==='text.update'&&requireNode(doc,item.target).type!=='text')throw Error('text.update 只接受文字');
@@ -175,7 +167,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
     if(child.parent&&child.parent!==item.id)throw Error('组合子操作不能指向其他父级');
     if(['page.update','material.decision','layer.repeat','layout.reuse'].includes(child.op))throw Error('组合内不支持全局或跨实例操作');
     for(const target of [child.target,child.strip,...(child.targets||[])].filter(Boolean))if(!spatialPath(doc.page.layers,requireNode(doc,target).id)?.ancestors.some(group=>group.id===item.id))throw Error('组合内不能修改外部对象：'+target);
-    const creates=['material.add','text.add','shape.add','vector.add','ink.add','material.tape','text.lettering','group.compose'].includes(child.op);
+    const creates=['material.add','text.add','graphic.add','material.tape','text.lettering','group.compose'].includes(child.op);
     doc=applyCreationV2Batch(doc,{protocolVersion:2,transactionId:'child-'+craftDigest([input.transactionId,index,childIndex]).slice(7,39),baseSceneRevision:input.baseSceneRevision,operations:[creates?{...child,parent:item.id}:child]},assets,options);
    }
   }else if(item.op==='group.ungroup'){
