@@ -21,24 +21,24 @@ const place=(x,y,rotationDeg=0)=>({reference:'page',at:[x,y],unit:'mm',rotationD
 const titleStyle={fontSizePt:36,fontPreset:'serif',color:'#35576A'};
 const structure=[
  {op:'page.update',paperColor:'#F8F4EA'},
- {op:'shape.add',id:'backdrop',kind:'ellipse',place:place(74,49),size:{width:98,height:75,unit:'mm'},style:{fill:'#E8DABF',opacity:.55}},
+ {op:'graphic.add',id:'backdrop',geometry:{kind:'ellipse'},place:place(74,49),size:{width:98,height:75,unit:'mm'},style:{fill:'#E8DABF',opacity:.55}},
  {op:'text.add',id:'small-label',content:'FIELD NOTES / 01',place:place(47,17),size:{width:70,unit:'mm'},style:{fontSizePt:10,fontPreset:'sans',color:'#5B7379'}},
  {op:'text.add',id:'draft-title',content:'先试试',place:place(75,43),size:{width:103,unit:'mm'},style:{...titleStyle,textAlign:'center'}},
  {op:'text.add',id:'body',content:'有些答案，要走近一点才看得见。\n先画一笔，写下一句，再把今天\n的小小念头，放到纸上。',place:place(76,99),size:{width:110,unit:'mm'},style:{fontSizePt:13,fontPreset:'serif',color:'#3B535F',lineHeight:1.55}},
  {op:'material.add',id:'paper',asset:'m1',place:place(42,151,-4)},
  {op:'text.add',id:'note',content:'只带上好奇心。\n其他的，慢慢来。',place:{reference:'node:paper',at:[.5,.5],unit:'ratio',rotationSpace:'reference',rotationDeg:0},size:{width:35,unit:'mm'},style:{fontSizePt:10,fontPreset:'serif',color:'#35576A',textAlign:'center'}},
- {op:'shape.add',id:'main-leaf',kind:'leaf',place:place(104,147,26),size:{width:38,height:50,unit:'mm'},style:{fill:'#7E9A89',stroke:'#526E65',strokeWidthMm:.4}},
+ {op:'graphic.add',id:'main-leaf',geometry:{kind:'leaf'},place:place(104,147,26),size:{width:38,height:50,unit:'mm'},style:{fill:'#7E9A89',stroke:'#526E65',strokeWidthMm:.4}},
  {op:'text.add',id:'closing',content:'不必每一笔都正确。',place:place(87,185),size:{width:100,unit:'mm'},style:{fontSizePt:13,fontPreset:'serif',color:'#35576A',textAlign:'center'}}
 ];
 const detail=[
  {op:'layer.delete',target:'draft-title'},
  {op:'text.lettering',id:'title',content:'先试试',place:place(74,45,-2),style:{...titleStyle,outline:{color:'#F8F4EA',widthMm:.7}},letters:[{index:0,style:{fontPreset:'sans',fontWeight:'bold'}},{index:1,style:{gradient:{angleDeg:90,stops:[{offset:0,color:'#C78354'},{offset:1,color:'#687A9E'}]}},rotationDeg:3,offsetMm:[0,1]},{index:2,style:{fontPreset:'hand'},rotationDeg:-3}]},
  {op:'text.add',id:'keyword',content:'留一点勇气',place:place(74,70),size:{width:58,unit:'mm'},style:{fontSizePt:16,fontPreset:'serif',color:'#35576A',textAlign:'center'}},
- {op:'draw.decorate',id:'keyword-mark',target:'keyword',kind:'highlight',style:{color:'#E7C57F',strokeWidthMm:5,opacity:.45},seed:17},
- {op:'draw.decorate',id:'closing-mark',target:'closing',kind:'underline',style:{color:'#B98C60',strokeWidthMm:.65},seed:7},
- {op:'shape.add',id:'dot-1',kind:'ellipse',place:place(24,80),size:{width:6,height:6,unit:'mm'},style:{fill:'#7E9A89'}},
- {op:'shape.add',id:'dot-2',kind:'ellipse',place:place(126,125),size:{width:4,height:4,unit:'mm'},style:{fill:'#C78354'}},
- {op:'ink.add',id:'leaf-vein',points:[{x:0,y:0},{x:8,y:-15},{x:15,y:-31}],unit:'mm',place:place(104,147,26),style:{color:'#E9EEE3',strokeWidthMm:.6,penStyle:'ballpoint'}},
+ {op:'graphic.add',id:'keyword-mark',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:keyword',width:.85,unit:'ratio'},place:{reference:'node:keyword',at:[.5,.45],unit:'ratio',anchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked'},style:{stroke:'#E7C57F',strokeWidthMm:5,penStyle:'marker',opacity:.45,blendMode:'multiply'},order:{before:'keyword'}},
+ {op:'graphic.add',id:'closing-mark',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:closing',width:.85,unit:'ratio'},place:{reference:'node:closing',at:[.5,1],unit:'ratio',anchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked',offset:{value:[0,1.5],unit:'mm'}},style:{stroke:'#B98C60',strokeWidthMm:.65,penStyle:'ballpoint'},order:{after:'closing'}},
+ {op:'graphic.add',id:'dot-1',geometry:{kind:'ellipse'},place:place(24,80),size:{width:6,height:6,unit:'mm'},style:{fill:'#7E9A89'}},
+ {op:'graphic.add',id:'dot-2',geometry:{kind:'ellipse'},place:place(126,125),size:{width:4,height:4,unit:'mm'},style:{fill:'#C78354'}},
+ {op:'graphic.add',id:'leaf-vein',geometry:{kind:'stroke',points:[{x:0,y:0},{x:8,y:-15},{x:15,y:-31}],unit:'mm'},place:place(104,147,26),style:{stroke:'#E9EEE3',strokeWidthMm:.6,penStyle:'ballpoint'}},
  {op:'material.decision',asset:'m1',choice:'intact',reason:'单张蓝纸承托小段随写，其余版式由文字与数字图形组织。'}
 ];
 const firstRevision=run('info').sceneRevision;

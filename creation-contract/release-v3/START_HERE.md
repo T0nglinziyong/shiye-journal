@@ -13,10 +13,10 @@ scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canva
 
 ## 按需工具
 - 运行 `node runtime/shiye.cjs self-test`、`info`；后续事务用 `begin work/next.json`。
-- 不会用某个操作就 `describe <op>`；`--full` 才展开完整 Schema。公共参数查 place/size/style/region。
+- 不会用某个操作就 `describe <op>`；`--full` 才展开完整 Schema。公共参数查 place/size/style/geometry/region。
 - 文字描边/渐变：`text.add / text.update` 的 style.outline / style.gradient。逐字异体标题：`text.lettering`。看 design/LETTERING.md；字体查询用 `fonts`。
-- 关键词高亮、下划线、括号：`draw.decorate` 自动生成可编辑笔迹；任意手绘仍用 ink.add / vector.add。材质来源不允许时，不把数字色带称作实体胶带。
-- 主体、正文与支撑图形占位：layer.place / group.compose / shape.add；必要裁取用 material.crop / split。不能缩放实物填空。
+- 图形和绘画统一 `graphic.add`：geometry 决定预设图形、path 或 stroke，place/size/style/order 与修改共用。看 design/GRAPHICS.md。不设置点缀命令；文字、素材、胶带、图形、笔迹都能点缀。数字色带不能冒充有来源的实体胶带。
+- 主体、正文与支撑图形占位：layer.place / group.compose / graphic.add；必要裁取用 material.crop / split。不能缩放实物填空。
 - `design-check` 仅返回图层框覆盖、字级和空区建议，忽略真实透明度、图案和字形，必须继续看实际 PNG。
 
 不手写 Scene、不写 Python/JS 创作脚本、不复制示例坐标/旧 revision，不执行 native.* 或协议 1。固定例子在 design/RECIPES.md，精细排版例子在 design/LETTERING.md。两份字体相近的文字错位不是渐变，阴影不是完整描边。

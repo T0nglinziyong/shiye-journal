@@ -46,7 +46,7 @@ test('minimum text height and relative line height persist after serialization a
 });
 test('reflow precedes anchoring and a linked follower sees the new height in the same transaction',async()=>{
  const {run}=await fixture();const relation={reference:'node:text',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'},behavior:'linked'};
- const initial=run([text({place:{...at(),rotationDeg:25}}),{op:'shape.add',id:'follower',kind:'ellipse',size:{width:4,unit:'mm'},place:relation}]);
+ const initial=run([text({place:{...at(),rotationDeg:25}}),{op:'graphic.add',id:'follower',geometry:{kind:'ellipse'},size:{width:4,unit:'mm'},place:relation}]);
  const a=run([{op:'text.update',target:'text',style:{fontSizePt:20}}],initial),b=run([{op:'layer.update',target:'text',style:{fontSizePt:20}}],initial);
  assert.deepEqual(a.page,b.page);assert.notEqual(worldBox(a.page,'follower').cy,worldBox(initial.page,'follower').cy);
  const stable=JSON.stringify(a.page);for(let i=0;i<5;i++)solveSceneLayout(a.page);assert.equal(JSON.stringify(a.page),stable);
@@ -66,10 +66,10 @@ test('compact discovery stays bounded and preserves recursive help only in expli
  for(const bad of [{xMm:5},{font_size:12},{set:{x:1}}])assert.throws(()=>validateCreationV2Commands(batch([{op:'layer.update',target:'text',...bad}])),/commands/);
 });
 test('digital geometry update, stroke style and repeat keep editable identities',async()=>{
- const {run}=await fixture();let d=run([{op:'vector.add',id:'v',paths:[{d:'M0 0 L10 10',style:{stroke:'#334455'}}],viewBox:[0,0,10,10],size:{width:20,unit:'mm'},place:at()},
- {op:'ink.add',id:'ink',points:[{x:0,y:0,pressure:.2},{x:20,y:0,pressure:.8}],unit:'mm',place:{...at(),rotationDeg:30},style:{color:'#334455',strokeWidthMm:1,penStyle:'pressure'}}]);
- d=run([{op:'layer.update',target:'v',geometry:{kind:'vector',paths:[{d:'M0 0 L20 0 L10 10 Z',style:{fill:'#FF0000'}}],viewBox:[0,0,20,10]},style:{strokeWidthMm:1}},
- {op:'layer.update',target:'ink',geometry:{kind:'ink',points:[{x:0,y:0,pressure:.1},{x:30,y:0,pressure:.9}],unit:'mm'}},
+ const {run}=await fixture();let d=run([{op:'graphic.add',id:'v',geometry:{kind:'path',paths:[{d:'M0 0 L10 10',style:{stroke:'#334455'}}],viewBox:[0,0,10,10]},size:{width:20,unit:'mm'},place:at()},
+ {op:'graphic.add',id:'ink',geometry:{kind:'stroke',points:[{x:0,y:0,pressure:.2},{x:20,y:0,pressure:.8}],unit:'mm'},place:{...at(),rotationDeg:30},style:{stroke:'#334455',strokeWidthMm:1,penStyle:'pressure'}}]);
+ d=run([{op:'layer.update',target:'v',geometry:{kind:'path',paths:[{d:'M0 0 L20 0 L10 10 Z',style:{fill:'#FF0000'}}],viewBox:[0,0,20,10]},style:{strokeWidthMm:1}},
+ {op:'layer.update',target:'ink',geometry:{kind:'stroke',points:[{x:0,y:0,pressure:.1},{x:30,y:0,pressure:.9}],unit:'mm'}},
  {op:'layer.repeat',target:'v',copies:[{id:'copy',place:at(120,70),style:{opacity:.5}}]}],d);
  assert.equal(node(d,'copy').svgPaths[0].d,node(d,'v').svgPaths[0].d);assert.equal(node(d,'copy').opacity,.5);approx(worldBox(d.page,'ink').rotation,30);assert.deepEqual(node(d,'ink').points.map(p=>p.p),[.1,.9]);
 });

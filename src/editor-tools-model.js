@@ -26,7 +26,7 @@ export function shapeSVG(s){
   if(![x,y,w,h].every(Number.isFinite)||w<=0||h<=0||s.svgPaths.length>64)throw Error('SVG 路径边界无效');
   const paths=s.svgPaths.map(path=>{
    if(typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d))throw Error('SVG 路径包含不支持的字符');
-   const pathFill=safe(path.fill??s.fill??'#e7eef7'),pathStroke=safe(path.stroke??s.stroke??'none');
+   const pathFill=safe((Object.hasOwn(path,'fill')?path.fill:s.fill)??'none'),pathStroke=safe((Object.hasOwn(path,'stroke')?path.stroke:s.stroke)??'none');
    return '<path d="'+path.d+'" fill="'+pathFill+'" stroke="'+pathStroke+'" fill-rule="'+(path.fillRule==='evenodd'?'evenodd':'nonzero')+'" stroke-width="'+Math.max(0,(s.lineWidth??2)*w/Math.max(1,s.width))+'" opacity="'+Math.max(0,Math.min(1,path.opacity??1))+'"/>';
   }).join('');
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+[x,y,w,h].join(' ')+'" preserveAspectRatio="none" style="width:100%;height:100%">'+paths+'</svg>';

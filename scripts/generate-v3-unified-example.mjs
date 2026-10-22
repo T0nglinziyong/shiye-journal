@@ -49,12 +49,12 @@ const commands={protocolVersion:2,transactionId:'v3-unified-example',baseSceneRe
  {op:'material.weave',strip:'strip',through:[{target:'frame',window:'left-hole',sideAfter:'front'},{target:'frame',window:'right-hole',sideAfter:'back'}]},
  {op:'text.add',id:'title',content:'把今天折成几片',place:{reference:'page',at:[.5,.11],unit:'ratio'},size:{width:135,unit:'mm'},style:{fontSizePt:22,color:'#304638',textAlign:'center'}},
  {op:'text.add',id:'note',content:'蓝色散成两片，浅绿留出两道窗口。暖橙从纸间穿过，像今天稍稍绕了一段路。',place:{reference:'page',at:[.5,.84],unit:'ratio'},size:{width:195,unit:'mm'},style:{fontSizePt:13,color:'#304638'}},
- {op:'shape.add',id:'dot',kind:'ellipse',place:{reference:'page.left',at:[.84,.15],unit:'ratio'},size:{width:8,height:8,unit:'mm'},style:{fill:'#b8d0c4'}},
+ {op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:{reference:'page.left',at:[.84,.15],unit:'ratio'},size:{width:8,height:8,unit:'mm'},style:{fill:'#b8d0c4'}},
  {op:'group.compose',id:'note-card',layoutBox:{width:65,height:30,unit:'mm'},place:{reference:'page.left',at:[.48,.25],unit:'ratio',rotationDeg:-4},children:[
-  {op:'shape.add',id:'note-marker',kind:'rect',place:{reference:'parent',at:[.5,.35],unit:'ratio'},size:{width:47,height:6,unit:'mm'},style:{fill:'#f4dda2'}},
+  {op:'graphic.add',id:'note-marker',geometry:{kind:'rect'},place:{reference:'parent',at:[.5,.35],unit:'ratio'},size:{width:47,height:6,unit:'mm'},style:{fill:'#f4dda2'}},
   {op:'text.add',id:'note-caption',content:'窗边的小光，慢慢走。',place:{reference:'node:note-marker',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,2],unit:'mm'},behavior:'linked'},size:{width:54,unit:'mm'},style:{fontSizePt:10,color:'#304638'}}
  ]},
- {op:'ink.add',id:'marker',points:[{x:0,y:0},{x:55,y:0}],unit:'mm',place:{reference:'page',at:[.5,.16],unit:'ratio'},style:{strokeWidthMm:2,color:'#e8d66b',penStyle:'marker'}},
+ {op:'graphic.add',id:'marker',geometry:{kind:'stroke',points:[{x:0,y:0},{x:55,y:0}],unit:'mm'},place:{reference:'page',at:[.5,.16],unit:'ratio'},style:{strokeWidthMm:2,stroke:'#e8d66b',penStyle:'marker'}},
  ...['m1','m2','m3'].map((asset,index)=>({op:'material.decision',asset,choice:'crafted',reason:['真实分成两片并保留余料','两道实体开窗构成穿插通道','穿过两个开窗而保持纸条实体'][index]}))
 ]};
 await writeFile(join(work,'work/commands.json'),JSON.stringify(commands,null,2)+'\n');

@@ -26,8 +26,8 @@ try{
   {op:'material.add',id:'paper',asset:'m1',place:mm(62,91,-6)},
   {op:'text.add',id:'title',content:'春日片刻',place:mm(95,42),size:{width:110,unit:'mm'},style:{fontSizePt:32,color:'#30463d'}},
   {op:'text.add',id:'body',content:'留一点空白，\n记下今天看见的颜色。',place:mm(108,150),size:{width:88,unit:'mm'},style:{fontSizePt:18,color:'#4f5f54'}},
-  {op:'shape.add',id:'stamp',kind:'ellipse',place:mm(29,45),size:{width:11,height:11,unit:'mm'},style:{fill:'#b36f67'}},
-  {op:'ink.add',id:'highlight',unit:'mm',points:[{x:0,y:1},{x:37,y:3},{x:62,y:0}],place:mm(124,176.5),style:{strokeWidthMm:2,color:'#b69667',penStyle:'marker'}},
+  {op:'graphic.add',id:'stamp',geometry:{kind:'ellipse'},place:mm(29,45),size:{width:11,height:11,unit:'mm'},style:{fill:'#b36f67'}},
+  {op:'graphic.add',id:'highlight',geometry:{kind:'stroke',points:[{x:0,y:1},{x:37,y:3},{x:62,y:0}],unit:'mm'},place:mm(124,176.5),style:{strokeWidthMm:2,stroke:'#b69667',penStyle:'marker'}},
   {op:'material.decision',asset:'m1',choice:'intact',reason:'保留纸张的完整边界，用作日记内容载体'}
  ]};
  await writeFile(join(dir,'work/commands.json'),JSON.stringify(commands));

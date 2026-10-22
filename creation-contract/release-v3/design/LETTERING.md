@@ -29,17 +29,18 @@
 运行时生成普通 Group 与 small-title-g1/g2/g3 文本节点；仍可独立编辑，或整体移动。index 按 Unicode 字素计数，不拆组合音标。只用于短标题，不替代连写语言的整词 shaping，也不自动保证所有字体有全部字形。已知宽高是确定性估算，必须实际预览。
 
 ## 小背景、圈点、条纹与跨边
-普通字也可借局部小背景获得层次：先放文字，再创建 shape.add 的 dots/stripes/ellipse/frame 等于后方。小背景围绕**所选文字**，不铺满全页；数字形状可以自由调整尺寸，不改变实物。
+普通字也可借局部小背景获得层次：先放文字，再创建 graphic.add 的 dots/stripes/ellipse/frame 等于后方。小背景围绕**所选文字**，不铺满全页；数字形状可以自由调整尺寸，不改变实物。
 
-## 目标导向的下划线、高亮、括号
+## 使用普通图形/笔迹实现局部强调
+点缀是一种构图选择，不是专门的 Command。先决定哪句话值得强调，再用统一 graphic.add；不要每段文字都画线。下面是可编辑的普通线条，通过已有 place 指定位置，仍可成为大幅构图线条。
 
 ```json
-{"op":"draw.decorate","id":"word-underline","target":"accent-word","kind":"underline","style":{"color":"#8B9E74","strokeWidthMm":0.6},"seed":42}
+{"op":"graphic.add","id":"word-underline","geometry":{"kind":"line"},"size":{"reference":"node:accent-word","width":0.85,"height":0.06,"unit":"ratio"},"place":{"reference":"node:accent-word","referenceAnchor":"bottom-center","anchor":"top-center","offset":{"value":[0,1.5],"unit":"mm"},"rotationSpace":"reference","rotationDeg":0,"behavior":"linked"},"style":{"stroke":"#8B9E74","strokeWidthMm":0.6,"fill":null},"order":{"after":"accent-word"}}
 ```
 
-kind 可为 underline/highlight/bracket；可选 size/place/style/order 和 seed。默认下划线放在目标下方、高亮放在目标后方，生成普通可编辑 ink。用来解决强调或连接，不是每段都必须有。highlight 不自动识别句中词语：先把关键词设为单独单行文本框。标记跟随位置，文字标记尺寸按创建时排版估计，其他对象按目标框；目标大幅改字后重建或修改 geometry。
+所有图形/笔迹颜色用 fill/stroke；strokeWidthMm 是线宽。自由笔迹用 geometry.kind=stroke、points 和 unit。geometry、place、size、style 在 layer.update 中仍是相同结构，更多例子见 GRAPHICS.md。place 的 linked 只跟随位置和朝向，size.reference 在命令执行时取值，不自动追踪改字后的框宽。不同组内的层级调整须先明确 parent。
 
-图形、笔迹可以是页面主体，不止这些小标记：素材少时用 vector.add 绘制主图形，shape.add 构建大色块/边框和区域关系，ink.add 画更自由的路径。不要把一页稀疏文字加几条高亮误认为完整构图。
+图形、笔迹可以成为页面主体：素材少时用自由路径绘制主图，用大字、色块、线框构建区域关系。不要把稀疏文字加几条高亮误认为完整构图。
 
 ## 默认可用字体
 当前默认 `fontPreset:"hand"`。网页编辑器使用应用已有的 Ma Shan Zheng 艺术手写字体，在测量前等字体加载；离线包不包含字体字节，用 `fonts` 的 recommended.hand 判断当前机器是否有可用艺术字体。找不到时安装合法字体或选择已存在字体，不仅填写一个不存在的名称。`fontPreset` 改变且未明确给 `fontFamily` 时，会清除之前的指定字体覆盖，保证新预设真正生效。
