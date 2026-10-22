@@ -1,0 +1,28 @@
+name: Craft development snapshot
+on:
+  push:
+    branches: [feat/craft-detail-type-effects-20261022]
+    paths: [.github/workflows/craft-dev-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: |
+          mkdir -p /tmp/craft-workspace
+          git rev-parse HEAD > /tmp/craft-workspace/revision.txt
+          git archive HEAD | gzip > /tmp/craft-workspace/source.tar.gz
+          tar -czf /tmp/craft-workspace/dependencies.tar.gz node_modules
+          cd /tmp/craft-workspace && sha256sum *.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: craft-workspace
+          path: /tmp/craft-workspace
+          retention-days: 1
