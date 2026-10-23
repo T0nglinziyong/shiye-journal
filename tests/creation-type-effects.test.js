@@ -16,6 +16,7 @@ import {createFabricSceneBridge} from '../src/fabric-scene-bridge.js';
 import {worldBox} from '../src/scene-spatial.js';
 import {solveSceneLayout} from '../src/scene-layout.js';
 import {auditCreationDesign} from '../src/creation-design-audit.js';
+import {sketchGeometry} from '../src/graphic-geometry.js';
 import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
 import {applySceneNodeChange} from '../src/scene-edit-kernel.js';
 import {tinyPNG} from './offline-canvas-test-support.mjs';
@@ -32,6 +33,17 @@ async function fixture(width=30,height=20,mode='single'){
 const node=(d,id='word')=>creationNode(d,id),near=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 function pixels(extra){const c=createCanvas(220,160),ctx=c.getContext('2d');ctx.translate(110,80);drawSceneText(ctx,{type:'text',width:160,height:100,content:'A',fontSize:64,fontName:'DejaVu Sans',alignment:'center',color:'#FFFFFF',...extra});return ctx.getImageData(0,0,220,160).data;}
 const ink=data=>{let count=0;for(let i=3;i<data.length;i+=4)if(data[i])count++;return count;};
+test('one graphic command compiles a stable editable hand-drawn path and supports local replacement',async()=>{
+ const {run}=await fixture();
+ const add={op:'graphic.add',id:'edge',geometry:{kind:'sketch',motif:'corner',seed:23},place:at(50,50),size:{width:40,height:30,unit:'mm'},style:{fill:null,stroke:'#799897',strokeWidthMm:.55}};
+ const made=run([add]),shape=node(made,'edge');
+ assert.equal(shape.kind,'vector');assert.equal(shape.svgPaths.length,1);
+ assert.equal(shape.svgPaths[0].d,sketchGeometry(add.geometry).paths[0].d);
+ assert.equal(node(run([add]),'edge').svgPaths[0].d,shape.svgPaths[0].d);
+ const revised=run([{op:'layer.update',target:'edge',geometry:{kind:'sketch',motif:'loop',seed:23}}],made);
+ assert.notEqual(node(revised,'edge').svgPaths[0].d,shape.svgPaths[0].d);
+ assert.equal(node(revised,'edge').id,'edge');
+});
 test('outline paints full glyph boundaries and gradient paints real multiple colors, not an offset duplicate',()=>{
  const plain=pixels({}),border=pixels({textOutline:{color:'#000000',width:5,offsetX:0,offsetY:0}}),offset=pixels({textOutline:{color:'#000000',width:5,offsetX:8,offsetY:4}}),grad=pixels({textGradient:gradient});
  assert.ok(ink(border)>ink(plain));assert.notDeepEqual(border,offset);let red=0,blue=0;for(let i=0;i<grad.length;i+=4)if(grad[i+3]>200){if(grad[i]>grad[i+2]+20)red++;if(grad[i+2]>grad[i]+20)blue++;}assert.ok(red>10&&blue>10,JSON.stringify({red,blue}));
@@ -84,6 +96,7 @@ test('design audit points out a large material frame with no added writing',asyn
  assert.equal(withoutWriting.materialFrames[0].assetAlias,'m1');
  assert.equal(withoutWriting.materialFrames[0].annotationFrames,0);
  assert.ok(withoutWriting.observations.some(line=>line.includes('大素材框')));
+ assert.ok(withoutWriting.observations.some(line=>line.includes('大素材占据')));
  const written=run([material,text]),withWriting=auditCreationDesign(written.page,{materials:[{alias:'m1',assetID:'paper'}]});
  assert.ok(withWriting.materialFrames[0].annotationFrames>0);
  assert.equal(withWriting.visualReviewPerformed,false);

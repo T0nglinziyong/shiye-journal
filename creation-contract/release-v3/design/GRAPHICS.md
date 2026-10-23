@@ -3,7 +3,7 @@
 只有 `graphic.add` 创建图形与笔迹；后续使用 `layer.update`。不存在“点缀命令”：文字、材料、胶带和绘画都可能承担主视觉、连接、注释或点缀，作用由构图决定。
 
 ## 公共参数
-- geometry：要画的几何。预设 kind 如 rect/ellipse/star/sparkle/flower/dots/bracket；自由 SVG 使用 path；压感笔迹使用 stroke。
+- geometry：要画的几何。预设 kind 如 rect/ellipse/star/sparkle/flower/dots/bracket；`sketch` 直接生成可编辑手绘线形；自由 SVG 使用 path；压感笔迹使用 stroke。
 - place：唯一定位入口。页面毫米、比例、相对对象或父组的锚点/偏移均沿用原定义，不另设 target/placement。
 - size：统一宽高与 mm/ratio；ratio 明确 reference。预设和 path 必须给 size；stroke 可省略使用毫米点集本身的尺寸。单维通常保留比例，横/竖直笔迹的零跨度轴保留笔宽，不能从一条线拉出曲线。
 - style：填充用 fill，线条和笔迹都用 stroke，线宽 strokeWidthMm。opacity/blendMode/shadow 共用；penStyle 用于笔迹，填充和虚线等用于图形。不适用字段会报错，不默默忽略。
@@ -13,6 +13,11 @@
 
 ### 从素材取图形，而不是给素材贴图形
 先问实物里最有辨识度的是轮廓、局部颜色、运动方向，还是印刷字的节奏。先从其中一个特征做**组织画面的图形**：沿真实纸边或物件动作方向的一段笔迹、跨过两件素材交界的局部色带，或回应印刷孔洞/纽扣的一组大小有别的圈线。大书写面优先使用已有真实纸片；不要用与素材无关的大浅色圆角/椭圆把一页变成界面卡片。随后在另一区域用局部圈线/荧光回应具体字句；只有小圈和短线时，主结构仍可能只是素材陈列。要强调一句话，用短 marker 放在字后，`order.before` 指向该文字；把图形锚定在相关 `node:<id>`，材料或文字移动后关系才容易保持。粗大的预设箭头容易像演示文稿，若视觉语气是随手记录，优先试少量点构成的轻笔迹并在真实 PNG 上比较。一个图形也可以不闭合、不居中、不完整露出；不能因预设形状省事就让它与实物无关。
+
+首个图形若显得像流程箭头，换**用途**而不只换颜色：在纸边试不闭合的 `sketch.corner`，圈出实物局部试 `sketch.loop`，沿照片下沿试 `sketch.underline`，回应票边或衣物节奏试 `sketch.scallop`。`seed` 固定手绘扰动；相同输入可重复渲染。这些线形直接编译成可编辑 path，与 `graphic.add` 的 place/size/style/order 共用，不另开工具文件。例如：
+```json
+{"op":"graphic.add","id":"photo-edge","geometry":{"kind":"sketch","motif":"corner","seed":23},"place":{"reference":"node:photo","at":[0.04,0.05],"unit":"ratio","rotationSpace":"reference","behavior":"linked"},"size":{"width":40,"height":30,"unit":"mm"},"style":{"fill":null,"stroke":"#799897","strokeWidthMm":0.55},"order":{"after":"photo"}}
+```
 
 ## 同一个星形：既可做主图，也可做小呼应
 主图使用页面位置和较大尺寸：

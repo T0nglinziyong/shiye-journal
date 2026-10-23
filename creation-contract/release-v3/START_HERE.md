@@ -4,8 +4,8 @@ scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canva
 
 ## 最短有效路线
 包内已有 `work/commands.json` 初稿。首次直接填它的 operations；每次 apply 后，要在同一路径开始新事务时，改用新的 transactionId 和 `info` 返回的 sceneRevision。`begin` 不会覆盖已有文件，无须为此重新安装依赖或重新生成整页。
-1. 读 TASK.json 的任务字段和 design/GUIDE.md，看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览图为各件独立放大观察；尺寸图用同一毫米比例，判断真实大小以尺寸图和 TASK 为准。materials.metadataHints 直接提供现有素材分类标签，它只是观察线索，实际图片与用户事实优先。TASK 的 creativeBriefRef 指向同一份动态指导；先用 `describe` 查当前需要的命令，遇到高级工艺才读 design/SKILL.md 或对应专题，别在第一次试摆前通读所有文档。保留真实来源、尺寸和用户事实。
-2. **试摆阶段**：辨认主角、可写纸面、连接物和小件。让主角、底纸、书写面叠压，并露出有用边缘；素材少时也可让大字或段落成为主块。若 TASK.styles 含“丰富层叠”，先做两种**主块比例或素材职责真正不同**的结构草稿，各用 `preview --commands` 看真实候选 PNG，选更有图文关系的一种再 apply；不要把两套完整 Scene 都写出来。首批 Commands 就从实物轮廓、颜色或动作试一个承担承托、分区或阅读路线的数字图形，不把全部图形留到最后补。若强印刷字卡在缩略图中吞掉整页，应先改露出面积、位置、合法裁片或相邻文字重量，再继续写正文。
+1. 读 TASK.json 的任务字段和 design/GUIDE.md，看 assets/overview.jpg、assets/size-map.jpg 与必要原图。TASK.sourceContext 是运行时使用的来源快照，无须逐字段阅读。总览图为各件独立放大观察；尺寸图用同一毫米比例，判断真实大小以尺寸图和 TASK 为准。materials.metadataHints 直接提供现有素材分类标签，它只是观察线索，实际图片与用户事实优先。TASK 的 creativeBriefRef 指向同一份动态指导；先用 `describe` 查当前需要的命令，遇到高级工艺才读 design/SKILL.md 或对应专题，别在第一次试摆前通读所有文档。保留真实来源、尺寸和用户事实。
+2. **试摆阶段**：辨认主角、可写纸面、连接物和小件。TASK.requiredAssetIDs 之外的材料可不选用，须记录取舍；不为展示每件素材牺牲书写空间。让主角、底纸、书写面叠压，并露出有用边缘；素材少时也可让大字或段落成为主块。若 TASK.styles 含“丰富层叠”，先做两种**主块比例或素材职责真正不同**的结构草稿，各用 `preview --commands` 看真实候选 PNG，选更有图文关系的一种再 apply；不要把两套完整 Scene 都写出来。首批 Commands 就从实物轮廓、颜色或动作试一个承担承托、分区或阅读路线的数字图形，不把全部图形留到最后补。若强印刷字卡在缩略图中吞掉整页，应先改露出面积、位置、合法裁片或相邻文字重量，再继续写正文。
 3. **内容阶段**：根据试排中的真实书写空间决定正文长度、标题或独立字条，再反过来调整素材。用字重、颜色、行距与分组构成层次；不能把大印刷标题之外的文字都缩成图注。
 4. **细节阶段**：在有关联的地方尝试小素材、合法胶带/裁条、数字图形、圈注、笔迹或局部高亮。“丰富层叠”要在不同区域比较**不同作用与尺度**的回应：例如使用真实纸片承载书写、一段沿实物轮廓走的笔迹、关键词背后的半透明荧光；不是画一个粗箭头和小圆圈就宣布丰富。图形应从本次素材提炼形状或方向；预览无益就删掉或重画。不要用与素材无关的大浅色椭圆衬满一页，这容易把手帐变成界面卡片。主色可占较大面积，强调色集中在少数关键处。看图决定保留，不凑工具或装饰数量；具体问题查 design/PLAYBOOK.md。`graphic.add` 的 ellipse/rect/arrow/stroke 共用 place/size/style；填色不需要描边时只给 style.fill，手绘短线可用 geometry.kind=stroke 与少量毫米坐标点。复杂手绘化先 `graphics help`，避免手写长 SVG。
 5. apply 后 preview 看当前 Scene。返回的 geometryReview 会列出框级空区、图形尺度、粗略笔触面积、高亮层级与大素材上的新增图层；先据此定位，再打开 PNG 判断，不能把几何提示当成审美结论。若提示图形“小范围”或“笔触面积很轻”，先检查画面是否只有小圈短线或一条淡色长线；如确实缺乏组织关系，试一个连接两件素材或承托正文的图形，使用 `node:<id>` 相对定位到相关对象，再比较 PNG。若提示高亮在文字上方，确认是否遮字，背景高亮用 `order.before` 放到对应文字后。出现大空洞、遮字或素材相互孤立时，用下一事务局部修订；不为凑轮次重复渲染。
@@ -16,7 +16,7 @@ scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canva
 - 先运行 `node runtime/shiye.cjs self-test`；只在它报告缺少 Canvas 时安装 `package-lock.json` 指定的依赖，不为每次局部修改重复 `npm ci`。用 `info` 读取当前修订；后续事务用 `begin work/next.json`。
 - 不会用某个操作就 `describe <op>`；`--full` 才展开完整 Schema。公共参数查 place/size/style/geometry/region。
 - 文字描边/渐变：`text.add / layer.update` 的 style.outline / style.gradient。逐字异体标题：`text.lettering`。看 design/LETTERING.md；字体查询用 `fonts`。
-- 图形和绘画统一 `graphic.add`：geometry 决定预设图形、path 或 stroke，place/size/style/order 与修改共用。看 design/GRAPHICS.md。不设置点缀命令；文字、素材、胶带、图形、笔迹都能点缀。数字色带不能冒充有来源的实体胶带。
+- 图形和绘画统一 `graphic.add`：geometry 决定预设图形、sketch、path 或 stroke，place/size/style/order 与修改共用。看 design/GRAPHICS.md。不设置点缀命令；文字、素材、胶带、图形、笔迹都能点缀。数字色带不能冒充有来源的实体胶带。首个图形预览不佳时，换一个作用不同的图形再试，不要只删掉就交付。
 - 主体、正文与支撑图形占位：layer.update / group.compose / graphic.add；必要裁取用 material.cut / split。不能缩放实物填空。
 - `design-check` 仅返回图层框覆盖、字级和空区建议，忽略真实透明度、图案和字形。`preview` 若使用 Node Canvas 还会返回 `pixelReview`，从真实 PNG 标出低笔触区：透明素材大框造成的“假覆盖”可由此发现。两者都不是审美评分；用它们定位区域，再实际看 PNG 决定重排、补写或保留呼吸留白。
 

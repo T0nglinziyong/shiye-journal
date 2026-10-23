@@ -73,6 +73,8 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
   return {assetAlias:material?.alias||null,title:material?.title||null,journalRoles:material?.journalRoles||[],estimatedPageFrameFraction:Number((box.width*box.height/pageArea).toFixed(3)),annotationFrames:hits.length,estimatedAnnotationFrameFraction:Number((Math.min(1,hits.reduce((sum,area)=>sum+area,0)/(box.width*box.height))).toFixed(3))};
  });
  if(materialFrames.some(frame=>!frame.annotationFrames))observations.push('有大素材框没有文字、图形或笔迹相交：看真实 PNG 判断它是有内容的印刷主角，还是只充当未使用的整张底纸；后者应调整露出面积或建立具体图文关系。');
+ const lightlyUsed=materialFrames.filter(frame=>frame.estimatedPageFrameFraction>=.25&&frame.estimatedAnnotationFrameFraction<.12);
+ if(lightlyUsed.length)observations.push(`大素材占据约四分之一页以上，新增图文只触及少量区域（${lightlyUsed.map(frame=>frame.assetAlias||frame.title||'未命名素材').join('、')}）：缩看真实 PNG，检查印刷字、截图界面或底纸是否盖过亲手写下的内容；若是，合法裁取或改变露出方式，把可写空间交还给内容。框级估算不代表实际可见面积。`);
  if(materialFrames.some(frame=>frame.journalRoles.includes('headline')&&frame.estimatedPageFrameFraction>=.2)&&fontSizes.length&&Math.max(...fontSizes)<18)observations.push('现成印刷标题框占据较大页面面积，新增字级明显较轻：缩看 PNG 比较两者视觉重量；如果印刷字压住全部新增表达，调整露出范围、合法裁片或正文层级。');
  return {kind:'design-advisory',visualReviewPerformed:false,method:'24x32 rotated-frame AABB grid, approximate stroke/fill area and material-frame intersections; ignores actual alpha/masks and text glyph fill',limitations:'不是像素留白率或审美评分；笔触面积忽略真实纹理、透明材料和局部遮挡，图形尺度和类别不是质量或数量评分；背景纸框可能覆盖整页。不得据此声称已看图或强制填满。',layers:types,graphicVocabulary,graphicScale,estimatedGraphicPaintFraction,typography:{fontSizesPt:[...new Set(fontSizes.map(n=>Number(n.toFixed(2))))].sort((a,b)=>a-b),fontChoices:[...fonts],effects},pages,materialFrames,observations};
 }

@@ -56,6 +56,7 @@ d.TapeCaps=obj({start:en('square','angled','torn'),end:en('square','angled','tor
 // shortcut, no decoration type, and no legacy shape/vector/ink wrapper fields.
 d.GraphicGeometry={oneOf:[
  obj({kind:{enum:graphicPresetKinds}},['kind']),
+ obj({kind:{const:'sketch'},motif:en('loop','underline','corner','scallop'),seed:{type:'integer',minimum:1,maximum:2147483646}},['kind','motif']),
  obj({kind:{const:'path'},paths:ref('VectorPaths'),viewBox:ref('ViewBox')},['kind','paths','viewBox']),
  obj({kind:{const:'stroke'},points:ref('InkPoints'),unit:{const:'mm'}},['kind','points','unit'])
 ]};

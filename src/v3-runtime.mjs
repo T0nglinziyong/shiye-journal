@@ -130,6 +130,8 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
   const advisory=auditCreationDesign(draft,{materials:task.materials,styles:task.styles});
   const reviewedPNG=readFileSync('output/preview.png');
   if(sha(reviewedPNG)!==capture.pngHash)throw fail('PREVIEW_STALE','预览 PNG 与当前记录不一致；先重新运行 preview');
+  if(arg==='pass'&&task.styles?.includes('丰富层叠')&&!advisory.layers.shape&&!advisory.layers.ink)
+   throw fail('VISUAL_REVIEW_INCOMPLETE','丰富层叠作品没有任何新增图形或笔迹。若首个图形效果不好，试另一种承担不同作用的线形、色形或局部笔迹，查看真实 PNG 后再 review pass；仍可 review fail 保存当前判断。');
   const pixels=capture.pixelReview||await pixelAdvisory(reviewedPNG,draft,await loadOfflineCanvas());
   const review={result:arg,source:'agent-declared',sceneRevision:current,pngHash:capture.pngHash,reviewedAt:new Date().toISOString(),geometryAdvisories:advisory.observations,pixelReview:pixels};
   atomic('output/review.json',review);process.stdout.write(JSON.stringify({ok:true,...review,reminder:'这是创作者声明；用真实 PNG 核对低笔触区和几何提示，若仍有显著问题应继续修改，不能据此宣称独立视觉验收通过。'})+'\n');return;

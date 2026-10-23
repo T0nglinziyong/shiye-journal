@@ -155,6 +155,17 @@ test('check and proposal leave Scene unchanged; unified text update and review d
   assert.ok(Math.abs(caption.fontSize-10*25.4/72*scale)<1e-6);assert.ok(Math.abs(caption.x-60*scale)<1e-6);ok('preview');const review=ok('review','--result','pass');assert.ok(Array.isArray(review.geometryAdvisories));assert.equal(review.pixelReview.pages.length,1);assert.match(review.reminder,/创作者声明/);ok('pack');assert.deepEqual((await read('output/manifest.json')).visualReview,{result:'pass',source:'agent-declared'});
  });
 });
+test('rich review requires a rendered crafted mark, then accepts a direct editable sketch',async()=>{
+ const p=project('手绘完成态',{mode:'spread',ratio:'b6'});p.styles=['手作便签','丰富层叠'];
+ await withPackage([paper()],async({run,ok,read,apply})=>{
+  await apply([material('paper','m1',mm(42,72)),text('note','今天把这张纸留下。',32,105,68,12),decision('m1')]);
+  ok('preview');assert.match(run('review','pass').stderr,/VISUAL_REVIEW_INCOMPLETE/);
+  await apply([{op:'graphic.add',id:'paper-edge',geometry:{kind:'sketch',motif:'corner',seed:23},place:{reference:'node:paper',at:[.05,.05],unit:'ratio'},size:{width:22,height:22,unit:'mm'},style:{fill:null,stroke:'#799897',strokeWidthMm:.55}}]);
+  const scene=await read('scene.json'),mark=scene.page.layers.find(node=>node.id==='paper-edge');
+  assert.equal(mark.kind,'vector');assert.ok(mark.svgPaths[0].d.startsWith('M'));
+  ok('preview');assert.equal(ok('review','pass').result,'pass');assert.equal(ok('pack').visualReview.result,'pass');
+ },{p});
+});
 test('eight required materials survive revisions grouping preview delivery and reopen',async()=>{
  const assets=Array.from({length:8},(_,i)=>paper('required-'+i,20,24)),p=project('八件素材双页',{mode:'spread',ratio:'b6'});p.requiredAssetIDs=assets.map(a=>a.id);
  await withPackage(assets,async({dir,ok,read,apply})=>{
