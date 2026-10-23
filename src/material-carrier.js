@@ -3,10 +3,10 @@
 export function separateSharedCarrier(regions,pixels,pageW,pageH){
   return regions.flatMap(region=>{
     const mask=region.mask;
-    if(!mask?.alpha?.length||region.shapeModel||region.fillRatio>=.45||region.seedDensity>=.3)return [region];
+    if(!mask?.alpha?.length||region.shapeModel||region.seedDensity>=.3)return [region];
     const x0=Math.round(region.x*pageW),y0=Math.round(region.y*pageH),w=mask.width,h=mask.height;
     if(w<8||h<8)return [region];
-    const histogram=new Uint32Array(256);let total=0,bright=0,min=255,max=0;
+    const histogram=new Uint32Array(256);let total=0,min=255,max=0;
     const luminance=new Uint8Array(w*h);
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=y*w+x;if(mask.alpha[i]<128)continue;
@@ -14,8 +14,10 @@ export function separateSharedCarrier(regions,pixels,pageW,pageH){
       if(at<0||at+2>=pixels.length)continue;
       const light=Math.round(.2126*pixels[at]+.7152*pixels[at+1]+.0722*pixels[at+2]);
       luminance[i]=light;histogram[light]++;total++;min=Math.min(min,light);max=Math.max(max,light);
-      if(light>=205)bright++;
     }
+    // A shared card can be cream, blue or grey. Compare its lightest pixels
+    // with its own ink instead of requiring camera RGB to exceed 205.
+    let bright=0;for(let i=Math.max(0,max-20);i<=max;i++)bright+=histogram[i];
     if(total<100||max-min<35||bright/total<.12)return [region];
     let sum=0,between=-1,threshold=180;
     for(let i=0;i<256;i++)sum+=i*histogram[i];

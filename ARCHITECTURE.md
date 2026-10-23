@@ -4,7 +4,7 @@
 
 | 能力 | 单一选择入口 | 执行与数据合同 | 回归测试 |
 | --- | --- | --- | --- |
-| 素材识别 | `src/recognition-profiles.js` 的候选发现与 Mask 分割两个独立设置 | 默认 `unified + auto`：`paper-analysis.js` 整合旧版连通区域、物理载体和受约束的漏检补全，只在整页阶段决定素材身份；`material-unified-segmentation.js` 在每个候选内共享梯度证据，仲裁实际轮廓、规则形状和透明 Mask。选择 `legacy + morphgac` 可恢复原版候选与原版分割路径；其他显式组合各按所选算法运行。后处理只能修改已有素材的透明边界；`src/image.js` 最终回到高清原图裁切。实测口径和局限见 [识别研究集成](docs/recognition-research-integration.md)。 | `tests/recognition-profiles.test.js`、`tests/unified-material-discovery.test.js`、`tests/recognition-settings-browser.mjs`、`tests/recognition-browser.mjs`、`tests/import-browser-acceptance.mjs` |
+| 素材识别 | `src/recognition-profiles.js` 的候选发现与 Mask 分割两个独立设置 | 默认 `unified + auto`：`paper-analysis.js` 整合旧版连通区域、物理载体和受约束的漏检补全，只在整页阶段决定素材身份；`material-unified-segmentation.js` 在每个候选内共享梯度证据，仲裁实际轮廓、规则形状和透明 Mask。选择 `legacy + morphgac` 可恢复原版候选与原版分割路径；其他显式组合各按所选算法运行。导入页保留一次识别的基础 Mask 和 900 px 分析帧，合并共同载体、形状规整与重复孔洞开关复用这些中间结果；明确关闭“合并共同载体”时才尝试把同一浅色载体上的独立印刷区域分件。形状和孔洞后处理只调整当前素材边界。`src/image.js` 最终回到高清原图裁切。实测口径和局限见 [识别研究集成](docs/recognition-research-integration.md)。 | `tests/recognition-profiles.test.js`、`tests/unified-material-discovery.test.js`、`tests/recognition-stage-reuse-browser.mjs`、`tests/recognition-settings-browser.mjs`、`tests/recognition-browser.mjs`、`tests/import-browser-acceptance.mjs` |
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
 | 页面组件 | `src/react-routes.jsx` 的 React 路由组件 | 页面及最近删除列表由 React 渲染，仍使用原 `trash` 表；`src/app.js` 负责业务编排和路由 | `tests/react-route-smoke.mjs`、`tests/trash-offline-browser.mjs`、`tests/library-canvas-latest-browser.mjs` |
@@ -41,7 +41,7 @@
 
 每批修改先运行 `npm test && npm run test:ui`，再按触及的能力跑对应浏览器脚本，至少覆盖手机、iPad 横竖与桌面 Chromium 视口。模拟视口不等于实体 Safari／Pencil。发布前必须用准确的暂存快照重复测试，检查私有文件、凭据、远端新提交及固定 CloudBase 测试项目的 Git 自动部署。
 
-素材识别必须遵循“整页候选先于边界分割”：所选候选发现算法只决定一次有几件实体；MorphGAC、统一轮廓、GrabCut、形状规整和打孔恢复只能修改各自候选内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
+素材识别必须遵循“整页候选先于边界分割”：所选候选发现算法决定初始实体；MorphGAC、统一轮廓、GrabCut、形状规整和打孔恢复只能修改各自候选内的透明边界。唯一明确的人工例外是关闭“合并共同载体”时，从已识别的载体 Mask 中分离独立印刷区域；切换回合并时恢复同一基础 Mask，不重跑整页识别。内部印刷格子、文字框和人物细节不得仅因自身闭合而在默认设置下成为新素材。
 
 目前 `src/app.js` 保留跨页业务编排；素材、系列、搭配、作品、导入、登录、账号、设置、弹窗及抠图控制面板由 React 持有。创作画布只有 Fabric 这一套运行中的编辑引擎。Fabric 对 `<canvas>` 的原生绘制与事件处理是像素引擎边界，不应由 React 重绘每次笔迹。非画布路径不得恢复旧 HTML 页面渲染，也不得直接增删或替换 React 子节点；图片加载后的封面由 React 原位更新，缩略图测量仅调整尺寸样式。识别质量与云存储的生产迁移须用真实案例验证，不能从界面迁移本身推断已经实现。
 

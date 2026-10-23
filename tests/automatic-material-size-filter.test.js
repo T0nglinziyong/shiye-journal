@@ -43,12 +43,13 @@ test('does not modify input, ordering, masks or manual edit objects',()=>{
  assert.deepEqual(out,[keep]);assert.strictEqual(out[0],keep);
  assert.strictEqual(out[0].mask,mask);assert.equal(input.length,2);
 });
-test('both automatic import entrances apply the filter, never manual box refinement',async()=>{
+test('initial, prefetched and cached postprocess results all apply the same automatic size filter',async()=>{
  const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
  const matches=app.match(/filterAutomaticMaterialBoxes\(/g)||[];
- assert.equal(matches.length,2,'foreground and background prefetch should agree');
+ assert.equal(matches.length,3,'foreground, background prefetch and cached reprocessing should agree');
  assert.match(app,/candidates=filterAutomaticMaterialBoxes\(candidates/);
  assert.match(app,/regions=filterAutomaticMaterialBoxes\(regions/);
+ assert.match(app,/automatic=filterAutomaticMaterialBoxes\(regions/);
  const manual=app.slice(app.indexOf('async function refreshImportCandidates('),
   app.indexOf('async function previewCrop()'));
  assert.doesNotMatch(manual,/filterAutomaticMaterialBoxes/);
