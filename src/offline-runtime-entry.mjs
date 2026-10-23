@@ -5,6 +5,18 @@ async function main(){
  const task=JSON.parse(readFileSync('TASK.json','utf8'));
  if(task?.format!=='shiye-gpt-creation-package'||task.version!==3||task.sourceContext?.packageLayout!=='v3')throw Error('不是拾页 v3 创作包');
  const command=process.argv[2];
+ if(process.argv.includes('--help')){
+  const usage={
+   help:'help [topic]',describe:'describe <operation|topic> [--full]',graphics:'graphics help',info:'info',fonts:'fonts',
+   'design-check':'design-check', 'self-test':'self-test',begin:'begin work/<name>.json',
+   check:'check work/<name>.json',apply:'apply work/<name>.json',
+   preview:'preview [--commands work/<name>.json]（试排图写入 output/proposals/）',
+   inspect:'inspect',review:'review pass|fail',pack:'pack'
+  };
+  if(!usage[command])throw Object.assign(Error('未知工作台命令'),{code:'UNKNOWN_COMMAND'});
+  process.stdout.write(JSON.stringify({ok:true,command,usage:usage[command],readOnly:true})+'\n');
+  return;
+ }
  const arg=command==='preview'&&process.argv[3]==='--commands'?process.argv[4]:command==='review'&&process.argv[3]==='--result'?process.argv[4]:process.argv[3];
  if(command==='begin'&&process.argv.slice(4).some(value=>value.startsWith('--protocol=')&&value!=='--protocol=2'))throw Object.assign(Error('只接受统一协议 2'),{code:'COMMAND_PROTOCOL_INVALID'});
  await runV3(task,command,arg,{full:process.argv.includes('--full')});

@@ -38,7 +38,14 @@ async function withPackage(assets,fn,{p=project('统一创作测试'),canvas=tru
 }
 test('current ZIP creates editable Scene, recovers stale locks and verifies real PNG bytes',async()=>{
  const assets=[paper()];await withPackage(assets,async({files,dir,run,ok,read,write,batch})=>{
-  for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
+ for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
+  const task=JSON.parse(new TextDecoder().decode(files['TASK.json']));
+  assert.equal(task.creativeBriefRef,'design/GUIDE.md');
+  assert.equal(task.creativeBrief,undefined);
+  assert.ok(files[task.creativeBriefRef]);
+  assert.equal(JSON.parse(run('pack','--help').stdout).readOnly,true);
+  assert.equal(JSON.parse(run('review','--help').stdout).readOnly,true);
+  assert.equal((await read('scene.json')).page.layers.length,0);
   const commands=batch([material('hero','m1',mm(60,70)),text('title','一张蓝纸的今天',60,20,70,22),{op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:mm(85,38),size:{width:8,height:8,unit:'mm'},style:{fill:'#d5e2d6'}},decision('m1')]);
   await write('work/commands.json',commands);
   const lock=join(dir,'work/.scene-write-lock');await mkdir(lock);await writeFile(join(lock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));await utimes(lock,new Date(Date.now()-120000),new Date(Date.now()-120000));
@@ -118,7 +125,8 @@ test('unified commands keep partition offcut windows weave and editable text wit
 });
 test('fixed recipes contain valid operation snippets rather than task-specific transactions',async()=>{
  const a=unzipSync(new Uint8Array(await (await makeTask([paper()],'甲')).blob.arrayBuffer())),b=unzipSync(new Uint8Array(await (await makeTask([paper()],'乙')).blob.arrayBuffer()));
- for(const path of ['START_HERE.md','design/CRAFT_GUIDE.md','design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/LETTERING.md','design/GRAPHICS.md','design/RECIPES.md','api/fixed-release.json'])assert.deepEqual(a[path],b[path],path);
+ for(const path of ['START_HERE.md','design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/LETTERING.md','design/GRAPHICS.md','design/RECIPES.md','api/fixed-release.json'])assert.deepEqual(a[path],b[path],path);
+ assert.equal(a['design/CRAFT_GUIDE.md'],undefined);
  for(const path of ['design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/LETTERING.md']){
   const prose=new TextDecoder().decode(a[path]);assert.doesNotMatch(prose,/4849|4850|4851|4852|4853|教程视频/);
   assert.match(prose,/文字|正文/);

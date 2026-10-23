@@ -38,6 +38,11 @@ test('page and relative commands create editable native Scene nodes',async()=>{
  const revised=run([{op:'group.create',id:'note-group',targets:['caption','dot']},{op:'layer.update',target:'dot',order:{before:'caption'}},{op:'group.ungroup',target:'note-group'},{op:'page.update',paperColor:'#eeeeee'}],result);
  assert.equal(revised.page.paperColor,'#eeeeee');assert.ok(revised.page.layers.some(n=>n.agentKey==='caption'));assert.ok(revised.page.layers.some(n=>n.id==='dot'));assert.doesNotThrow(()=>run([{op:'layout.detach',target:'caption'}],revised));
 });
+test('line preset rejects a box thinner than its stroke instead of silently vanishing',async()=>{
+ const {run}=await setup();
+ assert.throws(()=>run([{op:'graphic.add',id:'rule',geometry:{kind:'line'},place:at,size:{width:31,height:.1,unit:'mm'},style:{stroke:'#7C9EAD',strokeWidthMm:.45}}]),/线条高度不能小于笔宽/);
+ assert.ok(run([{op:'graphic.add',id:'rule',geometry:{kind:'line'},place:at,size:{width:31,height:1,unit:'mm'},style:{stroke:'#7C9EAD',strokeWidthMm:.45}}]).page.layers.some(node=>node.id==='rule'));
+});
 test('group.compose creates local children and linked captions survive reopen',async()=>{
  const {run}=await setup(paper('photo-local',30,20));
  const made=run([{op:'group.compose',id:'card',layoutBox:{width:90,height:100,unit:'mm'},place:{...at,rotationDeg:8},children:[add('photo',{...local,at:[.5,.35]}),{op:'text.add',id:'caption',content:'今天的照片',size:{width:45,unit:'mm'},place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'},behavior:'linked'}}]}]);

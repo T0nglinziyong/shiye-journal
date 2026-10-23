@@ -35,8 +35,6 @@ inspect 提供每个节点完整字段，不止摘要。所有编辑共享锁定
 AI 不可添加 manualVisualResize/manualVisualCopy 来逃避实物约束；基线已有手工变形可以保持。不得更改 source、纸张物理单位或私自换素材图片引用。`;
 export function webArtDirection(source){return [
   '【本次视觉方向】',source.styles.map(s=>s+'：'+visualStyleBrief(s)).join('；'),
-  '具体图文构思沿用本包共用的“构图与内容”指导，不另套模板。复用布局时重新选择主次；印章、曲线文字或镂空按需要使用，不按复杂度评分。',
   creativeTypographyGuide(source.baseDraft,{publicCommands:true}),
-  '【分阶段创作】文字、图形、素材都是核心构成。先稳定主块（大素材、艺术标题、段落或主图形）并预留正常字号正文，再完善内容，接着主动完成丰富的细节层，尝试小素材、胶带、图形、笔迹和局部强调的不同组合；不要只审视而不执行，也不要以保持简洁为由过早收手。素材少时由文字块和数字图形担当主体，不只贴一件素材配两句小字。除非明确要求大留白，最终应充实、疏密有序；大片无作用空区回到主块/文字/图形重排，不能用随机小装饰填平。按 design/SKILL.md、PLAYBOOK.md、LETTERING.md 执行并用真实 PNG 依 REVIEW.md 复核，design-check 不能代替看图。',
-  '【内部看图自评，不要在最终回复中输出】检查实际画面，先缩看整页焦点与动线，再放大核对文字、素材边缘、层次和第二处值得看的细节。检查是否只是逐项说明图片、通用鸡汤或空泛标题；按本次文字策略修订。纯粹拼贴不新增文字。若发现问题，修改对应 Scene 节点并重新 preview；最终 Scene 与 PNG 摘要必须一致，不用旧预览验收新图层。'
+  '本次风格只决定倾向，不套固定版式。文字、纸片和小图形共同决定主次；按 design/SKILL.md 创作，再看实际画面并依 design/REVIEW.md 修订。'
 ].join('\n\n');}
