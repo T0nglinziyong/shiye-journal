@@ -20,10 +20,13 @@ on:
       - 'src/app.js'
       - 'src/opencv-worker.js'
       - 'src/opencv-worker-browser.js'
+      - 'src/material-polish.css'
+      - 'src/material-carrier.js'
       - 'src/recognition-*.js'
       - 'src/slimsam-*.js'
       - 'tests/recognition-engine-browser.mjs'
       - 'tests/recognition-stage-reuse-browser.mjs'
+      - 'tests/import-paper-layout-browser.mjs'
       - 'tests/recognition-browser.mjs'
       - 'tests/material-count-browser.mjs'
       - 'tests/cutout-inspection-browser.mjs'
@@ -79,6 +82,7 @@ jobs:
           node tests/material-count-browser.mjs
           node tests/recognition-engine-browser.mjs
           node tests/recognition-stage-reuse-browser.mjs
+          node tests/import-paper-layout-browser.mjs
           node tests/cutout-inspection-browser.mjs
           node tests/recognition-browser.mjs
           node tests/import-browser-acceptance.mjs
