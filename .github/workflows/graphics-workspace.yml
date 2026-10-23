@@ -1,0 +1,30 @@
+name: Graphics development workspace
+on:
+  push:
+    branches: [feat/local-graphics-image-workflow-20261023]
+    paths: [.github/workflows/graphics-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: |
+          npm ci
+          npm install --save-exact roughjs@4.6.6 paper@0.12.18
+          mkdir -p /tmp/graphics-workspace
+          git rev-parse HEAD > /tmp/graphics-workspace/revision.txt
+          git archive HEAD | gzip > /tmp/graphics-workspace/source.tar.gz
+          cp package.json package-lock.json /tmp/graphics-workspace/
+          tar -czf /tmp/graphics-workspace/dependencies.tar.gz node_modules
+          cd /tmp/graphics-workspace && sha256sum *.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graphics-workspace
+          path: /tmp/graphics-workspace
+          retention-days: 2
