@@ -25,3 +25,6 @@ Documentation is on-demand: one small entry in START_HERE and GRAPHICS_TOOL.md, 
 Focused tests cover current mode exports, source and reference hashes, original snapshot retention, candidate separation, stale-source/account guards, actual library geometry and actual ZIP graphics/check/apply/Node Canvas preview/pack/reopen. Browser fixture tests the production mode picker and actual Worker + shared render. Image/provider calls are mocked in automated flow tests: no paid-model artistic quality claim.
 
 Hybrid pack verifies a separate reference image and records its hash. This proves bytes are retained, not that the model actually used them or that they are artistically accurate. A model-generated PNG may redraw the reference; constraints in prompts cannot prove pixel fidelity.
+
+## Release hardening
+Hybrid results with no editable layers fail explicitly; the source snapshot is retained. Reference verification rejects out-of-package symlinks as well as changed hashes. Browser Worker cancellation, clone errors, constructor failures and timeout all release their resources. The four-viewport three-mode/Worker test is included in Craft browser CI. The original test branch is preserved; no database migration or private asset write is part of this release.

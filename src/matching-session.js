@@ -139,7 +139,9 @@ export function createMatchingSession(c){
       try{await recorder.turn(turn,results,draft);}catch{v.progress+='\n诊断记录未保存；本轮画面已可靠暂存。';update();}
      }
     });
-    ensureAccount();await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode='tools';
+    ensureAccount();
+    if(mode==='hybrid'&&!output.draft?.layers?.length)throw Error('重建未产生可编辑图层；原始成图已保留，未保存空候选');
+    await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode='tools';
     if(mode==='hybrid'){v.project=p;v.linkedProjectID=null;v.progress+='\n已生成可编辑候选；原始成图独立保留，细节仍需核对。';}
     {v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
     v.status='completed';

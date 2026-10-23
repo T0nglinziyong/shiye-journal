@@ -129,10 +129,16 @@ npm run dev -- --port 5173 --strictPort
 
 新创作包将文字、图形和素材都作为构图主角：先稳定主要视觉块，完善内容，再主动审视小素材、胶带、图形和笔迹的点缀作用；素材少时由标题、段落和主图形组织版式。默认避免大片无作用空区，明确的极简任务除外。没有素材数量或填充率硬指标。
 
-`style.outline` 支持完整或偏移字形描边，`style.gradient` 支持真实字形填充渐变；同一文字节点可改字、改字体、重排、保存并重开。`text.lettering` 创建逐字可编辑的艺术标题，`draw.decorate` 根据目标生成普通笔迹下划线/高亮/括号。`fonts` 只查询字体名，不打包字体；`design-check` 是只读框级建议，不是看图或审美评分。完整例子在导出包的 design/LETTERING.md。
+`style.outline` 支持完整或偏移字形描边，`style.gradient` 支持真实字形填充渐变；同一文字节点可改字、改字体、重排、保存并重开。`text.lettering` 创建逐字可编辑的艺术标题，图形和笔迹统一使用 `graphic.add`，不存在点缀专用命令。`fonts` 只查询字体名，不打包字体；`design-check` 是只读框级建议，不是看图或审美评分。完整例子在导出包的 design/LETTERING.md。
 
 `node scripts/generate-craft-details-example.mjs <目录>` 生成单素材、文字/图形为主的合成两阶段验收例子；CI 保留结构预览、细节预览和最终项目。它不冒充真实模型创作 A/B 结果。更多边界见 docs/creation-detail-type-effects.md。
 
 ### Command 分类与丰富构图
 
 当前普通更新统一 `layer.update`，显示遮罩统一 `layer.mask`，真实保留/移除统一 `material.cut`。数字复制用 `layer.duplicate`，艺术标题整体重排用 `text.reflow`。尺寸可显式 linked；图形/笔迹与文字共用描边/渐变样式。创作包默认鼓励丰富、有作用的细节，不新增点缀指令。完整边界见 [command-taxonomy.md](docs/command-taxonomy.md)。
+
+### 三模式与本地图形计算
+
+搭配页统一为纯编辑（edit）、纯绘画（draw）和两者结合（hybrid），人工画笔不受此模式限制。网页 GPT 导出无需 API Key；应用内生图和 GPT 重建需配置对应模型。混合模式独立保留参考快照，再使用原素材重建可编辑候选，不是无损拆图。
+
+导出包提供只读 `node runtime/shiye.cjs graphics work/graphics.json`：本地 Rough.js / Paper.js / perfect-freehand 计算路径，生成普通 Command 草稿，再经 apply 写入同一 Scene。几何计算无需联网或安装 Canvas；PNG 渲染仍需已验证的 Canvas 后端。详情按需查 [三模式与 graphics](docs/three-modes-graphics.md)。

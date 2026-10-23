@@ -6,6 +6,7 @@ import {imageProvenance,projectForReconstruction} from '../src/image-workflow.js
 import {createOfflineHandoff,verifyOfflineTaskPackage,importEditableWork} from '../src/offline-creation.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 import {createMatchingSession} from '../src/matching-session.js';
+import {itemFromAsset} from '../src/domain.js';
 import {tinyPNG} from './offline-canvas-test-support.mjs';
 const a={id:'a',title:'Real source fixture',kind:'paper',blobId:'original',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
 function setup(mode='hybrid'){const p=project('Mode fixture',{mode:'spread',ratio:'b6'});Object.assign(p,{candidateAssetIDs:['a'],requiredAssetIDs:[],processing:'自由拆解',creationMode:mode,contentPolicy:'visual'});return p;}
@@ -38,14 +39,14 @@ test('vision reconstruction prompt labels generated reference independently of t
  const messages=buildCreativeMessages(args),parts=messages[1].content;
  assert.equal(parts.filter(x=>x.type==='image_url').length,2);assert.match(JSON.stringify(parts),/不是真实素材库/);assert.match(JSON.stringify(parts),/素材 m1/);assert.throws(()=>buildCreativeMessages({...args,referenceImage:'https://example.com/reference.png'}),/不接受外链/);
 });
-function sessionFixture(mode,{failRebuild=false,changeAccount=false}={}){
+function sessionFixture(mode,{failRebuild=false,changeAccount=false,emptyRebuild=false}={}){
  let savedImages=0,calledAgent=0,received;const p=setup(mode),records=new Map(),state={accountId:'A',route:'matching',projects:[],assets:[a],aiSettings:{key:'mock-key',keys:{openai:'mock-image-key'},model:'mock',transport:'json'},matchCreationMode:mode};
  const ctx={state,uid:()=>crypto.randomUUID(),toast:()=>{},db:{stageProject:async p=>records.set(p.id,structuredClone(p)),transaction:async(_,fn)=>fn({objectStore:()=>({put:p=>records.set(p.id,p)})})},deviceRecords:{get:async()=>null,put:async()=>{}},createProject:()=>p,supportsVision:()=>true,
  createAIRecorder:async()=>({request:()=>{},response:()=>{},finish:async()=>{},turn:async()=>{}}),
  generatePageImage:async()=>{if(changeAccount)state.accountId='B';return new Blob([tinyPNG],{type:'image/png'});},
  saveGeneratedImageSnapshot:async(_,source)=>{savedImages++;const s={id:'snapshot',title:'Reference',isSnapshot:true,snapshotBlobId:'pixels',imageCreation:imageProvenance(source,[a])};state.projects.push(s);records.set(s.id,s);return s;},
  modelImage:async()=> 'data:image/png;base64,'+Buffer.from(tinyPNG).toString('base64'),
- runCreativeAgent:async opts=>{calledAgent++;received=opts;if(failRebuild)throw Error('mock model unavailable');return {draft:opts.draft};}};
+ runCreativeAgent:async opts=>{calledAgent++;received=opts;if(failRebuild)throw Error('mock model unavailable');if(!emptyRebuild)opts.draft.items.push(itemFromAsset(a,opts.draft,.5,.5));return {draft:opts.draft};}};
  return {ctx,records,session:createMatchingSession(ctx),read:()=>({savedImages,calledAgent,received})};
 }
 test('draw saves genuine image snapshot without running the editable agent',async()=>{
@@ -59,4 +60,10 @@ test('hybrid preserves original and creates separate candidate with both referen
 test('hybrid failure keeps the saved image; account changes stop old results before saving',async()=>{
  const f=sessionFixture('hybrid',{failRebuild:true});await f.session.restore();await f.session.generate();assert.equal(f.session.variants()[0].status,'failed');assert.equal(f.ctx.state.projects[0].id,'snapshot');assert.equal(f.read().savedImages,1);
  const g=sessionFixture('hybrid',{changeAccount:true});await g.session.restore();await g.session.generate();assert.equal(g.read().savedImages,0);assert.equal(g.read().calledAgent,0);assert.equal(g.ctx.state.projects.length,0);
+});
+
+test('hybrid never labels an empty reconstruction as a completed editable candidate',async()=>{
+ const f=sessionFixture('hybrid',{emptyRebuild:true});await f.session.restore();await f.session.generate();
+ const v=f.session.variants()[0];assert.equal(v.status,'failed');assert.match(v.progress,/未产生可编辑图层/);
+ assert.equal(f.read().savedImages,1);assert.equal(f.ctx.state.projects.length,1);assert.equal(f.ctx.state.projects[0].isSnapshot,true);
 });
