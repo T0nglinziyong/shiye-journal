@@ -38,7 +38,7 @@ async function withPackage(assets,fn,{p=project('统一创作测试'),canvas=tru
 }
 test('current ZIP creates editable Scene, recovers stale locks and verifies real PNG bytes',async()=>{
  const assets=[paper()];await withPackage(assets,async({files,dir,run,ok,read,write,batch})=>{
- for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
+ for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/size-map.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
   const task=JSON.parse(new TextDecoder().decode(files['TASK.json']));
   assert.equal(task.creativeBriefRef,'design/GUIDE.md');
   assert.equal(task.creativeBrief,undefined);

@@ -3,16 +3,17 @@
 scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canvas 或经验证的浏览器 Canvas 渲染；实际打开 output/preview.png，最后交付 output/project.shiyeproject.json 与 PNG。不得用示意图代替。字段不清时查 api/commands.schema.json，通常只需 describe。
 
 ## 最短有效路线
-1. 读 TASK.json 的任务字段和 design/GUIDE.md，看 assets/overview.jpg 与必要原图。TASK 的 creativeBriefRef 指向同一份动态指导；高级工艺才按需读 design/SKILL.md 或对应专题。保留真实来源、尺寸和用户事实。
+包内已有 `work/commands.json` 初稿。首次直接填它的 operations；每次 apply 后，要在同一路径开始新事务时，改用新的 transactionId 和 `info` 返回的 sceneRevision。`begin` 不会覆盖已有文件，无须为此重新安装依赖或重新生成整页。
+1. 读 TASK.json 的任务字段和 design/GUIDE.md，看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览图为各件独立放大观察；尺寸图用同一毫米比例，判断真实大小以尺寸图和 TASK 为准。materials.metadataHints 直接提供现有素材分类标签，它只是观察线索，实际图片与用户事实优先。TASK 的 creativeBriefRef 指向同一份动态指导；高级工艺才按需读 design/SKILL.md 或对应专题。保留真实来源、尺寸和用户事实。
 2. **试摆阶段**：辨认主角、可写纸面、连接物和小件。让主角、底纸、书写面叠压，并露出有用边缘；素材少时也可让大字或段落成为主块。先写结构 Commands，运行 `preview --commands work/commands.json`，打开返回的 `output/proposals/*.png` 看未提交的真实 Scene 试排；满意后 apply。
 3. **内容阶段**：根据试排中的真实书写空间决定正文长度、标题或独立字条，再反过来调整素材。用字重、颜色、行距与分组构成层次；不能把大印刷标题之外的文字都缩成图注。
 4. **细节阶段**：在有关联的地方尝试小素材、合法胶带/裁条、数字圆形、圈注、笔迹或局部高亮。主色可占较大面积，强调色集中在少数关键处。看图决定保留，不凑工具或装饰数量；具体问题查 design/PLAYBOOK.md。
 5. apply 后 preview 看当前 Scene。若出现大空洞、遮字或素材相互孤立，就用下一事务局部修订。尤其检查是否把几个素材各放一处、配几句解释就结束；应考虑改变主块比例、让纸面承载正文、用叠压建立阅读路线。不为凑轮次重复渲染。design-check 只能辅助定位，不能代替看图。
-6. 按 design/REVIEW.md 看整页、文字和局部。除非 TASK 明确要求大留白，默认画面应充实、疏密有序，不留大片未完成空区。空洞先用主块/文字/图形重排解决，不撒小物填平；边距、行距和必要停顿必须保留。
+6. 按 design/REVIEW.md 看整页、文字和局部。分别指出最大无作用空区、最弱的一段新增文字、最像并排展示而缺少关系的素材；存在明显问题就针对这些对象用一批局部 Commands 修正，再看 PNG。除非 TASK 明确要求大留白，默认画面应充实、疏密有序；空洞先用主块/文字/图形重排解决，不撒小物填平；边距、行距和必要停顿必须保留。
 7. 补齐 material.decision，review 后 pack。代码校验通过不代表审美完成；最终 PNG、Scene 必须一致。
 
 ## 按需工具
-- 运行 `node runtime/shiye.cjs self-test`、`info`；后续事务用 `begin work/next.json`。
+- 先运行 `node runtime/shiye.cjs self-test`；只在它报告缺少 Canvas 时安装 `package-lock.json` 指定的依赖，不为每次局部修改重复 `npm ci`。用 `info` 读取当前修订；后续事务用 `begin work/next.json`。
 - 不会用某个操作就 `describe <op>`；`--full` 才展开完整 Schema。公共参数查 place/size/style/geometry/region。
 - 文字描边/渐变：`text.add / layer.update` 的 style.outline / style.gradient。逐字异体标题：`text.lettering`。看 design/LETTERING.md；字体查询用 `fonts`。
 - 图形和绘画统一 `graphic.add`：geometry 决定预设图形、path 或 stroke，place/size/style/order 与修改共用。看 design/GRAPHICS.md。不设置点缀命令；文字、素材、胶带、图形、笔迹都能点缀。数字色带不能冒充有来源的实体胶带。
