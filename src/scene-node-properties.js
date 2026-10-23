@@ -49,6 +49,9 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
   if(change.size?.width!==undefined)next.width=dimension(page,change.size,'width',parentID)*s;
   reflowSceneText(next,{...(change.size?.height===undefined?{}:{minimumHeight:dimension(page,change.size,'height',parentID)*s}),...(change.style?.lineHeight===undefined?{}:{lineHeightRatio:change.style.lineHeight})});
  }
+ // The line preset is rasterized inside its Scene box. A box thinner than
+ // its stroke can silently disappear in the real PNG, so reject that draft.
+ if(next.type==='shape'&&next.kind==='line'&&next.height+1e-7<(next.lineWidth||0))throw Error('线条高度不能小于笔宽；增大 size.height 或改用 geometry.stroke');
  validateTextEffects(next);
  validateGraphicEffects(next);
  const values={};for(const key of new Set([...Object.keys(node),...Object.keys(next)]))if(JSON.stringify(node[key])!==JSON.stringify(next[key]))values[key]=next[key];

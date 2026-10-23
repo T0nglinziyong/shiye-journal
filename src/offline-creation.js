@@ -16,7 +16,6 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
-import {creativePageBrief} from './creative-page-brief.js';
 import {imagePrompt} from './ai-image-generation.js';
 import {classifyJournalMaterial} from './journal-case-study.js';
 import {tapeDimensions,tapeRepeatRange} from './tape-strip.js';
@@ -35,6 +34,16 @@ function sourceFor(p,aliases){
  const d=p.drafts[0],priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
+export function createEditablePackageGuide(source,selected,settings={}){
+ const materialDirection=selected.length<=3
+  ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
+  :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。画布空白本身也能直接书写，不必把全部正文塞进唯一一张卡片。可让人物或小贴纸压住纸边、让正文沿实物边缘展开；露出有用轮廓，避免多件同心堆叠。';
+ // START_HERE and REVIEW own the reusable composition workflow. Keep this
+ // per-task guide short so the model can reach the actual materials sooner.
+ const textDirection=source.contentPolicy==='visual'||source.textMode==='none'?'本次不新增文字。':source.textMode==='requested'&&!source.userText?'没有明确文字要求时不主动配文。':source.textMode==='rich'?'本次可以写展开的随想：在真实书写空间内推进一个具体念头，再用短注回应素材细节；不靠口号或重复句子凑满。':source.textMode==='minimal'?'本次文字精炼，但图文关系仍须完成。':'新增文字长短随真实书写空间和内容而定。';
+ const pageDirection=source.mode==='spread'?'双页分别检查：每页都有主块、可读内容或明确的视觉回应；两页可一重图一重字，但不要把某页的空洞算作另一页的留白。':'缩看整页，再放大检查图文交界和细节。';
+ return ['materials.selection 标出取材优先级：required 必须可见，preferred 优先考虑，available 按需取用；后两者可以不选，记录 material.decision 即可。素材篮不是必须全件完整铺开的清单。',creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),webArtDirection(source),materialDirection,textDirection,pageDirection,'先看实物轮廓、印刷字和可写处，再让主块、文字与图形共同决定排版。只有结构难以取舍时才比较候选，不为比较而重写整份 Scene。只写 work/commands.json，局部修订继续用下一批 Command；对当前 Scene 真实预览。技术通过与视觉完成分开判断，具体诊断见 design/REVIEW.md；高级工艺按需 describe，不预读完整 Schema。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].filter(Boolean).join('\n\n');
+}
 // Alias shortening happens before freezing/hashing the task. Persistent asset
 // IDs never change, and images and source references share the same mapping.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referencePreview=null}){
@@ -49,7 +58,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
  const source=sourceFor(p,aliases);source.creationMode=creationMode;source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';
  const selected=source.materials.map(({alias,assetID})=>{
   const asset=assets.find(item=>item.id===assetID);if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
-  return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tape:asset.kind==='tape'?{axis:tapeDimensions(asset).axis,widthMM:tapeDimensions(asset).widthMM,sourceLengthMM:tapeDimensions(asset).lengthMM,repeatRangeMM:tapeRepeatRange(asset),flatCrop:asset.tapeFlatCrop??null,textureModes:['sample',...(tapeRepeatRange(asset)?['repeat']:[]),'stretch'],capStyles:['square','angled','torn']}:null,tags:asset.tags||[]};
+  const hints=value=>Array.isArray(value)?value.filter(item=>typeof item==='string'&&item.trim()).slice(0,8).map(item=>item.trim().slice(0,40)):[];
+  return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tape:asset.kind==='tape'?{axis:tapeDimensions(asset).axis,widthMM:tapeDimensions(asset).widthMM,sourceLengthMM:tapeDimensions(asset).lengthMM,repeatRangeMM:tapeRepeatRange(asset),flatCrop:asset.tapeFlatCrop??null,textureModes:['sample',...(tapeRepeatRange(asset)?['repeat']:[]),'stretch'],capStyles:['square','angled','torn']}:null,tags:hints(asset.tags),contentTags:hints(asset.contentTags),styleTags:hints(asset.styleTags),semanticColorNames:hints(asset.semanticColorNames),placementHints:hints(asset.placementHints)};
  });
  if(!selected.length)throw Error('请先选择素材');
  const showImages=settings.includeThumbnails!==false,chosen=showImages?previews:[];
@@ -63,7 +73,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
  source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
  source.taskHash=await taskFingerprint(source);
  const work=webSceneDocument(source,source.baseDraft,p.title);
- const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),webArtDirection(source),'先观察素材并构思素材之间的关系；只写 work/commands.json，经 apply 修改唯一 scene.json 后看真实预览。按需 help / describe；使用 material.cut、material.split、material.window、material.weave，曲线文字、胶带路径、字形镂空等同样使用公共参数；默认 describe 返回精简帮助，完整规范加 --full。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
+ const guide=createEditablePackageGuide(source,selected,settings);
  const files=await createV3PackageFiles({source,selected,chosen,work,guide,runtime:offlineValidateSource,glyph:offlineGlyphSource});
  if(creationMode!=='edit'){
   const task=JSON.parse(strFromU8(files['TASK.json']));task.creationMode=creationMode;task.imageRequestRef='image-request.json';

@@ -39,8 +39,11 @@ test('HTML renderer accepts same-task WebP and clearly requires visual inspectio
  const bytes=new Uint8Array([82,73,70,70,12,0,0,0,87,69,66,80,86,80,56,32]);
  const html=offlineBrowserPage({items:[],canvas:{width:1000,height:1000}},{
    materials:[{alias:'m1',assetID:'a1'}]
- },{m1:bytes},'window.ShiyeScene={render:async()=>({})};');
+ },{m1:bytes},'window.ShiyeScene={render:async()=>({})};',new Uint8Array([0,1,2]));
  assert.match(html,/data:image\/webp;base64,/);
+ assert.match(html,/font-src data:/);
+ assert.match(html,/font-family:'Ma Shan Zheng'/);
+ assert.match(html,/data:font\/ttf;base64,/);
  assert.match(html,/中文字体/);
  assert.match(html,/dataset\.renderState/);
  assert.match(html,/渲染失败/);

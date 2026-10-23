@@ -5,6 +5,7 @@ import paper from 'paper/dist/paper-core.js';
 import {getStroke} from 'perfect-freehand';
 import {graphicsRequestSchema,graphicsOptionKeys,graphicsLimits} from './graphics-contract.js';
 import {shapeSVG} from './editor-tools-model.js';
+import {sketchGeometry} from './graphic-geometry.js';
 import {physicalSVGPath} from './svg-paint-geometry.js';
 const validate=new Ajv2020({strict:false,allErrors:true}).compile(graphicsRequestSchema);
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
@@ -19,8 +20,13 @@ function pathCheck(d){
  if((normalized.match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi)||[]).some(n=>Math.abs(+n)>100000))fail('GRAPHICS_LIMIT','路径坐标超出预算');
  return normalized;
 }
-function paint(base,local={}){return {fill:local.fill===undefined?(base.fill??null):local.fill,stroke:local.stroke===undefined?(base.stroke===undefined?'#546E7A':base.stroke):local.stroke,strokeWidthMm:base.strokeWidthMm??.4,opacity:(base.opacity??1)*(local.opacity??1)};}
+function paint(base,local={}){
+ const fill=local.fill===undefined?(base.fill??null):local.fill;
+ const stroke=local.stroke===undefined?(base.stroke===undefined?(fill===null?'#546E7A':null):base.stroke):local.stroke;
+ return {fill,stroke,strokeWidthMm:base.strokeWidthMm??.4,opacity:(base.opacity??1)*(local.opacity??1)};
+}
 function inputPaths(scope,g,w,h,style){
+ if(g.kind==='sketch')return inputPaths(scope,sketchGeometry(g),w,h,style);
  let paths=[];
  if(g.kind==='path'){
   const [x,y,vw,vh]=g.viewBox;

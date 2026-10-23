@@ -3,10 +3,58 @@
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 export const graphicPresetKinds=Object.freeze([...commonShapes,...advancedShapes].map(([kind])=>kind==='rectangle'?'rect':kind).filter(kind=>kind!=='vector'));
 const presets=new Set(graphicPresetKinds);
-export function initialGraphicNode(id,geometry,scale){
+// Small, deterministic line studies compile into the same editable vector
+// paths as any hand-authored path. No extra tool invocation or asset is needed.
+export function sketchGeometry({motif,seed=1,waypoints}){
+ const phase=(seed%997)*.071;
+ const wobble=t=>Math.sin(t*17+phase)*.85+Math.sin(t*31+phase*.7)*.42;
+ const path=points=>points.map(([x,y],i)=>(i?'L':'M')+x.toFixed(2)+' '+y.toFixed(2)).join(' ');
+ const samples=(count,point)=>Array.from({length:count},(_,i)=>point(i/(count-1)));
+ let paths;
+ if(motif==='loop'){
+  // Leave a deliberate opening: a hand-drawn loop should not look stamped.
+  paths=[path(samples(37,t=>{const a=(-.12+t*.94)*Math.PI*2;return [50+(43+wobble(t))*Math.cos(a),50+(43+wobble(t))*Math.sin(a)];}))];
+ }else if(motif==='underline'){
+  paths=[path(samples(21,t=>[4+t*92,52+Math.sin(t*Math.PI*1.35+phase)*3+wobble(t)*1.3]))];
+ }else if(motif==='corner'){
+  paths=[path(samples(13,t=>t<.5?[8+wobble(t),8+t*142]:[8+(t-.5)*142,79+wobble(t)]))];
+ }else if(motif==='scallop'){
+  paths=[path(samples(41,t=>[3+t*94,52+Math.sin(t*7*Math.PI)*8+wobble(t)*.8]))];
+ }else if(motif==='trail'){
+  if(waypoints){
+   // A few material-led waypoints make the gesture specific to this scene.
+   // Short gaps and restrained lateral wobble keep it hand drawn and editable.
+   paths=waypoints.slice(1).flatMap((end,index)=>{
+    const start=waypoints[index],dx=(end[0]-start[0])*90,dy=(end[1]-start[1])*90,length=Math.hypot(dx,dy)||1;
+    return [[.03,.46],[.54,.97]].map(([from,to],dash)=>path(samples(7,t=>{
+     const u=from+(to-from)*t,offset=Math.sin(Math.PI*t)*(Math.sin(u*9+phase+index*2+dash)*.72+wobble(u+index)*.22);
+     return [5+start[0]*90+dx*u-dy/length*offset,5+start[1]*90+dy*u+dx/length*offset];
+    })));
+   });
+  }else{
+   // Preserve the ready-made gesture for cases without explicit landmarks.
+   const spans=[[.02,.15],[.20,.34],[.39,.56],[.62,.74],[.80,.97]];
+   paths=spans.map(([start,end],index)=>path(samples(5,t=>{
+    const u=start+(end-start)*t;
+    return [3+u*94,53+Math.sin(u*Math.PI*1.2+phase*.2)*10+wobble(u)*1.2+(index%2?1:-1)];
+   })));
+  }
+ }else if(motif==='rays'){
+  paths=Array.from({length:7},(_,index)=>{
+   const angle=(index/7)*Math.PI*2-.35+Math.sin(phase+index*1.7)*.08;
+   const inner=24+(index%3)*2,outer=39+(index%2)*5;
+   return path([[50+Math.cos(angle)*inner,50+Math.sin(angle)*inner],[50+Math.cos(angle)*outer,50+Math.sin(angle)*outer]]);
+  });
+ }else throw Error('未知手绘线形：'+motif);
+ return {kind:'path',viewBox:[0,0,100,100],paths:paths.map(d=>({d}))};
+}
+export function initialGraphicNode(id,geometry,scale,style={}){
  const common={id,agentKey:id,zIndex:500,opacity:1,blendMode:'normal'};
  if(geometry.kind==='stroke')return {...common,type:'ink',points:[{x:0,y:0,p:.5}],layoutRotation:0,width:.5*scale,color:'#546E7A',penStyle:'ballpoint'};
- return {...common,type:'shape',kind:'rectangle',x:0,y:0,rotation:0,width:scale,height:scale,fill:null,stroke:'#546E7A',lineWidth:.5*scale};
+ // A fill-only graphic should not acquire an unrequested dark outline. An
+ // unstyled or outline-only graphic keeps the existing visible stroke default.
+ const fillOnly=style.fill!=null&&!Object.hasOwn(style,'stroke');
+ return {...common,type:'shape',kind:'rectangle',x:0,y:0,rotation:0,width:scale,height:scale,fill:null,stroke:fillOnly?null:'#546E7A',lineWidth:.5*scale};
 }
 export function inkLocalFrame(node){
  const a=(node.layoutRotation||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
@@ -15,6 +63,7 @@ export function inkLocalFrame(node){
  return {points,c,s,cx:left+w/2,cy:top+h/2,width:Math.max(node.width,w),height:Math.max(node.width,h),spanX:w,spanY:h};
 }
 export function replaceGraphicGeometry(node,geometry,scale){
+ if(geometry.kind==='sketch')geometry=sketchGeometry(geometry);
  if(geometry.kind==='stroke'){
   if(node.type!=='ink')throw Error('stroke 几何需要笔迹节点；不会隐式转换图层类型');
   const old=inkLocalFrame(node),points=geometry.points,xs=points.map(p=>p.x),ys=points.map(p=>p.y),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;

@@ -26,6 +26,15 @@ test('decoded image cache evicts by pixel budget and reuses matching source node
 test('corner resize preserves the opposite rotated corner and aspect ratio',()=>{const start={x:100,y:120,width:80,height:40,rotation:30},next=resizeObject(start,1,1,30,20),corner=o=>({x:o.x-o.width*Math.cos(Math.PI/6)/2+o.height*Math.sin(Math.PI/6)/2,y:o.y-o.width*Math.sin(Math.PI/6)/2-o.height*Math.cos(Math.PI/6)/2});assert.ok(Math.abs(next.width/next.height-2)<1e-8);const a=corner(start),b=corner(next);assert.ok(Math.hypot(a.x-b.x,a.y-b.y)<1e-8);});
 test('continued material cut composes inside the current piece and rejects tiny results',()=>{const next=composeCrop({x:0,y:0,width:.5,height:1},{x:.5,y:0,width:.5,height:1});assert.deepEqual(next,{x:.25,y:0,width:.25,height:1});assert.equal(validateCrop(next,20,30),next);assert.throws(()=>validateCrop(next,NaN,30),/实物尺寸/);assert.throws(()=>validateCrop(next,4,30),/2 mm/);assert.throws(()=>validateCrop({x:.8,y:0,width:.4,height:1},20,30),/范围/);});
 test('text layout retains explicit newlines and paragraph gaps while wrapping',()=>{const result=textLines({content:'abcd\nef',width:16,fontSize:10,paragraphSpacing:3},text=>text.length*8);assert.deepEqual(result.lines.map(l=>l.text),['ab','cd','ef']);assert.ok(result.lines[2].y>26);});
+test('text layout keeps closing punctuation with its word and avoids orphaned opening brackets',()=>{
+ const measure=text=>Array.from(text).length*10;
+ const punctuation=textLines({content:'今天，去看花。',width:20,fontSize:10},measure).lines.map(line=>line.text);
+ assert.deepEqual(punctuation,['今','天，','去看','花。']);
+ const opening=textLines({content:'先说（好事）',width:30,fontSize:10},measure).lines.map(line=>line.text);
+ assert.ok(opening.every(line=>!new Set(Array.from('（《「『【〔〈([{')).has(Array.from(line).at(-1))));
+ const words=textLines({content:'去看 Road',width:50,fontSize:10},measure).lines.map(line=>line.text);
+ assert.deepEqual(words,['去看','Road']);
+});
 test('a queued close from the previous dialog cannot cancel the newly opened editor',()=>{const dialog=new EventTarget();dialog.open=true;let closed=0;onDialogClosed(dialog,()=>closed++);dialog.dispatchEvent(new Event('close'));assert.equal(closed,0);dialog.open=false;dialog.dispatchEvent(new Event('close'));dialog.dispatchEvent(new Event('close'));assert.equal(closed,1);});
 test('reusable multicolor vectors keep every color layer, holes and opacity in shared preview/export',()=>{const svg=shapeSVG({kind:'vector',vectorLayers:[{fill:'#abcdef',opacity:.5,paths:[[[0,0],[1,0],[1,1]]]},{fill:'#fedcba',opacity:1,paths:[[[0,0],[.5,0],[.5,.5]]]}]});assert.match(svg,/#abcdef/);assert.match(svg,/#fedcba/);assert.match(svg,/opacity="0.5"/);assert.equal((svg.match(/<path /g)||[]).length,2);assert.ok(!shapeSVG({vectorLayers:[{fill:'<script>',paths:[[['bad',0]]]}]}).includes('<script>'));});
 

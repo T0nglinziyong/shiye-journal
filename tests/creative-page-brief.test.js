@@ -16,15 +16,33 @@ test('art direction encourages connected text, materials and graphics without fi
   assert.match(brief,/连贯的多行正文/);
   assert.match(brief,/文字贴近相关素材/);
   assert.match(brief,/手写、线条和荧光笔/);
+  assert.match(brief,/先在真实可写纸面安排一处能读下去的记录/);
+  assert.match(brief,/不要把全部新增文字排成同一种整齐的无衬线段落/);
   assert.match(brief,/无意空洞/);
   assert.match(brief,/避免为填满纸张而堆砌/);
   assert.doesNotMatch(brief,/至少\d|填充率.{0,4}\d|最低图层/);
   const visual=creativePageBrief({contentPolicy:'visual'});
   assert.match(visual,/不生成标题、正文或图注/);
   assert.doesNotMatch(visual,/连贯的多行正文/);
+  assert.doesNotMatch(visual,/手作便签要保留/);
+  const printed=creativePageBrief({styles:['手作便签'],textPresentation:'type'});
+  assert.match(printed,/不强加手写字体/);
+  assert.doesNotMatch(printed,/不要把全部新增文字排成同一种整齐的无衬线段落/);
   const cover=creativePageBrief({styles:['极简留白'],purposes:['主题封面']});
   assert.match(cover,/有意留白/);
   assert.match(cover,/不强塞长正文/);
+});
+
+test('composition density choice changes the shared creative direction',()=>{
+  const sparse=creativePageBrief({styles:['随材而定','疏朗留白']});
+  const layered=creativePageBrief({styles:['随材而定','丰富层叠']});
+  const automatic=creativePageBrief({styles:['随材而定','自动安排']});
+  assert.match(sparse,/本次选择疏朗留白/);
+  assert.match(layered,/本次选择丰富层叠/);
+  assert.match(layered,/有不同职责的组合/);
+  assert.match(layered,/不强制主路径、大图形/);
+  assert.match(automatic,/默认疏密随素材而定/);
+  assert.doesNotMatch(sparse,/本次选择丰富层叠/);
 });
 
 test('spread direction balances both pages and keeps the gutter readable without forbidding intentional bleed',()=>{
@@ -48,9 +66,10 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(api[1].content[0].text,/图文职责/);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,textMode:'rich'}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/连贯的多行正文/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/无意空洞/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/纸片错层/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/展开的随想/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/书写空间/);
+  assert.match(strFromU8(webFiles['design/REVIEW.md']),/空白|空区/);
+  assert.match(strFromU8(webFiles['design/REVIEW.md']),/书写面/);
   assert.match(strFromU8(webFiles['design/GUIDE.md']),/主图与旁注、错层图文/);
   assert.match(api[0].content,/主图与旁注、错层图文/);
   assert.ok(JSON.parse(strFromU8(webFiles['TASK.json'])).materials[0].journalRoles.includes('writing'));
@@ -87,7 +106,8 @@ test('both editable and image transports receive the same spread-specific page b
   assert.match(api[1].content[0].text,marker);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),marker);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/双页分别检查/);
+  assert.match(strFromU8(webFiles['design/REVIEW.md']),/中缝/);
   const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
   assert.match(image,marker);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{creationMode:'draw',includeThumbnails:true},previews:[{alias:'m1',bytes:tinyPNG}]});

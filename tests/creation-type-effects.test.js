@@ -16,6 +16,7 @@ import {createFabricSceneBridge} from '../src/fabric-scene-bridge.js';
 import {worldBox} from '../src/scene-spatial.js';
 import {solveSceneLayout} from '../src/scene-layout.js';
 import {auditCreationDesign} from '../src/creation-design-audit.js';
+import {sketchGeometry} from '../src/graphic-geometry.js';
 import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
 import {applySceneNodeChange} from '../src/scene-edit-kernel.js';
 import {tinyPNG} from './offline-canvas-test-support.mjs';
@@ -23,8 +24,8 @@ const at=(x=65,y=65)=>({reference:'page',at:[x,y],unit:'mm'});
 const outline={color:'#35516A',widthMm:.7,offsetMm:[.5,.4]},gradient={angleDeg:90,stops:[{offset:0,color:'#E58A50'},{offset:1,color:'#556EA4'}]};
 const text={op:'text.add',id:'word',content:'未来',size:{width:50,unit:'mm'},place:at(),style:{fontSizePt:23,fontPreset:'serif'}};
 const batch=operations=>({protocolVersion:2,transactionId:'effects',baseSceneRevision:'sha256:'+'0'.repeat(64),operations});
-async function fixture(){
- const asset={id:'paper',title:'synthetic paper',kind:'paper',physicalWidthMM:30,physicalHeightMM:20};const p=project('Art lettering');p.processing='自由拆解';
+async function fixture(width=30,height=20,mode='single'){
+ const asset={id:'paper',title:'synthetic paper',kind:'paper',physicalWidthMM:width,physicalHeightMM:height};const p=project('Art lettering',{mode});p.processing='自由拆解';
  const task=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}]});
  const assets=task.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true})),doc=webSceneDocument(task.source,task.source.baseDraft,'editable effects');
  return {assets,doc,run:(ops,base=doc)=>applyCreationV2Batch(base,batch(ops),assets)};
@@ -32,6 +33,29 @@ async function fixture(){
 const node=(d,id='word')=>creationNode(d,id),near=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 function pixels(extra){const c=createCanvas(220,160),ctx=c.getContext('2d');ctx.translate(110,80);drawSceneText(ctx,{type:'text',width:160,height:100,content:'A',fontSize:64,fontName:'DejaVu Sans',alignment:'center',color:'#FFFFFF',...extra});return ctx.getImageData(0,0,220,160).data;}
 const ink=data=>{let count=0;for(let i=3;i<data.length;i+=4)if(data[i])count++;return count;};
+test('one graphic command compiles a stable editable hand-drawn path and supports local replacement',async()=>{
+ const {run}=await fixture();
+ const add={op:'graphic.add',id:'edge',geometry:{kind:'sketch',motif:'corner',seed:23},place:at(50,50),size:{width:40,height:30,unit:'mm'},style:{fill:null,stroke:'#799897',strokeWidthMm:.55}};
+ const made=run([add]),shape=node(made,'edge');
+ assert.equal(shape.kind,'vector');assert.equal(shape.svgPaths.length,1);
+ assert.equal(shape.svgPaths[0].d,sketchGeometry(add.geometry).paths[0].d);
+ assert.equal(node(run([add]),'edge').svgPaths[0].d,shape.svgPaths[0].d);
+ const revised=run([{op:'layer.update',target:'edge',geometry:{kind:'sketch',motif:'loop',seed:23}}],made);
+ assert.notEqual(node(revised,'edge').svgPaths[0].d,shape.svgPaths[0].d);
+ assert.equal(node(revised,'edge').id,'edge');
+});
+test('material-led trail waypoints stay editable and reject invalid routes',async()=>{
+ const {run}=await fixture();
+ const geometry={kind:'sketch',motif:'trail',seed:23,waypoints:[[.05,.72],[.38,.48],[.66,.63],[.94,.18]]};
+ const command={op:'graphic.add',id:'route',geometry,place:at(50,50),size:{width:46,height:28,unit:'mm'},style:{fill:null,stroke:'#799897',strokeWidthMm:.85}};
+ const made=run([command]),route=node(made,'route');
+ assert.equal(route.kind,'vector');assert.equal(route.svgPaths.length,6);
+ assert.deepEqual(route.svgPaths.map(p=>p.d),sketchGeometry(geometry).paths.map(p=>p.d));
+ const changed=run([{op:'layer.update',target:'route',geometry:{...geometry,waypoints:[[.05,.72],[.7,.25]]}}],made);
+ assert.notDeepEqual(node(changed,'route').svgPaths,route.svgPaths);
+ assert.throws(()=>validateCreationV2Commands(batch([{...command,geometry:{...geometry,motif:'loop'}}])));
+ assert.throws(()=>validateCreationV2Commands(batch([{...command,geometry:{...geometry,waypoints:[[.05,.72],[1.2,.3]]}}])));
+});
 test('outline paints full glyph boundaries and gradient paints real multiple colors, not an offset duplicate',()=>{
  const plain=pixels({}),border=pixels({textOutline:{color:'#000000',width:5,offsetX:0,offsetY:0}}),offset=pixels({textOutline:{color:'#000000',width:5,offsetX:8,offsetY:4}}),grad=pixels({textGradient:gradient});
  assert.ok(ink(border)>ink(plain));assert.notDeepEqual(border,offset);let red=0,blue=0;for(let i=0;i<grad.length;i+=4)if(grad[i+3]>200){if(grad[i]>grad[i+2]+20)red++;if(grad[i+2]>grad[i]+20)blue++;}assert.ok(red>10&&blue>10,JSON.stringify({red,blue}));
@@ -77,6 +101,57 @@ test('Fabric and export use the same painter; text scaling preserves effect unit
 test('design audit is read-only, distinguishes geometry from visual evidence and diagnoses sparse layouts',async()=>{
  const {run}=await fixture(),d=run([text]);const before=JSON.stringify(d);const report=auditCreationDesign(d.page);assert.equal(report.visualReviewPerformed,false);assert.equal(report.layers.text,1);assert.equal(JSON.stringify(d),before);assert.ok(report.pages[0].uncoveredRectangleFraction>.2);assert.ok(report.observations.some(s=>s.includes('文字块')));
  const bg=run([{op:'graphic.add',id:'bg',geometry:{kind:'rect'},size:{reference:'page',width:1,height:1,unit:'ratio'},place:{reference:'page',at:[.5,.5],unit:'ratio'}}]);assert.equal(auditCreationDesign(bg.page).pages[0].estimatedFrameCoverage,1);assert.match(report.limitations,/不是像素/);
+});
+test('design audit points out a large material frame with no added writing',async()=>{
+ const {run}=await fixture(120,150),material={op:'material.add',id:'paper-layer',asset:'m1',place:at()};
+ const bare=run([material]),withoutWriting=auditCreationDesign(bare.page,{materials:[{alias:'m1',assetID:'paper',title:'synthetic paper'}]});
+ const bareRich=auditCreationDesign(bare.page,{styles:['丰富层叠']});
+ assert.ok(bareRich.observations.some(line=>line.includes('没有新增图形')));
+ assert.equal(bareRich.observations.some(line=>line.includes('仅使用基础圆')),false);
+ assert.equal(withoutWriting.materialFrames[0].assetAlias,'m1');
+ assert.equal(withoutWriting.materialFrames[0].annotationFrames,0);
+ assert.ok(withoutWriting.observations.some(line=>line.includes('大素材框')));
+ assert.ok(withoutWriting.observations.some(line=>line.includes('大素材占据')));
+ const written=run([material,text]),withWriting=auditCreationDesign(written.page,{materials:[{alias:'m1',assetID:'paper'}]});
+ assert.ok(withWriting.materialFrames[0].annotationFrames>0);
+ assert.equal(withWriting.visualReviewPerformed,false);
+ const smallCaption=run([material,{...text,style:{...text.style,fontSizePt:12}}]);
+ const printed=auditCreationDesign(smallCaption.page,{materials:[{alias:'m1',assetID:'paper',journalRoles:['headline']}],styles:['丰富层叠']});
+ assert.ok(printed.observations.some(line=>line.includes('印刷标题框')));
+});
+test('rich composition preview identifies a limited graphic vocabulary without claiming visual failure',async()=>{
+ const {run}=await fixture();
+ const circles=run([{op:'graphic.add',id:'ring',geometry:{kind:'ellipse'},size:{width:8,height:8,unit:'mm'},place:at(),style:{fill:null,stroke:'#556677'}}]);
+ const report=auditCreationDesign(circles.page,{styles:['丰富层叠']});
+ assert.deepEqual(report.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});
+ assert.ok(report.observations.some(line=>line.includes('图形')));
+ assert.match(report.limitations,/不是质量或数量评分/);
+ const withInk=run([{op:'graphic.add',id:'stroke',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:12,y:3}]},place:at(),style:{stroke:'#556677'}}],circles);
+ assert.equal(auditCreationDesign(withInk.page,{styles:['丰富层叠']}).observations.some(line=>line.includes('仅使用基础圆')),false);
+ const smallOnly=auditCreationDesign(withInk.page,{styles:['丰富层叠']});
+ assert.ok(smallOnly.observations.some(line=>line.includes('较小范围')),'a short stroke must not silence the scale advisory');
+ assert.ok(smallOnly.graphicScale.maxWidthFraction<.33);
+ const longFaint=run([{op:'graphic.add',id:'long-faint',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:80,y:0}]},place:at(),style:{stroke:'#AABBCC',strokeWidthMm:2,opacity:.25}}]);
+ const faintReport=auditCreationDesign(longFaint.page,{styles:['丰富层叠']});
+ assert.ok(faintReport.graphicScale.maxWidthFraction>.33);
+ assert.ok(faintReport.observations.some(line=>line.includes('笔触面积')),'a long faint line must not stand in for graphic structure');
+});
+test('design audit warns when a later marker frame crosses earlier text without claiming pixel proof',async()=>{
+ const {run}=await fixture();
+ const d=run([text,{op:'graphic.add',id:'front-marker',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:20,y:0}]},place:{reference:'page',at:[60,65],unit:'mm'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker'}}]);
+ const report=auditCreationDesign(d.page,{styles:['丰富层叠']});
+ assert.ok(report.observations.some(line=>line.includes('front-marker→word')));
+ assert.match(report.limitations,/不是像素留白率/);
+ const behind=run([text,{op:'graphic.add',id:'back-marker',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:20,y:0}]},place:{reference:'page',at:[60,65],unit:'mm'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker'},order:{before:'word'}}]);
+ assert.equal(auditCreationDesign(behind.page).observations.some(line=>line.includes('荧光笔在文字图层上方')),false);
+});
+test('rich spread advisory reports where graphics were placed without treating one-sided marks as a failure',async()=>{
+ const {run}=await fixture(30,20,'spread');
+ const d=run([{op:'graphic.add',id:'left-mark',geometry:{kind:'ellipse'},size:{width:8,height:8,unit:'mm'},place:at(45,55),style:{fill:null,stroke:'#556677'}}]);
+ const report=auditCreationDesign(d.page,{styles:['丰富层叠']});
+ assert.deepEqual(report.graphicVocabulary.pages,{'page.left':1,'page.right':0});
+ assert.ok(report.observations.some(line=>line.includes('只在一页')));
+ assert.equal(report.visualReviewPerformed,false);
 });
 test('current help stays compact and describes the exact executable examples',()=>{
  for(const name of ['text.lettering','graphic.add']){const help=describeCreationCommand(name);assert.ok(JSON.stringify(help).length<7000);assert.equal(help.schema,undefined);for(const example of creationCommandRegistry[name].examples)validateCreationV2Commands(batch([example]));}

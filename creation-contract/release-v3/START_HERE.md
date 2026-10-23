@@ -1,27 +1,36 @@
 # 拾页 GPT 创作包 · 图文素材共同构图
 
-scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canvas 或经验证的浏览器 Canvas 渲染；实际打开 output/preview.png，最后交付 output/project.shiyeproject.json 与 PNG。不得用示意图代替。字段不清时查 api/commands.schema.json，通常只需 describe。
+交付一页有表达、能细看的完成态手帐，以及对应的可编辑 JSON。scene.json 是唯一作品；所有预览来自它的真实 Node Canvas 或经验证的浏览器 Canvas 渲染。用 `work/commands.json` 编辑，不手写 Scene，不另写 Python/JavaScript 创作程序。
 
-## 最短有效路线
-1. 读 TASK.json、design/GUIDE.md 和 design/SKILL.md，看 assets/overview.jpg 与必要原图。文字、图形、实体素材都是核心构成；不是“贴完材料再塞字”。保留真实来源、尺寸和用户事实。
-2. **构图阶段**：先决定页面主块和阅读路线。主块可以是大素材、艺术标题、段落或数字图形。素材多时先稳定大材料，素材少时让文字和图形担当主体。预留正常字号的正文，不用小字救满版素材。
-3. **内容阶段**：完成主要文字和图文关系。块内对齐，块间错落；用大小、粗细、颜色、行距和形状区分主次。大印刷标题不能让其余内容都退化成图注。
-4. **点缀阶段不要吝啬装饰**：主体稳定后，主动尝试多个区域的细节关系与变化，不默认极简；选择与内容有关的小素材、贴纸、合法胶带/裁条、图形、笔迹或局部强调。具体看 design/PLAYBOOK.md。记录简短选择：增强哪个区域、使用什么、为何保留或舍弃。不能因为禁止乱装饰，就直接跳过细节设计；也不凑工具数量。
-5. 使用 work/commands.json 经 apply 修改作品，再 preview 看图。首轮基础预览后解决主结构问题；下一轮合并文字与细节的局部精修，不为凑轮次重复渲染。可运行 design-check 辅助定位，但它不是审美验收。
-6. 按 design/REVIEW.md 看整页、文字和局部。除非 TASK 明确要求大留白，默认画面应充实、疏密有序，不留大片未完成空区。空洞先用主块/文字/图形重排解决，不撒小物填平；边距、行距和必要停顿必须保留。
-7. 补齐 material.decision，review 后 pack。代码校验通过不代表审美完成；最终 PNG、Scene 必须一致。
+## 开始
 
-## 按需工具
-- 运行 `node runtime/shiye.cjs self-test`、`info`；后续事务用 `begin work/next.json`。
-- 不会用某个操作就 `describe <op>`；`--full` 才展开完整 Schema。公共参数查 place/size/style/geometry/region。
-- 文字描边/渐变：`text.add / layer.update` 的 style.outline / style.gradient。逐字异体标题：`text.lettering`。看 design/LETTERING.md；字体查询用 `fonts`。
-- 图形和绘画统一 `graphic.add`：geometry 决定预设图形、path 或 stroke，place/size/style/order 与修改共用。看 design/GRAPHICS.md。不设置点缀命令；文字、素材、胶带、图形、笔迹都能点缀。数字色带不能冒充有来源的实体胶带。
-- 主体、正文与支撑图形占位：layer.update / group.compose / graphic.add；必要裁取用 material.cut / split。不能缩放实物填空。
-- `design-check` 仅返回图层框覆盖、字级和空区建议，忽略真实透明度、图案和字形，必须继续看实际 PNG。
+1. `node runtime/shiye.cjs self-test` 检查渲染环境；通过即开始，不重复安装。缺少依赖才按 package-lock 安装。
+2. 读 TASK.json 的任务字段和 design/GUIDE.md；看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览用于辨认内容，尺寸图与毫米数据用于判断真实大小。sourceContext 是运行时来源快照，无须逐字段读。
+3. 可一次查询 `describe material.add text.add graphic.add`，之后只查本次需要的命令。普通帮助已有最小例子；只有需要某项高级功能时才查 `--full`、api/commands.schema.json 或专题文档。
 
-不手写 Scene、不写 Python/JS 创作脚本、不复制示例坐标/旧 revision，不执行 native.* 或协议 1。固定例子在 design/RECIPES.md，精细排版例子在 design/LETTERING.md。两份字体相近的文字错位不是渐变，阴影不是完整描边。
+## 创作与迭代
 
-## 当前接口分工（不用记同义命令）
-普通更新统一 layer.update；显示遮罩 layer.mask（replace/intersect/subtract/clear）；真实裁切 material.cut（region+keep/remove）。分片与命名开窗仍分别用 material.split/material.window。数字复制 layer.duplicate，艺术标题整体重排 text.reflow；两者是结构操作，不塞进普通更新。所有专业操作按需 describe，不通读完整 Schema。
+先从本批材料找到想表达的内容，同时决定各件材料承担什么职责。将相关的材料、书写和局部图形组织成有主次的组合，再形成整页；材料少时书写和绘画也能承担视觉重量。具体方式见任务指导，不固定模板、主路径、图形种类或装饰数量。
 
-需要手绘化、路径平滑/简化或布尔几何时，按需 `graphics help` 与 design/GRAPHICS_TOOL.md；计算只生成普通 Command 草稿，不直接改作品。
+用一批命令完成第一张可判断的整体稿：主要材料、实际文字和关键细节一起出现。不能只摆图片然后判断完成度。构图方向明确时直接创作；只有两种结构难以取舍时，才用 `preview --commands work/<候选>.json` 比较。候选应改变材料职责或图文组织，而非仅换坐标颜色。
+
+`apply work/commands.json` 后运行 `preview`，**打开返回路径的真实 PNG**。先看整页的主次和充实程度，再看可读内容、材料交界和局部细节。几何或像素报告只是定位工具，默认保存在 diagnosticsPath；需要时读取或用 `preview --full`，不要为消除提示而加粗线、扩大色块。
+
+每次修改先用一句话写清“画面哪里不成立、为什么、这次改什么”。若整页仍是完整图片加独立正文框，应重分材料职责和书写空间；只挪几毫米、加一个圈不会解决这个问题。若整体成立，才修具体换行、遮挡、局部高亮等。图形、剪裁和叠压服务内容，可大胆尝试，也可删除无用尝试。连续局部修订无收益时换结构，不继续沿同一方向堆元素。
+
+下一事务用 `begin work/next.json`，填写 operations；不要重复旧 transactionId 或 revision。候选预览不改 Scene；选中候选后 apply，再预览当前 Scene。正常无需先 check 再 apply，apply 本身原子校验，失败不会留下半幅作品。
+
+## 收尾
+
+实际打开 output/preview.png，按 design/REVIEW.md 审查当前 PNG，补齐 material.decision，记录 `review pass` 或 `review fail` 后 `pack`。自评是创作者声明，不是独立验收；明显未解决的问题应如实说明。最终交付 output/preview.png 和 output/project.shiyeproject.json，二者必须同源。pack 会重新核对真实渲染和素材来源。
+
+## 按需能力
+
+- 普通位置、内容和样式：layer.update；组合：group.create / group.compose。
+- 高级工艺按需查 design/SKILL.md；问题与方法查 design/PLAYBOOK.md。
+- 真实裁切/余料：material.cut / split / window；显示遮罩：layer.mask。不要混淆显示隐藏与实体取料。
+- 图形、笔迹：graphic.add，支持预设、自由路径、stroke、sketch。手绘化和布尔几何按需 `graphics help`、design/GRAPHICS_TOOL.md。
+- 字体：fonts；艺术字：text.lettering；详见 design/LETTERING.md。
+- inspect 查询当前图层与用量；design-check 按需定位几何问题。完整命令清单用 help，精确字段用 describe。
+
+实体尺寸、来源、裁片占用与用户事实必须保留。原创想法可以自由写，不把它冒充用户发生过的经历。高级工艺不设配额，也不因担心技术细节而放弃必要的素材加工。
