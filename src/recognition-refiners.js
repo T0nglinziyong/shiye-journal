@@ -1,4 +1,5 @@
 import {visionTask,visionParallelTasks,visionParallelism} from './vision-runtime.js';
+import {keepPhysicalBeforeUnsafeRegularization} from './material-physical-mask-guard.js';
 
 const chunks=(items,count)=>{
   const out=Array.from({length:Math.min(count,items.length)},()=>[]);
@@ -6,38 +7,44 @@ const chunks=(items,count)=>{
   return out.filter(Boolean).filter(group=>group.length);
 };
 
-async function finalizeCandidates({
+export async function finalizeCandidates({
   candidates,frame,sourceFrame=frame,width,height,preprocess={},postprocess={},
-  onProgress=()=>{},paperWidthMM=210,paperHeightMM=297
+  onProgress=()=>{},onAnalysis=()=>{},paperWidthMM=210,paperHeightMM=297,mergeSharedCarrier=true
 }){
   if(!candidates.length)return candidates;
+  onAnalysis({candidates,frame,sourceFrame,width,height,preprocess,paperWidthMM,paperHeightMM});
   let out=candidates;
+  if(mergeSharedCarrier===false){
+    onProgress({status:'boundary-postprocess',engine:'separate-carrier',total:out.length});
+    out=await visionTask('separate-shared-carrier',{
+      candidates:out,pixels:sourceFrame.data,width,height
+    });
+  }
   if(postprocess.shapeRegularization!==false){
     onProgress({status:'boundary-postprocess',engine:'shape-regularization',total:out.length});
     try{
-      out=await visionTask('material-boundary-refine',{
+      const refined=await visionTask('material-boundary-refine',{
         pixels:frame.data,width,height,candidates:out,mode:'postprocess',
         postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false},
         chromaEdges:preprocess.chromaEdges!==false
       });
+      out=out.map((candidate,i)=>keepPhysicalBeforeUnsafeRegularization(candidate,refined[i]));
     }catch(error){onProgress({status:'fallback',engine:'shape-regularization',message:error.message});}
   }
-  if(postprocess.apertures===false)return out;
-  onProgress({status:'boundary-postprocess',engine:'repeated-apertures',total:out.length});
-  try{
-    return await visionTask('restore-repeated-apertures',{
-      pixels:sourceFrame.data,width,height,candidates:out,paperWidthMM,paperHeightMM
-    });
-  }catch(error){
-    onProgress({status:'fallback',engine:'repeated-apertures',message:error.message});
-    return out;
+  if(postprocess.apertures!==false){
+    onProgress({status:'boundary-postprocess',engine:'repeated-apertures',total:out.length});
+    try{
+      out=await visionTask('restore-repeated-apertures',{
+        pixels:sourceFrame.data,width,height,candidates:out,paperWidthMM,paperHeightMM
+      });
+    }catch(error){onProgress({status:'fallback',engine:'repeated-apertures',message:error.message});}
   }
+  return out;
 }
 
-async function parallelFinalPipeline({
-  candidates,frame,sourceFrame=frame,width,height,preprocess={},postprocess={},
-  onProgress=()=>{},paperWidthMM=210,paperHeightMM=297,method='morphgac',mergeSharedCarrier=true
-}){
+async function parallelFinalPipeline(context){
+  const {candidates,frame,sourceFrame=frame,width,height,preprocess={},
+    onProgress=()=>{},paperWidthMM=210,paperHeightMM=297,method='morphgac'}=context;
   if(!candidates.length)return candidates;
   const groups=chunks(candidates,Math.min(visionParallelism(),candidates.length));
   onProgress({status:'contour-refinement',engine:method,total:candidates.length});
@@ -47,15 +54,15 @@ async function parallelFinalPipeline({
       pixels:new Uint8ClampedArray(frame.data),
       sourcePixels:new Uint8ClampedArray(sourceFrame.data),
       transferInput:true,
-      width,height,boxes,method,paperWidthMM,paperHeightMM,mergeSharedCarrier,
+      width,height,boxes,method,paperWidthMM,paperHeightMM,mergeSharedCarrier:true,
       chromaEdges:preprocess.chromaEdges!==false,
-      shapeRegularization:postprocess.shapeRegularization!==false,
-      apertures:postprocess.apertures!==false
+      shapeRegularization:false,
+      apertures:false
     })));
     // Keep uncertain candidates in the review UI. Their full RGB bounding
     // rectangle is an editable fallback, not a claim of reliable segmentation.
     // Dropping them here made the eighth (scalloped ticket) disappear.
-    return results.flat().sort((a,b)=>a.y-b.y||a.x-b.x);
+    return finalizeCandidates({...context,candidates:results.flat().sort((a,b)=>a.y-b.y||a.x-b.x)});
   }catch(error){
     onProgress({status:'fallback',engine:method,message:error.message});
     // A box is only a proposal, never a finished cutout. Returning proposals
@@ -69,19 +76,20 @@ export async function refineCandidatesAuto(context){
   return parallelFinalPipeline({...context,method:'morphgac'});
 }
 export async function refineCandidatesUnified({candidates,frame,sourceFrame=frame,width,height,
-  mergeSharedCarrier=true,onProgress=()=>{},paperWidthMM=210,paperHeightMM=297}){
+  mergeSharedCarrier=true,onProgress=()=>{},onAnalysis=()=>{},postprocess={},preprocess={},paperWidthMM=210,paperHeightMM=297}){
   if(!candidates.length)return candidates;
   onProgress({status:'contour-refinement',engine:'unified-v8-v5',total:candidates.length});
   try{
     // One worker retains the shared page gradient and all neighboring masks.
     // Splitting candidates across workers would copy the whole page twice and
     // remove the V5 inter-carrier overlap guard.
-    return await visionTask('process-material-boxes',{
+    const base=await visionTask('process-material-boxes',{
       pixels:new Uint8ClampedArray(frame.data),
-      ...(mergeSharedCarrier===false?{sourcePixels:new Uint8ClampedArray(sourceFrame.data)}:{}),
       transferInput:true,width,height,boxes:candidates,method:'unified',
-      paperWidthMM,paperHeightMM,mergeSharedCarrier
+      paperWidthMM,paperHeightMM,mergeSharedCarrier:true
     });
+    return finalizeCandidates({candidates:base,frame,sourceFrame,width,height,mergeSharedCarrier,
+      onProgress,onAnalysis,postprocess,preprocess,paperWidthMM,paperHeightMM});
   }catch(error){
     throw Error('统一识别分割失败，已保留候选框但未生成素材：'+(error?.message||'图像引擎暂不可用'),{cause:error});
   }

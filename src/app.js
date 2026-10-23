@@ -111,7 +111,7 @@ import {cloudPreferencesRecord,cloudPreferencesFromMeta} from './cloud-preferenc
 import {cloudAISettingsRecord,cloudAISettingsFromMeta} from './cloud-ai-settings.js';
 import {cloudMatchingSettingsRecord,cloudMatchingSettingsFromMeta,applyMatchingDefaults} from './cloud-matching-settings.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
-import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
+import {detectPaperCandidates,reprocessPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
 import {estimatePageLighting} from './material-color-restoration.js';
 import {extractEditableCandidateRGB} from './import-candidate-color.js';
@@ -2829,7 +2829,8 @@ async function prefetchImportRecord(rec,settings,revision){
       recognitionSource:correctedBitmap&&corners?{bitmap,corners}:null,
       recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
-      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
+      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;},
+      onAnalysis:analysis=>{if(valid())rec.recognitionAnalysis=analysis;}});if(!valid())return;
     candidates=filterAutomaticMaterialBoxes(candidates,{paperWidthMM:pw,paperHeightMM:ph,enabled:settings.paperSize!=='none'});
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
@@ -2892,7 +2893,7 @@ async function switchImportRecord(index,skipSave=false){
     if(job.signature!==JSON.stringify(importPrefetchSettings(rec))){
       rec.bitmap?.close?.();rec.correctedBitmap?.close?.();if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
       for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
-      Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null});
+      Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null,recognitionAnalysis:null});
     }
     importPrefetchJobs.delete(rec);
     state.paperCorners=rec.corners||rec.autoPaperCorners||null;state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;
@@ -2904,7 +2905,7 @@ async function switchImportRecord(index,skipSave=false){
     rec.bitmap.close?.();rec.correctedBitmap?.close?.();
     if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
     for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
-    Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null});
+    Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null,recognitionAnalysis:null});
     Object.assign(state,{importBitmap:null,correctedBitmap:null,correctedURL:null,importCandidates:[],importCandidateData:[],importCandidateURLs:[],importCandidateSelection:new Set()});
   }
   const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file,{research:researchDecode});rec.bitmap=bitmap;
@@ -2939,6 +2940,7 @@ async function rotateImportPhoto(){
   state.importBitmap=await decodeRecognitionImage(rec.file,{research:(state.preferences.candidateDiscovery||'unified')==='unified'});
   rec.bitmap=state.importBitmap;rec.recognitionDecodeMode=(state.preferences.candidateDiscovery||'unified')==='unified'?'research':'legacy';
   state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
+  rec.recognitionAnalysis=null;
   saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
 }
 async function previewCorrection(){
@@ -2951,6 +2953,7 @@ async function applyPaperPreview(){
   if(rec.manualEdits&&!confirm('重新校正会舍弃本照片的名称、手动选框和修补结果并重新识别，继续吗？'))return;
   state.correctedBitmap?.close?.();if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
   state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
+  rec.recognitionAnalysis=null;
   state.importProcessing=state.importMode==='snapshot'?'正在更新校正后的页面…':'正在按新校正结果识别…';render();
   try{if(state.importMode!=='snapshot')await previewCrop();toast(state.importMode==='snapshot'?'已使用校正结果':'已使用校正结果，候选素材已更新');}
   finally{state.importProcessing='';if(state.route==='import')render();}
@@ -2963,6 +2966,22 @@ async function openManualImportBox(){
 }
 async function refreshImportCandidates(regions,{manual=false}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
+  for(let i=0;i<previous.length;i++)previous[i].selected=state.importCandidateSelection?.has(i)===true;
+  const matchedPrevious=new Set();
+  const sameCandidate=region=>{
+    const same=previous.find(item=>!matchedPrevious.has(item)&&item.region===region);
+    if(same){matchedPrevious.add(same);return same;}
+    let best=null,bestScore=0;
+    for(const item of previous){
+      if(matchedPrevious.has(item)||!item.region||item.region.manualGeometry!==region.manualGeometry)continue;
+      const a=item.region,x=Math.max(a.x,region.x),y=Math.max(a.y,region.y),
+        overlap=Math.max(0,Math.min(a.x+a.w,region.x+region.w)-x)*Math.max(0,Math.min(a.y+a.h,region.y+region.h)-y),
+        areaA=a.w*a.h,areaB=region.w*region.h,score=overlap/Math.max(1e-9,areaA+areaB-overlap);
+      if(score>bestScore){best=item;bestScore=score;}
+    }
+    if(bestScore<.45)return null;
+    matchedPrevious.add(best);return best;
+  };
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
     toast('正在按旋转框分割 '+(index+1)+' / '+regions.length);
@@ -3000,8 +3019,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:record.file.name,sourceIndex:state.importIndex,lighting});
       // Changing only colour must not reset manual names, tags, dimensions or
       // choices, and must never cause the segmentation algorithm to rerun.
-      const old=previous.find(item=>item.region===region)||
-        previous.find(item=>item.region&&Math.abs(item.region.x-region.x)<1e-6&&Math.abs(item.region.y-region.y)<1e-6&&Math.abs(item.region.w-region.w)<1e-6&&Math.abs(item.region.h-region.h)<1e-6);
+      const old=sameCandidate(region);
       if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','dimensionSource','width','height']){
         if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
       }
@@ -3019,7 +3037,8 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,candidateDiscovery:state.preferences.candidateDiscovery||'unified',recognitionPixels:state.preferences.recognitionPixels,
     recognitionSource:state.correctedBitmap&&state.paperCorners?{bitmap:state.importBitmap,corners:state.paperCorners}:null,
-    recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.importMergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
+    recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.importMergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},
+    onAnalysis:analysis=>{record.recognitionAnalysis=analysis;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘识别未完成，正在检查候选结果…')
@@ -3066,9 +3085,8 @@ async function changeImportRecognitionSetting(key,value){
     return;
   }
   const shape=key==='importShapeRegularization'||key==='importApertures';
-  if(state.importCandidateData?.length&&!confirm(shape?
-    '更改边缘后处理需要重新识别当前照片，继续？':
-    '更改光照会重新识别候选并重置当前候选标注，继续？')){
+  const reuse=shape||key==='importMergeSharedCarrier';
+  if(!reuse&&state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){
     render();return;
   }
   state[key]=!!value;
@@ -3076,7 +3094,22 @@ async function changeImportRecognitionSetting(key,value){
   state.importProcessing=shape?'正在按新参数细化轮廓…':key==='importMergeSharedCarrier'?'正在重新检查共同载体…':
     state.importMode==='snapshot'?'正在调整页面颜色…':'正在均衡光照并重新识别…';
   saveActiveImportRecord();render();
-  try{if(state.importMode!=='snapshot')await previewCrop();}
+  try{
+    if(state.importMode!=='snapshot'){
+      if(reuse&&record?.recognitionAnalysis){
+        const regions=await reprocessPaperCandidates(record.recognitionAnalysis,{
+          mergeSharedCarrier:state.importMergeSharedCarrier!==false,
+          postprocess:recognitionPostprocessOptions()
+        });
+        const [pw,ph]=paperDimensions();
+        const automatic=filterAutomaticMaterialBoxes(regions,{
+          paperWidthMM:pw,paperHeightMM:ph,enabled:state.paperSize!=='none'
+        });
+        const manual=state.importCandidateData.filter(item=>item.region?.manualGeometry).map(item=>item.region);
+        await refreshImportCandidates([...automatic,...manual]);
+      }else await previewCrop();
+    }
+  }
   catch(error){state[key]=before;if(record)record[key]=before;toast(error.message);}
   finally{state.importProcessing='';if(state.route==='import')render();}
 }
@@ -3114,6 +3147,9 @@ async function confirmImportPhoto(){
   }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode==='material'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
+  // Review/save no longer needs the 900 px analysis rasters. Keep extracted
+  // candidate Blobs, but release this transient workspace on mobile devices.
+  rec.recognitionAnalysis=null;
   // Material review/save uses the extracted candidate Blobs, not either full
   // photo raster. A corrected 4096 px canvas plus its pinned RGBA buffer can
   // exceed 100 MB; retaining one per confirmed photo exhausts iPad Safari in

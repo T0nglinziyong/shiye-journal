@@ -63,3 +63,21 @@ test('legacy detector and explicit old MorphGAC algorithm remain callable',async
  assert.ok(mor[0].mask?.alpha?.length>0);
  assert.equal(mor[0].segmentationMethod,'morphgac');
 });
+
+test('shared carrier can be split from its cached mask without rediscovering or segmenting the page',async()=>{
+ const cv=await cvModule,width=180,height=160,w=130,h=130,
+   pixels=new Uint8ClampedArray(width*height*4),alpha=new Uint8Array(w*h).fill(255);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   let color=x>=25&&x<155&&y>=15&&y<145?220:245;
+   if(x>=40&&x<130&&((y>=35&&y<50)||(y>=70&&y<85)||(y>=105&&y<120)))color=40;
+   pixels.set([color,color,color,255],(y*width+x)*4);
+ }
+ const base={x:25/width,y:15/height,w:w/width,h:h/height,fillRatio:1,
+   seedDensity:.1,mask:{width:w,height:h,alpha}};
+ const separated=await processVision(cv,'separate-shared-carrier',{
+   candidates:[base],pixels,width,height
+ });
+ assert.equal(separated.length,3);
+ assert.ok(separated.every(region=>region.mask.alpha.length===region.mask.width*region.mask.height));
+ assert.equal(base.mask.alpha.length,w*h,'cached carrier mask stays untouched');
+});

@@ -4,11 +4,15 @@ import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
 import {analysisPixels,sourcePixels} from './recognition-raster.js';
 import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
+import {finalizeCandidates} from './recognition-refiners.js';
+export function reprocessPaperCandidates(analysis,{mergeSharedCarrier=true,postprocess={},onProgress=()=>{}}={}){
+  return finalizeCandidates({...analysis,mergeSharedCarrier,postprocess,onProgress,onAnalysis:()=>{}});
+}
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
   recognition='auto',candidateDiscovery='unified',recognitionPixels=900,
-  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{},recognitionSource=null
+  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{},onAnalysis=()=>{},recognitionSource=null
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
   // A single discovery scale keeps material identities and candidate geometry
@@ -54,7 +58,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
   const candidates=await segmentPaperMaterials(discoveryFrame,{
-    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier,candidateDiscovery
+    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier:true,candidateDiscovery
   });
   onDiagnostic({phase:'boxes',count:candidates.length,
     dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,candidateDiscovery,smallestMM,
@@ -74,7 +78,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
         paperWidthMM,paperHeightMM,mergeSharedCarrier,candidateDiscovery,
         preprocess,
         postprocess:recognitionPostprocess,
-        onProgress
+        onProgress,onAnalysis
       })
     : candidates;
 }
