@@ -92,10 +92,23 @@ export function computeGraphics(request){
   }
   if(result.length>graphicsLimits.outputPaths)fail('GRAPHICS_LIMIT','输出路径过多');
   let outputSegments=0,outputCharacters=0;
-  const clean=result.filter(p=>p.d?.trim()).map(p=>{
-   const item=scope.PathItem.create(p.d);outputSegments+=count(item);outputCharacters+=p.d.length;if(outputSegments>graphicsLimits.outputSegments||outputCharacters>100000||p.d.length>8192)fail('GRAPHICS_LIMIT','输出路径过于复杂，请增大容差或填充间距');
-   return {d:item.pathData,fillRule:p.fillRule||'nonzero',style:p.style};
-  });
+  const clean=[];
+  for(const p of result.filter(p=>p.d?.trim())){
+   const item=scope.PathItem.create(p.d),data=item.pathData;
+   outputSegments+=count(item);outputCharacters+=data.length;
+   if(outputSegments>graphicsLimits.outputSegments||outputCharacters>100000)fail('GRAPHICS_LIMIT','输出路径过于复杂，请增大容差或填充间距');
+   // Rough emits full-precision coordinates and many independent stroke subpaths.
+   // Budget the canonical SVG, then split ONLY unfilled strokes at subpath boundaries.
+   // Filled compound paths stay intact so holes and winding rules cannot change.
+   const pieces=data.length>8192&&!p.style.fill&&item.children?.length?item.children.map(c=>c.pathData):[data];
+   let chunk='';
+   const flush=()=>{if(chunk){clean.push({d:chunk,fillRule:p.fillRule||'nonzero',style:p.style});chunk='';}};
+   for(const piece of pieces){
+    if(piece.length>8192)fail('GRAPHICS_LIMIT','输出路径过于复杂，请增大容差或填充间距');
+    if(chunk.length+piece.length+1>8192)flush();chunk+=(chunk?' ':'')+piece;
+   }
+   flush();if(clean.length>graphicsLimits.outputPaths)fail('GRAPHICS_LIMIT','输出路径过多');
+  }
   const id=q.id||'graphic-result',operations=[];
   // One child per paint width preserves Rough.js hatch vs outline widths.
   const kids=clean.map((p,i)=>({op:'graphic.add',id:id+'-'+(i+1),geometry:{kind:'path',viewBox:[0,0,w,h],paths:[{d:p.d,fillRule:p.fillRule}]},size:{width:w,height:h,unit:'mm'},place:{reference:'parent',at:[w/2,h/2],unit:'mm'},style:p.style}));
