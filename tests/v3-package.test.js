@@ -50,7 +50,7 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   await write('work/commands.json',commands);
   const lock=join(dir,'work/.scene-write-lock');await mkdir(lock);await writeFile(join(lock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));await utimes(lock,new Date(Date.now()-120000),new Date(Date.now()-120000));
   ok('apply','work/commands.json');assert.equal(ok('apply','work/commands.json').replayed,true);
-  const preview=ok('preview');assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);assert.deepEqual(preview.geometryReview.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});ok('pack');
+  const preview=ok('preview');assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);assert.deepEqual(preview.geometryReview.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});assert.equal(preview.pixelReview.pages.length,1);assert.ok(preview.pixelReview.pages[0].estimatedVisibleCoverage>0);ok('pack');
   const png=await readFile(join(dir,'output/preview.png'));assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
   assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,1);
   const capture=await read('output/preview-capture.json');assert.equal(capture.rendererBackend,'node-canvas@3.2.3');
@@ -152,7 +152,7 @@ test('check and proposal leave Scene unchanged; unified text update and review d
   const commands=await read('work/draft.json');commands.operations=[material('piece','m1',mm(30,40)),text('caption','真实字号',55,20,40,12),{op:'layer.update',target:'caption',style:{fontSizePt:10},place:mm(60,25)},decision('m1')];await write('work/draft.json',commands);
   ok('check','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);ok('preview','--commands','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);await assert.rejects(readFile(join(dir,'output/preview.png')),{code:'ENOENT'});
   ok('apply','work/draft.json');const scene=await read('scene.json'),caption=scene.page.layers.find(n=>n.agentKey==='caption'),scale=scene.page.canvas.height/scene.page.physicalPageHeightMM;
-  assert.ok(Math.abs(caption.fontSize-10*25.4/72*scale)<1e-6);assert.ok(Math.abs(caption.x-60*scale)<1e-6);ok('preview');ok('review','--result','pass');ok('pack');assert.deepEqual((await read('output/manifest.json')).visualReview,{result:'pass',source:'agent-declared'});
+  assert.ok(Math.abs(caption.fontSize-10*25.4/72*scale)<1e-6);assert.ok(Math.abs(caption.x-60*scale)<1e-6);ok('preview');const review=ok('review','--result','pass');assert.ok(Array.isArray(review.geometryAdvisories));assert.equal(review.pixelReview.pages.length,1);assert.match(review.reminder,/创作者声明/);ok('pack');assert.deepEqual((await read('output/manifest.json')).visualReview,{result:'pass',source:'agent-declared'});
  });
 });
 test('eight required materials survive revisions grouping preview delivery and reopen',async()=>{

@@ -100,6 +100,22 @@ test('rich composition preview identifies a limited graphic vocabulary without c
  assert.match(report.limitations,/不是质量或数量评分/);
  const withInk=run([{op:'graphic.add',id:'stroke',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:12,y:3}]},place:at(),style:{stroke:'#556677'}}],circles);
  assert.equal(auditCreationDesign(withInk.page,{styles:['丰富层叠']}).observations.some(line=>line.includes('仅使用基础圆')),false);
+ const smallOnly=auditCreationDesign(withInk.page,{styles:['丰富层叠']});
+ assert.ok(smallOnly.observations.some(line=>line.includes('较小范围')),'a short stroke must not silence the scale advisory');
+ assert.ok(smallOnly.graphicScale.maxWidthFraction<.33);
+ const longFaint=run([{op:'graphic.add',id:'long-faint',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:80,y:0}]},place:at(),style:{stroke:'#AABBCC',strokeWidthMm:2,opacity:.25}}]);
+ const faintReport=auditCreationDesign(longFaint.page,{styles:['丰富层叠']});
+ assert.ok(faintReport.graphicScale.maxWidthFraction>.33);
+ assert.ok(faintReport.observations.some(line=>line.includes('笔触面积')),'a long faint line must not stand in for graphic structure');
+});
+test('design audit warns when a later marker frame crosses earlier text without claiming pixel proof',async()=>{
+ const {run}=await fixture();
+ const d=run([text,{op:'graphic.add',id:'front-marker',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:20,y:0}]},place:{reference:'page',at:[60,65],unit:'mm'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker'}}]);
+ const report=auditCreationDesign(d.page,{styles:['丰富层叠']});
+ assert.ok(report.observations.some(line=>line.includes('front-marker→word')));
+ assert.match(report.limitations,/不是像素留白率/);
+ const behind=run([text,{op:'graphic.add',id:'back-marker',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:20,y:0}]},place:{reference:'page',at:[60,65],unit:'mm'},style:{stroke:'#E8D66B',strokeWidthMm:4,penStyle:'marker'},order:{before:'word'}}]);
+ assert.equal(auditCreationDesign(behind.page).observations.some(line=>line.includes('荧光笔在文字图层上方')),false);
 });
 test('rich spread advisory reports where graphics were placed without treating one-sided marks as a failure',async()=>{
  const {run}=await fixture(30,20,'spread');
