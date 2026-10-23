@@ -1,0 +1,51 @@
+name: Verified three-mode source checkpoint
+on:
+  push:
+    branches: [feat/three-mode-graphics-runtime-20261023]
+    paths: [.github/workflows/three-mode-checkpoint.yml]
+permissions:
+  contents: write
+jobs:
+  source:
+    if: github.ref == 'refs/heads/feat/three-mode-graphics-runtime-20261023'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and save source code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,json,lzma,pathlib,shutil
+          parts=sorted(pathlib.Path('.three-mode-transfer').glob('part-*.b64'))
+          assert len(parts)==3
+          payload=base64.b64decode(''.join(p.read_text() for p in parts),validate=True)
+          assert hashlib.sha256(payload).hexdigest()=='2bbd6cdec333e57aa2c535c3def9c01e790e12e3590b507aea8e4f06bc9e1ef3'
+          changes=json.loads(lzma.decompress(payload));assert len(changes)==41
+          for change in changes:
+              path=pathlib.Path(change['path'])
+              assert not path.is_absolute() and '..' not in path.parts and not path.is_symlink()
+              assert str(path).startswith(('src/','tests/','scripts/','docs/','creation-contract/')) or str(path) in ('README.md','package.json','package-lock.json')
+              old=path.read_text() if path.exists() else ''
+              digest=hashlib.sha256(old.encode()).hexdigest()
+              if digest==change['after']: continue
+              assert digest==change['before'],str(path)
+              new=old
+              for start,end,text in reversed(change['edits']):
+                  assert 0<=start<=end<=len(old)
+                  new=new[:start]+text+new[end:]
+              assert hashlib.sha256(new.encode()).hexdigest()==change['after'],str(path)
+              if change['status']=='D':
+                  assert new==''
+                  path.unlink()
+              else:
+                  path.parent.mkdir(parents=True,exist_ok=True);path.write_text(new)
+          shutil.rmtree('.three-mode-transfer')
+          PY
+          git add -A
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- .github)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: local editable graphics and three-mode creation workflow'
+          git push origin HEAD:refs/heads/feat/three-mode-graphics-runtime-20261023
