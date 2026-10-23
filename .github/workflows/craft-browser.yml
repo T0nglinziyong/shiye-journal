@@ -9,6 +9,11 @@ on:
       - 'src/creative*.js'
       - 'src/creation-*.js'
       - 'src/graphic-*.js'
+      - 'src/graphics-*'
+      - 'src/image-*'
+      - 'src/react-creation-mode.jsx'
+      - 'tests/three-modes-browser.mjs'
+      - 'tests/fixtures/three-modes.*'
       - 'src/svg-paint-geometry.js'
       - 'src/react-text-effects.jsx'
       - 'tests/taxonomy-browser.mjs'
@@ -105,6 +110,7 @@ jobs:
           node tests/type-effects-browser.mjs
           node tests/unified-graphics-browser.mjs
           node tests/taxonomy-browser.mjs
+          node tests/three-modes-browser.mjs
           git diff --exit-code -- package.json package-lock.json
       - name: Verify clean-build reproducibility and generate current creation example
         run: |
