@@ -16,12 +16,15 @@ test('art direction encourages connected text, materials and graphics without fi
   assert.match(brief,/连贯的多行正文/);
   assert.match(brief,/文字贴近相关素材/);
   assert.match(brief,/手写、线条和荧光笔/);
+  assert.match(brief,/先在真实可写纸面安排一处能读下去的记录/);
+  assert.match(brief,/不要把全部新增文字排成同一种整齐的无衬线段落/);
   assert.match(brief,/无意空洞/);
   assert.match(brief,/避免为填满纸张而堆砌/);
   assert.doesNotMatch(brief,/至少\d|填充率.{0,4}\d|最低图层/);
   const visual=creativePageBrief({contentPolicy:'visual'});
   assert.match(visual,/不生成标题、正文或图注/);
   assert.doesNotMatch(visual,/连贯的多行正文/);
+  assert.doesNotMatch(visual,/手作便签要保留/);
   const cover=creativePageBrief({styles:['极简留白'],purposes:['主题封面']});
   assert.match(cover,/有意留白/);
   assert.match(cover,/不强塞长正文/);
@@ -33,6 +36,9 @@ test('composition density choice changes the shared creative direction',()=>{
   const automatic=creativePageBrief({styles:['随材而定','自动安排']});
   assert.match(sparse,/本次选择疏朗留白/);
   assert.match(layered,/本次选择丰富层叠/);
+  assert.match(layered,/先比较两种主块比例或素材职责真正不同的试摆/);
+  assert.match(layered,/首次试摆就从实际素材中找一个可延伸的形状、颜色或动作/);
+  assert.match(layered,/预览后在另一处试不同尺度与作用的手绘回应/);
   assert.match(layered,/具体交界处相互回应/);
   assert.match(automatic,/默认疏密随素材而定/);
   assert.doesNotMatch(sparse,/本次选择丰富层叠/);

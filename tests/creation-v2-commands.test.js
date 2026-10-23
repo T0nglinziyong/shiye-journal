@@ -35,6 +35,7 @@ test('page and relative commands create editable native Scene nodes',async()=>{
   {op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:{reference:'page',at:[20,20],unit:'mm'},size:{width:5,height:5,unit:'mm'},style:{fill:'#aabbcc',shadow:{offsetMm:[1,2],blurMm:1,color:'#112233'}}}]);
  const nodes=result.page.layers,photo=nodes.find(n=>n.creativePieceID==='photo'),caption=nodes.find(n=>n.agentKey==='caption'),dot=nodes.find(n=>n.id==='dot');
  assert.ok(photo&&caption&&dot);assert.equal(caption.content,'今天看见的一角。');assert.ok(caption.fixedLineHeight>caption.fontSize);assert.ok(caption.y>photo.y);assert.equal(dot.kind,'ellipse');assert.equal(dot.shadow.color,'#112233');
+ assert.equal(dot.stroke,null,'填色图形不应自动带深色描边');
  const revised=run([{op:'group.create',id:'note-group',targets:['caption','dot']},{op:'layer.update',target:'dot',order:{before:'caption'}},{op:'group.ungroup',target:'note-group'},{op:'page.update',paperColor:'#eeeeee'}],result);
  assert.equal(revised.page.paperColor,'#eeeeee');assert.ok(revised.page.layers.some(n=>n.agentKey==='caption'));assert.ok(revised.page.layers.some(n=>n.id==='dot'));assert.doesNotThrow(()=>run([{op:'layout.detach',target:'caption'}],revised));
 });

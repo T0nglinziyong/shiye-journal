@@ -3,10 +3,13 @@
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 export const graphicPresetKinds=Object.freeze([...commonShapes,...advancedShapes].map(([kind])=>kind==='rectangle'?'rect':kind).filter(kind=>kind!=='vector'));
 const presets=new Set(graphicPresetKinds);
-export function initialGraphicNode(id,geometry,scale){
+export function initialGraphicNode(id,geometry,scale,style={}){
  const common={id,agentKey:id,zIndex:500,opacity:1,blendMode:'normal'};
  if(geometry.kind==='stroke')return {...common,type:'ink',points:[{x:0,y:0,p:.5}],layoutRotation:0,width:.5*scale,color:'#546E7A',penStyle:'ballpoint'};
- return {...common,type:'shape',kind:'rectangle',x:0,y:0,rotation:0,width:scale,height:scale,fill:null,stroke:'#546E7A',lineWidth:.5*scale};
+ // A fill-only graphic should not acquire an unrequested dark outline. An
+ // unstyled or outline-only graphic keeps the existing visible stroke default.
+ const fillOnly=style.fill!=null&&!Object.hasOwn(style,'stroke');
+ return {...common,type:'shape',kind:'rectangle',x:0,y:0,rotation:0,width:scale,height:scale,fill:null,stroke:fillOnly?null:'#546E7A',lineWidth:.5*scale};
 }
 export function inkLocalFrame(node){
  const a=(node.layoutRotation||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);

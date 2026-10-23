@@ -134,7 +134,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    if(item.op==='text.add'){
     if(item.size.width===undefined)throw Error('文字创建需要 size.width');
     node={...common,type:'text',content:item.content,width:dimension(doc.page,item.size,'width',item.parent)*s,height:1,fontSize:12*25.4/72*s,color:'#334D4A',style:'hand',alignment:'left'};
-   }else node=initialGraphicNode(item.id,item.geometry,s);
+   }else node=initialGraphicNode(item.id,item.geometry,s,item.style);
    Object.assign(node,changedNodeProperties(doc.page,node,item,item.parent));
    doc=insertSceneNode(doc,node,assets);doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,{place:item.place,order:item.order,...(item.size?.behavior==='linked'?{size:item.size}:{})},assets,{created:true});
   }else if(item.op==='text.reflow'){
