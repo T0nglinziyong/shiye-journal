@@ -1,0 +1,21 @@
+name: Three-mode development source
+on:
+  push:
+    branches: [feat/three-mode-graphics-runtime-20261023]
+    paths: [.github/workflows/three-mode-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p /tmp/three-mode-source
+          git rev-parse HEAD > /tmp/three-mode-source/revision.txt
+          git archive HEAD | gzip > /tmp/three-mode-source/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: three-mode-source
+          path: /tmp/three-mode-source
+          retention-days: 2
