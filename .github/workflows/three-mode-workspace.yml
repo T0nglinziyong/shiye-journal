@@ -10,10 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
+      - name: Capture exact implementation for final release review
+        run: |
           mkdir -p /tmp/three-mode-source
           git rev-parse HEAD > /tmp/three-mode-source/revision.txt
+          git rev-parse HEAD^{tree} > /tmp/three-mode-source/tree.txt
           git archive HEAD | gzip > /tmp/three-mode-source/source.tar.gz
+          cd /tmp/three-mode-source && sha256sum source.tar.gz > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: three-mode-source
