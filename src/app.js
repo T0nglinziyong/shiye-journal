@@ -2289,7 +2289,7 @@ function openOfflineImportDialog(){
 }
 async function importOfflineProject(p,{aiGenerated=true}={}){await flushSave();if(aiGenerated)p.aiGenerated=true;await db.stageProject(p);state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=null;state.tool='select';if(modal.open)modal.close();closeOverlay();route('editor');toast(p.creationVerification?.preview==='mismatch'?'已暂存可编辑草稿；外部预览或清单有差异，请核对画面':'已暂存可编辑草稿；请核对画面与正文');}
 async function offlineTaskAccount(){return cloudEnabled?(await requireCloudUser()).id:'browser';}
-async function importOfflineText(text){const {importEditableWork}=await import('./offline-creation.js');return importOfflineProject(importEditableWork(text,state.assets));}
+async function importOfflineText(text){const accountID=state.accountId,{importEditableWork}=await import('./offline-creation.js');if(state.accountId!==accountID)throw Error('账号已变化，未导入旧任务');const p=importEditableWork(text,state.assets);if(p.creationMode==='hybrid'){const references=state.projects.filter(x=>x.isSnapshot&&x.imageCreation&&x.offlineBundleId===p.offlineBundleId);if(references.length===1){p.sourceSnapshotID=references[0].id;p.reconstruction.sourceSnapshotID=references[0].id;}}return importOfflineProject(p);}
 async function createFromBasket(templateID=null){
   await flushSave();
   const p=createMatchingProject(false),draft=p.drafts[0];
@@ -3310,15 +3310,19 @@ workFileInput.onchange=async()=>{const file=workFileInput.files?.[0];workFileInp
 };
 async function saveOfflineSnapshotFile(file,matchingProject,mimeType){
   if(!['image/png','image/jpeg','image/webp'].includes(mimeType))throw Error('请选择 PNG、JPEG 或 WebP 图片');
+  const accountID=state.accountId,source=matchingProject?structuredClone(matchingProject):null,provenance=source?imageProvenance(source,structuredClone(state.assets)):null;
   const bitmap=await createImageBitmap(file);
   try{
+    if(state.accountId!==accountID)throw Error('账号已变化，未导入旧账号的快照');
     const blobId=uid(),snapshot=snapshotRecord({title:importDefaultTitle(file.name,'snapshot'),previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
     if(matchingProject){
       snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;
-      snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;snapshot.imageCreation=imageProvenance(matchingProject,state.assets);
+      snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;snapshot.imageCreation=provenance;
     }
     const content=file.type===mimeType?file:new Blob([file],{type:mimeType});
+    if(state.accountId!==accountID)throw Error('账号已变化，未导入旧账号的快照');
     await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:content}]});
+    if(state.accountId!==accountID)throw Error('账号已变化，不更新当前页面');
     urls.set(blobId,URL.createObjectURL(content));
     if(matchingProject){
       await matchingSession.importProject(snapshot,{alreadyStored:true});

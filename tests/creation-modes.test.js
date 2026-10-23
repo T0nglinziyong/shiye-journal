@@ -22,14 +22,14 @@ test('exactly three outputs share original sources; image tasks cannot masquerad
 });
 test('hybrid reference is separate, hash-bound and never turns into physical inventory',async()=>{
  const task=await handoff('hybrid',tinyPNG),bytes=new Uint8Array(await task.blob.arrayBuffer()),files=unzipSync(bytes),q=decode(files['image-request.json']);
- assert.equal(q.reference.role,'generated-visual-reference-not-source');assert.equal(q.materials.length,1);assert.ok(files[q.reference.image]);await verifyOfflineTaskPackage(bytes,task.source);
+ assert.equal(q.reference.role,'generated-visual-reference-not-source');assert.equal(q.output.reference,q.reference.image);assert.equal(q.materials.length,1);assert.ok(files[q.reference.image]);await verifyOfflineTaskPackage(bytes,task.source);
  files[q.reference.image]=new Uint8Array([...tinyPNG.slice(0,-1),tinyPNG.at(-1)^1]);await assert.rejects(verifyOfflineTaskPackage(zipSync(files),task.source),/参考图/);
  await assert.rejects(handoff('edit',tinyPNG),/只有混合/);
 });
 test('reconstruction keeps original snapshot untouched and refuses changed source pixels or sizes',()=>{
  const original=setup('draw'),snapshot={id:'snapshot',title:'Reference',isSnapshot:true,imageCreation:imageProvenance(original,[a])},before=JSON.stringify(snapshot);
  const result=projectForReconstruction(snapshot,[a]);assert.notEqual(result.id,original.id);assert.equal(result.sourceSnapshotID,'snapshot');assert.equal(result.creationMode,'hybrid');assert.equal(result.drafts[0].layers.length,0);assert.equal(JSON.stringify(snapshot),before);
- assert.deepEqual(result.drafts[0].canvas,original.drafts[0].canvas);assert.deepEqual(result.candidateAssetIDs,['a']);
+ assert.deepEqual(result.drafts[0].canvas,original.drafts[0].canvas);assert.deepEqual(result.candidateAssetIDs,['a']);assert.deepEqual(result.initialEditorSnapshot.drafts[0].canvas,result.drafts[0].canvas);assert.deepEqual(result.draftHistorySnapshots[result.activeDraftID],result.drafts[0]);
  assert.throws(()=>projectForReconstruction(snapshot,[{...a,blobId:'changed'}]),/改变/);assert.throws(()=>projectForReconstruction(snapshot,[{...a,physicalWidthMM:35}]),/改变/);assert.throws(()=>projectForReconstruction(null,[a]),/缺少/);
 });
 test('vision reconstruction prompt labels generated reference independently of the original material',()=>{

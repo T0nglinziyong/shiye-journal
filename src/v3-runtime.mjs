@@ -1,3 +1,4 @@
+import {verifyImageReference} from './image-reference-runtime.mjs';
 import {runGraphics} from './graphics-runtime.mjs';
 import {auditCreationDesign} from './creation-design-audit.js';
 import {offlineFontCatalog} from './offline-font-catalog.mjs';
@@ -119,6 +120,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
   const review={result:arg,source:'agent-declared',sceneRevision:current,pngHash:capture.pngHash,reviewedAt:new Date().toISOString()};
   atomic('output/review.json',review);process.stdout.write(JSON.stringify({ok:true,...review})+'\n');return;
  }
+ const imageReference=verifyImageReference(source);
  verifiedImages(task);validateMaterialDecisions(doc.materialDecisions,draft,source);
  const capture=existsSync('output/preview-capture.json')?load('output/preview-capture.json'):null,png=existsSync('output/preview.png')?readFileSync('output/preview.png'):null;
  if(!capture||!png||capture.sceneRevision!==current||capture.sceneHash!==sceneHash||capture.pngHash!==sha(png)||capture.renderer!=='shiye-scene-v2')throw fail('PREVIEW_STALE','当前 Scene 缺少同源 PNG；先运行 preview');
@@ -127,6 +129,6 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  if(verified.report.rendererVersion!==capture.renderer||verified.report.rendererBackend!==capture.rendererBackend||sha(verified.png)!==capture.pngHash)throw fail('PREVIEW_STALE','PNG 与当前 Scene 的实际 Canvas 渲染不一致；请重新运行 preview');
  const result=webSceneDocument(source,draft,doc.title,doc.materialDecisions),bytes=JSON.stringify(result);writeFileSync('output/project.shiyeproject.json',bytes);
  const review=existsSync('output/review.json')?load('output/review.json'):null,visualReview=review?.sceneRevision===current&&review?.pngHash===capture.pngHash?{result:review.result,source:review.source}:null;
- const manifest={format:'shiye-v3-delivery',version:3,sceneRevision:current,sceneHash,sceneJsonHash:sha(readFileSync('scene.json')),projectHash:sha(bytes),previewHash:capture.pngHash,renderer:capture.renderer,rendererBackend:capture.rendererBackend,fonts:capture.fonts,assets:capture.assets,physical:'passed',reading:info.quality.reading,visualReview,materialDecisions:doc.materialDecisions,createdAt:new Date().toISOString()};
+ const manifest={format:'shiye-v3-delivery',version:3,...(imageReference?{imageReference}:{}),sceneRevision:current,sceneHash,sceneJsonHash:sha(readFileSync('scene.json')),projectHash:sha(bytes),previewHash:capture.pngHash,renderer:capture.renderer,rendererBackend:capture.rendererBackend,fonts:capture.fonts,assets:capture.assets,physical:'passed',reading:info.quality.reading,visualReview,materialDecisions:doc.materialDecisions,createdAt:new Date().toISOString()};
  atomic('output/manifest.json',manifest);process.stdout.write(JSON.stringify({ok:true,...manifest,durationMs:Math.round(performance.now()-started)})+'\n');
 }

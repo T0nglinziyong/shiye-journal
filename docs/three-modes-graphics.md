@@ -15,7 +15,7 @@ TASK.sourceContext.creationMode is hashed with the task. `image-request.json` (v
 Snapshot.imageCreation stores only page/brief/source revision metadata, never credentials. A reconstructed project has sourceSnapshotID and reconstruction {status:candidate, review:pending, limitations}. Reference images are not material inventory. PNG imports lacking the original task cannot infer provenance and are not offered automatic source reconstruction. Explicit source changes reject stale reconstruction.
 
 ## Unified graphics utility
-Rough.js 4.6.6 + Paper.js 0.12.18 + existing perfect-freehand 1.2.3 are pinned local libraries, not external AI services. Operations rough/smooth/simplify/flatten/boolean/stroke/measure are read-only. Shared GraphicGeometry/Place/Style types. Fixed millimetre computation; placement only goes into ordinary group.compose/graphic.add drafts. Only check/apply edits Scene. Original image bytes, inventory and original pressure points are not modified.
+Rough.js 4.6.6 + Paper.js 0.12.18 + existing perfect-freehand 1.2.3 are pinned local libraries, not external AI services. Operations rough/smooth/simplify/flatten/boolean/stroke/measure are read-only. Shared GraphicGeometry/Place/Style types. Fixed millimetre computation; placement only goes into ordinary group.compose/graphic.add drafts. Only check/apply edits Scene. Original image bytes, inventory and original pressure points are not modified. The tool is callable in the exported GPT runtime; the browser helper is reusable but is not injected into the older provider-native creative tool protocol in this release.
 
 The exported `runtime/graphics.cjs` is self-contained (no npm or Canvas needed for geometry). A bounded Node subprocess handles 10s/128MB/3MB output limits. Input and output node/path budgets are checked. Browser clients use an isolated terminable Worker with the same bundled implementation. SVG handling accepts path data only, no arbitrary XML, external image references or scripts. Paper offset-path/semantic segmentation are not claimed. Headless Paper adapters exclude only DOM/canvas wiring; its actual path algorithms run.
 
@@ -23,3 +23,5 @@ Documentation is on-demand: one small entry in START_HERE and GRAPHICS_TOOL.md, 
 
 ## Verification
 Focused tests cover current mode exports, source and reference hashes, original snapshot retention, candidate separation, stale-source/account guards, actual library geometry and actual ZIP graphics/check/apply/Node Canvas preview/pack/reopen. Browser fixture tests the production mode picker and actual Worker + shared render. Image/provider calls are mocked in automated flow tests: no paid-model artistic quality claim.
+
+Hybrid pack verifies a separate reference image and records its hash. This proves bytes are retained, not that the model actually used them or that they are artistically accurate. A model-generated PNG may redraw the reference; constraints in prompts cannot prove pixel fidelity.
