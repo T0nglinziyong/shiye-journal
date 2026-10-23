@@ -5,7 +5,7 @@ export const graphicPresetKinds=Object.freeze([...commonShapes,...advancedShapes
 const presets=new Set(graphicPresetKinds);
 // Small, deterministic line studies compile into the same editable vector
 // paths as any hand-authored path. No extra tool invocation or asset is needed.
-export function sketchGeometry({motif,seed=1}){
+export function sketchGeometry({motif,seed=1,waypoints}){
  const phase=(seed%997)*.071;
  const wobble=t=>Math.sin(t*17+phase)*.85+Math.sin(t*31+phase*.7)*.42;
  const path=points=>points.map(([x,y],i)=>(i?'L':'M')+x.toFixed(2)+' '+y.toFixed(2)).join(' ');
@@ -21,12 +21,24 @@ export function sketchGeometry({motif,seed=1}){
  }else if(motif==='scallop'){
   paths=[path(samples(41,t=>[3+t*94,52+Math.sin(t*7*Math.PI)*8+wobble(t)*.8]))];
  }else if(motif==='trail'){
-  // Separate, uneven strokes create a route without a polished connector arrow.
-  const spans=[[.02,.15],[.20,.34],[.39,.56],[.62,.74],[.80,.97]];
-  paths=spans.map(([start,end],index)=>path(samples(5,t=>{
-   const u=start+(end-start)*t;
-   return [3+u*94,53+Math.sin(u*Math.PI*1.2+phase*.2)*10+wobble(u)*1.2+(index%2?1:-1)];
-  })));
+  if(waypoints){
+   // A few material-led waypoints make the gesture specific to this scene.
+   // Short gaps and restrained lateral wobble keep it hand drawn and editable.
+   paths=waypoints.slice(1).flatMap((end,index)=>{
+    const start=waypoints[index],dx=(end[0]-start[0])*90,dy=(end[1]-start[1])*90,length=Math.hypot(dx,dy)||1;
+    return [[.03,.46],[.54,.97]].map(([from,to],dash)=>path(samples(7,t=>{
+     const u=from+(to-from)*t,offset=Math.sin(Math.PI*t)*(Math.sin(u*9+phase+index*2+dash)*.72+wobble(u+index)*.22);
+     return [5+start[0]*90+dx*u-dy/length*offset,5+start[1]*90+dy*u+dx/length*offset];
+    })));
+   });
+  }else{
+   // Preserve the ready-made gesture for cases without explicit landmarks.
+   const spans=[[.02,.15],[.20,.34],[.39,.56],[.62,.74],[.80,.97]];
+   paths=spans.map(([start,end],index)=>path(samples(5,t=>{
+    const u=start+(end-start)*t;
+    return [3+u*94,53+Math.sin(u*Math.PI*1.2+phase*.2)*10+wobble(u)*1.2+(index%2?1:-1)];
+   })));
+  }
  }else if(motif==='rays'){
   paths=Array.from({length:7},(_,index)=>{
    const angle=(index/7)*Math.PI*2-.35+Math.sin(phase+index*1.7)*.08;

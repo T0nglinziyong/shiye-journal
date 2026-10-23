@@ -44,6 +44,18 @@ test('one graphic command compiles a stable editable hand-drawn path and support
  assert.notEqual(node(revised,'edge').svgPaths[0].d,shape.svgPaths[0].d);
  assert.equal(node(revised,'edge').id,'edge');
 });
+test('material-led trail waypoints stay editable and reject invalid routes',async()=>{
+ const {run}=await fixture();
+ const geometry={kind:'sketch',motif:'trail',seed:23,waypoints:[[.05,.72],[.38,.48],[.66,.63],[.94,.18]]};
+ const command={op:'graphic.add',id:'route',geometry,place:at(50,50),size:{width:46,height:28,unit:'mm'},style:{fill:null,stroke:'#799897',strokeWidthMm:.85}};
+ const made=run([command]),route=node(made,'route');
+ assert.equal(route.kind,'vector');assert.equal(route.svgPaths.length,6);
+ assert.deepEqual(route.svgPaths.map(p=>p.d),sketchGeometry(geometry).paths.map(p=>p.d));
+ const changed=run([{op:'layer.update',target:'route',geometry:{...geometry,waypoints:[[.05,.72],[.7,.25]]}}],made);
+ assert.notDeepEqual(node(changed,'route').svgPaths,route.svgPaths);
+ assert.throws(()=>validateCreationV2Commands(batch([{...command,geometry:{...geometry,motif:'loop'}}])));
+ assert.throws(()=>validateCreationV2Commands(batch([{...command,geometry:{...geometry,waypoints:[[.05,.72],[1.2,.3]]}}])));
+});
 test('outline paints full glyph boundaries and gradient paints real multiple colors, not an offset duplicate',()=>{
  const plain=pixels({}),border=pixels({textOutline:{color:'#000000',width:5,offsetX:0,offsetY:0}}),offset=pixels({textOutline:{color:'#000000',width:5,offsetX:8,offsetY:4}}),grad=pixels({textGradient:gradient});
  assert.ok(ink(border)>ink(plain));assert.notDeepEqual(border,offset);let red=0,blue=0;for(let i=0;i<grad.length;i+=4)if(grad[i+3]>200){if(grad[i]>grad[i+2]+20)red++;if(grad[i+2]>grad[i]+20)blue++;}assert.ok(red>10&&blue>10,JSON.stringify({red,blue}));

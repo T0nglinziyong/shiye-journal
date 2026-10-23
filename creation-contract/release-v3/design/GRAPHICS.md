@@ -19,6 +19,11 @@
 {"op":"graphic.add","id":"photo-edge","geometry":{"kind":"sketch","motif":"corner","seed":23},"place":{"reference":"node:photo","at":[0.04,0.05],"unit":"ratio","rotationSpace":"reference","behavior":"linked"},"size":{"width":40,"height":30,"unit":"mm"},"style":{"fill":null,"stroke":"#799897","strokeWidthMm":0.55},"order":{"after":"photo"}}
 ```
 
+当固定 `trail` 不贴合素材时，在同一个 geometry 中加 `waypoints`，给出图形框内 2–6 个 `[x,y]` 比例点（均为 0–1）；把点选在**真实的纸边、贴纸轮廓或视觉转折处**，而不是均匀撒点。它会沿这些点生成断续路径，仍是可编辑 path，可用 `layer.update` 局部改点。图形框的位置和尺寸仍由 place/size 定义；不要用大量微小图形冒充构图联系。
+```json
+{"op":"graphic.add","id":"material-route","geometry":{"kind":"sketch","motif":"trail","seed":17,"waypoints":[[0.06,0.72],[0.36,0.45],[0.68,0.62],[0.93,0.18]]},"place":{"reference":"page.left","at":[0.5,0.58],"unit":"ratio"},"size":{"width":60,"height":42,"unit":"mm"},"style":{"fill":null,"stroke":"#6A8784","strokeWidthMm":0.9}}
+```
+
 ## 同一个星形：既可做主图，也可做小呼应
 主图使用页面位置和较大尺寸：
 ```json
