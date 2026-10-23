@@ -1,3 +1,5 @@
+import {generationProfile,creationMethod} from './creation-methods.js';
+import {projectForReconstruction} from './image-workflow.js';
 import {normalizeMatchingDirection} from './matching-directions.js';
 import {localDeviceRecords} from './local-device-records.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
@@ -6,7 +8,7 @@ import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,cr
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose'];
+const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
@@ -85,10 +87,19 @@ export function createMatchingSession(c){
   async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());if(!existing?.isDraft)await c.db.stageProject(p);v.linkedProjectID=p.id;
     await device.put(account(),matchingSnapshot(c.state,variants));
     if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
-  async generate(){
+  async rebuild(id){
+   const snapshot=c.state.projects.find(p=>p.id===id)||variants.find(v=>v.id===id)?.project;
+   if(!snapshot?.imageCreation)throw Error('此画面缺少原始素材任务，不能自动重建');
+   return this.generate({snapshot});
+  },
+  async generate({snapshot:referenceSnapshot=null}={}){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
-   const cfg=structuredClone(c.state.aiSettings);if(cfg.deliveryMode!=='image'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
-   const p=c.createProject(),ids=[...p.candidateAssetIDs],assetsSnapshot=structuredClone(c.state.assets),findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+   const mode=referenceSnapshot?'hybrid':creationMethod(c.state.matchCreationMode),cfg={...structuredClone(c.state.aiSettings),...generationProfile(mode)};
+   if(mode!=='draw'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥；导出给网页 GPT 不需要 Key');
+   if(mode==='hybrid'&&!c.supportsVision(cfg))throw Error('混合模式的重建需要可看图模型；可改为导出给网页版 GPT');
+   const assetsSnapshot=structuredClone(c.state.assets),p=referenceSnapshot?projectForReconstruction(referenceSnapshot,assetsSnapshot):c.createProject(),ids=[...p.candidateAssetIDs],findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+   p.creationMode=mode;let referenceImage=null;
+
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder,checkpointFailed=false;
    const accountID=c.state.accountId;
    const ensureAccount=createCreativeRunGuard({accountID,ids,assets:assetsSnapshot,getAccount:()=>c.state.accountId,getAsset:id=>c.state.assets.find(a=>a.id===id),signal:run.signal});
@@ -96,13 +107,23 @@ export function createMatchingSession(c){
    update();
    try {
     await save();ensureAccount();
-    if(cfg.deliveryMode==='image'){
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,signal:run.signal,onProgress:message=>{v.progress=message;notify();}});
-     ensureAccount();const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
+    if(mode!=='edit'){
+     let snapshot=referenceSnapshot;
+     if(!snapshot){
+      const blob=await c.generatePageImage({settings:{...cfg,includeThumbnails:true},project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,signal:run.signal,onProgress:message=>{v.progress=message;notify();}});
+      ensureAccount();snapshot=await c.saveGeneratedImageSnapshot(blob,p);
+     }
+     ensureAccount();v.project=snapshot;v.linkedProjectID=snapshot.id;v.sourceSnapshotID=snapshot.id;await save();
+     if(mode==='draw'){v.status='completed';v.progress='成品图片已保存为快照；可能重绘素材，不能逐层编辑。';return;}
+     referenceImage=await c.modelImage({id:snapshot.id,blobId:snapshot.snapshotBlobId},null,1536,false);ensureAccount();
+     if(!referenceImage)throw Error('原图已保留，但重建参考图读取失败');
+     p.sourceSnapshotID=snapshot.id;p.reconstruction={version:1,status:'candidate',sourceSnapshotID:snapshot.id,review:'pending',limitations:['GPT 按参考图重新构造，不能保证逐像素一致；请核对未还原细节。']};
+     v.project=p;v.linkedProjectID=null;
+     v.progress='原始成图已保存，正在按真实素材重建可编辑候选…';await save();notify();
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key,accountId:c.state.accountId||'browser'});const vision=c.supportsVision(cfg);
     const {images}=await prepareCreativeRunInputs({assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:c.modelImage,guard:ensureAccount});
-    let steps='';const output=await c.runCreativeAgent({...creativeRunParameters({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:cfg,prompt:p.intent||''}),images,request:recorder.request,signal:run.signal,
+    let steps='';const output=await c.runCreativeAgent({...creativeRunParameters({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:{...cfg,deliveryMode:'tools',generationMode:'agent'},prompt:p.intent||''}),referenceImage,images,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
@@ -118,9 +139,9 @@ export function createMatchingSession(c){
       try{await recorder.turn(turn,results,draft);}catch{v.progress+='\n诊断记录未保存；本轮画面已可靠暂存。';update();}
      }
     });
-    ensureAccount();await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode=cfg.deliveryMode;
-    if(['image','pdf'].includes(cfg.deliveryMode)){const snapshot=await c.saveSnapshotFromDraft(p,{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});v.project=snapshot;v.linkedProjectID=snapshot.id;v.progress+='\n创作完成，已保存为不可编辑快照；点击查看。';}
-    else{v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
+    ensureAccount();await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode='tools';
+    if(mode==='hybrid'){v.project=p;v.linkedProjectID=null;v.progress+='\n已生成可编辑候选；原始成图独立保留，细节仍需核对。';}
+    {v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
     v.status='completed';
    }catch(error){v.status=run.signal.aborted?'stopped':'failed';v.progress+='\n'+String(error.message||'创作失败').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]')+(checkpointFailed?'。本轮暂存失败，画面仍在当前页面；暂勿关闭。':'。已暂存的完整步骤仍保留。');}
    finally {

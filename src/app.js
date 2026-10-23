@@ -140,6 +140,8 @@ const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).ru
 import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {materialAliases} from './material-alias.js';
 import {snapshotRecord,workInTab} from './work-collections.js';
+import {generationProfile} from './creation-methods.js';
+import {imageProvenance,projectForReconstruction} from './image-workflow.js';
 import {generatePageImage} from './ai-image-generation.js';
 import {clipMaterial,materialMaskGeometry} from './material-mask.js';
 import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.js';
@@ -173,7 +175,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -958,7 +960,7 @@ function updateMatchingFromReact(key,value,options){
     state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
     normalizeMatchingDirection(state);
   }else if(['matchContentPolicy','matchMode',
-    'matchRatio','matchIntent'].includes(key))state[key]=value;
+    'matchRatio','matchIntent','matchCreationMode'].includes(key))state[key]=value;
   else return;
   void matchingSession.persist().catch(error=>{
     console.warn('本机搭配状态未保存；不影响云端作品同步',error);
@@ -1346,6 +1348,9 @@ async function runAppAction(action,id,value){try{
   case 'match-core':await actionStore.dispatch({type:'matching/priority',payload:{id}});break;
   case 'match-generate':captureMatchingDirection();queueMatchingDefaultsSync();await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
+  case 'match-rebuild':await matchingSession.rebuild(id);break;
+  case 'view-reference-snapshot':state.previewProjectID=id;route('projectPreview');break;
+  case 'snapshot-export-rebuild':await exportOfflineCreation({snapshot:state.projects.find(p=>p.id===state.previewProjectID)});break;
   case 'match-import-gpt':openOfflineImportDialog();break;
   case 'basket':await actionStore.dispatch({type:'matching/basket',payload:{id}});break;
   case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];});render();break;
@@ -2192,9 +2197,9 @@ function captureMatchingDirection(){
   state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;
   state.matchRatio=view.querySelector('#match-ratio')?.value||'a4';normalizeMatchingDirection(state);
 }
-function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';return p;}
-async function exportOfflineCreation(){
-  if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
+function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';return p;}
+async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
+  if(!rebuildSnapshot&&!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
   captureMatchingDirection();
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
   const timing={},report={cacheHits:0,covers:0,materials:0};
@@ -2205,7 +2210,7 @@ async function exportOfflineCreation(){
   const canceled=()=>{if(controller.signal.aborted)throw controller.signal.reason||Error('已取消导出');};
   const measured=async(name,task)=>{const now=performance.now();try{return await task();}finally{timing[name]=Math.round(performance.now()-now);}};
   try{
-    const p=createMatchingProject(),assetsSnapshot=structuredClone(state.assets),aliases=materialAliases(p.candidateAssetIDs),previews=[],cfg=structuredClone(state.aiSettings);
+    const assetsSnapshot=structuredClone(state.assets),p=rebuildSnapshot?projectForReconstruction(rebuildSnapshot,assetsSnapshot):createMatchingProject(),aliases=materialAliases(p.candidateAssetIDs),previews=[],cfg={...structuredClone(state.aiSettings),...generationProfile(p.creationMode)};
     const account=await offlineTaskAccount();canceled();
     const all=Object.entries(aliases);report.materials=all.length;
     // Editable task packages include the current full-resolution source image;
@@ -2235,7 +2240,9 @@ async function exportOfflineCreation(){
     const materialRows=await materialWork;
     canceled();previews.push(...materialRows);
     progress('正在校验内容并生成 ZIP 文件…');
-    const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,settings:{...cfg,includeThumbnails:true}});});
+    const referencePreview=rebuildSnapshot?new Uint8Array(await (await db.get('blobs',rebuildSnapshot.snapshotBlobId))?.data?.arrayBuffer()):null;
+    if(rebuildSnapshot&&!referencePreview?.length)throw Error('原始成图尚未同步，不能导出空参考');
+    const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referencePreview,settings:{...cfg,includeThumbnails:true}});});
     canceled();
     p.offlineBundleId=result.source.bundleId;
     canceled();
@@ -2360,6 +2367,7 @@ async function startAICreation(){
  const findAsset=id=>assetsSnapshot.find(a=>a.id===id),pscope=targetProject.materialPriority;
  const ids=[...new Set([...(targetProject.candidateAssetIDs||[]),...(pscope?[]:state.basket),...(sourceDraft.items||[]).map(x=>x.assetID)])].filter(id=>findAsset(id)&&!pscope?.excluded?.includes(id));
  if(cfg.deliveryMode==='image'){
+  sourceProject.candidateAssetIDs=ids;sourceProject.creationMode='draw';sourceProject.activeDraftID=sourceDraft.id;
   if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
   const controller=new AbortController();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备图像生成…';render();
   try{const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,signal:controller.signal,onProgress:message=>{state.aiProgress=message;publishAIStatus();}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
@@ -2415,11 +2423,13 @@ async function saveProjectSnapshot(source,{format='image/png',alsoEditable=false
  if(state.route==='works')render();return snapshot;
 }
 async function saveGeneratedImageSnapshot(blob,source){
+ const accountID=state.accountId,provenance=imageProvenance(source,state.assets);
  if(!(blob instanceof Blob)||blob.type!=='image/png')throw Error('图像模型没有返回 PNG');
  const bitmap=await createImageBitmap(blob);let width,height;try{width=bitmap.width;height=bitmap.height;}finally{bitmap.close();}
  const blobId=uid(),snapshot=snapshotRecord({title:source.title,previewBlobId:blobId,format:'image/png',width,height,sourceProjectID:source.id});
- snapshot.styleTags=[...(source.styleTags||[])];snapshot.tags=[...(source.tags||[])];snapshot.purpose=source.purpose;snapshot.aiGenerated=true;
- await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:blob}]});urls.set(blobId,URL.createObjectURL(blob));state.projects.push(snapshot);
+ snapshot.styleTags=[...(source.styleTags||[])];snapshot.tags=[...(source.tags||[])];snapshot.purpose=source.purpose;snapshot.aiGenerated=true;snapshot.imageCreation=provenance;
+ if(state.accountId!==accountID)throw Error('账号已变化，未保存到另一个账号');
+ await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:blob}]});if(state.accountId!==accountID)throw Error('账号已变化，未显示到另一个账号');urls.set(blobId,URL.createObjectURL(blob));state.projects.push(snapshot);
  if(state.route==='works')render();return snapshot;
 }
 async function restorePendingProjects(){const pending=await db.pendingProjects();
@@ -3305,7 +3315,7 @@ async function saveOfflineSnapshotFile(file,matchingProject,mimeType){
     const blobId=uid(),snapshot=snapshotRecord({title:importDefaultTitle(file.name,'snapshot'),previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
     if(matchingProject){
       snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;
-      snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;
+      snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;snapshot.imageCreation=imageProvenance(matchingProject,state.assets);
     }
     const content=file.type===mimeType?file:new Blob([file],{type:mimeType});
     await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:content}]});

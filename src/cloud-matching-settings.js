@@ -1,10 +1,11 @@
+import {creationMethod} from './creation-methods.js';
 import {normalizeMatchingPaper,normalizeMatchingDirection,styleGroups,purposeGroups,selectedDirections,matchingContentOptions} from './matching-directions.js';
 // Last-used creative direction belongs to the signed-in account, not to any
 // project or AI task. Keep actual writing/content and current asset basket
 // device-local; only non-secret, reusable controls synchronize.
 export const CLOUD_MATCHING_SETTINGS_ID='app-matching-defaults';
 export const MATCHING_CLOUD_KEYS=Object.freeze([
-  'matchMode','matchRatio','matchStyle','matchStyles','matchPurpose',
+  'matchCreationMode','matchMode','matchRatio','matchStyle','matchStyles','matchPurpose',
   'matchPurposes','matchContentPolicy',
   'recommendFilter'
 ]);
@@ -18,6 +19,7 @@ export function normalizeMatchingDefaults(source){
       if(Array.isArray(value))output[key]=[...new Set(value.filter(x=>typeof x==='string'&&x.length<=80))].slice(0,12);
     }else if(typeof value==='string'&&value.length<=100){output[key]=value;}
   }
+  if(output.matchCreationMode)output.matchCreationMode=creationMethod(output.matchCreationMode);
   if(output.matchRatio)output.matchRatio=normalizeMatchingPaper(output.matchRatio);
   if(output.matchStyles)output.matchStyles=selectedDirections(styleGroups,output.matchStyles);
   if(output.matchPurposes)output.matchPurposes=selectedDirections(purposeGroups,output.matchPurposes);

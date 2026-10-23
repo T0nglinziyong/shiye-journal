@@ -11,7 +11,7 @@ import {imagePrompt} from '../src/ai-image-generation.js';
 test('four current directions replace obsolete choices without reviving processing or lettering pickers',()=>{
   const state={matchStyles:['不存在'],matchPurposes:['旅途记录'],matchContentPolicy:'collection'};
   normalizeMatchingDirection(state);
-  assert.deepEqual(state,{matchRatio:'a4',matchStyles:['随材而定','自动安排'],matchStyle:'随材而定',matchPurposes:['自由创作'],matchPurpose:'自由创作',matchContentPolicy:'original'});
+  assert.deepEqual(state,{matchCreationMode:'edit',matchRatio:'a4',matchStyles:['随材而定','自动安排'],matchStyle:'随材而定',matchPurposes:['自由创作'],matchPurpose:'自由创作',matchContentPolicy:'original'});
   assert.equal(styleGroups.length+purposeGroups.length+1,4);
   for(const label of [...styleGroups,...purposeGroups].flatMap(g=>[g.label,...g.options]).concat(Object.values(matchingContentOptions)))assert.equal(label.length,4);
 });

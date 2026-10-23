@@ -1,7 +1,9 @@
+import {CreationModePicker} from './react-creation-mode.jsx';
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
+import {creationModeDescription} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -970,6 +972,8 @@ function MatchingSessionPanel({session,state,source,onAction}){
         </button><pre className="match-progress" aria-live="polite">{variant.progress}</pre>
         {variant.linkedProjectID&&!state.projects.some(project=>project.id===variant.linkedProjectID)?
           <button className="btn" data-react-action="true" onClick={action('match-restore',variant.id)}>恢复已删除作品</button>:null}
+        {variant.project?.isSnapshot&&variant.project.imageCreation&&variant.status!=='running'?<button className="btn" data-react-action="true" onClick={action('match-rebuild',variant.project.id)}>从这张图重建可编辑候选</button>:null}
+        {variant.sourceSnapshotID&&!variant.project?.isSnapshot?<button className="btn" data-react-action="true" onClick={action('view-reference-snapshot',variant.sourceSnapshotID)}>查看原始成图</button>:null}
         {variant.status==='running'?<button className="btn" data-react-action="true" onClick={action('match-stop')}>停止创作</button>:
           variant.project.deliveryMode==='zip'?<button className="btn"
             data-react-action="true"
@@ -993,6 +997,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
     <section className="panel match-direction"><h2>先定这一页的方向</h2><p>从素材出发，写一点自己的想法。保持默认也可以开始。</p>
       <div className="match-creative-controls">
+        <CreationModePicker value={state.matchCreationMode} onChange={value=>change('matchCreationMode',value)}/>
         <DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/>
         <label>文字内容<select id="match-content-policy" value={Object.hasOwn(matchingContentOptions,state.matchContentPolicy)?state.matchContentPolicy:'original'} onChange={event=>change('matchContentPolicy',event.target.value)}>
           {Object.entries(matchingContentOptions).map(([value,label])=><option key={value} value={value}>{label}</option>)}
@@ -1025,7 +1030,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
-    <section className="panel match-action"><h2>开始创作</h2><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
+    <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!scope.candidateAssetIDs.length}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!scope.candidateAssetIDs.length}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
     <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>
@@ -1473,6 +1478,7 @@ export function ProjectPreviewPage({project,source,assets,localCover,loadLocalCo
     <p>{project.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p>
     <div className="project-preview-actions">
       {project.isSnapshot?button('download-snapshot','下载快照','primary'):button('preview-continue','继续创作','primary')}
+      {project.isSnapshot&&project.imageCreation?button('snapshot-export-rebuild','导出给 GPT 重建'):null}
       {button('project-meta','作品信息与标签')}{button('project-delete','移到最近删除','danger')}
     </div>
   </div>;

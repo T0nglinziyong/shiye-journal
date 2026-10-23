@@ -1,3 +1,4 @@
+import {creationMethod} from './creation-methods.js';
 import {paperPresets} from './paper-sizes.js';
 const matchingPaperIDs=new Set(paperPresets.map(paper=>paper.id));
 export const normalizeMatchingPaper=value=>matchingPaperIDs.has(value)?value:'a4';
@@ -9,6 +10,7 @@ export const purposeGroups=[{id:'page',label:'页面用途',options:['自由创�
 export const matchingContentOptions={original:'灵感随写',documentary:'日常记录',visual:'纯粹拼贴'};
 export function selectedDirections(groups,values=[]){const selected=new Set(values);return groups.map(group=>group.options.find(name=>selected.has(name))||group.options[0]);}
 export function normalizeMatchingDirection(state){
+  state.matchCreationMode=creationMethod(state.matchCreationMode);
   state.matchRatio=normalizeMatchingPaper(state.matchRatio);
   state.matchStyles=selectedDirections(styleGroups,state.matchStyles||[state.matchStyle]);
   state.matchPurposes=selectedDirections(purposeGroups,state.matchPurposes||[state.matchPurpose]);

@@ -15,7 +15,7 @@ test('account-scoped AI metadata preserves provider keys and all model preferenc
   assert.equal(restored.key,'sk-private-abc');
   assert.equal(restored.keys.openai,'sk-openai-secret');
   assert.equal(restored.customLayoutPrompt,'多留白');
-  assert.equal(restored.creationMode,'tools');
+  assert.equal(restored.creationMode,'edit');
   assert.equal('creationMode' in item.settings,false);
   assert.equal(restored.includeThumbnails,false);
   assert.equal('sendPresetReferences' in restored,false);

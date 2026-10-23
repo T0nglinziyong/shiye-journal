@@ -46,8 +46,8 @@ test('editable result ZIP still validates its native project entry',async()=>{
  assert.throws(()=>importEditableWorkPackage(zipSync({'preview.svg':strToU8('<svg/>')}),[asset]),/缺少/);
 });
 test('image-only task remains separate and no private keys reach either package',async()=>{
- const image=await make({settings:{deliveryMode:'image',key:'sk-test-not-for-GPT-task'}}),files=await entries(image);
- assert.equal(image.deliveryMode,'image');assert.ok(files['task/context.json']);assert.equal(files['TASK.json'],undefined);
+ const image=await make({settings:{creationMode:'draw',key:'sk-test-not-for-GPT-task'}}),files=await entries(image);
+ assert.equal(image.deliveryMode,'image');assert.ok(files['TASK.json']);assert.ok(files['image-request.json']);assert.equal(files['scene.json'],undefined);assert.equal(files['runtime/shiye.cjs'],undefined);assert.equal(read(files,'TASK.json').sourceContext.capabilities.sceneWorkbench,false);assert.ok(!Object.values(files).map(strFromU8).join('').includes('sk-test-not-for-GPT-task'));
  const editable=await make({settings:{provider:'openai',key:'sk-test-not-for-GPT-task',keys:{openai:'sk-test-not-for-GPT-task'}}});
  const combined=Object.values(await entries(editable)).map(bytes=>strFromU8(bytes)).join(' ');
  assert.ok(!combined.includes('sk-test-not-for-GPT-task'));

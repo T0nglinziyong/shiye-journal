@@ -1,3 +1,4 @@
+import {tinyPNG} from './offline-canvas-test-support.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
@@ -62,9 +63,9 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(image,/纸片错层/);
   assert.match(image,/图文职责/);
   assert.doesNotMatch(image,/充分展开连贯的多行正文/);
-  const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,textMode:'rich'}});
+  const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{creationMode:'draw',includeThumbnails:true,textMode:'rich'},previews:[{alias:'m1',bytes:tinyPNG}]});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
-  assert.ok(strFromU8(imageFiles['task/GUIDE.txt']).includes(image));
+  assert.ok(strFromU8(imageFiles['design/IMAGE_MODE.md']).includes(imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:true,textMode:'rich'})));
   assert.equal(imageFiles['task/knowledge.json'],undefined);
 });
 
@@ -89,9 +90,9 @@ test('both editable and image transports receive the same spread-specific page b
   assert.match(strFromU8(webFiles['design/GUIDE.md']),marker);
   const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
   assert.match(image,marker);
-  const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false}});
+  const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{creationMode:'draw',includeThumbnails:true},previews:[{alias:'m1',bytes:tinyPNG}]});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
-  assert.match(strFromU8(imageFiles['task/GUIDE.txt']),marker);
+  assert.match(strFromU8(imageFiles['design/IMAGE_MODE.md']),marker);
 });
 
 test('image API forwards no-text setting and does not quietly request copy',async()=>{

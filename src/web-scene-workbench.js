@@ -120,7 +120,7 @@ export function importWebScene(input,assets,{trustedSource=null}={}){
   p.initialEditorSnapshot={drafts:[structuredClone(d)],activeDraftID:d.id};
   p.draftHistorySnapshots={[d.id]:structuredClone(d)};
   p.candidateAssetIDs=s.materials.map(m=>m.assetID);p.requiredAssetIDs=s.requiredAssetIDs||[];p.materialPriority=structuredClone(s.materialPriority);p.styles=s.styles;p.purposes=s.purposes;
-  inheritCreationBrief(p,s);p.creationVerification={structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:s.bundleId};
+  inheritCreationBrief(p,s);p.creationMode=s.creationMode||'edit';if(s.creationMode==='hybrid')p.reconstruction={version:1,status:'candidate',review:'pending',sourceTaskId:s.bundleId,referenceImage:s.referenceImage||null,limitations:['按参考图重建，不保证逐像素一致；请保留独立原图并核对。']};p.creationVerification={structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:s.bundleId};
   if(input.materialDecisions?.length)p.creationMaterialDecisions=structuredClone(input.materialDecisions);
   return p;
 }

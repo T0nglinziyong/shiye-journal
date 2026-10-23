@@ -53,6 +53,8 @@
     "perfect-freehand": "1.2.3",
     "polygon-clipping": "0.15.7",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "roughjs": "4.6.6",
+    "paper": "0.12.18"
   }
 }

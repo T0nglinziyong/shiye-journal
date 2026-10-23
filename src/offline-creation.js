@@ -1,3 +1,5 @@
+import {creationMethod} from './creation-methods.js';
+import {imageWorkflowRequest,imageWorkflowGuide} from './image-workflow.js';
 import {webSceneContract,webSceneDocument,importWebScene} from './web-scene-workbench.js';
 import {createV3PackageFiles} from './v3-package.js';
 import {webArtDirection} from './web-creation-guide.js';
@@ -28,21 +30,23 @@ function packagePreviewPath(folder,name,bytes,{transparent=false}={}){
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
 export const EDITABLE_PACKAGE_ENTRY='project.shiyeproject.json';
 const validAlias=validMaterialAlias;
+const projectMode=(p,settings)=>p.creationMode||settings.creationMode||'edit';
 function sourceFor(p,aliases){
  const d=p.drafts[0],priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 // Alias shortening happens before freezing/hashing the task. Persistent asset
 // IDs never change, and images and source references share the same mapping.
-export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={}}){
- if(settings.deliveryMode!=='image'){
+export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referencePreview=null}){
+ const creationMode=creationMethod(projectMode(p,settings));
+ {
   const entries=Object.entries(aliases);
   if(entries.some(([alias])=>!validAlias(alias)))throw Error('素材篮中有无效素材编号');
   const short=new Map(entries.map(([alias],index)=>[alias,'m'+(index+1)]));
   aliases=Object.fromEntries(entries.map(([alias,id])=>[short.get(alias),id]));
   previews=previews.map(entry=>({...entry,alias:short.get(entry.alias)||entry.alias}));
  }
- const source=sourceFor(p,aliases);source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';
+ const source=sourceFor(p,aliases);source.creationMode=creationMode;source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';
  const selected=source.materials.map(({alias,assetID})=>{
   const asset=assets.find(item=>item.id===assetID);if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
   return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tape:asset.kind==='tape'?{axis:tapeDimensions(asset).axis,widthMM:tapeDimensions(asset).widthMM,sourceLengthMM:tapeDimensions(asset).lengthMM,repeatRangeMM:tapeRepeatRange(asset),flatCrop:asset.tapeFlatCrop??null,textureModes:['sample',...(tapeRepeatRange(asset)?['repeat']:[]),'stretch'],capStyles:['square','angled','torn']}:null,tags:asset.tags||[]};
@@ -50,29 +54,30 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
  if(!selected.length)throw Error('请先选择素材');
  const showImages=settings.includeThumbnails!==false,chosen=showImages?previews:[];
  if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
- if(settings.deliveryMode==='image')for(const entry of chosen)packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true});
- if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,showImages});
- const {offlineValidateSource}=await import('./generated/offline-validate-source.js'),{offlineGlyphSource}=await import('./generated/offline-glyph-source.js'),mode='scene';
- source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,editableTapeRibbon:true,canonicalNodePreview:true,validateOffline:true,previewOffline:'node-canvas'};
+ if(creationMode!=='edit'&&!showImages)throw Error('真实素材生图需要素材图片；没有跳过引用图。');
+ if(referencePreview){if(creationMode!=='hybrid'||!(referencePreview instanceof Uint8Array))throw Error('只有混合创作可附带参考图');const format=previewImageFormat(referencePreview);if(!format||referencePreview.length>40000000)throw Error('参考图格式或大小无效');source.referenceImage={image:'reference/draft.'+format.extension,sha256:'sha256:'+await sha256Hex(referencePreview),role:'generated-visual-reference-not-source'};}
+ const {offlineValidateSource}=await import('./generated/offline-validate-source.js'),{offlineGlyphSource}=await import('./generated/offline-glyph-source.js'),mode=creationMode;
+ source.capabilities=creationMode==='draw'?{sceneWorkbench:false,imageGeneration:'host-required',sourceFidelity:'reference-only'}:{sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,editableTapeRibbon:true,canonicalNodePreview:true,validateOffline:true,previewOffline:'node-canvas',graphics:'local-read-only'};
  source.packageLayout='v3';source.schemaHash=schemaFingerprint(webSceneContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
  freezeCraftTask(source,p.drafts[0],assets);
  source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
  source.taskHash=await taskFingerprint(source);
  const work=webSceneDocument(source,source.baseDraft,p.title);
- const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),webArtDirection(source),'先观察素材并构思素材之间的关系；只写 work/commands.json，经 apply 修改唯一 scene.json 后看真实预览。按需 help / describe；使用 material.crop、material.split、material.window、material.weave，曲线文字、胶带路径、字形镂空等同样使用公共参数；默认 describe 返回精简帮助，完整规范加 --full。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
- const files=await createV3PackageFiles({source,selected,chosen,work,guide,runtime:offlineValidateSource,glyph:offlineGlyphSource}),bytes=zipSync(files,{level:4}),prompts={file:webResultPrompt(mode,'file'),text:webResultPrompt(mode,'text')};
- return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:chosen.reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
-}
-async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,showImages}){
- source.deliveryMode='image';source.packageLayout='compact-v2';source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;source.taskHash=await taskFingerprint(source);
- const context={format:OFFLINE_PACKAGE_FORMAT,version:2,deliveryMode:'image',source,materials:selected.map(item=>({...item,preview:showImages?packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true}):null}))};
- const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,textMode:source.textMode});
- const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (${packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true})})`:''}`).join('；');
- const start=`拾页手帐画面图片任务｜一次完成\n\n先读 task/context.json 与 task/GUIDE.txt，然后${showImages?'逐件查看 materials/ 中的透明图片（WebP 或 PNG）':'依据素材名称、标签与尺寸'}。\n\n素材编号：${imageOrder}\n\n最终在聊天中展示画面，并交付一张可下载 PNG。它是不可逐层编辑的画面快照，不要返回工程数据或代码。`;
- const files={'START_HERE.txt':strToU8(start),'task/context.json':strToU8(JSON.stringify(context,null,2)),'task/GUIDE.txt':strToU8(brief)};
- for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
- const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result))),prompt=webResultPrompt('image','file');
- return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-AI画面任务.zip',prompt,prompts:{file:prompt,text:null},source,mode:'image',deliveryMode:'image',previewCount:chosen.length,imageBytes:chosen.reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
+ const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),webArtDirection(source),'先观察素材并构思素材之间的关系；只写 work/commands.json，经 apply 修改唯一 scene.json 后看真实预览。按需 help / describe；使用 material.cut、material.split、material.window、material.weave，曲线文字、胶带路径、字形镂空等同样使用公共参数；默认 describe 返回精简帮助，完整规范加 --full。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
+ const files=await createV3PackageFiles({source,selected,chosen,work,guide,runtime:offlineValidateSource,glyph:offlineGlyphSource});
+ if(creationMode!=='edit'){
+  const task=JSON.parse(strFromU8(files['TASK.json']));task.creationMode=creationMode;task.imageRequestRef='image-request.json';
+  files['image-request.json']=strToU8(JSON.stringify(imageWorkflowRequest({mode:creationMode,source,materials:task.materials,reference:source.referenceImage||null}),null,2));
+  files['design/IMAGE_MODE.md']=strToU8(imageWorkflowGuide+'\n## 本次生图要求\n'+imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(m=>m.assetID),theme:p.intent,includeImages:true,textMode:source.textMode,requireAll:settings.requireAllCandidates!==false}));
+  if(referencePreview)files[source.referenceImage.image]=referencePreview;
+  if(creationMode==='draw'){
+   for(const key of Object.keys(files))if(!key.startsWith('assets/')&&!['TASK.json','image-request.json','design/IMAGE_MODE.md'].includes(key))delete files[key];
+   files['START_HERE.md']=strToU8('# 拾页 · 纯绘画\n读 TASK.json、image-request.json 和 design/IMAGE_MODE.md，查看 assets/ 原图。由宿主图像模型创作完整 PNG，交付图像快照；不是可编辑 Scene，不调用 apply/pack。');
+  }else files['START_HERE.md']=strToU8('# 本次是混合创作\n先读 design/IMAGE_MODE.md：先生成或查看参考成图，再按下面的统一 Command 流程重建独立可编辑候选。不要用生图替代 Scene 的 preview。\n\n'+strFromU8(files['START_HERE.md']));
+  files['TASK.json']=strToU8(JSON.stringify(task,null,2));
+ }
+ const bytes=zipSync(files,{level:4}),prompts={file:webResultPrompt(mode,'file'),text:mode==='draw'?null:webResultPrompt(mode,'text')};
+ return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,deliveryMode:mode==='draw'?'image':'tools',previewCount:chosen.length,imageBytes:chosen.reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 export function inspectEditableSource(text){
  if(new TextEncoder().encode(text).byteLength>8_000_000)throw Error('可编辑作品文件过大');
@@ -99,7 +104,8 @@ export async function verifyOfflineTaskPackage(bytes,source){
  if(!Object.hasOwn(source,'previewHashes'))throw Error('原始任务缺少当前素材预览指纹字段');
  const expected=source.previewHashes;if(expected===null)return;
  if(!expected||typeof expected!=='object'||Array.isArray(expected)||Object.keys(expected).length!==source.materials.length)throw Error('原始任务的素材预览指纹不完整');
- readProjectPackageEntries(bytes,{allowTask:true});const previews=unzipSync(bytes,{filter:entry=>entry.name.startsWith('assets/')});
+ readProjectPackageEntries(bytes,{allowTask:true});const previews=unzipSync(bytes,{filter:entry=>entry.name.startsWith('assets/')||entry.name===source.referenceImage?.image});
+ if(source.referenceImage){const reference=previews[source.referenceImage.image];if(!reference||!previewImageFormat(reference)||'sha256:'+await sha256Hex(reference)!==source.referenceImage.sha256)throw Error('混合创作参考图缺失或指纹不一致');}
  for(const item of source.materials){
   const fingerprint=expected[item.alias],names=['webp','png','jpg'].map(ext=>`assets/${item.alias}.${ext}`).filter(path=>previews[path]);if(names.length!==1)throw Error(`原始任务素材 ${item.alias} 的预览文件不唯一或缺失`);
   const image=previews[names[0]],format=previewImageFormat(image);if(!format||names[0]!==`assets/${item.alias}.${format.extension}`)throw Error(`原始任务素材 ${item.alias} 的图片内容与格式不一致`);
