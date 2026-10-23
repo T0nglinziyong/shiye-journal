@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import {CREATION_METHODS,WEB_RESULT_METHODS,creationMethod,generationProfile,webResultPrompt,classifyCreationBytes,classifyCreationFile} from '../src/creation-methods.js';
 
 test('creative method and web return method are independent choices',()=>{
-  assert.deepEqual(CREATION_METHODS.map(([id])=>id),['tools','json','image']);
+  assert.deepEqual(CREATION_METHODS.map(([id])=>id),['edit','draw','hybrid']);
   assert.deepEqual(WEB_RESULT_METHODS.map(([id])=>id),['file','text']);
-  assert.equal(creationMethod('bad'),'tools');
-  assert.deepEqual(generationProfile('tools'),{creationMode:'tools',deliveryMode:'tools',generationMode:'agent',snapshot:false});
-  assert.equal(generationProfile('json').generationMode,'direct');
-  assert.equal(generationProfile('image').snapshot,'image/png');
+  assert.equal(creationMethod('bad'),'edit');
+  assert.deepEqual(generationProfile('edit'),{creationMode:'edit',deliveryMode:'tools',generationMode:'agent',snapshot:false});
+  assert.equal(generationProfile('hybrid').generationMode,'agent');
+  assert.equal(generationProfile('draw').snapshot,'image/png');
 });
 
 test('editable delivery requires PNG plus JSON for both file and text outputs',()=>{
-  for(const mode of ['tools','json']){
+  for(const mode of ['edit','hybrid']){
     const file=webResultPrompt(mode,'file');
     assert.match(file,/project.shiyeproject.json/);
     assert.match(file,/ZIP/);
@@ -21,9 +21,9 @@ test('editable delivery requires PNG plus JSON for both file and text outputs',(
     assert.match(text,/JSON/);assert.match(text,/preview.png/);
     assert.match(text,/不省略字段/);assert.match(text,/单行/);assert.match(file,/单行/);
   }
-  const png=webResultPrompt('image','file');
+  const png=webResultPrompt('draw','file');
   assert.match(png,/PNG/);
-  assert.throws(()=>webResultPrompt('image','text'),/不能用复制文本/);
+  assert.throws(()=>webResultPrompt('draw','text'),/不能用复制文本/);
 });
 
 const bytes=(...parts)=>Uint8Array.from(parts);
@@ -51,7 +51,7 @@ test('size budget protects text and package imports even with false MIME extensi
 
 test('editable handoff prompts remain concise without a final-response gag',()=>{
  for(const output of ['file','text']){
-   const prompt=webResultPrompt('tools',output);
+   const prompt=webResultPrompt('edit',output);
    assert.ok(prompt.length<260);
    assert.doesNotMatch(prompt,/不要附加过程说明|无需另加解释|自评/);
    assert.match(prompt,/runtime\/shiye\.cjs/);

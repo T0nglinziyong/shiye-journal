@@ -1,33 +1,23 @@
-// Creation is independent from delivery: file vs copy text is selected only
-// when handing the task to ChatGPT. Avoid presenting ZIP as a separate mode.
+// Product modes are independent from provider transport and manual drawing tools.
 export const CREATION_METHODS=Object.freeze([
-  ['tools','调用工具 · 返回工具调用'],
-  ['json','直接排版 · 返回可编辑图层'],
-  ['image','自由绘画 · 生成快照图片']
+ ['edit','纯编辑 · 可编辑图层'],
+ ['draw','纯绘画 · 成品图片'],
+ ['hybrid','两者结合 · 先生图再重建']
 ]);
-export const WEB_RESULT_METHODS=Object.freeze([
-  ['file','作品文件'],
-  ['text','复制文本']
-]);
-export function creationMethod(mode){
-  return CREATION_METHODS.some(([id])=>id===mode)?mode:'tools';
-}
+export const WEB_RESULT_METHODS=Object.freeze([['file','作品文件'],['text','复制文本']]);
+export function creationMethod(mode){return CREATION_METHODS.some(([id])=>id===mode)?mode:'edit';}
 export function generationProfile(mode){
-  const id=creationMethod(mode);
-  return {creationMode:id,deliveryMode:id,generationMode:id==='tools'?'agent':'direct',
-    snapshot:id==='image'?'image/png':false};
+ const id=creationMethod(mode);return {creationMode:id,deliveryMode:id==='draw'?'image':'tools',generationMode:'agent',snapshot:id==='draw'?'image/png':false};
 }
+export function creationModeDescription(mode){return {edit:'真实素材、文字、图形直接组成可编辑作品；手写和 graphics 均可用。',draw:'把真实素材作为参考生成成品图，保存为不可逐层编辑的快照；模型可能重绘素材。',hybrid:'先生图，再由 GPT 参照图像、使用原素材重建独立可编辑候选；不是无损拆图。'}[creationMethod(mode)];}
 export function webResultPrompt(mode,output){
-  const id=creationMethod(mode);
-  if(output!=='file'&&output!=='text')throw Error('交付形式不受支持');
-  if(id==='image'){
-    if(output==='text')throw Error('自由绘画必须交付 PNG 图片，不能用复制文本表示完整像素');
-    return '请读 ZIP 的 START_HERE.txt 和任务说明，观察素材并生成完整手帐画面；直接展示画面并提供单个可下载的 PNG 作品文件，不要返回 JSON、ZIP 或说明性图注。';
-  }
-  const instructions='请读 ZIP/START_HERE.md 和 TASK.json，查看 assets/overview.jpg 与必要原图。只编写 work/commands.json，经 node runtime/shiye.cjs apply，再运行 preview 看真实 PNG；用下一批命令局部修订，最后 pack 交付。';
-  return output==='file'
-    ?instructions+'交付可下载的 output/preview.png 与 output/project.shiyeproject.json，JSON 保持单行紧凑格式，不要交付 ZIP。'
-    :instructions+'展示并提供可下载的 output/preview.png；将同一最终 JSON 放在一个完整的 ```json 代码块中，JSON 正文保持单行、不缩进、不省略字段；字符串换行保留转义。';
+ const id=creationMethod(mode);if(!['file','text'].includes(output))throw Error('交付形式不受支持');
+ if(id==='draw'){
+  if(output==='text')throw Error('纯绘画必须交付 PNG 图片，不能用复制文本表示完整像素');
+  return '读 ZIP/START_HERE.md、TASK.json 与 image-request.json，逐件查看真实素材。直接生图并展示、提供 PNG；这是图像快照，不返回虚构可编辑 JSON。';
+ }
+ const instructions=(id==='hybrid'?'按 ZIP/design/IMAGE_MODE.md 先生成或查看参考成图，再按原素材重建可编辑图层；不可把整图冒充可编辑作品。':'')+'请读 ZIP/START_HERE.md 和 TASK.json，查看 assets/overview.jpg 与必要原图。用 work/commands.json 经 node runtime/shiye.cjs apply，再 preview 看真实 PNG；局部修订后 pack。';
+ return instructions+(output==='file'?'交付 output/preview.png 与单行完整 output/project.shiyeproject.json；混合模式另交付原始参考 PNG。':'展示 preview.png，最终完整 JSON 放在一个单行 json 代码块中，不省略字段，字符串换行保留转义。');
 }
 
 const utf8Start=(bytes)=>new TextDecoder('utf-8',{fatal:false}).decode(bytes);

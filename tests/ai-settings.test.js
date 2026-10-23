@@ -76,7 +76,7 @@ test('A-12: image input is scoped to verified endpoint/model combinations',()=>{
 test('settings always use editable creation and cannot revive retired method preferences',()=>{
   for(const mode of ['tools','json','image','zip','pdf']){
     const actual=normalizeAISettings({creationMode:mode,deliveryMode:mode,generationMode:'direct'});
-    assert.equal(actual.creationMode,'tools');
+    assert.equal(actual.creationMode,'edit');
     assert.equal(actual.deliveryMode,'tools');
     assert.equal(actual.generationMode,'agent');
     assert.equal(actual.snapshot,false);

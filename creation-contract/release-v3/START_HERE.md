@@ -23,3 +23,5 @@ scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canva
 
 ## 当前接口分工（不用记同义命令）
 普通更新统一 layer.update；显示遮罩 layer.mask（replace/intersect/subtract/clear）；真实裁切 material.cut（region+keep/remove）。分片与命名开窗仍分别用 material.split/material.window。数字复制 layer.duplicate，艺术标题整体重排 text.reflow；两者是结构操作，不塞进普通更新。所有专业操作按需 describe，不通读完整 Schema。
+
+需要手绘化、路径平滑/简化或布尔几何时，按需 `graphics help` 与 design/GRAPHICS_TOOL.md；计算只生成普通 Command 草稿，不直接改作品。

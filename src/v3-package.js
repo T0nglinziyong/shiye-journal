@@ -1,3 +1,5 @@
+import {offlineGraphicsSource} from './generated/offline-graphics-source.js';
+import {graphicsRequestSchema} from './graphics-contract.js';
 import {strToU8} from 'fflate';
 import {v3PackageLock} from './v3-package-lock.js';
 import {v3SceneSchema} from './v3-scene-schema.js';
@@ -40,10 +42,10 @@ export async function createV3PackageFiles({source,selected,chosen,work,guide,ru
  const revision=await fingerprint(new TextEncoder().encode(JSON.stringify(work)));
  const files={
   'START_HERE.md':encode(creationFixedFiles['START_HERE.md']),'TASK.json':encode(task),'scene.json':encode(work),'assets/overview.jpg':overviewBytes,'assets/manifest.json':encode(manifest),
-  'design/GUIDE.md':encode(guide),'design/CRAFT_GUIDE.md':encode(creationFixedFiles['design/CRAFT_GUIDE.md']),'design/SKILL.md':encode(creationFixedFiles['design/SKILL.md']),'design/PLAYBOOK.md':encode(creationFixedFiles['design/PLAYBOOK.md']),'design/REVIEW.md':encode(creationFixedFiles['design/REVIEW.md']),'design/LETTERING.md':encode(creationFixedFiles['design/LETTERING.md']),'design/GRAPHICS.md':encode(creationFixedFiles['design/GRAPHICS.md']),'design/RECIPES.md':encode(creationRecipes()),
+  'design/GUIDE.md':encode(guide),'design/CRAFT_GUIDE.md':encode(creationFixedFiles['design/CRAFT_GUIDE.md']),'design/SKILL.md':encode(creationFixedFiles['design/SKILL.md']),'design/PLAYBOOK.md':encode(creationFixedFiles['design/PLAYBOOK.md']),'design/REVIEW.md':encode(creationFixedFiles['design/REVIEW.md']),'design/LETTERING.md':encode(creationFixedFiles['design/LETTERING.md']),'design/GRAPHICS.md':encode(creationFixedFiles['design/GRAPHICS.md']),'design/GRAPHICS_TOOL.md':encode(creationFixedFiles['design/GRAPHICS_TOOL.md']),'design/RECIPES.md':encode(creationRecipes()),
   'api/fixed-release.json':encode({releaseId:creationFixedReleaseId,protocolVersion:2,files:Object.keys(creationFixedFiles)}),'api/commands.schema.json':encode(creationV2RuntimeSchema),'api/scene.schema.json':encode(v3SceneSchema),
   'work/commands.json':encode({protocolVersion:2,transactionId:'initial-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[]}),
-  'runtime/shiye.cjs':encode(runtime),'runtime/glyphs.cjs':encode(glyph),
+  'runtime/graphics.cjs':encode(offlineGraphicsSource),'api/graphics.schema.json':encode(graphicsRequestSchema),'runtime/shiye.cjs':encode(runtime),'runtime/glyphs.cjs':encode(glyph),
   'package.json':encode({name:'shiye-gpt-creation-v3',private:true,version:'3.0.0',dependencies:{canvas:'3.2.3'}}),'package-lock.json':encode(v3PackageLock)
  };
  for(const entry of entries)files[entry.image]=chosen.find(item=>item.alias===entry.alias).bytes;

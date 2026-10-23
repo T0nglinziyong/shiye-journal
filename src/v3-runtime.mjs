@@ -1,3 +1,5 @@
+import {verifyImageReference} from './image-reference-runtime.mjs';
+import {runGraphics} from './graphics-runtime.mjs';
 import {auditCreationDesign} from './creation-design-audit.js';
 import {offlineFontCatalog} from './offline-font-catalog.mjs';
 import {localGlyphOutline} from './creation-font-resolver.mjs';
@@ -50,11 +52,12 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  const doc=validateV3SceneDocument(load('scene.json'));
  if(canonicalTaskSource(doc.source)!==canonicalTaskSource(source))throw fail('SOURCE_CHANGED','scene.json 的只读来源与 TASK.json 不一致');
  const current=revision(doc);
- if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:2,topics:creationHelpTopics,operations:Object.values(creationCommandRegistry).map(({name,available,advanced,summary})=>({name,available,advanced,summary}))})+'\n');return;}
+ if(command==='graphics'){runGraphics(arg,current);return;}
+ if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:2,tools:[{name:'graphics',readOnly:true,help:'graphics help'}],topics:creationHelpTopics,operations:Object.values(creationCommandRegistry).map(({name,available,advanced,summary})=>({name,available,advanced,summary}))})+'\n');return;}
  if(command==='describe'){process.stdout.write(JSON.stringify({ok:true,...describeCreationV2Command(arg,{full})})+'\n');return;}
  if(command==='design-check'){const result={ok:true,sceneRevision:current,...auditCreationDesign(doc.page)};save('output/design-advisory.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
  if(command==='fonts'){process.stdout.write(JSON.stringify({ok:true,...offlineFontCatalog()})+'\n');return;}
- if(command==='info'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:2,supportedProtocolVersions:[2],taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'})+'\n');return;}
+ if(command==='info'){process.stdout.write(JSON.stringify({ok:true,tools:['graphics'],protocolVersion:2,supportedProtocolVersions:[2],taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'})+'\n');return;}
  if(command==='self-test'){
   const result={ok:false,node:process.version,renderer:null,fonts:'environment-dependent',hint:null};
   try{const canvas=await loadOfflineCanvas();result.ok=true;result.renderer=canvas.rendererBackend+'/shiye-scene-v2';}catch(e){result.hint=e.message;}
@@ -90,7 +93,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  }
  const info=inspectWebScene(doc,assets);
  if(command==='inspect'){const result={...info,sceneRevision:current,ledger:buildMaterialLedger(doc.page,assets)};save('output/scene-summary.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
- if(!['preview','pack','review'].includes(command))throw fail('UNKNOWN_COMMAND','支持 info/fonts/design-check/self-test/help/describe/begin/check/apply/preview/inspect/review/pack');
+ if(!['preview','pack','review'].includes(command))throw fail('UNKNOWN_COMMAND','支持 graphics/info/fonts/design-check/self-test/help/describe/begin/check/apply/preview/inspect/review/pack');
  const draft=validateWebScene(doc.page,source,assets),sceneHash=craftSceneHash(draft);
  if(command==='preview'){
   if(arg){
@@ -117,6 +120,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
   const review={result:arg,source:'agent-declared',sceneRevision:current,pngHash:capture.pngHash,reviewedAt:new Date().toISOString()};
   atomic('output/review.json',review);process.stdout.write(JSON.stringify({ok:true,...review})+'\n');return;
  }
+ const imageReference=verifyImageReference(source);
  verifiedImages(task);validateMaterialDecisions(doc.materialDecisions,draft,source);
  const capture=existsSync('output/preview-capture.json')?load('output/preview-capture.json'):null,png=existsSync('output/preview.png')?readFileSync('output/preview.png'):null;
  if(!capture||!png||capture.sceneRevision!==current||capture.sceneHash!==sceneHash||capture.pngHash!==sha(png)||capture.renderer!=='shiye-scene-v2')throw fail('PREVIEW_STALE','当前 Scene 缺少同源 PNG；先运行 preview');
@@ -125,6 +129,6 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  if(verified.report.rendererVersion!==capture.renderer||verified.report.rendererBackend!==capture.rendererBackend||sha(verified.png)!==capture.pngHash)throw fail('PREVIEW_STALE','PNG 与当前 Scene 的实际 Canvas 渲染不一致；请重新运行 preview');
  const result=webSceneDocument(source,draft,doc.title,doc.materialDecisions),bytes=JSON.stringify(result);writeFileSync('output/project.shiyeproject.json',bytes);
  const review=existsSync('output/review.json')?load('output/review.json'):null,visualReview=review?.sceneRevision===current&&review?.pngHash===capture.pngHash?{result:review.result,source:review.source}:null;
- const manifest={format:'shiye-v3-delivery',version:3,sceneRevision:current,sceneHash,sceneJsonHash:sha(readFileSync('scene.json')),projectHash:sha(bytes),previewHash:capture.pngHash,renderer:capture.renderer,rendererBackend:capture.rendererBackend,fonts:capture.fonts,assets:capture.assets,physical:'passed',reading:info.quality.reading,visualReview,materialDecisions:doc.materialDecisions,createdAt:new Date().toISOString()};
+ const manifest={format:'shiye-v3-delivery',version:3,...(imageReference?{imageReference}:{}),sceneRevision:current,sceneHash,sceneJsonHash:sha(readFileSync('scene.json')),projectHash:sha(bytes),previewHash:capture.pngHash,renderer:capture.renderer,rendererBackend:capture.rendererBackend,fonts:capture.fonts,assets:capture.assets,physical:'passed',reading:info.quality.reading,visualReview,materialDecisions:doc.materialDecisions,createdAt:new Date().toISOString()};
  atomic('output/manifest.json',manifest);process.stdout.write(JSON.stringify({ok:true,...manifest,durationMs:Math.round(performance.now()-started)})+'\n');
 }
