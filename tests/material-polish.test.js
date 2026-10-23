@@ -69,6 +69,15 @@ test('series layout chooses fan, nine-cell grid, then unrestricted pile',()=>{
   const a=slot.rotation*Math.PI/180,halfW=(Math.abs(Math.cos(a))*slot.w*360+Math.abs(Math.sin(a))*slot.h*300)/2,halfH=(Math.abs(Math.sin(a))*slot.w*360+Math.abs(Math.cos(a))*slot.h*300)/2;
   assert.ok(slot.x*360-halfW>=0&&slot.x*360+halfW<=360&&slot.y*300-halfH>=0&&slot.y*300+halfH<=300);
  }
+ for(const count of [10,18,50]){
+  const slots=seriesCoverLayout(count,'pile').slots;
+  // Each cutout gets a distinct visible center instead of hiding under the
+  // final item in one central stack.
+  for(let i=0;i<slots.length;i++)for(let j=i+1;j<slots.length;j++){
+   assert.ok(Math.abs(slots[i].x-slots[j].x)>slots[j].w*.45||
+     Math.abs(slots[i].y-slots[j].y)>slots[j].h*.45);
+  }
+ }
 });
 test('series matrix keeps selected sources in order and produces a bounded 360px image',()=>{
  const series={id:'s'},assets=Array.from({length:7},(_,i)=>({id:'a'+i,seriesID:'s'}));assert.deepEqual(seriesCovers(series,assets).map(a=>a.id),['a0','a1','a2','a3','a4','a5','a6']);

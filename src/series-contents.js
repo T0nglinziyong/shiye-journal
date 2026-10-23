@@ -17,6 +17,7 @@ export function seriesContentsModel(state){
   const series=state.series.find(item=>item.id===state.seriesID);
   if(!series)return null;
   const filter=filters(series.id);
-  return {series,filter,all:state.assets.filter(asset=>asset.seriesID===series.id&&!asset.isProjectInternal),
-    members:seriesMembers(series.id,state.assets,filter),covers:seriesCovers(series,state.assets)};
+  const effectiveSeries={...series,coverLayout:series.coverLayout??state.preferences?.seriesCoverLayout??'auto'};
+  return {series:effectiveSeries,filter,all:state.assets.filter(asset=>asset.seriesID===series.id&&!asset.isProjectInternal),
+    members:seriesMembers(series.id,state.assets,filter),covers:seriesCovers(effectiveSeries,state.assets)};
 }

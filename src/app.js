@@ -368,7 +368,7 @@ function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
   if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,mergeSharedCarrier:view.querySelector('#setting-merge-carrier').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false};
-  if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
+  if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value),seriesCoverLayout:view.querySelector('#setting-series-cover-layout').value};
 }
 const routeScroll=new Map();
 const mainNavigation=createMainNavigation();
@@ -739,6 +739,7 @@ function render(){
         }})
     :state.route==='series'
     ?createElement(SeriesPage,{series:state.series,assets:state.assets,display:state.preferences.display,
+      defaultCoverLayout:state.preferences.seriesCoverLayout,
       account:state.accountId||'browser',
       seriesCovers,source:image,onAction:handle,selection:parity,
       pageSize:state.preferences.maxPageItems,
@@ -2729,6 +2730,7 @@ function openSeriesEditor(id){
   const existing=state.series.find(item=>item.id===id);
   const members=existing?state.assets.filter(item=>item.seriesID===id&&!item.isProjectInternal):[];
   openOverlay(createElement(SeriesEditorDialog,{series:existing,members,assets:state.assets,
+    defaultCoverLayout:state.preferences.seriesCoverLayout,
     source:image,onClose:closeOverlay,onError:toast,onSave:async values=>{
       const next={...existing,id:existing?.id||uid(),
         createdAt:existing?.createdAt||new Date().toISOString(),

@@ -1,4 +1,5 @@
 import {recognitionModeAllowed,recognitionPixelsAllowed,candidateDiscoveryAllowed} from './recognition-profiles.js';
+import {seriesCoverMode} from './series-cover-layout.js';
 const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=4;
 const defaults={
   paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,autoOrganizeWorks:true,
@@ -14,7 +15,7 @@ const defaults={
   // precision-first manufactured aperture recovery.
   recognitionShapeRegularization:true,
   recognitionApertures:true,
-  customPaperWidth:210,customPaperHeight:297,display:'grid',backdrop:'auto',maxPageItems:40,
+  customPaperWidth:210,customPaperHeight:297,display:'grid',backdrop:'auto',maxPageItems:40,seriesCoverLayout:'auto',
   markTapeUsedWithProject:false
 };
 const migrateRecognition=value=>{
@@ -40,6 +41,7 @@ export function normalizePreferences(value={}){
     recognitionApertures:value?.recognitionApertures!==false,
     autoOrganize:value?.autoOrganize!==false,autoOrganizeWorks:value?.autoOrganizeWorks!==false,
     maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):40,
+    seriesCoverLayout:seriesCoverMode(value?.seriesCoverLayout),
     markTapeUsedWithProject:value?.markTapeUsedWithProject===true
   };
 }
