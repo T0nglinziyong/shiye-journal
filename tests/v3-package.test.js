@@ -38,7 +38,7 @@ async function withPackage(assets,fn,{p=project('统一创作测试'),canvas=tru
 }
 test('current ZIP creates editable Scene, recovers stale locks and verifies real PNG bytes',async()=>{
  const assets=[paper()];await withPackage(assets,async({files,dir,run,ok,read,write,batch})=>{
- for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/size-map.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
+ for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/size-map.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json','fonts/MaShanZheng-Regular.ttf','fonts/OFL.txt'])assert.ok(files[path],path);
   const task=JSON.parse(new TextDecoder().decode(files['TASK.json']));
   assert.equal(task.creativeBriefRef,'design/GUIDE.md');
   assert.equal(task.creativeBrief,undefined);
@@ -53,7 +53,7 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   const preview=ok('preview');assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);assert.deepEqual(preview.geometryReview.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});assert.equal(preview.pixelReview.pages.length,1);assert.ok(preview.pixelReview.pages[0].estimatedVisibleCoverage>0);ok('pack');
   const png=await readFile(join(dir,'output/preview.png'));assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
   assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,1);
-  const capture=await read('output/preview-capture.json');assert.equal(capture.rendererBackend,'node-canvas@3.2.3');
+  const capture=await read('output/preview-capture.json');assert.equal(capture.rendererBackend,'node-canvas@3.2.3');assert.equal(capture.fonts,'Ma Shan Zheng (bundled)');assert.equal(capture.pixelReview.pages.length,1);assert.equal(ok('fonts').recommended.hand,'Ma Shan Zheng');
   const forged=Buffer.from(png);forged[forged.length-1]^=1;capture.pngHash='sha256:'+createHash('sha256').update(forged).digest('hex');await writeFile(join(dir,'output/preview.png'),forged);await write('output/preview-capture.json',capture);
   assert.match(run('pack').stderr,/PREVIEW_STALE/);ok('preview');
   const scene=await read('scene.json');scene.page.paperColor='#eeeeee';await write('scene.json',scene);assert.match(run('pack').stderr,/PREVIEW_STALE/);

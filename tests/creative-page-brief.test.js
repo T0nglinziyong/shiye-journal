@@ -68,9 +68,10 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(api[1].content[0].text,/图文职责/);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,textMode:'rich'}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/连贯的多行正文/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/无意空洞/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/纸片错层/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/展开的随想/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/书写空间/);
+  assert.match(strFromU8(webFiles['design/REVIEW.md']),/空白|空区/);
+  assert.match(strFromU8(webFiles['design/REVIEW.md']),/书写面/);
   assert.match(strFromU8(webFiles['design/GUIDE.md']),/主图与旁注、错层图文/);
   assert.match(api[0].content,/主图与旁注、错层图文/);
   assert.ok(JSON.parse(strFromU8(webFiles['TASK.json'])).materials[0].journalRoles.includes('writing'));
@@ -107,7 +108,8 @@ test('both editable and image transports receive the same spread-specific page b
   assert.match(api[1].content[0].text,marker);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),marker);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/双页分别检查/);
+  assert.match(strFromU8(webFiles['design/REVIEW.md']),/中缝/);
   const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
   assert.match(image,marker);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{creationMode:'draw',includeThumbnails:true},previews:[{alias:'m1',bytes:tinyPNG}]});

@@ -40,5 +40,9 @@ export function auditRenderedPixels(data,width,height,{paperColor,pageMode}={}){
   result.push({page:count===1?'page':pageIndex===0?'page.left':'page.right',estimatedVisibleCoverage:Number((occupied.flat().filter(Boolean).length/(columns*rows)).toFixed(3)),largestLowPaintRectanglePx:Object.fromEntries(Object.entries(frame).map(([key,value])=>[key,Number(value.toFixed(1))])),lowPaintRectangleFraction:Number((largest.area/(columns*rows)).toFixed(3))});
  }
  const observations=result.filter(page=>page.estimatedVisibleCoverage<.5).map(page=>`${page.page} 的真实 PNG 中接近纸色的格子超过一半：缩看是否是有意的呼吸留白；若只是小正文和几件独立素材留下的大空区，优先重排真实纸片与书写，避免用无关大色块填补。`);
+ if(result.length===2&&Math.abs(result[0].estimatedVisibleCoverage-result[1].estimatedVisibleCoverage)>.14){
+  const lighter=result[0].estimatedVisibleCoverage<result[1].estimatedVisibleCoverage?result[0]:result[1];
+  observations.push(`${lighter.page} 的可见笔触比另一页少得多：缩看两页是否仍有意形成呼应；若这页只有一张完整卡片和一段独立小字，优先在现有纸面加入可读随写、让图形回应实物细节或调整主块，而非随机填色。`);
+ }
  return {kind:'pixel-advisory',method:'24x32 sampled PNG grid; a cell is painted when at least 2.5% of samples differ from the declared paper color by 18 RGB levels',limitations:'浅色素材、纸纹、照片内部的留白和遮挡都会影响估计。它不是可用书写面积或视觉质量评分，必须打开 PNG 判断。',pages:result,observations};
 }

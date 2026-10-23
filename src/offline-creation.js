@@ -16,7 +16,6 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
-import {creativePageBrief} from './creative-page-brief.js';
 import {imagePrompt} from './ai-image-generation.js';
 import {classifyJournalMaterial} from './journal-case-study.js';
 import {tapeDimensions,tapeRepeatRange} from './tape-strip.js';
@@ -67,7 +66,11 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
  const materialDirection=selected.length<=3
   ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
   :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。可让人物或小贴纸压住纸边、让正文写进真正可写处；露出有用轮廓，避免多件同心堆叠。';
- const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),webArtDirection(source),materialDirection,'先观察素材并构思素材之间的关系；只写 work/commands.json，经 apply 修改唯一 scene.json 后看真实预览。按需 help / describe；使用 material.cut、material.split、material.window、material.weave，曲线文字、胶带路径、字形镂空等同样使用公共参数；默认 describe 返回精简帮助，完整规范加 --full。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
+ // START_HERE and REVIEW own the reusable composition workflow. Keep this
+ // per-task guide short so the model can reach the actual materials sooner.
+ const textDirection=source.contentPolicy==='visual'||source.textMode==='none'?'本次不新增文字。':source.textMode==='requested'&&!source.userText?'没有明确文字要求时不主动配文。':source.textMode==='rich'?'本次可以写展开的随想：在真实书写空间内推进一个具体念头，再用短注回应素材细节；不靠口号或重复句子凑满。':source.textMode==='minimal'?'本次文字精炼，但图文关系仍须完成。':'新增文字长短随真实书写空间和内容而定。';
+ const pageDirection=source.mode==='spread'?'双页分别检查：每页都有主块、可读内容或明确的视觉回应；两页可一重图一重字，但不要把某页的空洞算作另一页的留白。':'缩看整页，再放大检查图文交界和细节。';
+ const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),webArtDirection(source),materialDirection,textDirection,pageDirection,'先看实物轮廓、印刷字和可写处，再让主块、文字与图形共同决定排版。两种候选只改变真实的素材职责或主次，不为比较而重写整份 Scene。只写 work/commands.json，局部修订继续用下一批 Command；对当前 Scene 真实预览。技术通过与视觉完成分开判断，具体诊断见 design/REVIEW.md；高级工艺按需 describe，不预读完整 Schema。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].filter(Boolean).join('\n\n');
  const files=await createV3PackageFiles({source,selected,chosen,work,guide,runtime:offlineValidateSource,glyph:offlineGlyphSource});
  if(creationMode!=='edit'){
   const task=JSON.parse(strFromU8(files['TASK.json']));task.creationMode=creationMode;task.imageRequestRef='image-request.json';

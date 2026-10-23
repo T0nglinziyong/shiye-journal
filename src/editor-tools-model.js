@@ -69,7 +69,28 @@ export function resizeObject(start,cornerX,cornerY,dx,dy){const a=(start.rotatio
 export function textLineHeight(t){return (typeof t.fixedLineHeight==='number'?t.fixedLineHeight:t.lineHeight||t.fontSize*1.3)+(t.lineSpacing??t.additionalLineSpacing??0);}
 export const textFontFamily=journalFontFamily;
 export function textFont(t){return `${t.italic?'italic ':''}${t.bold?'bold ':''}${t.fontSize}px ${textFontFamily(t)}`;}
-export function textLines(t,measure){const lines=[];let y=0;for(const paragraph of String(t.content).split('\n')){let line='';for(const ch of Array.from(paragraph)){if(line&&measure(line+ch)>textContentWidth(t)){lines.push({text:line,y});y+=textLineHeight(t);line='';}line+=ch;}lines.push({text:line,y});y+=textLineHeight(t)+(t.paragraphSpacing||0);}return {lines,height:y};}
+const noLineStart=new Set(Array.from('，。！？；：、）》」』】〕〉…,.!?;:%)]}'));
+const noLineEnd=new Set(Array.from('（《「『【〔〈([{'));
+export function textLines(t,measure){
+ const lines=[];let y=0;const width=textContentWidth(t),push=text=>{lines.push({text,y});y+=textLineHeight(t);};
+ for(const paragraph of String(t.content).split('\n')){
+  let line='';
+  for(const ch of Array.from(paragraph)){
+   if(line&&measure(line+ch)>width){
+    const chars=Array.from(line);let carry=ch;
+    if((noLineStart.has(ch)||noLineEnd.has(chars.at(-1)))&&chars.length>1){
+     carry=chars.pop()+ch;line=chars.join('');
+    }else if(/[A-Za-z0-9]/u.test(ch)){
+     const word=line.match(/[A-Za-z0-9]+$/u)?.[0];
+     if(word&&word.length<line.length&&measure(word+ch)<=width){carry=word+ch;line=line.slice(0,-word.length);}
+    }
+    push(line.replace(/[ \t]+$/u,''));line=/^[ \t]$/u.test(carry)?'':carry;
+   }else line+=ch;
+  }
+  push(line);y+=t.paragraphSpacing||0;
+ }
+ return {lines,height:y};
+}
 export function drawSceneText(ctx,node,frameHeight=node.height){
  ctx.save();
  try{

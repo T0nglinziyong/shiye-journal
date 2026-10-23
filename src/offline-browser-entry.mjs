@@ -1,6 +1,7 @@
 import {attachSceneV2,sceneLayerEntries} from './scene-v2.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
 import {auditOfflineCanvasDraft} from './offline-canvas-audit.js';
+import {auditRenderedPixels} from './creation-pixel-audit.js';
 const validImage=url=>typeof url==='string'&&/^data:image\/(?:png|webp|jpeg);base64,[a-zA-Z0-9+/]+=*$/.test(url);
 export async function render(payload){
  window.SHIYE_RENDER_READY=false;window.SHIYE_EXPORT_PREVIEW=null;window.SHIYE_RENDER_REPORT=null;
@@ -15,7 +16,9 @@ export async function render(payload){
  const missing=sourceIDs.filter(id=>!seen.has(id));if(missing.length)throw Error('这些素材未真正渲染：'+missing.join('、'));
  document.querySelector('#page').replaceChildren(canvas);
  const geometryAudit=auditOfflineCanvasDraft(payload.draft);
- const fullReport={...report,...geometryAudit,visibleSourceCount:sourceIDs.length,decodedSourceCount:seen.size,visualReview:'manual-required',reading:'pending',note:'Canvas 使用任务包图片与当前设备字体；不是对字体和阅读的自动验收'};
+ const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+ const pixelReview=auditRenderedPixels(pixels,canvas.width,canvas.height,{paperColor:payload.draft.paperColor,pageMode:payload.draft.pageMode});
+ const fullReport={...report,...geometryAudit,pixelReview,visibleSourceCount:sourceIDs.length,decodedSourceCount:seen.size,visualReview:'manual-required',reading:'pending',note:'Canvas 使用任务包图片与当前设备字体；不是对字体和阅读的自动验收'};
  status.textContent='已按拾页共用 Canvas 渲染（'+seen.size+' 件素材）。'+(geometryAudit.warnings.length?'发现 '+geometryAudit.warnings.length+' 项待检查问题；':'')+'请对照验收清单检查文字、抠图和图层。';
  const review=document.querySelector('#audit');if(review)review.textContent=geometryAudit.warnings.length?geometryAudit.warnings.join('；'):'基础几何检查未发现明显溢出，仍需人工检查实际画面';
  document.body.dataset.renderState='ready';button.disabled=false;

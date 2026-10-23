@@ -16,7 +16,7 @@ test('four current directions replace obsolete choices without reviving processi
   for(const label of [...styleGroups,...purposeGroups].flatMap(g=>[g.label,...g.options]).concat(Object.values(matchingContentOptions)))assert.equal(label.length,4);
 });
 
-test('API, editable ZIP and image routes use the same material-dependent and expressive contract',async()=>{
+test('API, editable ZIP and image routes preserve expressive intent while the ZIP keeps task guidance concise',async()=>{
   const p=project('测试');p.styles=['随材而定','自动安排'];p.purposes=['自由创作'];
   const assets=[{id:'letter',title:'印刷标题 JOURNEY',kind:'text',physicalWidthMM:60,physicalHeightMM:25,tags:['字母']}];
   const params=creativeRunParameters({project:p,draft:p.drafts[0],assets,ids:['letter'],settings:{}});
@@ -26,11 +26,16 @@ test('API, editable ZIP and image routes use the same material-dependent and exp
   const files=unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
   const guide=strFromU8(files['design/GUIDE.md']);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets,ids:['letter'],includeImages:false});
-  for(const text of [api,guide,image]){
+  for(const text of [api,image]){
     assert.match(text,/结合表达构思书写空间/);assert.match(text,/不要先划固定正文框/);assert.match(text,/可编辑图形与图案/);assert.match(text,/vectorPaths\/vectorLayers/);assert.match(text,/不伪装成用户拥有的实体贴纸/);assert.match(text,/不要先把大素材排满/);assert.match(text,/素材职责必须拉开/);assert.match(text,/脱离图像通读/);assert.match(text,/灵感随写/);assert.match(text,/俏皮态度/);assert.match(text,/长、中、短版本/);
     assert.match(text,/图文对话/);assert.match(text,/window 开窗/);assert.match(text,/不无限缩小字号/);
     assert.doesNotMatch(text,/只能写客观观察/);
   }
+  assert.match(guide,/灵感随写/);assert.match(guide,/俏皮态度/);
+  assert.match(guide,/本次素材较少/);assert.match(guide,/真实预览/);
+  assert.ok(guide.length<5000);
+  assert.match(strFromU8(files['START_HERE.md']),/图文素材共同构图|主块/);
+  assert.match(strFromU8(files['design/REVIEW.md']),/文字.*图形.*素材|图文关系/);
   assert.equal(files['task/knowledge.json'],undefined);
   assert.equal(bundle.source.processing,'自由拆解');
   assert.equal(bundle.source.contentPolicy,'original');

@@ -67,7 +67,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  if(command==='info'){process.stdout.write(JSON.stringify({ok:true,tools:['graphics'],protocolVersion:2,supportedProtocolVersions:[2],taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'})+'\n');return;}
  if(command==='self-test'){
   const result={ok:false,node:process.version,renderer:null,fonts:'environment-dependent',hint:null};
-  try{const canvas=await loadOfflineCanvas();result.ok=true;result.renderer=canvas.rendererBackend+'/shiye-scene-v2';}catch(e){result.hint=e.message;}
+  try{const canvas=await loadOfflineCanvas();result.ok=true;result.renderer=canvas.rendererBackend+'/shiye-scene-v2';result.fonts=existsSync('fonts/MaShanZheng-Regular.ttf')?'Ma Shan Zheng (bundled)':'environment-dependent';}catch(e){result.hint=e.message;}
   save('output/self-test.json',result);process.stdout.write(JSON.stringify(result)+'\n');if(!result.ok)process.exitCode=1;return;
  }
  if(command==='begin'){
@@ -112,15 +112,15 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
    mkdirSync('output/proposals',{recursive:true});const stem=input.transactionId;
    writeFileSync('output/proposals/'+stem+'.png',png);
    const advisory=auditCreationDesign(page,{materials:task.materials,styles:task.styles});
-   const result={ok:true,proposal:true,baseSceneRevision:current,proposedSceneHash:report.sceneHash,pngHash:sha(png),path:'output/proposals/'+stem+'.png',geometryReview:{observations:advisory.observations,graphicVocabulary:advisory.graphicVocabulary,graphicScale:advisory.graphicScale,estimatedGraphicPaintFraction:advisory.estimatedGraphicPaintFraction,materialFrames:advisory.materialFrames,pages:advisory.pages},pixelReview:await pixelAdvisory(png,page,canvasModule)};
+   const result={ok:true,proposal:true,baseSceneRevision:current,proposedSceneHash:report.sceneHash,pngHash:sha(png),path:'output/proposals/'+stem+'.png',geometryReview:{observations:advisory.observations,graphicVocabulary:advisory.graphicVocabulary,graphicScale:advisory.graphicScale,estimatedGraphicPaintFraction:advisory.estimatedGraphicPaintFraction,materialFrames:advisory.materialFrames,pages:advisory.pages},pixelReview:report.pixelReview||await pixelAdvisory(png,page,canvasModule)};
    atomic('output/proposals/'+stem+'.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;
   }
   const canvasModule=await loadOfflineCanvas(),{png,report}=await renderOfflinePNG(draft,source,verifiedImages(task),canvasModule),dimensions=pngSize(png);
   if(report.sceneHash!==sceneHash||dimensions.width!==Math.round(draft.canvas.width)||dimensions.height!==Math.round(draft.canvas.height))throw fail('RENDER_MISMATCH','渲染摘要或尺寸与当前 Scene 不符');
   writeFileSync('output/preview.png',png);
-  const capture={sceneRevision:current,sceneHash,pngHash:sha(png),renderer:report.rendererVersion,rendererBackend:report.rendererBackend,fonts:'environment-dependent',assets:Object.fromEntries(task.materials.map(m=>[m.alias,m.sha256])),...dimensions,renderedAt:new Date().toISOString(),visualReview:'pending'};
+  const pixels=report.pixelReview||await pixelAdvisory(png,draft,canvasModule);
+  const capture={sceneRevision:current,sceneHash,pngHash:sha(png),renderer:report.rendererVersion,rendererBackend:report.rendererBackend,fonts:report.fontReview,pixelReview:pixels,assets:Object.fromEntries(task.materials.map(m=>[m.alias,m.sha256])),...dimensions,renderedAt:new Date().toISOString(),visualReview:'pending'};
   const advisory=auditCreationDesign(draft,{materials:task.materials,styles:task.styles});
-  const pixels=await pixelAdvisory(png,draft,canvasModule);
   atomic('output/preview-capture.json',capture);process.stdout.write(JSON.stringify({ok:true,...capture,geometryReview:{observations:advisory.observations,graphicVocabulary:advisory.graphicVocabulary,graphicScale:advisory.graphicScale,estimatedGraphicPaintFraction:advisory.estimatedGraphicPaintFraction,materialFrames:advisory.materialFrames,pages:advisory.pages},pixelReview:pixels,durationMs:Math.round(performance.now()-started)})+'\n');return;
  }
  if(command==='review'){
@@ -130,7 +130,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
   const advisory=auditCreationDesign(draft,{materials:task.materials,styles:task.styles});
   const reviewedPNG=readFileSync('output/preview.png');
   if(sha(reviewedPNG)!==capture.pngHash)throw fail('PREVIEW_STALE','预览 PNG 与当前记录不一致；先重新运行 preview');
-  const pixels=await pixelAdvisory(reviewedPNG,draft,await loadOfflineCanvas());
+  const pixels=capture.pixelReview||await pixelAdvisory(reviewedPNG,draft,await loadOfflineCanvas());
   const review={result:arg,source:'agent-declared',sceneRevision:current,pngHash:capture.pngHash,reviewedAt:new Date().toISOString(),geometryAdvisories:advisory.observations,pixelReview:pixels};
   atomic('output/review.json',review);process.stdout.write(JSON.stringify({ok:true,...review,reminder:'这是创作者声明；用真实 PNG 核对低笔触区和几何提示，若仍有显著问题应继续修改，不能据此宣称独立视觉验收通过。'})+'\n');return;
  }

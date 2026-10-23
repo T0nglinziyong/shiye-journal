@@ -13,4 +13,5 @@ test('rendered-pixel advisory exposes visually empty space hidden by a transpare
  assert.ok(result.pages[1].estimatedVisibleCoverage<.01);
  assert.ok(result.pages[1].lowPaintRectangleFraction>.9);
  assert.match(result.observations.join(' '),/page.right/);
+ assert.match(result.observations.join(' '),/比另一页少得多/);
 });

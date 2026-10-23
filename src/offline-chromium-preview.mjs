@@ -1,8 +1,8 @@
 import {spawn,spawnSync} from 'node:child_process';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
 import {offlineBrowserSource} from './generated/offline-browser-source.js';
 import {offlineBrowserPage} from './offline-browser-page.js';
 
@@ -18,6 +18,8 @@ export function findOfflineChromium(){
 // Private CDP pipe transport: no debug TCP port, remote page or asset upload.
 export async function renderChromiumPNG(draft,source,images,backend){
  const profile=await mkdtemp(join(tmpdir(),'shiye-render-'));
+ const handFontPath=resolve(process.cwd(),'fonts/MaShanZheng-Regular.ttf');
+ const handFont=existsSync(handFontPath)?readFileSync(handFontPath):null;
  const flags=['--headless=new','--disable-background-networking','--no-first-run','--no-default-browser-check','--remote-debugging-pipe','--user-data-dir='+profile,'about:blank'];
  if(process.env.SHIYE_CHROMIUM_NO_SANDBOX==='1')flags.unshift('--no-sandbox');
  const child=spawn(backend.path,flags,{stdio:['ignore','ignore','pipe','pipe','pipe']});
@@ -50,7 +52,7 @@ export async function renderChromiumPNG(draft,source,images,backend){
   await call('Page.enable',{},sessionId);await call('Network.enable',{},sessionId);
   await call('Network.setBlockedURLs',{urls:['http://*','https://*','ftp://*']},sessionId);
   const {frameTree}=await call('Page.getFrameTree',{},sessionId);
-  await call('Page.setDocumentContent',{frameId:frameTree.frame.id,html:offlineBrowserPage(draft,source,images,offlineBrowserSource)},sessionId);
+  await call('Page.setDocumentContent',{frameId:frameTree.frame.id,html:offlineBrowserPage(draft,source,images,offlineBrowserSource,handFont)},sessionId);
   const response=await call('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{
    const until=Date.now()+25000;
    while(!window.SHIYE_RENDER_READY){
@@ -63,7 +65,7 @@ export async function renderChromiumPNG(draft,source,images,backend){
   if(response.exceptionDetails)throw Error(response.exceptionDetails.exception?.description||response.exceptionDetails.text);
   const {preview,report}=response.result.value||{};
   if(!preview?.png?.startsWith('data:image/png;base64,'))throw Error('浏览器没有生成真实 PNG');
-  return {png:Buffer.from(preview.png.slice('data:image/png;base64,'.length),'base64'),report:{...report,rendererBackend:'browser-canvas/'+version.product,fontReview:'environment-dependent'}};
+  return {png:Buffer.from(preview.png.slice('data:image/png;base64,'.length),'base64'),report:{...report,rendererBackend:'browser-canvas/'+version.product,fontReview:handFont?'Ma Shan Zheng (bundled)':'environment-dependent'}};
  }finally{
   failAll(Error('浏览器渲染会话已结束'));
   if(child.exitCode===null){
