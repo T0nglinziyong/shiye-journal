@@ -10,7 +10,7 @@
 #view .import-review .review-background-card{overflow:visible}
 #view .import-review .review-background-card .review-paper-controls{
  position:static;transform:none;width:100%;box-shadow:none;background:transparent;
- padding:8px 0 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(39px,auto) 30px;
+ padding:8px 0 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(50px,auto) 30px;
  gap:4px;align-items:center;
 }
 #view .import-review .review-background-card .review-paper-controls>*{
