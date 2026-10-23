@@ -40,7 +40,7 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
  const assets=[paper()];await withPackage(assets,async({files,dir,run,ok,read,write,batch})=>{
  for(const path of ['START_HERE.md','TASK.json','scene.json','assets/overview.jpg','assets/size-map.jpg','assets/m1.png','assets/manifest.json','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json','fonts/MaShanZheng-Regular.ttf','fonts/OFL.txt'])assert.ok(files[path],path);
   const task=JSON.parse(new TextDecoder().decode(files['TASK.json']));
-  assert.equal(task.creativeBriefRef,'design/GUIDE.md');
+  assert.equal(task.creativeBriefRef,'design/GUIDE.md');assert.equal(task.materials[0].selection,'preferred');
   assert.equal(task.creativeBrief,undefined);
   assert.ok(files[task.creativeBriefRef]);
   assert.equal(JSON.parse(run('pack','--help').stdout).readOnly,true);
@@ -50,7 +50,7 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   await write('work/commands.json',commands);
   const lock=join(dir,'work/.scene-write-lock');await mkdir(lock);await writeFile(join(lock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));await utimes(lock,new Date(Date.now()-120000),new Date(Date.now()-120000));
   ok('apply','work/commands.json');assert.equal(ok('apply','work/commands.json').replayed,true);
-  const preview=ok('preview');assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);assert.deepEqual(preview.geometryReview.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});assert.equal(preview.pixelReview.pages.length,1);assert.ok(preview.pixelReview.pages[0].estimatedVisibleCoverage>0);ok('pack');
+  const compact=ok('preview');assert.equal(compact.path,'output/preview.png');assert.equal(compact.geometryReview,undefined);assert.equal(compact.pixelReview,undefined);assert.ok(JSON.stringify(compact).length<1200);const saved=await read(compact.diagnosticsPath);assert.equal(saved.pngHash,compact.pngHash);const preview=ok('preview','--full');assert.equal(preview.pngHash,compact.pngHash);assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);assert.deepEqual(preview.geometryReview.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});assert.equal(preview.pixelReview.pages.length,1);assert.ok(preview.pixelReview.pages[0].estimatedVisibleCoverage>0);ok('pack');
   const png=await readFile(join(dir,'output/preview.png'));assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
   assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,1);
   const capture=await read('output/preview-capture.json');assert.equal(capture.rendererBackend,'node-canvas@3.2.3');assert.equal(capture.fonts,'Ma Shan Zheng (bundled)');assert.equal(capture.pixelReview.pages.length,1);assert.equal(ok('fonts').recommended.hand,'Ma Shan Zheng');
@@ -62,6 +62,7 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
 test('one public protocol exposes executable help and delivers mask vector ink text',async()=>{
  await withPackage([paper('photo',30,20)],async({files,dir,ok,read,apply})=>{
   const help=ok('help');assert.equal(help.protocolVersion,2);assert.equal(help.operations.length,Object.keys(creationCommandRegistry).length);
+  const described=ok('describe','material.add','text.add','graphic.add');assert.equal(described.descriptions.length,3);for(const [index,topic] of ['material.add','text.add','graphic.add'].entries()){const {ok:_,...single}=ok('describe',topic);assert.deepEqual(described.descriptions[index],single);}
   assert.ok(help.operations.some(row=>row.name==='material.glyphKnockout'));assert.ok(help.operations.every(row=>!row.name.startsWith('native.')));assert.ok(help.topics.includes('place'));
   assert.doesNotMatch(new TextDecoder().decode(files['api/commands.schema.json']),/native\./);
   assert.equal((await read('work/commands.json')).protocolVersion,2);ok('begin','work/next.json','--protocol=2');assert.equal((await read('work/next.json')).protocolVersion,2);
@@ -151,15 +152,17 @@ test('check and proposal leave Scene unchanged; unified text update and review d
   const before=await readFile(join(dir,'scene.json'));assert.equal(ok('describe','material.split').name,'material.split');ok('begin','work/draft.json');assert.match(run('begin','work/draft.json').stderr,/DRAFT_EXISTS/);
   const commands=await read('work/draft.json');commands.operations=[material('piece','m1',mm(30,40)),text('caption','真实字号',55,20,40,12),{op:'layer.update',target:'caption',style:{fontSizePt:10},place:mm(60,25)},decision('m1')];await write('work/draft.json',commands);
   ok('check','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);ok('preview','--commands','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);await assert.rejects(readFile(join(dir,'output/preview.png')),{code:'ENOENT'});
+  for(const args of [['--full','--commands','work/draft.json'],['--commands','work/draft.json','--full']]){assert.equal(ok('preview',...args).proposal,true);assert.deepEqual(await readFile(join(dir,'scene.json')),before);await assert.rejects(readFile(join(dir,'output/preview.png')),{code:'ENOENT'});}
+  assert.match(run('preview','--full','--commands').stderr,/COMMAND_PATH_INVALID/);await assert.rejects(readFile(join(dir,'output/preview.png')),{code:'ENOENT'});
   ok('apply','work/draft.json');const scene=await read('scene.json'),caption=scene.page.layers.find(n=>n.agentKey==='caption'),scale=scene.page.canvas.height/scene.page.physicalPageHeightMM;
   assert.ok(Math.abs(caption.fontSize-10*25.4/72*scale)<1e-6);assert.ok(Math.abs(caption.x-60*scale)<1e-6);ok('preview');const review=ok('review','--result','pass');assert.ok(Array.isArray(review.geometryAdvisories));assert.equal(review.pixelReview.pages.length,1);assert.match(review.reminder,/创作者声明/);ok('pack');assert.deepEqual((await read('output/manifest.json')).visualReview,{result:'pass',source:'agent-declared'});
  });
 });
-test('rich review requires a rendered crafted mark, then accepts a direct editable sketch',async()=>{
+test('review records agent judgement without imposing an aesthetic graphic quota',async()=>{
  const p=project('手绘完成态',{mode:'spread',ratio:'b6'});p.styles=['手作便签','丰富层叠'];
  await withPackage([paper()],async({run,ok,read,apply})=>{
   await apply([material('paper','m1',mm(42,72)),text('note','今天把这张纸留下。',32,105,68,12),decision('m1')]);
-  ok('preview');assert.match(run('review','pass').stderr,/VISUAL_REVIEW_INCOMPLETE/);
+  assert.match(run('review','pass').stderr,/PREVIEW_STALE/);ok('preview');assert.equal(ok('review','pass').source,'agent-declared');
   await apply([{op:'graphic.add',id:'paper-edge',geometry:{kind:'sketch',motif:'corner',seed:23},place:{reference:'node:paper',at:[.05,.05],unit:'ratio'},size:{width:22,height:22,unit:'mm'},style:{fill:null,stroke:'#799897',strokeWidthMm:.55}}]);
   const scene=await read('scene.json'),mark=scene.page.layers.find(node=>node.id==='paper-edge');
   assert.equal(mark.kind,'vector');assert.ok(mark.svgPaths[0].d.startsWith('M'));
@@ -169,6 +172,7 @@ test('rich review requires a rendered crafted mark, then accepts a direct editab
 test('eight required materials survive revisions grouping preview delivery and reopen',async()=>{
  const assets=Array.from({length:8},(_,i)=>paper('required-'+i,20,24)),p=project('八件素材双页',{mode:'spread',ratio:'b6'});p.requiredAssetIDs=assets.map(a=>a.id);
  await withPackage(assets,async({dir,ok,read,apply})=>{
+  assert.ok((await read('TASK.json')).materials.every(m=>m.selection==='required'));
   await apply([...assets.map((a,i)=>material('piece-'+i,'m'+(i+1),mm(25+(i%4)*44,40+Math.floor(i/4)*43))),...assets.map((a,i)=>decision('m'+(i+1)))]);
   await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'graphic.add',id:'accent',geometry:{kind:'ellipse'},place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'},order:{after:'title'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.update',target:'heading-group',place:mm(115,20)}]);
   await apply([{op:'layer.update',target:'note',style:{fontSizePt:11},place:mm(185,142),content:'八件小东西有各自的位置。\n把它们放在一起，今天就有了形状。'}]);ok('preview');ok('pack');assert.equal((await read('scene.json')).materialDecisions.length,8);assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,8);

@@ -39,10 +39,8 @@ test('composition density choice changes the shared creative direction',()=>{
   const automatic=creativePageBrief({styles:['随材而定','自动安排']});
   assert.match(sparse,/本次选择疏朗留白/);
   assert.match(layered,/本次选择丰富层叠/);
-  assert.match(layered,/先比较两种主块比例或素材职责真正不同的试摆/);
-  assert.match(layered,/首次试摆就从实际素材中找一个可延伸的形状、颜色或动作/);
-  assert.match(layered,/预览后在另一处试不同尺度与作用的手绘回应/);
-  assert.match(layered,/具体交界处相互回应/);
+  assert.match(layered,/有不同职责的组合/);
+  assert.match(layered,/不强制主路径、大图形/);
   assert.match(automatic,/默认疏密随素材而定/);
   assert.doesNotMatch(sparse,/本次选择丰富层叠/);
 });

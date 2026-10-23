@@ -1,28 +1,36 @@
 # 拾页 GPT 创作包 · 图文素材共同构图
 
-scene.json 是唯一作品。预览必须由同一 Scene 通过真实 Node Canvas 或经验证的浏览器 Canvas 渲染；实际打开 output/preview.png，最后交付 output/project.shiyeproject.json 与 PNG。不得用示意图代替。字段不清时查 api/commands.schema.json，通常只需 describe。
+交付一页有表达、能细看的完成态手帐，以及对应的可编辑 JSON。scene.json 是唯一作品；所有预览来自它的真实 Node Canvas 或经验证的浏览器 Canvas 渲染。用 `work/commands.json` 编辑，不手写 Scene，不另写 Python/JavaScript 创作程序。
 
-## 最短有效路线
-包内已有 `work/commands.json` 初稿。首次直接填它的 operations；每次 apply 后，要在同一路径开始新事务时，改用新的 transactionId 和 `info` 返回的 sceneRevision。`begin` 不会覆盖已有文件，无须为此重新安装依赖或重新生成整页。
-1. 读 TASK.json 的任务字段和 design/GUIDE.md，看 assets/overview.jpg、assets/size-map.jpg 与必要原图。TASK.sourceContext 是运行时使用的来源快照，无须逐字段阅读。总览图为各件独立放大观察；尺寸图用同一毫米比例，判断真实大小以尺寸图和 TASK 为准。materials.metadataHints 直接提供现有素材分类标签，它只是观察线索，实际图片与用户事实优先。TASK 的 creativeBriefRef 指向同一份动态指导；先用 `describe` 查当前需要的命令，遇到高级工艺才读 design/SKILL.md 或对应专题，别在第一次试摆前通读所有文档。保留真实来源、尺寸和用户事实。
-2. **试摆阶段**：辨认主角、可写纸面、连接物和小件。TASK.requiredAssetIDs 之外的材料可不选用，须记录取舍；不为展示每件素材牺牲书写空间。让主角、底纸、书写面叠压，并露出有用边缘；素材少时也可让大字或段落成为主块。若 TASK.styles 含“丰富层叠”，先做两种**主块比例或素材职责真正不同**的结构草稿，各用 `preview --commands` 看真实候选 PNG，选更有图文关系的一种再 apply；不要把两套完整 Scene 都写出来。首批 Commands 要从本次实物轮廓、颜色或动作画出一个**看得见的主图形关系**，例如一段从纸边走向照片的断续笔路、回应花束方向的线形、跨过两张纸的局部色带；不要先放完素材和正文，最后只补一个小圈。图形是否有效以真实 PNG 为准。若强印刷字卡在缩略图中吞掉整页，应先改露出面积、位置、合法裁片或相邻文字重量，再继续写正文。
-3. **内容阶段**：根据试排中的真实书写空间决定正文长度、标题或独立字条，再反过来调整素材。画布空白本身就是手帐纸，能直接写；不用把所有字塞进贴上的卡片。用字重、颜色、行距与分组构成层次；不能把大印刷标题之外的文字都缩成图注。若所有新文字集中在一张印刷卡片或唯一整齐文本框里，先把一段随写移到另一处纸面或素材边缘，写出本次素材的具体细节，再检查阅读路线；别靠重复抽象口号填字数。
-4. **细节阶段**：拿当前 PNG 找出两页各自最弱的一个具体图文关系，分别试画回应，再比较修订前后：可以是照片与纸片间的阅读路线、文字背后的短荧光、圈住实物细节的多笔线、沿裁边的断续痕迹。`sketch.trail` 一次生成可编辑断续线，`sketch.rays` 一次生成不等长放射笔痕；它们与 marker、自由 stroke 均走 `graphic.add`，无需另写脚本。只保留真正增加关系的笔痕，但不能把“图形很轻”或“只有一个小圈”当成丰富层叠的完成状态；此时换用途和尺度再试，而非直接 pass。不要用与素材无关的大浅色椭圆衬满一页，也不要拿随机星点补无作用空区。主色可占较大面积，强调色集中在关键处；具体问题查 design/PLAYBOOK.md。`graphic.add` 的 ellipse/rect/sketch/stroke 共用 place/size/style；填色不需要描边时只给 style.fill。高级手绘计算按需 `graphics help`。
-5. apply 后 preview 看当前 Scene。返回的 geometryReview 会列出框级空区、图形尺度、粗略笔触面积、高亮层级与大素材上的新增图层；先据此定位，再打开 PNG 判断，不能把几何提示当成审美结论。若提示图形“小范围”或“笔触面积很轻”，先检查画面是否只有小圈短线或一条淡色长线；如确实缺乏组织关系，试一个连接两件素材或承托正文的图形，使用 `node:<id>` 相对定位到相关对象，再比较 PNG。若提示高亮在文字上方，确认是否遮字，背景高亮用 `order.before` 放到对应文字后。出现大空洞、遮字或素材相互孤立时，用下一事务局部修订；不为凑轮次重复渲染。
-6. 按 design/REVIEW.md 看整页、文字和局部。分别指出最大无作用空区、最弱的一段新增文字、最像并排展示而缺少关系的素材；存在明显问题就针对这些对象用一批局部 Commands 修正，再看 PNG。特别看大块纹样纸是否只有图案而无图文关系、现成印刷大字是否压过全部新增内容；前者可改成局部底纸或承载相关文字，后者可调整位置与合法裁切。**自评仍能指出这些未解决的显著问题时，不得声明 `review pass`。**除非 TASK 明确要求大留白，默认画面应充实、疏密有序；空洞先用主块/文字/图形重排解决，不撒小物填平；边距、行距和必要停顿必须保留。
-7. 补齐 material.decision，review 后 pack。代码校验通过不代表审美完成；最终 PNG、Scene 必须一致。
+## 开始
 
-## 按需工具
-- 先运行 `node runtime/shiye.cjs self-test`；只在它报告缺少 Canvas 时安装 `package-lock.json` 指定的依赖，不为每次局部修改重复 `npm ci`。用 `info` 读取当前修订；后续事务用 `begin work/next.json`。
-- 不会用某个操作就 `describe <op>`；`--full` 才展开完整 Schema。公共参数查 place/size/style/geometry/region。
-- 文字描边/渐变：`text.add / layer.update` 的 style.outline / style.gradient。逐字异体标题：`text.lettering`。看 design/LETTERING.md；字体查询用 `fonts`。
-- 图形和绘画统一 `graphic.add`：geometry 决定预设图形、sketch、path 或 stroke，place/size/style/order 与修改共用。看 design/GRAPHICS.md。不设置点缀命令；文字、素材、胶带、图形、笔迹都能点缀。数字色带不能冒充有来源的实体胶带。首个图形预览不佳时，换一个作用不同的图形再试，不要只删掉就交付。
-- 主体、正文与支撑图形占位：layer.update / group.compose / graphic.add；必要裁取用 material.cut / split。不能缩放实物填空。
-- `design-check` 仅返回图层框覆盖、字级和空区建议，忽略真实透明度、图案和字形。`preview` 若使用 Node Canvas 还会返回 `pixelReview`，从真实 PNG 标出低笔触区：透明素材大框造成的“假覆盖”可由此发现。两者都不是审美评分；用它们定位区域，再实际看 PNG 决定重排、补写或保留呼吸留白。
+1. `node runtime/shiye.cjs self-test` 检查渲染环境；通过即开始，不重复安装。缺少依赖才按 package-lock 安装。
+2. 读 TASK.json 的任务字段和 design/GUIDE.md；看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览用于辨认内容，尺寸图与毫米数据用于判断真实大小。sourceContext 是运行时来源快照，无须逐字段读。
+3. 可一次查询 `describe material.add text.add graphic.add`，之后只查本次需要的命令。普通帮助已有最小例子；只有需要某项高级功能时才查 `--full`、api/commands.schema.json 或专题文档。
 
-不手写 Scene、不写 Python/JS 创作脚本、不复制示例坐标/旧 revision，不执行 native.* 或协议 1。固定例子在 design/RECIPES.md，精细排版例子在 design/LETTERING.md。两份字体相近的文字错位不是渐变，阴影不是完整描边。
+## 创作与迭代
 
-## 当前接口分工（不用记同义命令）
-普通更新统一 layer.update；显示遮罩 layer.mask（replace/intersect/subtract/clear）；真实裁切 material.cut（region+keep/remove）。分片与命名开窗仍分别用 material.split/material.window。数字复制 layer.duplicate，艺术标题整体重排 text.reflow；两者是结构操作，不塞进普通更新。所有专业操作按需 describe，不通读完整 Schema。
+先从本批材料找到想表达的内容，同时决定各件材料承担什么职责。将相关的材料、书写和局部图形组织成有主次的组合，再形成整页；材料少时书写和绘画也能承担视觉重量。具体方式见任务指导，不固定模板、主路径、图形种类或装饰数量。
 
-需要手绘化、路径平滑/简化或布尔几何时，按需 `graphics help` 与 design/GRAPHICS_TOOL.md；计算只生成普通 Command 草稿，不直接改作品。
+用一批命令完成第一张可判断的整体稿：主要材料、实际文字和关键细节一起出现。不能只摆图片然后判断完成度。构图方向明确时直接创作；只有两种结构难以取舍时，才用 `preview --commands work/<候选>.json` 比较。候选应改变材料职责或图文组织，而非仅换坐标颜色。
+
+`apply work/commands.json` 后运行 `preview`，**打开返回路径的真实 PNG**。先看整页的主次和充实程度，再看可读内容、材料交界和局部细节。几何或像素报告只是定位工具，默认保存在 diagnosticsPath；需要时读取或用 `preview --full`，不要为消除提示而加粗线、扩大色块。
+
+每次修改先用一句话写清“画面哪里不成立、为什么、这次改什么”。若整页仍是完整图片加独立正文框，应重分材料职责和书写空间；只挪几毫米、加一个圈不会解决这个问题。若整体成立，才修具体换行、遮挡、局部高亮等。图形、剪裁和叠压服务内容，可大胆尝试，也可删除无用尝试。连续局部修订无收益时换结构，不继续沿同一方向堆元素。
+
+下一事务用 `begin work/next.json`，填写 operations；不要重复旧 transactionId 或 revision。候选预览不改 Scene；选中候选后 apply，再预览当前 Scene。正常无需先 check 再 apply，apply 本身原子校验，失败不会留下半幅作品。
+
+## 收尾
+
+实际打开 output/preview.png，按 design/REVIEW.md 审查当前 PNG，补齐 material.decision，记录 `review pass` 或 `review fail` 后 `pack`。自评是创作者声明，不是独立验收；明显未解决的问题应如实说明。最终交付 output/preview.png 和 output/project.shiyeproject.json，二者必须同源。pack 会重新核对真实渲染和素材来源。
+
+## 按需能力
+
+- 普通位置、内容和样式：layer.update；组合：group.create / group.compose。
+- 高级工艺按需查 design/SKILL.md；问题与方法查 design/PLAYBOOK.md。
+- 真实裁切/余料：material.cut / split / window；显示遮罩：layer.mask。不要混淆显示隐藏与实体取料。
+- 图形、笔迹：graphic.add，支持预设、自由路径、stroke、sketch。手绘化和布尔几何按需 `graphics help`、design/GRAPHICS_TOOL.md。
+- 字体：fonts；艺术字：text.lettering；详见 design/LETTERING.md。
+- inspect 查询当前图层与用量；design-check 按需定位几何问题。完整命令清单用 help，精确字段用 describe。
+
+实体尺寸、来源、裁片占用与用户事实必须保留。原创想法可以自由写，不把它冒充用户发生过的经历。高级工艺不设配额，也不因担心技术细节而放弃必要的素材加工。
