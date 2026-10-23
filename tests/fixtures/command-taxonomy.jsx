@@ -8,6 +8,7 @@ import {webSceneDocument} from '../../src/web-scene-workbench.js';
 import {applyCreationV2Batch} from '../../src/creation-v2-commands.js';
 import {describeCreationCommand} from '../../src/creation-v2-contract.js';
 import {findSceneNode} from '../../src/scene-v2.js';
+import {creationNode} from '../../src/creation-scene-core.js';
 import {worldBox} from '../../src/scene-spatial.js';
 import {renderSceneCanvas} from '../../src/scene-renderer.js';
 import {createFabricSceneBridge} from '../../src/fabric-scene-bridge.js';
@@ -49,7 +50,7 @@ function Form(){
 }
 function App(){useEffect(()=>{(async()=>{
  await render();const n={...structuredClone(findSceneNode(doc.page,'leaf')),x:140,y:90,width:110,height:140},editorPage={sceneVersion:2,canvas:{width:280,height:180},physicalPageHeightMM:100,layers:[n]},canvas=new fabric.Canvas('editor',{width:280,height:180}),bridge=createFabricSceneBridge(fabric),object=await bridge.fromNode(n);canvas.add(object);canvas.renderAll();
- window.__taxonomy={get doc(){return doc;},assets,tx,apply,findSceneNode,worldBox,importEditableWork,geometryArea,itemSourceGeometry,render,applyCreationV2Batch,help:describeCreationCommand('layer.update'),editorPage,object,canvas,bridge,policy:USER_SCENE_POLICY};window.__taxReady=true;
+ window.__taxonomy={get doc(){return doc;},assets,tx,apply,findSceneNode,creationNode,worldBox,importEditableWork,geometryArea,itemSourceGeometry,render,applyCreationV2Batch,help:describeCreationCommand('layer.update'),editorPage,object,canvas,bridge,policy:USER_SCENE_POLICY};window.__taxReady=true;
  })().catch(error=>{console.error(error);document.querySelector('#status').textContent=error.message;});},[]);
  return <main><h1>Composition, common edits, linked size</h1><p id="status">Synthetic materials · editable effects and title structure</p><div className="columns"><section id="artwork"/><aside><h2>Shared graphic styles</h2><Form/><h2>Editable native vector</h2><canvas id="editor"/></aside></div></main>;
 }
