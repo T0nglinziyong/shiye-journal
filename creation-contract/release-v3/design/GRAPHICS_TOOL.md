@@ -15,7 +15,7 @@ node runtime/shiye.cjs preview
 {"version":1,"operation":"rough","id":"hand-star","geometry":{"kind":"star"},"size":{"width":16,"height":16,"unit":"mm"},"place":{"reference":"page","at":[30,40],"unit":"mm"},"style":{"fill":"#B8CCD2","stroke":"#486573","strokeWidthMm":0.4},"seed":42,"options":{"roughness":1.1,"fillStyle":"hachure","hachureGapMm":1.8}}
 ```
 
-geometry/place/style/parent/order 与 Command 共用。计算用固定毫米尺寸，不自动推断目标、点缀或布局；结果是普通 group.compose + graphic.add。之后仍由 layer.update 修改。每次换 id，不覆盖未应用草稿；Scene 改变后重新生成事务基准，不绕过 revision 检查。
+geometry/place/parent/order 与 Command 共用；此计算器的 style 只接受 fill、stroke、strokeWidthMm、opacity，其余外观在应用后通过 layer.update 设置。计算用固定毫米尺寸，不自动推断目标、点缀或布局；结果是普通 group.compose + graphic.add。之后仍由 layer.update 修改。每次换 id，不覆盖未应用草稿；Scene 改变后重新生成事务基准，不绕过 revision 检查。
 
 Rough.js：rough 手绘轮廓与填充，必须 seed。Paper.js：smooth 平滑、simplify 简化、flatten 折线化、boolean 闭合路径并交差、measure 测量。perfect-freehand：stroke 将压力点变轮廓；需要继续编辑压力点时直接用原有 graphic.add。每种 operation 只接受它适用的 options，详见 graphics help / api/graphics.schema.json。不会自动识别人物、生成字体或返回真实材料余料。
 

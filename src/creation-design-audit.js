@@ -48,7 +48,7 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
   return total;
  },0);
  const estimatedGraphicPaintFraction=Number(Math.min(1,painted/(page.canvas.width*page.canvas.height)).toFixed(4));
- if(styles.includes('丰富层叠')&&!types.ink&&graphicKinds.every(kind=>['rectangle','ellipse','line','frame'].includes(kind)))observations.push('丰富层叠目前仅使用基础圆、矩形或直线，没有可编辑笔迹或来自本次素材形状的图形：打开 PNG 检查是否缺少阅读路线、纸边连接或局部手绘回应；先试画再比较，若现有印刷图案已承担这些作用可以保留，不要为消除提示随机加星星。');
+ if(styles.includes('丰富层叠')&&graphicBoxes.length&&!types.ink&&graphicKinds.every(kind=>['rectangle','ellipse','line','frame'].includes(kind)))observations.push('丰富层叠目前仅使用基础圆、矩形或直线，没有可编辑笔迹或来自本次素材形状的图形：打开 PNG 检查是否缺少阅读路线、纸边连接或局部手绘回应；先试画再比较，若现有印刷图案已承担这些作用可以保留，不要为消除提示随机加星星。');
  if(styles.includes('丰富层叠')&&graphicBoxes.length&&graphicScale.maxWidthFraction<.33&&graphicScale.maxHeightFraction<.22)observations.push('新增图形都局限在较小范围；它们可能只是在圈点和划短线。缩看真实 PNG：若主块仍像独立摆放的素材，先试一个从本次素材轮廓、方向或文字空间生长的承托/跨边/阅读路线图形，再决定是否保留。不要为消除提示放大无关图案。');
  if(styles.includes('丰富层叠')&&graphicBoxes.length&&estimatedGraphicPaintFraction<.007)observations.push('新增图形的估计笔触面积很轻；长而淡的色线也可能只留下细微痕迹。缩看真实 PNG，确认图形是否真正组织主块、与素材轮廓或书写内容建立关系；若没有，调整位置、形态和层级，别靠放大无关色块凑面积。');
  const frontMarkers=entries.flatMap((node,index)=>{

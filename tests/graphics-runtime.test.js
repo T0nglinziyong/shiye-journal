@@ -40,6 +40,25 @@ test('actual Paper operations preserve style, millimetres and remain ordinary dr
  const out=computeGraphics(query({operation:'measure',seed:undefined,geometry:path('M0 0H24V24H0Z')}));
  assert.equal(out.measurements[0].areaMm2,24*24);assert.deepEqual(out.operations,[]);
 });
+test('sketch graphics stay open paths and fill-only graphics do not gain outlines',()=>{
+ const sketch={kind:'sketch',motif:'underline',seed:23};
+ const measured=computeGraphics(query({operation:'measure',seed:undefined,geometry:sketch,style:{stroke:'#799897'}}));
+ assert.equal(measured.measurements[0].closed,false);
+ assert.equal(measured.measurements[0].areaMm2,null);
+ assert.ok(measured.measurements[0].segments>4);
+ const flattened=computeGraphics(query({operation:'flatten',seed:undefined,geometry:sketch,style:{stroke:'#799897'}}));
+ assert.equal(flattened.paths[0].style.fill,null);
+ assert.equal(flattened.paths[0].style.stroke,'#799897');
+ assert.doesNotThrow(()=>validateCreationV2Commands(tx(flattened.operations)));
+ for(const [motif,count] of [['trail',5],['rays',7]]){
+  const generated=computeGraphics(query({operation:'measure',seed:undefined,geometry:{kind:'sketch',motif,seed:23},style:{stroke:'#799897'}}));
+  assert.equal(generated.measurements.length,count);
+  assert.ok(generated.measurements.every(row=>row.closed===false&&row.areaMm2===null));
+ }
+ const fill=computeGraphics(query({operation:'flatten',seed:undefined,geometry:{kind:'rect'},style:{fill:'#AABBCC'}}));
+ assert.equal(fill.paths[0].style.fill,'#AABBCC');
+ assert.equal(fill.paths[0].style.stroke,null);
+});
 test('boolean holes and empty results do not create fabricated geometry',()=>{
  const out=computeGraphics(query({operation:'boolean',seed:undefined,geometry:path('M0 0H24V24H0Z'),operand:path('M6 6H18V18H6Z'),options:{mode:'subtract'}}));
  const measured=computeGraphics(query({operation:'measure',seed:undefined,geometry:{kind:'path',viewBox:[0,0,24,24],paths:out.paths.map(({d,fillRule})=>({d,fillRule}))}}));

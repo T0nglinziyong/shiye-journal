@@ -64,8 +64,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
  source.taskHash=await taskFingerprint(source);
  const work=webSceneDocument(source,source.baseDraft,p.title);
  const materialDirection=selected.length<=3
-  ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
-  :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。可让人物或小贴纸压住纸边、让正文写进真正可写处；露出有用轮廓，避免多件同心堆叠。';
+  ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
+  :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。画布空白本身也能直接书写，不必把全部正文塞进唯一一张卡片。可让人物或小贴纸压住纸边、让正文沿实物边缘展开；露出有用轮廓，避免多件同心堆叠。';
  // START_HERE and REVIEW own the reusable composition workflow. Keep this
  // per-task guide short so the model can reach the actual materials sooner.
  const textDirection=source.contentPolicy==='visual'||source.textMode==='none'?'本次不新增文字。':source.textMode==='requested'&&!source.userText?'没有明确文字要求时不主动配文。':source.textMode==='rich'?'本次可以写展开的随想：在真实书写空间内推进一个具体念头，再用短注回应素材细节；不靠口号或重复句子凑满。':source.textMode==='minimal'?'本次文字精炼，但图文关系仍须完成。':'新增文字长短随真实书写空间和内容而定。';

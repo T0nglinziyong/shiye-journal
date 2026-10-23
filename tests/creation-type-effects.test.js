@@ -93,6 +93,9 @@ test('design audit is read-only, distinguishes geometry from visual evidence and
 test('design audit points out a large material frame with no added writing',async()=>{
  const {run}=await fixture(120,150),material={op:'material.add',id:'paper-layer',asset:'m1',place:at()};
  const bare=run([material]),withoutWriting=auditCreationDesign(bare.page,{materials:[{alias:'m1',assetID:'paper',title:'synthetic paper'}]});
+ const bareRich=auditCreationDesign(bare.page,{styles:['丰富层叠']});
+ assert.ok(bareRich.observations.some(line=>line.includes('没有新增图形')));
+ assert.equal(bareRich.observations.some(line=>line.includes('仅使用基础圆')),false);
  assert.equal(withoutWriting.materialFrames[0].assetAlias,'m1');
  assert.equal(withoutWriting.materialFrames[0].annotationFrames,0);
  assert.ok(withoutWriting.observations.some(line=>line.includes('大素材框')));

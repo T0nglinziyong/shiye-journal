@@ -20,6 +20,19 @@ export function sketchGeometry({motif,seed=1}){
   paths=[path(samples(13,t=>t<.5?[8+wobble(t),8+t*142]:[8+(t-.5)*142,79+wobble(t)]))];
  }else if(motif==='scallop'){
   paths=[path(samples(41,t=>[3+t*94,52+Math.sin(t*7*Math.PI)*8+wobble(t)*.8]))];
+ }else if(motif==='trail'){
+  // Separate, uneven strokes create a route without a polished connector arrow.
+  const spans=[[.02,.15],[.20,.34],[.39,.56],[.62,.74],[.80,.97]];
+  paths=spans.map(([start,end],index)=>path(samples(5,t=>{
+   const u=start+(end-start)*t;
+   return [3+u*94,53+Math.sin(u*Math.PI*1.2+phase*.2)*10+wobble(u)*1.2+(index%2?1:-1)];
+  })));
+ }else if(motif==='rays'){
+  paths=Array.from({length:7},(_,index)=>{
+   const angle=(index/7)*Math.PI*2-.35+Math.sin(phase+index*1.7)*.08;
+   const inner=24+(index%3)*2,outer=39+(index%2)*5;
+   return path([[50+Math.cos(angle)*inner,50+Math.sin(angle)*inner],[50+Math.cos(angle)*outer,50+Math.sin(angle)*outer]]);
+  });
  }else throw Error('未知手绘线形：'+motif);
  return {kind:'path',viewBox:[0,0,100,100],paths:paths.map(d=>({d}))};
 }
