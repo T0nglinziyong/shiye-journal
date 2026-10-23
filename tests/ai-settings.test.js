@@ -54,6 +54,12 @@ test('automatic organization uses current defaults and persists an explicit off 
   }
 });
 
+test('default series cover layout persists and rejects unknown values',()=>{
+  assert.equal(normalizePreferences({}).seriesCoverLayout,'auto');
+  assert.equal(normalizePreferences({seriesCoverLayout:'pile'}).seriesCoverLayout,'pile');
+  assert.equal(normalizePreferences({seriesCoverLayout:'unknown'}).seriesCoverLayout,'auto');
+});
+
 test('A-12: image input is scoped to verified endpoint/model combinations',()=>{
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',model:'deepseek-flash'})),true);
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash'})),false);

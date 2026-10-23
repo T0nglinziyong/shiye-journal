@@ -1,4 +1,5 @@
 import {SeriesArtwork} from './react-series-artwork.jsx';
+import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
@@ -51,17 +52,18 @@ function RouteImage({asset,source,priority=false}){
     priority={priority} alt={asset.title}/><OrganizationBadge id={asset.id}/></>:<span>无预览</span>;
 }
 
-function SeriesCover({series,assets,seriesCovers,source,priority,account}){
+function SeriesCover({series,assets,seriesCovers,source,priority,account,defaultCoverLayout='auto'}){
   const coverRef=useRef(null);
   const [snapshot,setSnapshot]=useState(null);
-  const members=seriesCovers(series,assets);
-  const key=JSON.stringify([account,series.id,seriesCoverSignature(series,assets),
+  const effectiveSeries={...series,coverLayout:series.coverLayout??defaultCoverLayout};
+  const members=seriesCovers(effectiveSeries,assets);
+  const key=JSON.stringify([account,series.id,seriesCoverSignature(effectiveSeries,assets),
     members.map(asset=>source(asset.blobId)||asset.staticPath||'')]);
   useEffect(()=>{
     const cover=coverRef.current;
     if(!cover)return;
     let cancelled=false;
-    const start=()=>void loadSeriesCoverSnapshot({cover,series,assets,account})
+    const start=()=>void loadSeriesCoverSnapshot({cover,series:effectiveSeries,assets,account})
       .then(url=>{if(!cancelled&&url)setSnapshot({key,url});})
       .catch(()=>{});
     if(priority||typeof IntersectionObserver!=='function')start();
@@ -75,7 +77,7 @@ function SeriesCover({series,assets,seriesCovers,source,priority,account}){
     return ()=>{cancelled=true;};
   },[key]);
   return <div className="series-cover" ref={coverRef}>
-    <SeriesArtwork members={members} mode={series.coverLayout} source={source} priority={priority}/>
+    <SeriesArtwork members={members} mode={effectiveSeries.coverLayout} source={source} priority={priority}/>
     {snapshot?.key===key?<img className="series-cover-snapshot" alt="" src={snapshot.url}
       loading={priority?'eager':'lazy'} decoding="async"/>:null}
   </div>;
@@ -717,7 +719,7 @@ export function WorksPage({state,projects:initialProjects,isUntouchedLegacyExamp
   </div>;
 }
 
-export function SeriesPage({series,assets,display,seriesCovers,source,account,onAction,onTabChange,
+export function SeriesPage({series,assets,display,seriesCovers,source,account,onAction,onTabChange,defaultCoverLayout='auto',
   selection,onSelectionToggle,pageSize:configuredPageSize,onBatchAction,onBatchError,onEditSeries}){
   const [query,setQuery]=useState(selection.seriesQuery||'');
   const [seriesMenuID,setSeriesMenuID]=useState(null);
@@ -785,7 +787,7 @@ export function SeriesPage({series,assets,display,seriesCovers,source,account,on
           aria-pressed={active?selection.selected.has(entry.id):undefined}
           holdDisabled={active} onHold={()=>setSeriesMenuID(entry.id)}
           onActivate={event=>selectEntry(event,entry)}>
-          <SeriesCover series={entry} assets={assets} seriesCovers={seriesCovers}
+          <SeriesCover series={entry} assets={assets} seriesCovers={seriesCovers} defaultCoverLayout={defaultCoverLayout}
             source={source} priority={index<2} account={account}/>
           <div className="card-body"><h3>{entry.title} <span aria-hidden="true">→</span></h3><p>{members.length} 件素材</p></div>
         </PressCard>;
@@ -1512,6 +1514,10 @@ export function SettingsDisplayPage({preferences,onAction}){
         <label>每页最多展示<select id="setting-page-items" defaultValue={String(preferences.maxPageItems)}>
           {[20,40,80].map(count=><option value={count} key={count}>每页 {count} 项</option>)}
         </select></label>
+        <label>默认系列封面排版<select id="setting-series-cover-layout" defaultValue={preferences.seriesCoverLayout||'auto'}>
+          {seriesCoverModes.map(([id,label])=><option key={id} value={id}>{label}</option>)}
+        </select></label>
+        <p>只用于尚未单独设置排版的系列；在系列里手动修改后，不受默认值变化影响。</p>
         <p>素材库只创建当前页卡片；系列和作品共用此设置。</p>
       </section>
     </section>
@@ -1950,7 +1956,7 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
             <div><h2>照片 {ri+1}</h2>{snapshot?null:<small>{candidates.filter(c=>c.selected).length} 个已选素材</small>}</div>
             <span>✓ 已确认</span>
           </div>
-          {work?<label>作品名称<input className="record-work-title" data-index={ri}
+          {work?<label className="record-work-title-field"><span>作品名称</span><input className="record-work-title" data-index={ri}
             defaultValue={record.workTitle||importDefaultTitle(record.file.name,'work',{sourceIndex:ri})}
             onInput={event=>onWorkTitleChange(ri,event.currentTarget.value)}/></label>:null}
           {!snapshot?<label className="record-series-label">所属系列
@@ -1963,7 +1969,7 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
             </div></div>:<>
               {work?<div className="review-candidate review-background-card"><div className={`review-thumbnail import-work-paper-preview ${pattern==='columns'?'plain':pattern} ${columns?'has-columns':''}`}
                 style={{'--review-paper':color,backgroundColor:color}}>
-                <div className="review-paper-controls" aria-label="页面背景">
+              </div><div className="review-paper-controls" aria-label="页面背景">
                   <select id={`review-background-pattern-${ri}`} aria-label="底纸样式" value={pattern==='columns'?'plain':pattern}
                     onChange={event=>{record.workPaperPattern=event.target.value;setRevision(value=>value+1);}}>
                     {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵']].map(([value,label])=><option key={value} value={value}>{label}</option>)}
@@ -1972,8 +1978,7 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
                     onClick={()=>{record.workPaperColumns=!columns;if(pattern==='columns')record.workPaperPattern='plain';setRevision(value=>value+1);}}>{columns?'双栏':'单栏'}</button>
                   <input id={`review-background-color-${ri}`} type="color" aria-label="底纸颜色" value={color}
                     onChange={event=>{record.workPaperColor=event.target.value;setRevision(value=>value+1);}}/>
-                </div>
-              </div></div>:null}
+                </div></div>:null}
               {candidates.map((candidate,ci)=><div className={`review-candidate ${candidate.selected?'selected':''}`}
                 data-index={ri} data-candidate={ci} key={ci} tabIndex={0}
                 onContextMenu={event=>openMenu(event,ri,ci)}

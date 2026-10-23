@@ -1,5 +1,5 @@
 // CSS preview and persisted Canvas thumbnail use the same normalized geometry.
-export const SERIES_COVER_VERSION=3;
+export const SERIES_COVER_VERSION=4;
 export const SERIES_COVER_SIZE={width:360,height:300};
 export const seriesCoverModes=[['auto','自动：少量扇形，九件内整齐摆放，更多叠放'],['grid','整齐摆放（最多九件）'],['pile','自由叠放（不限件数）'],['fan','扇形叠放']];
 export function seriesCoverMode(value){return seriesCoverModes.some(([id])=>id===value)?value:'auto';}
@@ -12,10 +12,19 @@ export function seriesCoverLayout(count,mode='auto'){
   const f=i/(n-1),rotation=(f-.5)*(n===2?16:n===3?24:36),center=Math.abs(f-.5);
   return {x:(n===2?.36:n===3?.30:.25)+f*(n===2?.28:n===3?.40:.50),y:.5+center*.05,w:n===2?.53:n===3?.46:.33,h:n<=3?.76:.68,rotation,z:Math.round(n-Math.abs(i-(n-1)/2))};
  })};
- if(kind==='pile')return {kind,slots:Array.from({length:n},(_,i)=>{
-  const angle=i*2.39996,radius=Math.min(.16,.045*Math.sqrt(i)),rotation=((i*37)%31)-15;
-  return {x:.5+Math.cos(angle)*radius,y:.5+Math.sin(angle)*radius*.7,w:.50,h:.58,rotation,z:i+1};
- })};
+ if(kind==='pile'){
+  // Spread every cutout over the whole cover. A small overlap retains the
+  // collage feel, while each item keeps most of its own cell visible.
+  const columns=Math.ceil(Math.sqrt(n*1.2)),rows=Math.ceil(n/columns);
+  return {kind,slots:Array.from({length:n},(_,i)=>{
+   const row=Math.floor(i/columns),itemsInRow=Math.min(columns,n-row*columns),col=i%columns;
+   const stepX=.88/columns,stepY=.88/rows;
+   const stagger=row%2?stepX*.08:0;
+   const x=.5+(col-(itemsInRow-1)/2)*stepX+stagger;
+   const y=.5+(row-(rows-1)/2)*stepY;
+   return {x,y,w:Math.min(.96/columns,.84),h:Math.min(.96/rows,.88),rotation:((i*7)%13)-6,z:i+1};
+  })};
+ }
  const columns=n<=4?2:3,rows=Math.ceil(n/columns),w=.9/columns,h=.9/rows;
  return {kind,slots:Array.from({length:n},(_,i)=>{const row=Math.floor(i/columns),inRow=Math.min(columns,n-row*columns),col=i%columns;return {x:.5+(col-(inRow-1)/2)*(.94/columns),y:(row+.5)/rows,w,h,rotation:0,z:1};})};
 }

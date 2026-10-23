@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {CLOUD_PREFERENCES_ID,cloudPreferencesRecord,cloudPreferencesFromMeta} from '../src/cloud-preferences.js';
 
 test('saved UI preferences are account-scoped meta, not a model-key backup',()=>{
-  const input={maxPageItems:40,display:'list',recognitionPixels:900,apiKey:'NEVER_SEND',privateToken:'ALSO_SECRET'};
+  const input={maxPageItems:40,display:'list',seriesCoverLayout:'pile',recognitionPixels:900,apiKey:'NEVER_SEND',privateToken:'ALSO_SECRET'};
   const row=cloudPreferencesRecord(input,'2026-10-09T12:00:00Z');
   assert.equal(row.id,CLOUD_PREFERENCES_ID);
   assert.equal(row.updatedAt,'2026-10-09T12:00:00Z');
-  assert.deepEqual(row.preferences,{maxPageItems:40,display:'list',recognitionPixels:900});
+  assert.deepEqual(row.preferences,{maxPageItems:40,display:'list',seriesCoverLayout:'pile',recognitionPixels:900});
   input.maxPageItems=80;
   assert.equal(row.preferences.maxPageItems,40,'staged preferences are immutable copy');
   assert.ok(!JSON.stringify(row).includes('apiKey'));

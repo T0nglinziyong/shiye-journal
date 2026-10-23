@@ -68,6 +68,7 @@ jobs:
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/settings-offline-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:sync-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:responsive-browser
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/import-paper-layout-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:selection-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:layout-browser
       - name: Upload viewport screenshots

@@ -6,7 +6,7 @@ const safeFields=new Set([
   'recognition','candidateDiscovery','recognitionPixels','materialColorMode','balanceLight',
   'recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
   'recognitionShapeRegularization','recognitionApertures',
-  'customPaperWidth','customPaperHeight','display','backdrop','maxPageItems',
+  'customPaperWidth','customPaperHeight','display','backdrop','maxPageItems','seriesCoverLayout',
   'markTapeUsedWithProject',
   'recognitionDefaultsVersion'
 ]);

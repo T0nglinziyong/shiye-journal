@@ -75,9 +75,8 @@ async function verifyImportGeometry(width){
     'host.innerHTML=' + JSON.stringify(
       '<section class="import-review"><div class="review-candidates">'+
       '<div class="review-candidate review-background-card">'+
-      '<div class="review-thumbnail import-work-paper-preview plain">'+
-      '<div class="review-paper-direct-controls"><label class="review-paper-direct-row"><span>底纸样式</span><select><option>纯色</option></select></label><label class="review-paper-direct-row"><span>底纸颜色</span><input type="color" value="#fcfaf0"></label></div>'+
-      '</div></div>'+
+      '<div class="review-thumbnail import-work-paper-preview plain"></div>'+
+      '<div class="review-paper-controls"><select><option>纯色</option></select><button>单栏</button><input type="color" value="#fcfaf0"></div></div>'+
       '<div class="review-candidate selected" data-index="0" data-candidate="0">'+
       '<button><div class="review-thumbnail"><img alt="素材" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="></div>'+
       '<strong>素材 1</strong><small>20 × 30 mm</small></button></div>'+
@@ -94,12 +93,12 @@ async function verifyImportGeometry(width){
     )+
     ';document.body.append(host);const background=host.querySelector(".review-background-card .review-thumbnail").getBoundingClientRect(),'+
     'material=host.querySelector("[data-candidate] .review-thumbnail").getBoundingClientRect(),'+
-    'controls=host.querySelector(".review-paper-direct-controls").getBoundingClientRect(),'+
+    'controls=host.querySelector(".review-paper-controls").getBoundingClientRect(),'+
     'inspector=host.querySelector(".import-snapshot-inspect .import-inspector").getBoundingClientRect();'+
-    'host.remove();return {backgroundH:background.height,materialH:material.height,controlsInside:controls.top>=background.top-1&&controls.bottom<=background.bottom+1&&controls.left>=background.left-1&&controls.right<=background.right+1,inspectorH:inspector.height};})()');
+    'host.remove();return {backgroundH:background.height,materialH:material.height,controlsBelow:controls.top>=background.bottom-1&&controls.left>=background.left-1&&controls.right<=background.right+1,inspectorH:inspector.height};})()');
   assert.ok(Math.abs(metrics.backgroundH-metrics.materialH)<=1.1,JSON.stringify(metrics));
   assert.ok(metrics.backgroundH<=132,JSON.stringify(metrics));
-  assert.equal(metrics.controlsInside,true,JSON.stringify(metrics));
+  assert.equal(metrics.controlsBelow,true,JSON.stringify(metrics));
   assert.ok(metrics.inspectorH<400,'Snapshot inspector must not reserve 580/610px: '+JSON.stringify(metrics));
 }
 async function verifyMobileNavigation(){
