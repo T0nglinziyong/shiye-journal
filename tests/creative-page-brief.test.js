@@ -25,6 +25,9 @@ test('art direction encourages connected text, materials and graphics without fi
   assert.match(visual,/不生成标题、正文或图注/);
   assert.doesNotMatch(visual,/连贯的多行正文/);
   assert.doesNotMatch(visual,/手作便签要保留/);
+  const printed=creativePageBrief({styles:['手作便签'],textPresentation:'type'});
+  assert.match(printed,/不强加手写字体/);
+  assert.doesNotMatch(printed,/不要把全部新增文字排成同一种整齐的无衬线段落/);
   const cover=creativePageBrief({styles:['极简留白'],purposes:['主题封面']});
   assert.match(cover,/有意留白/);
   assert.match(cover,/不强塞长正文/);
