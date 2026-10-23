@@ -23,8 +23,8 @@ const at=(x=65,y=65)=>({reference:'page',at:[x,y],unit:'mm'});
 const outline={color:'#35516A',widthMm:.7,offsetMm:[.5,.4]},gradient={angleDeg:90,stops:[{offset:0,color:'#E58A50'},{offset:1,color:'#556EA4'}]};
 const text={op:'text.add',id:'word',content:'未来',size:{width:50,unit:'mm'},place:at(),style:{fontSizePt:23,fontPreset:'serif'}};
 const batch=operations=>({protocolVersion:2,transactionId:'effects',baseSceneRevision:'sha256:'+'0'.repeat(64),operations});
-async function fixture(){
- const asset={id:'paper',title:'synthetic paper',kind:'paper',physicalWidthMM:30,physicalHeightMM:20};const p=project('Art lettering');p.processing='自由拆解';
+async function fixture(width=30,height=20){
+ const asset={id:'paper',title:'synthetic paper',kind:'paper',physicalWidthMM:width,physicalHeightMM:height};const p=project('Art lettering');p.processing='自由拆解';
  const task=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}]});
  const assets=task.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true})),doc=webSceneDocument(task.source,task.source.baseDraft,'editable effects');
  return {assets,doc,run:(ops,base=doc)=>applyCreationV2Batch(base,batch(ops),assets)};
@@ -77,6 +77,16 @@ test('Fabric and export use the same painter; text scaling preserves effect unit
 test('design audit is read-only, distinguishes geometry from visual evidence and diagnoses sparse layouts',async()=>{
  const {run}=await fixture(),d=run([text]);const before=JSON.stringify(d);const report=auditCreationDesign(d.page);assert.equal(report.visualReviewPerformed,false);assert.equal(report.layers.text,1);assert.equal(JSON.stringify(d),before);assert.ok(report.pages[0].uncoveredRectangleFraction>.2);assert.ok(report.observations.some(s=>s.includes('文字块')));
  const bg=run([{op:'graphic.add',id:'bg',geometry:{kind:'rect'},size:{reference:'page',width:1,height:1,unit:'ratio'},place:{reference:'page',at:[.5,.5],unit:'ratio'}}]);assert.equal(auditCreationDesign(bg.page).pages[0].estimatedFrameCoverage,1);assert.match(report.limitations,/不是像素/);
+});
+test('design audit points out a large material frame with no added writing',async()=>{
+ const {run}=await fixture(80,100),material={op:'material.add',id:'paper-layer',asset:'m1',place:at()};
+ const bare=run([material]),withoutWriting=auditCreationDesign(bare.page,{materials:[{alias:'m1',assetID:'paper',title:'synthetic paper'}]});
+ assert.equal(withoutWriting.materialFrames[0].assetAlias,'m1');
+ assert.equal(withoutWriting.materialFrames[0].annotationFrames,0);
+ assert.ok(withoutWriting.observations.some(line=>line.includes('大素材框')));
+ const written=run([material,text]),withWriting=auditCreationDesign(written.page,{materials:[{alias:'m1',assetID:'paper'}]});
+ assert.ok(withWriting.materialFrames[0].annotationFrames>0);
+ assert.equal(withWriting.visualReviewPerformed,false);
 });
 test('current help stays compact and describes the exact executable examples',()=>{
  for(const name of ['text.lettering','graphic.add']){const help=describeCreationCommand(name);assert.ok(JSON.stringify(help).length<7000);assert.equal(help.schema,undefined);for(const example of creationCommandRegistry[name].examples)validateCreationV2Commands(batch([example]));}

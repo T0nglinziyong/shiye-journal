@@ -27,6 +27,17 @@ test('art direction encourages connected text, materials and graphics without fi
   assert.match(cover,/不强塞长正文/);
 });
 
+test('composition density choice changes the shared creative direction',()=>{
+  const sparse=creativePageBrief({styles:['随材而定','疏朗留白']});
+  const layered=creativePageBrief({styles:['随材而定','丰富层叠']});
+  const automatic=creativePageBrief({styles:['随材而定','自动安排']});
+  assert.match(sparse,/本次选择疏朗留白/);
+  assert.match(layered,/本次选择丰富层叠/);
+  assert.match(layered,/具体交界处相互回应/);
+  assert.match(automatic,/默认疏密随素材而定/);
+  assert.doesNotMatch(sparse,/本次选择丰富层叠/);
+});
+
 test('spread direction balances both pages and keeps the gutter readable without forbidding intentional bleed',()=>{
   const spread=creativePageBrief({pageMode:'spread',styles:['手作便签'],purposes:['日常记录']});
   assert.match(spread,/两张相互呼应的独立页面/);

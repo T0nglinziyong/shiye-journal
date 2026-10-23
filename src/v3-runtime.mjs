@@ -55,7 +55,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  if(command==='graphics'){runGraphics(arg,current);return;}
  if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:2,tools:[{name:'graphics',readOnly:true,help:'graphics help'}],topics:creationHelpTopics,operations:Object.values(creationCommandRegistry).map(({name,available,advanced,summary})=>({name,available,advanced,summary}))})+'\n');return;}
  if(command==='describe'){process.stdout.write(JSON.stringify({ok:true,...describeCreationV2Command(arg,{full})})+'\n');return;}
- if(command==='design-check'){const result={ok:true,sceneRevision:current,...auditCreationDesign(doc.page)};save('output/design-advisory.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
+ if(command==='design-check'){const result={ok:true,sceneRevision:current,...auditCreationDesign(doc.page,{materials:task.materials})};save('output/design-advisory.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
  if(command==='fonts'){process.stdout.write(JSON.stringify({ok:true,...offlineFontCatalog()})+'\n');return;}
  if(command==='info'){process.stdout.write(JSON.stringify({ok:true,tools:['graphics'],protocolVersion:2,supportedProtocolVersions:[2],taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'})+'\n');return;}
  if(command==='self-test'){
@@ -104,14 +104,16 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
    const {png,report}=await renderOfflinePNG(page,source,verifiedImages(task),await loadOfflineCanvas());
    mkdirSync('output/proposals',{recursive:true});const stem=input.transactionId;
    writeFileSync('output/proposals/'+stem+'.png',png);
-   const result={ok:true,proposal:true,baseSceneRevision:current,proposedSceneHash:report.sceneHash,pngHash:sha(png),path:'output/proposals/'+stem+'.png'};
+   const advisory=auditCreationDesign(page,{materials:task.materials});
+   const result={ok:true,proposal:true,baseSceneRevision:current,proposedSceneHash:report.sceneHash,pngHash:sha(png),path:'output/proposals/'+stem+'.png',geometryReview:{observations:advisory.observations,materialFrames:advisory.materialFrames,pages:advisory.pages}};
    atomic('output/proposals/'+stem+'.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;
   }
   const {png,report}=await renderOfflinePNG(draft,source,verifiedImages(task),await loadOfflineCanvas()),dimensions=pngSize(png);
   if(report.sceneHash!==sceneHash||dimensions.width!==Math.round(draft.canvas.width)||dimensions.height!==Math.round(draft.canvas.height))throw fail('RENDER_MISMATCH','渲染摘要或尺寸与当前 Scene 不符');
   writeFileSync('output/preview.png',png);
   const capture={sceneRevision:current,sceneHash,pngHash:sha(png),renderer:report.rendererVersion,rendererBackend:report.rendererBackend,fonts:'environment-dependent',assets:Object.fromEntries(task.materials.map(m=>[m.alias,m.sha256])),...dimensions,renderedAt:new Date().toISOString(),visualReview:'pending'};
-  atomic('output/preview-capture.json',capture);process.stdout.write(JSON.stringify({ok:true,...capture,durationMs:Math.round(performance.now()-started)})+'\n');return;
+  const advisory=auditCreationDesign(draft,{materials:task.materials});
+  atomic('output/preview-capture.json',capture);process.stdout.write(JSON.stringify({ok:true,...capture,geometryReview:{observations:advisory.observations,materialFrames:advisory.materialFrames,pages:advisory.pages},durationMs:Math.round(performance.now()-started)})+'\n');return;
  }
  if(command==='review'){
   if(!['pass','fail'].includes(arg))throw fail('REVIEW_RESULT_INVALID','使用 review pass 或 review fail');

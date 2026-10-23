@@ -49,7 +49,8 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   const commands=batch([material('hero','m1',mm(60,70)),text('title','一张蓝纸的今天',60,20,70,22),{op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:mm(85,38),size:{width:8,height:8,unit:'mm'},style:{fill:'#d5e2d6'}},decision('m1')]);
   await write('work/commands.json',commands);
   const lock=join(dir,'work/.scene-write-lock');await mkdir(lock);await writeFile(join(lock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));await utimes(lock,new Date(Date.now()-120000),new Date(Date.now()-120000));
-  ok('apply','work/commands.json');assert.equal(ok('apply','work/commands.json').replayed,true);ok('preview');ok('pack');
+  ok('apply','work/commands.json');assert.equal(ok('apply','work/commands.json').replayed,true);
+  const preview=ok('preview');assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);ok('pack');
   const png=await readFile(join(dir,'output/preview.png'));assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
   assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,1);
   const capture=await read('output/preview-capture.json');assert.equal(capture.rendererBackend,'node-canvas@3.2.3');
