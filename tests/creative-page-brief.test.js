@@ -48,9 +48,10 @@ test('API editable, web editable and API/web image handoffs share the same compo
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,textMode:'rich'}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
   assert.match(strFromU8(webFiles['design/GUIDE.md']),/连贯的多行正文/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/无意空洞/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/纸片错层/);
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/主图与旁注、错层图文/);
+  const method=strFromU8(webFiles['design/SKILL.md']),review=strFromU8(webFiles['design/REVIEW.md']);
+  assert.match(method,/书写面/);assert.match(method,/块内对齐、块间错落/);assert.match(review,/空区/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/design\/SKILL\.md/);
+  assert.doesNotMatch(strFromU8(webFiles['design/GUIDE.md']),/vectorPaths|ink_strokes/);
   assert.match(api[0].content,/主图与旁注、错层图文/);
   assert.ok(JSON.parse(strFromU8(webFiles['TASK.json'])).materials[0].journalRoles.includes('writing'));
   assert.equal(webFiles['task/knowledge.json'],undefined);

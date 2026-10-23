@@ -5,7 +5,7 @@
 先运行 `node runtime/shiye.cjs fonts` 查看当前环境。fontPreset 是 serif/sans/rounded/hand 类别偏好，不保证机器里都有不同字体；fontFamily 是具体名称，必须确认实际可用。字体文件不打包、不上传；没有字体时换可用字体或保留普通文字，不假装生成了该艺术字体。
 
 ## 一字或一段：普通文字上直接做效果
-通过相同 style 用于 text.add / layer.update / layer.update。outline=null、gradient=null 清除对应效果，正文仍可改。
+通过相同 style 用于 text.add / layer.update。outline=null、gradient=null 清除对应效果，正文仍可改。
 
 ```json
 {"op":"text.add","id":"accent-word","content":"试","place":{"reference":"page","at":[45,40],"unit":"mm"},"size":{"width":24,"unit":"mm"},"style":{"fontSizePt":30,"fontPreset":"serif","fontWeight":"bold","color":"#426076","outline":{"color":"#D8B980","widthMm":0.6,"offsetMm":[0,0]}}}

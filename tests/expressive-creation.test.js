@@ -26,11 +26,17 @@ test('API, editable ZIP and image routes use the same material-dependent and exp
   const files=unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
   const guide=strFromU8(files['design/GUIDE.md']);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets,ids:['letter'],includeImages:false});
-  for(const text of [api,guide,image]){
+  for(const text of [api,image]){
     assert.match(text,/结合表达构思书写空间/);assert.match(text,/不要先划固定正文框/);assert.match(text,/可编辑图形与图案/);assert.match(text,/vectorPaths\/vectorLayers/);assert.match(text,/不伪装成用户拥有的实体贴纸/);assert.match(text,/不要先把大素材排满/);assert.match(text,/素材职责必须拉开/);assert.match(text,/脱离图像通读/);assert.match(text,/灵感随写/);assert.match(text,/俏皮态度/);assert.match(text,/长、中、短版本/);
     assert.match(text,/图文对话/);assert.match(text,/window 开窗/);assert.match(text,/不无限缩小字号/);
     assert.doesNotMatch(text,/只能写客观观察/);
   }
+  // Editable packages share the intent, not the legacy native-field prose.
+  const method=strFromU8(files['design/SKILL.md']),review=strFromU8(files['design/REVIEW.md']);
+  assert.match(guide,/灵感随写/);assert.match(guide,/俏皮态度/);assert.match(guide,/design\/SKILL\.md/);
+  assert.match(method,/文字、图形、材料同等参与/);assert.match(method,/必用不等于每件完整突出/);
+  assert.match(method,/先为|预留|书写面/);assert.match(method,/不能放大实物/);assert.match(review,/正常尺寸文字/);
+  assert.doesNotMatch(guide,/vectorPaths\/vectorLayers|ink_strokes|crop 取区域|diagonal/);
   assert.equal(files['task/knowledge.json'],undefined);
   assert.equal(bundle.source.processing,'自由拆解');
   assert.equal(bundle.source.contentPolicy,'original');

@@ -27,11 +27,11 @@
 
 搭配默认使用“随材而定、自动安排、灵感随写、自由创作”。文字可选灵感随写、日常记录、纯粹拼贴：无真实记录时允许自言自语、态度和未完成的想法，不编造用户经历。文字长短、书写位置与颜色由实际空间和素材共同决定。构图参考根据素材角色、尺寸及语义选择；印刷字可直接承担标题，便签承载书写，裁剪、蒙版、开窗与胶带用于具体图文关系，不按复杂度评分。
 
-应用内可编辑 AI、图片生成与网页任务包共用内容和构图指导；不会额外增加一次模型调用。真实尺寸、来源用量与 Scene 校验照常执行。详见 [创作指导](docs/EXPRESSIVE_CREATION.md)。
+应用内可编辑 AI、图片生成与网页任务包保持相同内容边界；网页可编辑包按任务 GUIDE、单一 SKILL、按需诊断与真实 PNG REVIEW 分层，不重复携带旧原生字段说明。不会额外增加一次模型调用。真实尺寸、来源用量与 Scene 校验照常执行。详见 [创作指导](docs/EXPRESSIVE_CREATION.md)。
 
 ## GPT 创作任务包 v3
 
-网页导出的可编辑任务包以 `START_HERE.md` 与 `TASK.json` 为入口。`assets/overview.jpg` 仅供观察，`assets/mN.*` 是本次 Scene 引用的素材像素，`assets/manifest.json` 记录持久来源 ID、SHA256、像素与毫米尺寸。短别名在任务内稳定，来源 ID 不变。`scene.json` 是唯一权威作品，`work/commands.json` 是一次编辑事务。
+网页导出的可编辑任务包以 `START_HERE.md` 与 `TASK.json` 为入口。`assets/overview.jpg` 仅供观察，`assets/mN.*` 是本次 Scene 引用的素材像素，`assets/manifest.json` 记录持久来源 ID、SHA256、像素与毫米尺寸。短别名在任务内稳定，来源 ID 不变。 TASK 的 creativeBriefRef 指向 design/GUIDE.md，不再复制全部指导。默认阅读与审阅文件有字符预算测试；用户明确原文不按预算截断。实作验证见 [视觉迭代记录](docs/visual-iteration-status.md)。`scene.json` 是唯一权威作品，`work/commands.json` 是一次编辑事务。
 
 ```bash
 node runtime/shiye.cjs self-test
