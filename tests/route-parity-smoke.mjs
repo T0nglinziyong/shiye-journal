@@ -44,7 +44,7 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   click('[data-route="matching"]');click('[data-route="works"]');click('[data-route="library"]');
   assert.ok($('.asset-grid .action-card'),'Returning to Materials preserves All Materials');
 
-  assert.equal(win.document.querySelectorAll('[data-act="detail"]').length,0);
+  assert.equal(win.document.querySelectorAll('[data-act="detail"]').length,9);
   click('[data-route="matching"]');assert.ok($('.matching-page'));
   click('[data-route="works"]');assert.ok($('.works-grid'));
   assert.equal($('#work-kind').options.length,3);

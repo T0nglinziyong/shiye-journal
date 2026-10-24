@@ -280,7 +280,7 @@ export function mountCanvasEditor(c){
     const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');
     for(const [id,name] of [['all','全部类型'],...materialKinds])kindSelect.append(new Option(name,id));
     const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','素材状态');
-    for(const [id,name] of [['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']])statusSelect.append(new Option(name,id));
+    for(const [id,name] of [['all','全部状态'],['preset','预设'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']])statusSelect.append(new Option(name,id));
     const basisSelect=document.createElement('select');basisSelect.setAttribute('aria-label','排序依据');
     for(const [id,name] of [['time','最近添加'],['name','名称']])basisSelect.append(new Option(name,id));
     const orderSelect=document.createElement('select');orderSelect.setAttribute('aria-label','排序顺序');
@@ -295,8 +295,8 @@ export function mountCanvasEditor(c){
         let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
           :tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item}))
           :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)&&
-            (status==='all'||(status==='ready'?a.reviewStatus==='ready':status==='pendingReview'?a.reviewStatus!=='ready':
-            status==='used'?a.usageStatus==='used':status==='unused'?a.usageStatus!=='used':
+            (status==='all'||(status==='preset'?a.isCreativePreset:status==='ready'?a.reviewStatus==='ready'&&!a.isCreativePreset:status==='pendingReview'?a.reviewStatus!=='ready'&&!a.isCreativePreset:
+            status==='used'?a.usageStatus==='used':status==='unused'?a.usageStatus!=='used'&&!a.isCreativePreset:
             status==='inside'?!!a.seriesID:status==='outside'?!a.seriesID:status==='favorite'?!!a.isFavorite:true))).map(a=>({a}));
         if(tab==='all')list.sort((x,y)=>sortBasis==='name'?x.a.title.localeCompare(y.a.title,'zh-CN')*(sortOrder==='asc'?1:-1):
           (Date.parse(x.a.createdAt||0)-Date.parse(y.a.createdAt||0))*(sortOrder==='asc'?1:-1));
@@ -322,7 +322,8 @@ export function mountCanvasEditor(c){
       if(!a)return;
       if(item){p.close();change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}
       const occupied=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0));
-      const unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));
+      const unit=a.isCreativePreset?Math.max(-1,...occupied)+1:
+        Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));
       if(unit===undefined){toast('此页已使用全部实物数量');return;}
       if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}
       p.close();change(()=>{
@@ -442,7 +443,8 @@ export function mountCanvasEditor(c){
     const a=asset(entry.value.assetID);if(!a){toast('原始素材不存在');return;}
     const used=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex??0));
     const count=a.supply?.quantity??1;
-    const free=Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
+    const free=a.isCreativePreset?Math.max(-1,...used)+1:
+      Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
     const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
     if(free===undefined&&!roll){toast('复制会超出本页实物库存');return;}
     const copy={...structuredClone({...entry.value}),id:uid(),x:entry.value.x+25,y:entry.value.y+25,

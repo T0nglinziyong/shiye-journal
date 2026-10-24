@@ -47,7 +47,7 @@ function checkDraft(d,assets){
     const a=assets.find(a=>a.id===i.assetID);if(!a)throw Error('缺少素材 '+i.assetID);
     if(!i.generationBaseline)throw Error(a.title+' 缺少生成基线');
     const unit=i.materialUnitIndex??0;finite(unit,'来源段编号',0,10000);if(!Number.isInteger(unit))throw Error('来源段编号必须是整数');
-    if(a.kind!=='tape'&&unit!==0)throw Error(a.title+' 每个方案只能取用一份源素材');
+    if(a.kind!=='tape'&&!a.isCreativePreset&&unit!==0)throw Error(a.title+' 每个方案只能取用一份源素材');
     const crop=cropOf(i);assertRect(crop);
     if(i.materialMask)materialMaskPoints(i.materialMask);validateDisplaySlices(i);
     if(i.tapeStrip){
@@ -171,7 +171,8 @@ function process(d,item,asset,operations,mode,options){
 function addMaterials(d,assets,aliases,list){
   const output=[];
   for(const entry of list){
-    const asset=materialAsset(assets,aliases,entry.asset),unit=entry.unit??0,piece=entry.piece||'p-'+entry.asset+'-'+unit;
+    const asset=materialAsset(assets,aliases,entry.asset),unit=entry.unit??(asset.isCreativePreset?
+      Math.max(-1,...d.items.filter(item=>item.assetID===asset.id).map(item=>item.materialUnitIndex??0))+1:0),piece=entry.piece||'p-'+entry.asset+'-'+unit;
     let item=d.items.find(i=>keyOf(i)===piece);
     if(!entry.piece&&!item)item=d.items.find(i=>i.assetID===asset.id&&
       !i.manualVisualCopy&&(i.materialUnitIndex??0)===unit&&!i.cropRect);

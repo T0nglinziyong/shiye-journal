@@ -30,6 +30,7 @@
 - 高级工艺按需查 design/SKILL.md；问题与方法查 design/PLAYBOOK.md。
 - 真实裁切/余料：material.cut / split / window；显示遮罩：layer.mask。不要混淆显示隐藏与实体取料。
 - 图形、笔迹：graphic.add，支持预设、自由路径、stroke、sketch。手绘化和布尔几何按需 `graphics help`、design/GRAPHICS_TOOL.md。
+- 预设胶带、贴纸和印章与普通素材一起列在本次 TASK 的 materials 中，状态为“预设”；仅当用户选入本次创作时才进入 ZIP。数字预设可以重复使用，同一实物素材仍受单份来源和裁片占用约束。表格、月历等空白矢量图形直接用 `graphic.add`，名称见 design/GRAPHICS.md。
 - 字体：fonts；艺术字：text.lettering；详见 design/LETTERING.md。
 - inspect 查询当前图层与用量；design-check 按需定位几何问题。完整命令清单用 help，精确字段用 describe。
 

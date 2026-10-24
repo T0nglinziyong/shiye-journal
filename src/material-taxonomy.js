@@ -5,7 +5,7 @@ export const materialKinds=Object.freeze([
   ['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],
   ['text','文字剪片'],['reference','参考图'],['card','卡片'],['label','标签'],
   ['tag','吊牌'],['ticket','票券'],['postcard','明信片'],['envelope','信封'],
-  ['bookmark','书签'],['stamp','邮票'],['diecut','异形剪片'],
+  ['bookmark','书签'],['stamp','印章／邮票'],['diecut','异形剪片'],
   ['ribbon','丝带'],['fabric','布片'],['packaging','包装片'],['other','其他']
 ]);
 export const materialRoles=Object.freeze([

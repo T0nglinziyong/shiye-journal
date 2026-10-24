@@ -31,6 +31,7 @@ export function registerLibraryActions(actions,{db,state,asset}){
   actions.register('library/favorite',async({id})=>{
     const entry=asset(id);
     if(!entry)throw Error('素材不存在');
+    if(entry.isCreativePreset)throw Error('预设素材属于公共图库，不能修改原件');
     const next={...entry,isFavorite:!entry.isFavorite};
     await db.put('assets',next);
     Object.assign(entry,next);

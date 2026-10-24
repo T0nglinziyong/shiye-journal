@@ -11,7 +11,7 @@ export function buildMaterialLedger(draft,assets){
   const asset=catalog.get(item.assetID);craftAssert(asset,'MISSING_SOURCE','源素材不存在',{assetId:item.assetID,pieceId:pieceKey(item)});
   const unit=item.materialUnitIndex??0;
   craftAssert(Number.isInteger(unit)&&unit>=0,'INVALID_SOURCE_INSTANCE','素材来源段编号无效',{assetId:asset.id});
-  craftAssert(asset.kind==='tape'||unit===0,'MULTIPLE_SOURCE_INSTANCES','普通素材在一个方案中只能取用一份',{assetId:asset.id});
+  craftAssert(asset.kind==='tape'||asset.isCreativePreset||unit===0,'MULTIPLE_SOURCE_INSTANCES','普通素材在一个方案中只能取用一份',{assetId:asset.id});
   const geometry=itemSourceGeometry(item,asset),source=rectangleGeometry(0,0,asset.physicalWidthMM,asset.physicalHeightMM);
   assertSubset(geometry,source,{assetId:asset.id,pieceId:pieceKey(item)});
   if(asset.kind==='tape'){
@@ -39,7 +39,7 @@ export function buildMaterialLedger(draft,assets){
  for(const [index,scrap] of (draft.craftScraps||[]).entries()){
   const asset=catalog.get(scrap.assetId);craftAssert(asset,'MISSING_SOURCE','碎屑记录的来源缺失');
   craftAssert(Number.isInteger(scrap.unit)&&scrap.unit>=0&&
-    (asset.kind==='tape'||scrap.unit===0),'INVALID_SOURCE_INSTANCE','碎屑来源段编号无效');
+    (asset.kind==='tape'||asset.isCreativePreset||scrap.unit===0),'INVALID_SOURCE_INSTANCE','碎屑来源段编号无效');
   const source=rectangleGeometry(0,0,asset.physicalWidthMM,asset.physicalHeightMM),geometry=normalizeGeometry(scrap.geometryMM);assertSubset(geometry,source);
   const groupId=JSON.stringify([asset.id,scrap.unit]),group=groups.get(groupId)||{assetId:asset.id,unit:scrap.unit,sourceRevision:assetSourceRevision(asset),sourceAreaMM2:geometryArea(source),source,allocations:[]};
   for(const prior of group.allocations)craftAssert(geometryArea(geometryIntersection(prior.geometry,geometry))<=AREA_EPSILON,'SOURCE_REGION_OVERLAP','不可复用已记录的碎屑或废料',{assetId:asset.id});

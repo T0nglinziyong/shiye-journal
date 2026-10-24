@@ -82,7 +82,11 @@ export function validateWebScene(page,source,assets,{final=true}={}){
     const old=original.get(item.id)?.node,asset=frozen.find(a=>a.id===item.assetID);
     for(const k of ['manualVisualResize','manualVisualCopy'])if(item[k]&&(!old?.[k]||!same(materialGeometry(old),materialGeometry(item))))throw Error('AI 不可借手工标记改变真实素材尺寸或复制来源：'+item.id);
     const expected=asset?.blobId||null,staticPath=asset?.staticPath||null;
-    if((item.sourceBlobId||null)!==expected||(item.sourceStaticPath||null)!==staticPath)throw Error('素材图片必须使用任务固定版本：'+item.id);
+    // Bundled static images are identified by their immutable path. A Scene
+    // need not claim a cloud Blob that does not exist for that same image.
+    if((item.sourceStaticPath||null)!==staticPath||
+      (staticPath?item.sourceBlobId&&item.sourceBlobId!==expected:(item.sourceBlobId||null)!==expected))
+      throw Error('素材图片必须使用任务固定版本：'+item.id);
     const parents=current.get(item.id).parents;
     const masks=parents.map(p=>p.vectorMask);
     const geometryUnchanged=old&&same([old.cropRect,old.materialMask,old.vectorMask],[item.cropRect,item.materialMask,item.vectorMask])&&same(original.get(item.id).parents.map(p=>p.vectorMask),masks)&&(!masks.some(Boolean)||same([old.x,old.y,old.rotation,old.isFlippedHorizontally],[item.x,item.y,item.rotation,item.isFlippedHorizontally]));

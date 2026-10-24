@@ -21,8 +21,10 @@ await new Promise(resolve=>setTimeout(resolve,500));
 assert.match(window.document.querySelector('#view').textContent,/我的素材/);
 assert.ok(window.document.querySelector('.swift-series-controls input'));
 window.document.querySelector('.swift-tabs button:nth-child(2)').click();
-assert.equal(window.document.querySelectorAll('[data-act="detail"]').length,0);
-await waitFor(()=>/0 项/.test(window.document.querySelector('.library-count')?.textContent||''));
+assert.equal(window.document.querySelectorAll('[data-act="detail"]').length,9);
+await waitFor(()=>/9 项/.test(window.document.querySelector('.library-count')?.textContent||''));
+assert.ok([...window.document.querySelectorAll('.asset-grid [data-act="detail"] .chip')]
+  .every(chip=>chip.textContent==='预设'));
 assert.equal(window.document.querySelector('.asset-grid > :first-child').dataset.act,'import');
 window.document.querySelector('.asset-grid > :first-child').click();
 assert.match(window.document.querySelector('.import-progress').textContent,/检查照片.*确认归类.*完成/);
@@ -83,4 +85,4 @@ window.document.querySelector('[data-editor-ai]').click();
 assert.ok(window.document.querySelector('.inline-ai-panel'));
 assert.equal(window.document.querySelector('#modal').open,false);
 await window.happyDOM.abort();
-console.log('UI smoke: empty first-run library and works, navigation and editor rendered');
+console.log('UI smoke: preset-only first-run library, works, navigation and editor rendered');
