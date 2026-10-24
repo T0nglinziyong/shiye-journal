@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layer-update",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layer.update",
+      "target": "caption",
+      "style": {
+        "opacity": 0.9
+      }
+    }
+  ]
+}

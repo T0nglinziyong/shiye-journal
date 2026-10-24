@@ -1,0 +1,80 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {renderWorkCoverSnapshot,isPartialWorkCover} from '../src/work-cover-snapshot.js';
+
+test('COS Works cover renders complete scene using only 480px material blobs',async()=>{
+  const calls=[],closed=[],output=new Blob(['snapshot'],{type:'image/webp'});
+  const project={id:'work-1',activeDraftID:'draft-1',drafts:[
+    {id:'draft-1',sceneVersion:2,canvas:{width:750,height:1000},layers:[{id:'m',type:'material',assetID:'material-1'},{id:'ink',type:'ink',points:[{x:1,y:2}]}]}]};
+  let scene;
+  const cover=await renderWorkCoverSnapshot(project,{
+    resolveAsset:async id=>{calls.push(['asset',id]);return {id,blobId:'blob-1'};},
+    previewBlob:async(id,pixels)=>{calls.push(['preview',id,pixels]);return new Blob(['tiny']);},
+    createBitmap:async()=>({width:480,height:480,close:()=>closed.push(1)}),
+    renderScene:async(draft,options)=>{
+      scene=draft;
+      assert.equal(options.scale,.48);
+      assert.equal(options.waitForFonts,true);
+      const first=await options.loadMaterialImage('material-1');
+      assert.equal(first,await options.loadMaterialImage('material-1'));
+      return {canvas:{toBlob:callback=>callback(output)}};
+    }
+  });
+  assert.equal(cover,output);
+  assert.equal(scene,project.drafts[0]);
+  assert.deepEqual(calls,[['asset','material-1'],['preview','blob-1',480]]);
+  assert.equal(closed.length,1);
+});
+
+test('missing referenced image leaves a visible partial cover without altering the Scene',async()=>{
+  const project={id:'work-2',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,canvas:{width:600,height:800},layers:[{id:'m',type:'material',assetID:'missing'}]}]},
+    initial=structuredClone(project);
+  const placeholder={width:160,height:160},output=new Blob(['other scene layers']);
+  const cover=await renderWorkCoverSnapshot(project,{
+    resolveAsset:async()=>null,
+    createMissingImage:()=>placeholder,
+    renderScene:async(_draft,{loadMaterialImage})=>{
+      assert.equal(await loadMaterialImage('missing'),placeholder);
+      return {canvas:{toBlob:callback=>callback(output)}};
+    }
+  });
+  assert.equal(cover,output);
+  assert.equal(isPartialWorkCover(cover),true);
+  assert.deepEqual(project,initial);
+});
+
+test('already existing flat snapshots need no scene render',async()=>{
+  const raw=new Blob(['image']),p={isSnapshot:true,snapshotBlobId:'existing'};
+  assert.equal(await renderWorkCoverSnapshot(p,{getSnapshot:async id=>id==='existing'?raw:null}),raw);
+});
+
+test('optional cover rendering yields before encoding and passes its yield hook to the scene',async()=>{
+  const events=[],backgroundYield=async()=>events.push('yield');
+  const project={id:'work-idle',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,
+    canvas:{width:400,height:500},layers:[]}]};
+  await renderWorkCoverSnapshot(project,{
+    backgroundYield,
+    renderScene:async(_draft,options)=>{
+      assert.equal(options.backgroundYield,backgroundYield);
+      return {canvas:{toBlob:done=>{events.push('encode');done(new Blob(['cover']));}}};
+    }
+  });
+  assert.deepEqual(events,['yield','encode']);
+});
+
+test('cover uses the image version pinned by the work after the library image changes',async()=>{
+ const node={id:'m',type:'material',assetID:'a',sourceBlobId:'image-original'};
+ const project={id:'p',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,
+   canvas:{width:400,height:500},layers:[node]}]};
+ const seen=[];
+ await renderWorkCoverSnapshot(project,{
+   resolveAsset:async()=>({id:'a',blobId:'image-replacement'}),
+   previewBlob:async id=>{seen.push(id);return new Blob(['image']);},
+   createBitmap:async()=>({width:10,height:10}),
+   renderScene:async(_draft,{loadMaterialImage})=>{
+     await loadMaterialImage('a',node);
+     return {canvas:{toBlob:done=>done(new Blob(['cover']))}};
+   }
+ });
+ assert.deepEqual(seen,['image-original']);
+});

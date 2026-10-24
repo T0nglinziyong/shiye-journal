@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layer-reparent",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layer.reparent",
+      "target": "photo",
+      "parent": "card",
+      "preserveWorld": true
+    }
+  ]
+}

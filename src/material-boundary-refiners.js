@@ -1,4 +1,5 @@
-import {activeContour,morphGAC} from './browser-active-contours.js';
+import {morphGAC} from './browser-active-contours.js';
+import {orientedContourBox} from './material-orientation.js';
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const contourPoints=c=>Array.from({length:c.rows},(_,i)=>[c.data32S[i*2],c.data32S[i*2+1]]);
@@ -262,9 +263,23 @@ function activeMask(cv,rgba,rough){
 function restoreHoles(cv,outer,holes){
   if(!holes||cv.countNonZero(holes)===0)return;const target=new cv.Mat();cv.bitwise_and(holes,outer,target);outer.setTo(new cv.Scalar(0),target);target.delete();
 }
-function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,elapsed){
-  const found=largestExternal(cv,mask);if(!found.contour)return null;const b=cv.boundingRect(found.contour),local=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),packed=new cv.Mat();local.copyTo(packed);const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true);const points=contourPoints(poly).map(([x,y])=>[x-b.x,y-b.y]);found.contour.delete();poly.delete();local.delete();
-  return {x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
+function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,elapsed,shapeModel=null){
+  const found=largestExternal(cv,mask);if(!found.contour)return null;
+  const bounds=cv.boundingRect(found.contour),pad=shapeModel?2:0,
+    x=Math.max(0,bounds.x-pad),y=Math.max(0,bounds.y-pad),
+    right=Math.min(mask.cols,bounds.x+bounds.width+pad),bottom=Math.min(mask.rows,bounds.y+bounds.height+pad),
+    b=new cv.Rect(x,y,right-x,bottom-y),local=mask.roi(b),packed=new cv.Mat();
+  if(shapeModel){
+    // Straight and elliptical model edges are rasterized on a pixel grid.
+    // Feather only their final alpha, leaving the binary geometry and the
+    // free-form masks untouched. The padding lets the outside edge fade out.
+    cv.GaussianBlur(local,packed,new cv.Size(3,3),.58,.58,cv.BORDER_CONSTANT);
+  }else local.copyTo(packed);
+  const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true);const points=contourPoints(poly).map(([px,py])=>[px-b.x,py-b.y]);
+  const orientedBox=orientedContourBox(cv,found.contour,globalX,globalY,pageW,pageH,found.area,shapeModel);
+  found.contour.delete();poly.delete();local.delete();
+  const result={x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,orientedBox,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
+  packed.delete();return result;
 }
 
 /**
@@ -302,13 +317,9 @@ export function refineMaterialBoundaries(cv,p){
       }else{
         const fast=resizeForBudget(cv,roi,rough,320);
         workImage=fast.image;workMask=fast.mask;support=edgeSupportMap(cv,fast.image,useChroma);
-        if(mode==='grabcut'){
-          selected=grabCutMask(cv,fast.image,fast.mask);
-          method='browser-grabcut';
-        }else{
-          selected=activeMask(cv,fast.image,fast.mask);
-          method='browser-active-contour';
-        }
+        if(mode!=='grabcut')throw Error('unsupported contour mode: '+mode);
+        selected=grabCutMask(cv,fast.image,fast.mask);
+        method='browser-grabcut';
         confidence=boundarySupport(cv,selected,support);
       }
 
@@ -329,7 +340,7 @@ export function refineMaterialBoundaries(cv,p){
         restoreHoles(cv,selected,fullHoles);fullHoles.delete();
       }
       const elapsed=(typeof performance!=='undefined'?performance.now():Date.now())-started,
-        region=regionFromMask(cv,selected,x0,y0,pageW,pageH,method,confidence,elapsed);
+        region=regionFromMask(cv,selected,x0,y0,pageW,pageH,method,confidence,elapsed,shapeModel);
       if(region)out.push({...candidate,...region,postprocessed:post,shapeModel});else out.push(candidate);
 
       selected.delete();holes?.delete();support?.delete();workImage?.delete();workMask?.delete();rough.delete();roi.delete();

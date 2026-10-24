@@ -22,6 +22,15 @@
 .matching-page .match-basket-actions{display:flex;align-items:center;gap:4px;margin-top:4px}
 .matching-page .match-basket-actions button{height:27px;width:56px;min-width:0;flex:0 0 56px;padding:3px 5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d9e1d8;border-radius:16px;background:#f5f7f2;font-size:12px;line-height:1;white-space:nowrap}
 .matching-page .match-basket-actions button[aria-pressed="true"]{color:#ad833a;background:#fff4d9;border-color:#e8d5a3}
+.matching-page .match-basket-item>img{flex:none}
+.matching-page .match-basket-item>div{min-width:0;flex:1}
+.matching-page .match-basket-item{border:1px solid #e6e8e1;border-radius:12px;background:#fffefa;padding:8px;min-width:0}
+.matching-page .match-basket-item>img{width:66px;height:70px;object-fit:contain;border-radius:9px;background:#f7f7f2}
+.matching-page .match-basket-actions{flex-wrap:wrap;gap:4px}
+.matching-page .match-rec button,.matching-page .match-basket-actions button{min-height:27px;padding:3px 8px;border-radius:22px;font-size:12px;line-height:1.2}
+.matching-page .match-basket-actions button{width:auto;min-width:0;flex:none;height:auto;border:0;background:#e1e6dd;color:#52634b}
+.matching-page .match-basket-actions button.shiye-icon-host{gap:4px}
+.matching-page .match-basket-actions button>.shiye-icon{width:18px;height:18px;flex:0 0 18px;margin:0}
 .manual-layout-dialog .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .manual-layout-dialog .dialog-head h2{margin:0}
 .manual-layout-dialog>p{color:#718276;font-size:14px;line-height:1.5}
@@ -43,8 +52,69 @@
 .detail-heart[aria-pressed="true"],.card-favorite{color:#be635d}
 .card-favorite{float:right;font-size:16px}
 @media(max-width:680px){.matching-page .match-direction{margin-top:0}.matching-page .matching-layout>.panel{max-height:430px}.matching-page .match-recommendations{order:-1}.matching-page .match-generate>.btn{flex:1 1 180px}}
+@media(min-width:700px) and (max-width:1100px){.matching-page .matching-layout{grid-template-columns:minmax(300px,32%) minmax(0,1fr)}}
+@media(max-width:699px){.matching-page .match-basket-actions button{flex:none;width:auto;min-width:0}}
 @media(max-width:520px){.matching-page .match-rec-grid{grid-template-columns:1fr}.matching-page .match-rec{min-height:96px}.matching-page .match-rec>img{width:66px;height:70px}}
 
 .matching-page .match-cover-preview{display:grid;place-items:center;width:100%;min-height:150px;max-height:360px;overflow:hidden;border-radius:12px;background:#f6f4ed}
 .matching-page .match-cover-preview>.thumb-sheet{max-width:100%;max-height:340px}
 .matching-page .match-raster-preview{display:block;width:100%;height:100%;max-height:340px;object-fit:contain;background:#f6f4ed}
+
+/* Keep Matching proposal cards on the same responsive grid as Works cards. */
+.matching-page .match-previews .match-variant-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+  gap:13px;
+}
+.matching-page .match-previews .match-variant{
+  padding:10px;min-width:0;display:flex;flex-direction:column;
+  border-radius:17px;background:#fffefa;
+}
+.matching-page .match-previews .match-result{
+  min-width:0;width:100%;padding:0;gap:8px;
+  text-align:left;align-content:start;
+}
+.matching-page .match-previews .match-cover-preview{
+  width:100%;min-height:0;max-height:none;
+  aspect-ratio:1.36;overflow:hidden;border-radius:12px;
+}
+.matching-page .match-previews .match-cover-preview>.thumb-sheet{
+  max-width:100%;max-height:100%;
+}
+.matching-page .match-previews .match-raster-preview{
+  width:100%;height:100%;max-height:none;object-fit:contain;
+}
+.matching-page .match-previews .match-result strong{
+  min-width:0;display:block;font-size:13px;line-height:1.4;
+  white-space:nowrap;text-overflow:ellipsis;overflow:hidden;
+}
+.matching-page .match-previews .match-progress{
+  font-size:11px;line-height:1.4;max-height:64px;margin:4px 0;
+}
+@media(max-width:680px){
+  .matching-page .match-previews .match-variant-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
+  }
+  .matching-page .match-previews .match-variant{padding:7px}
+}
+
+/* Six peer controls share a compact two-row grid on all supported screens. */
+.match-creative-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.match-creative-controls>label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.match-creative-controls select{width:100%;max-width:100%;min-width:0;min-height:44px;box-sizing:border-box;text-overflow:ellipsis}
+.match-intent-label{display:flex;flex-direction:column;gap:6px}
+.matching-page .match-intent-label textarea{min-height:64px;height:64px;resize:vertical}
+@media(max-width:680px){
+  .matching-page .match-direction{padding:14px}
+  .matching-page .match-direction>h2{font-size:18px;margin:0 0 6px}
+  .matching-page .match-direction>p{font-size:13px;margin:0 0 10px}
+  .match-creative-controls{gap:12px 8px;margin:12px 0}
+  .match-creative-controls>label,.match-intent-label{font-size:13px}
+  .match-creative-controls select{padding:8px 4px;font-size:14px}
+}
+
+/* Decision content is secondary UI, not a headline. Keep touch targets large. */
+.match-creative-controls>label{font-size:12px;font-weight:500;line-height:1.5;color:#6a756d}
+.match-creative-controls select{font-size:14px;font-weight:400;line-height:1.4;padding:9px 10px;color:#354b40}
+.match-creative-controls select option{font-size:14px;font-weight:400}
+@media(max-width:680px){.match-creative-controls>label{font-size:12px}.match-creative-controls select{font-size:14px;padding:9px 4px}}

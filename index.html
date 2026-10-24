@@ -2,17 +2,18 @@
 <html lang="zh-CN"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#fffefa"><meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <title>拾页 · 本地创作</title><meta name="description" content="本地保存真实手账素材与可编辑作品">
+  <style>
+    #auth-root[hidden]{display:none!important}
+    #auth-root:has(.boot-card){min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f7f7f2;color:#263d34;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+    .boot-card{width:min(100%,420px);padding:28px;border:1px solid #dbe3d9;border-radius:18px;background:#fffefa}
+    .boot-card h1{margin:0 0 18px;font-size:28px}.boot-card p{margin:0;color:#617267}
+  </style>
 </head><body>
-  <div id="app">
-    <header class="topbar"><div class="brand"><b>♧</b><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div><nav class="main-nav" aria-label="主导航">
-      <button data-route="library"><span aria-hidden="true">▣</span> 素材</button><button data-route="matching"><span aria-hidden="true">✦</span> 搭配</button><button data-route="works"><span aria-hidden="true">▤</span> 作品</button>
-    </nav><div class="top-actions"><button type="button" id="top-basket" aria-label="本次创作">本次创作 <span id="basket-count">0</span></button><button type="button" id="top-settings" aria-label="设置">⚙</button><button type="button" id="sync-indicator" class="sync-indicator" hidden><span class="sync-indicator-symbol" aria-hidden="true"></span><span class="sync-indicator-label" aria-live="polite">正在核对</span></button><span id="save-state" class="save-state">本机存储</span></div></header>
-    <main id="view" aria-live="polite"><section class="empty"><strong>正在打开拾页…</strong><p>首次访问正在准备内置示例。网络较慢时，请稍候；不会读取其他网址的私人资料。</p></section></main>
-    <div id="toast" role="status" aria-live="polite"></div>
-  </div>
-  <dialog id="modal"><div class="modal-shell"><button type="button" class="modal-close" aria-label="关闭">×</button><div id="modal-body"></div></div></dialog>
-  <input id="file-input" type="file" accept="image/*" multiple hidden><input id="work-file-input" type="file" accept="image/*,.json,.zip" hidden><input id="snapshot-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden><input id="backup-input" type="file" accept=".shiyepwa,.json" hidden>
+  <div id="auth-root"><main class="boot-card" role="status"><h1>拾页</h1><p>正在启动…</p></main></div>
+  <div id="app" hidden></div>
   <script type="module" src="/src/app.js"></script>
 </body></html>

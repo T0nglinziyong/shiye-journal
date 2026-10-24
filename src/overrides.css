@@ -6,3 +6,278 @@
 .paper-corner-overlay svg { position: absolute; width: 100%; height: 100%; overflow: visible; }
 .paper-handle { position: absolute; width: 32px; height: 32px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid white; background: #277454; color: white; font-weight: 700; pointer-events: auto; touch-action: none; box-shadow: 0 1px 6px #183a2a88; }
 .corrected-preview { display: block; width: min(100%, 180px); max-height: 180px; object-fit: contain; margin: 8px auto 0; border: 1px solid #cbd9cd; }
+
+/* A cloud work is represented by one committed storage snapshot image, not a
+   cascade of separately loaded material layers. Pending covers remain calm. */
+.work-cover-pending{display:grid;place-items:center;width:100%;height:100%;min-height:90px;text-align:center;color:#7a8e82;font-size:12px;letter-spacing:.04em;background:linear-gradient(135deg,#fafbf8,#eff3ec)}
+.thumb-sheet>.work-cover-pending,.preview-paper>.work-cover-pending{position:absolute;inset:0;z-index:1;min-height:0;pointer-events:none}
+.works-grid .thumb-sheet>.work-reference,.project-preview-cover .preview-paper>.work-reference{display:block;width:100%;height:100%;object-fit:contain}
+
+/* Property panel is opt-in and never reserves an invisible right column. */
+.editing .swift-editor-workspace{grid-template-columns:minmax(0,1fr)!important;position:relative}
+.editing .swift-editor-workspace.show-inspector{grid-template-columns:minmax(0,1fr) minmax(230px,285px)!important}
+.editing .swift-editor-workspace .editor-inspector[hidden]{display:none!important}
+.editing .swift-editor-workspace.show-inspector .editor-inspector{display:block;min-width:0;overflow-y:auto;max-height:calc(100dvh - 170px)}
+@media(max-width:899px){
+ .editing .swift-editor-workspace.show-inspector{grid-template-columns:minmax(0,1fr)!important}
+ .editing .swift-editor-workspace.show-inspector .editor-inspector{position:absolute;z-index:100;top:8px;right:8px;width:min(82vw,310px);height:min(68dvh,490px);max-height:68dvh;box-shadow:0 12px 40px #243b2940;background:#fffefa;border-radius:14px}
+}
+.editing #ink{touch-action:none;user-select:none;-webkit-user-select:none}
+
+/* Compact, sequential recognition settings. Only configurable steps have controls. */
+.recognition-settings-group{display:grid;gap:8px;margin:0 0 12px;padding:12px 14px;border:1px solid #dde6dc;border-radius:13px;background:#fffefa}
+.recognition-settings-group>h2{margin:0;font-size:16px;line-height:1.3;color:#304d3b}
+.recognition-settings-group>p{margin:0;color:#6b796e;font-size:12px;line-height:1.45}
+.recognition-settings-group>label{margin:0;gap:4px;font-size:13px}
+.recognition-settings-group .setting-help{display:block;color:#748176;font-size:12px;line-height:1.4}
+.recognition-settings-group .setting-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.recognition-settings-group .setting-toggle span{display:grid;gap:3px;min-width:0}
+.recognition-settings-group .setting-toggle input{flex:none}
+@media(max-width:600px){.recognition-settings-group{padding:10px 12px;margin-bottom:9px;gap:7px}}
+
+/* Import confirmation: the first card is editable paper, never a flattened image. */
+.import-work-paper-preview{position:relative;display:grid;place-items:center;min-height:120px;background-color:var(--review-paper,#fcfaf0)!important;border-radius:10px;overflow:hidden}
+.import-work-paper-preview.grid{background-image:linear-gradient(to right,#82978b45 1px,transparent 1px),linear-gradient(to bottom,#82978b45 1px,transparent 1px)!important;background-size:20px 20px}
+.import-work-paper-preview.lines{background-image:repeating-linear-gradient(to bottom,transparent 0 22px,#82978b65 23px,transparent 24px)!important}
+.import-work-paper-preview.dots{background-image:radial-gradient(#82978b77 1px,transparent 1px)!important;background-size:14px 14px}
+.import-work-paper-preview.columns{background-image:linear-gradient(90deg,transparent 49.8%,#82978b77 50%,transparent 50.2%)!important}
+.review-paper-title{background:#fffefaed;border-radius:12px;padding:5px 9px;font-size:12px;color:#52634b}
+.review-background-card{display:grid;align-content:start;gap:5px;padding:6px}
+.review-background-card label{display:grid;gap:3px;font-size:12px}
+.review-background-card input[type=color]{width:100%;height:30px;padding:1px}
+.review-default .toggle-row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.review-default .toggle-row input{flex:none}
+.import-review .record-series-label{margin-top:6px}
+.settings-detail>.recognition-settings-group{margin-bottom:12px}
+.settings-detail>.recognition-settings-group>p{line-height:1.45;margin:1px 0 4px}
+.settings-detail>.recognition-settings-group>.actions{display:flex;flex-wrap:wrap;gap:8px}
+.settings-detail .unified-settings-group{padding:12px 14px;margin:0 0 12px;border:1px solid #dde6dc;border-radius:13px;background:#fffefa}
+.settings-detail .unified-settings-group summary{padding:3px 0}
+.settings-detail .unified-settings-group>div{padding:10px 0 0;display:grid;gap:8px}
+.settings-detail .unified-settings-group h2{margin:5px 0 0;font-size:16px}
+.settings-detail .unified-settings-group p{margin:0 0 3px;line-height:1.45;font-size:12px}
+.settings-detail .unified-settings-group label{margin:0}
+@media(max-width:600px){.settings-detail>.recognition-settings-group{padding:10px 12px;margin-bottom:9px}.settings-detail .unified-settings-group{padding:10px 12px;margin-bottom:9px}}
+/* Avoid the top navigation layer flickering during iOS overscroll bounce. */
+html,body{overscroll-behavior-y:none}
+/* Keep the mobile fixed bottom nav viewport-anchored: no transformed header. */
+#view,.import-review,.works-page,.series-grid,.asset-grid{overscroll-behavior-y:contain}
+
+/* A series detail uses the same search height, menu chips and layout as the
+   general material catalog, including narrow iPad and phone viewports. */
+.catalog-toolbar .series-contents .series-filters {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+  margin:9px 0 12px;
+  background:transparent;
+  padding:0;
+}
+.series-contents .series-filters > .shiye-search {
+  display:flex;
+  flex:1 1 260px;
+  min-width:min(100%,230px);
+  margin:0;
+}
+.series-contents .series-filters > .shiye-search input {
+  box-sizing:border-box;
+  width:100%;
+  max-width:none;
+  height:40px;
+  min-height:40px;
+  background:#fff;
+  border:1px solid #e3e5dc;
+  border-radius:10px;
+  padding:9px 13px;
+  font:inherit;
+  font-size:14px;
+}
+.series-contents .series-filters > .series-filter-menus {
+  display:flex;
+  align-items:center;
+  flex:0 1 auto;
+  width:auto;
+  min-width:0;
+  overflow:visible;
+}
+.series-contents .series-filter-menus > .four-filter-controls {
+  display:flex;
+  width:auto;
+  min-width:0;
+  gap:6px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.series-contents .series-filter-menus .filter-control {
+  flex:0 0 auto;
+  min-height:34px;
+  height:34px;
+  border-radius:9px;
+  padding:0 12px;
+  font-size:14px;
+}
+.series-contents .series-navigation .btn,
+.series-contents .series-navigation .library-select-toggle {
+  min-height:36px;
+  border-radius:10px;
+  padding:8px 14px;
+  font-size:14px;
+}
+@media (max-width:860px) {
+  .series-contents .series-filters > .shiye-search {flex:1 0 100%;min-width:0}
+  .series-contents .series-filters > .series-filter-menus {width:100%;flex:1 1 100%}
+  .series-contents .series-filter-menus > .four-filter-controls {width:100%}
+}
+@media (max-width:600px) {
+  .series-contents .series-filter-menus .filter-control {font-size:12px;padding:0 7px}
+}
+
+/* Main series catalog: the search and sort row follow the same catalog
+   controls as materials/works; the series detail uses the same language. */
+.catalog-toolbar .swift-series-controls > .shiye-search {
+  display:flex;
+  align-items:center;
+  flex:1 1 280px;
+  min-width:220px;
+  margin:0;
+}
+.catalog-toolbar .swift-series-controls > .shiye-search input {
+  width:100%;
+  max-width:none;
+  height:40px;
+  min-height:40px;
+  padding:9px 13px;
+  box-sizing:border-box;
+  background:#fff;
+  border:1px solid #e3e5dc;
+  border-radius:10px;
+  font-size:14px;
+}
+.catalog-toolbar .swift-series-controls .filter-control {
+  min-height:34px;
+  height:34px;
+  border-radius:9px;
+  font-size:14px;
+}
+@media(max-width:860px){
+  .catalog-toolbar .swift-series-controls > .shiye-search {
+    flex:1 1 100%;
+    min-width:0;
+  }
+}
+
+/* Work-import paper is ONE standard card, never a second tall settings card.
+   Pattern/colour editing opens on demand from its centered button. */
+.import-review .review-candidates {align-items:stretch}
+.import-review .review-candidates > .review-candidate {
+  min-width:0;
+  min-height:0;
+}
+.import-review .review-background-card {
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0;
+  overflow:hidden;
+}
+.import-review .review-background-card > .review-thumbnail {
+  flex:0 0 130px;
+  width:100%;
+  height:130px;
+  min-height:0;
+  max-height:130px;
+  position:relative;
+}
+.import-review .review-background-card .review-paper-control {
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:max-content;
+  max-width:calc(100% - 16px);
+  height:36px;
+  min-height:36px;
+  padding:8px 14px;
+  margin:0;
+  color:#3f5d44;
+  font-size:13px;
+  font-weight:600;
+  line-height:1;
+  white-space:nowrap;
+  border:1px solid #d5e1d4;
+  border-radius:18px;
+  background:#fffefaef;
+  box-shadow:0 2px 9px #203c2c14;
+  cursor:pointer;
+}
+.import-review .review-background-card .review-paper-control:focus-visible {
+  outline:2px solid #426b4d;
+  outline-offset:2px;
+}
+/* Snapshot recognition pane has only a handful of settings. Do not reserve
+   the 610/580px workspace designed for a long material candidate inspector. */
+.import-snapshot-inspect .inspect-columns > .import-inspector {
+  height:auto;
+  min-height:0;
+  max-height:none;
+  align-self:start;
+  overflow:visible;
+}
+.import-snapshot-inspect .import-inspector > .inspector-scroll {
+  flex:0 0 auto;
+  min-height:0;
+  overflow:visible;
+  padding-bottom:0;
+}
+.import-snapshot-inspect .import-inspector > .confirm-photo {
+  width:100%;
+  margin-top:14px;
+}
+/* Safe bottom scroll space for ALL three mobile catalog tabs.
+   Apply after other catalog/shelf overrides, not to full-screen import/editor. */
+@media(max-width:699px) {
+  body:not(.editing):not(:has(.import-nav)) #view {
+    padding-bottom:calc(115px + env(safe-area-inset-bottom))!important;
+    scroll-padding-bottom:calc(100px + env(safe-area-inset-bottom));
+  }
+  body:not(.editing):not(:has(.import-nav)) .matching-page,
+  body:not(.editing):not(:has(.import-nav)) .works-page {
+    margin-bottom:0;
+    padding-bottom:12px;
+  }
+}
+
+/* Paper tile is a full-strength editable preview, not an unselected sticker. */
+.import-review .review-background-card:not(.selected) {opacity:1}
+
+
+/* Works differs from Materials: its sticky catalogue header is nested inside
+   .works-page, so the generic '#view > .catalog-toolbar ~ .grid' rule never
+   matched. Keep the same 12/10px breathing space under the divider in EVERY
+   Works tab (all, editable, snapshots, templates, recently deleted). */
+#view > .works-page > .catalog-toolbar ~ .works-grid,
+#view > .shiye-retained-works-host > .works-page > .catalog-toolbar ~ .works-grid,
+#view > .works-page > .catalog-toolbar ~ .journal-template-grid,
+#view > .shiye-retained-works-host > .works-page > .catalog-toolbar ~ .journal-template-grid,
+#view > .works-page > .catalog-toolbar ~ .grid,
+#view > .shiye-retained-works-host > .works-page > .catalog-toolbar ~ .grid,
+#view > .works-page + .recently-deleted-grid {
+  margin-top:12px;
+}
+@media(max-width:699px){
+  #view > .works-page > .catalog-toolbar ~ .works-grid,
+  #view > .shiye-retained-works-host > .works-page > .catalog-toolbar ~ .works-grid,
+  #view > .works-page > .catalog-toolbar ~ .journal-template-grid,
+  #view > .shiye-retained-works-host > .works-page > .catalog-toolbar ~ .journal-template-grid,
+  #view > .works-page > .catalog-toolbar ~ .grid,
+  #view > .shiye-retained-works-host > .works-page > .catalog-toolbar ~ .grid,
+  #view > .works-page + .recently-deleted-grid {
+    margin-top:10px;
+  }
+}

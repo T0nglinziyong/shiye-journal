@@ -1,61 +1,722 @@
-import {cloudClient,requireCloudUser} from './cloud-session.js';
-import {privateCache} from './private-cache.js';
+import {prepareUploadJobs} from './upload-preparation.js';
+import {cloudMetadataRecord,assertCloudCommitSize} from './cloud-record-guard.js';
+import {readCloudPages} from './cloud-page-read.js';
+import {cloudClient,requireCloudUser,cloudStorage} from './cloud-session.js';
+import {privateCache,outboxVersionRows} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
+import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
+import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows,repairMiswrappedSyncRows} from './unified-sync-outbox.js';
+import {rebuildSyncRecords} from './sync-rebuild.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
+import {planMetadataBatch,splitMetadataBatch} from './sync-metadata-batch.js';
+import {compareRecordEdits} from './sync-last-write.js';
+import {mergeConcurrentMetadata,stampMetadataEdit} from './sync-field-merge.js';
+import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
-import {createCOSStore} from './cos-store.js';
+import {hiddenAssetCopy,referencedAssetIDsInProjects} from './asset-retention.js';
+import {sceneMaterialIDs,sceneMaterialBlobIDs} from './scene-material-references.js';
+import {createCloudBaseStorage} from './cloudbase-storage.js';
+import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
-export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
-const BUCKET='shiye-private';
-const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
+import {migrationPendingConflicts} from './migration-outbox-guard.js';
+import {forkConflictingEditableWork,availableConflictCopy} from './sync-conflict-copy.js';
+import {projectSemanticFingerprint} from './project-semantic.js';
+import {isLegacySceneProject} from './scene-v2.js';
+import {createBlobRevisionProof} from './blob-revision-proof.js';
+import {createSyncDiagnostics} from './sync-diagnostics.js';
+import {decodeImageBlob} from './image-blob-decoder.js';
+import {yieldToForeground,scheduleForegroundIdle} from './foreground-idle.js';
+import {boundedMap} from './bounded-map.js';
+import {assetBlobIDs,splitIndependentAssetImport,splitWideMetadataMutation,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
+export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null,
+  onAccountEpochChanged=()=>{if(typeof window!=='undefined')window.dispatchEvent(new Event('shiye-account-epoch-changed'));}}){
+const writeProvider=()=>{if(!objectStorage?.enabled)throw Error('CloudBase 云存储不可用；待同步资料仍留在本机');return 'cloudbase';};
 const usableBlob=value=>value instanceof Blob&&value.size>0;
-async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
-async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision,writesInFlight=0;
+const supportedProvider=provider=>{if(provider!=='cloudbase')throw Error('旧存储图片尚未迁移到 CloudBase；请完成迁移后重试');};
+async function downloadObject(path,provider){supportedProvider(provider);if(!objectStorage?.enabled)throw Error('云端图片读取尚未配置');return objectStorage.download(path,provider);}
+async function uploadObject(path,blob,type,provider=writeProvider()){supportedProvider(provider);writeProvider();await objectStorage.upload(path,blob,type,provider);return {error:null};}
+let owner,revision,accountEpoch,writesInFlight=0,activeDirect=null,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
 const uploads=new Map();
+const previewJobs=new Set();
+
 const snapshots=new Map();
 const documents=new Map();
+const blobRecordRequests=new Map();
+const blobRecords=new Map();
+const blobRevisionProof=createBlobRevisionProof();
+const syncDiagnostics=createSyncDiagnostics();
+objectStorage?.setDiagnosticReporter?.(event=>syncDiagnostics.record(event));
+function retainBlobRecord(id,saved){
+  blobRecords.delete(id);blobRecords.set(id,saved);
+  if(blobRecords.size>256)blobRecords.delete(blobRecords.keys().next().value);
+}
+let blobRecordTimer=null;
+function batchBlobRecord(id){
+  if(blobRecordRequests.has(id))return blobRecordRequests.get(id).promise;
+  let resolve,reject;
+  const promise=new Promise((ok,fail)=>{resolve=ok;reject=fail;});
+  blobRecordRequests.set(id,{promise,resolve,reject});
+  if(blobRecordTimer===null)blobRecordTimer=setTimeout(async()=>{
+    blobRecordTimer=null;
+    const entries=[...blobRecordRequests];
+    for(const [key] of entries)blobRecordRequests.delete(key);
+    const atRevision=revision;
+    for(let offset=0;offset<entries.length;offset+=120){
+      // Up to three independent metadata queries can overlap, while each
+      // request still stays below PostgREST's practical IN-list size.
+      const groups=[0,40,80].map(start=>entries.slice(offset+start,offset+start+40)).filter(group=>group.length);
+      await Promise.all(groups.map(async group=>{
+        const ids=group.map(([key])=>key);
+        try{
+          const rows=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',owner).eq('store','blobs').in('id',ids));
+          const found=new Map(rows.map(row=>[row.id,row.record]));
+          await Promise.all(group.map(async([key,waiter])=>{
+            const record=found.get(key);
+            if(record&&revision===atRevision){const saved={revision:atRevision,record};retainBlobRecord(key,saved);await remember('blob-record:'+key,saved);}
+            waiter.resolve(record?structuredClone(record):undefined);
+          }));
+        }catch(error){for(const [,waiter] of group)waiter.reject(error);}
+      }));
+    }
+  },0);
+  return promise;
+}
 const editorBases=new Map();
+const editorSceneBases=new Map();
+const remoteProjectWinners=new Map();
+const projectMetadataFields=['title','styleTags','isUsed','isDraft','isFavorite'];
+const sceneFingerprint=record=>projectSemanticFingerprint({drafts:record.drafts});
+const sameField=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function mergeProjectMetadata(base,local,remote,sceneSource){
+  const winner=latestEditedProject(local,remote);
+  const merged=structuredClone(sceneSource);
+  for(const key of projectMetadataFields){
+    const localChanged=!sameField(local[key],base[key]);
+    const remoteChanged=!sameField(remote[key],base[key]);
+    const value=localChanged&&(!remoteChanged||winner==='local')?local[key]:remote[key];
+    if(value===undefined)delete merged[key];else merged[key]=structuredClone(value);
+  }
+  merged.updatedAt=[local.updatedAt,remote.updatedAt].filter(value=>typeof value==='string').sort().at(-1)||
+    merged.updatedAt;
+  merged.__cloudSessionId=local.__cloudSessionId;
+  merged.__cloudBaseRevision=local.__cloudBaseRevision;
+  // A replacement is still pending. Its new base is the cloud document we
+  // just reconciled against, not the replacement's own uncommitted contents.
+  merged.__cloudBaseSceneFingerprint=sceneFingerprint(remote);
+  merged.__cloudBaseMetadata=Object.fromEntries(projectMetadataFields.map(key=>[key,remote[key]]));
+  return merged;
+}
 // The editor must carry the revision of the document it actually opened.
 // A later background sync cursor is not its editing baseline.
 const withProjectBase=(store,record,base)=>{
   if(store!=='projects'||!record)return record;
   const session=crypto.randomUUID();editorBases.set(session,base);
-  if(editorBases.size>300)editorBases.delete(editorBases.keys().next().value);
-  return {...record,__cloudBaseRevision:base,__cloudSessionId:session};
+  if(editorBases.size>300){const old=editorBases.keys().next().value;editorBases.delete(old);editorSceneBases.delete(old);}
+  // Large works arrive as list summaries without their layers. A summary
+  // fingerprint cannot be used as the base of an editable Scene.
+  const scene=record.projectDocumentPath?null:
+    Array.isArray(record.drafts)?sceneFingerprint(record):null;
+  const metadata=Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]));
+  editorSceneBases.set(session,{scene,metadata});
+  return {...record,__cloudBaseRevision:base,__cloudSessionId:session,
+    __cloudBaseSceneFingerprint:scene,__cloudBaseMetadata:metadata};
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 let cacheDisabled=false;
+let unifiedOutboxBefore=[],projectOutboxQuarantine=[],unifiedQuarantine=[];
+// The merge guard needs only identity/version stamps, never image payloads.
+// Keeping a second structured clone of every pending Blob made each import
+// progressively more expensive on mobile Safari.
+const outboxStamps=outboxVersionRows;
+const sessionTag=crypto.randomUUID();
+let outboxChannel=null;
+const channel=()=>{
+  if(typeof window==='undefined'||typeof BroadcastChannel==='undefined')return null;
+  if(outboxChannel)return outboxChannel;
+  if(!owner)return null;
+  const name='shiye-outbox:'+namespace+':'+owner;
+  outboxChannel=new BroadcastChannel(name);
+  // Outbox and committed-revision signals are tab-local optimizations:
+  // Web Locks and versioned server CAS remain the source of truth. A successful
+  // delete should become visible in another open tab immediately, not only on
+  // the next remote poll (other physical devices use the foreground revision check).
+  outboxChannel.onmessage=event=>{
+    const msg=event.data;
+    if(!msg||msg.source===sessionTag)return;
+    if(msg.type==='pending')
+      void unifiedSync.resume().catch(()=>{});
+    if(msg.type==='committed')notifyCloudSuperseded();
+  };
+  return outboxChannel;
+};
+// All post-reset uploads go under a unique, immutable generation prefix.
+// The background GC excludes this subtree even while deleting old objects,
+// so file cleanup can never block login or wipe newly uploaded images.
+function cloudSetResetCleanupPending(value,resetId=null){
+  resetCleanupPending=!!value;
+  if(resetId&&!/^[a-f0-9-]{36}$/i.test(resetId))throw Error('清空版本编号无效');
+  resetEpochId=resetId||null;
+}
+async function objectRoot(){
+  return (await identity())+'/' + (resetEpochId?'reset-'+resetEpochId+'/':'');
+}
+function assertAccountWritable(){
+  if(resetInProgress)throw Error('账号清空中，不能保存新资料');
+  if(resetCleanupPending&&!resetEpochId)
+    throw Error('云端清空版本尚未核对完成，暂不能写入');
+}
+async function withAccountSyncLock(task){
+  const id=await account();
+  let entered=false;
+  try{return await runAccountBrowserLock(id,async()=>{entered=true;return task();});}
+  catch(error){throw entered?error:markSyncPhase(error,'获取同步锁或执行同步任务');}
+}
+async function persistOutbox(kind,previous,rows,options={}){
+  if(!cache||cacheDisabled)throw Error('无法安全保存待同步资料');
+  const key=await account();
+  if(typeof cache.putOutbox==='function')await cache.putOutbox(key,kind,previous,rows,options);
+  else await cache.put(key,kind,rows);
+  channel()?.postMessage({source:sessionTag,type:'pending'});
+}
 const account=async()=>`${namespace}:${await identity()}`;
-function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
-const projectSync=createProjectSync({
-  load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await cache.put(key,'project-outbox',result.rows);}catch{/* The valid cloud version still takes precedence in this session. */}return result.rows;},
-  write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
-  commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
-  reconcile:async(record,operationID,baseRevision)=>{
-    if(await wasCommitted(operationID,baseRevision))return 'committed';
-    const latest=await version();
-    return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]})?'rebase':'conflict';
+function notifyCloudSuperseded(){
+  if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
+}
+function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error,conflicts:current.conflicts,uploading:current.uploading||writesInFlight>0,progress:activeDirect?{phase:activeDirect.phase,done:activeDirect.done,total:activeDirect.total}:null}}));}}
+// One durable account-scoped queue, one upload scheduler. The project and
+// import accessors below are filtered facades; neither owns a second queue.
+async function loadUnifiedOutbox(recover=false){
+  if(!cache)return [];
+  const user=await account();
+  let result;
+  if(recover&&typeof cache.migrateUnifiedOutbox==='function'){
+    result=await cache.migrateUnifiedOutbox(user);
+  }else{
+    const previous=await cache.get(user,'unified-outbox');
+    if(Array.isArray(previous))result={rows:previous,quarantine:await cache.get(user,'sync-quarantine')||[]};
+    else{
+      result=foldLegacySyncRows([],await cache.get(user,'project-outbox')||[],
+        await cache.get(user,'import-outbox')||[]);
+      await cache.put(user,'unified-outbox',result.rows);
+      if(result.quarantine.length)await cache.put(user,'sync-quarantine',result.quarantine);
+    }
+  }
+  const repaired=repairMiswrappedSyncRows(result.rows);
+  if(repaired){
+    if(typeof cache.repairUnifiedOutbox!=='function')
+      throw Error('本机待同步队列暂不能安全修复；原始记录已保留');
+    result=await cache.repairUnifiedOutbox(user,result.rows,repaired,[]);
+  }
+  if(recover&&result.rows.some(row=>row.record?.kind==='batch')){
+    // Reuse the existing crash-recovery gate before the first upload. A
+    // A missing Safari Blob is not evidence that its cloud source vanished.
+    const recovered=await recoverImportOutbox(importSyncRows(result.rows),async(asset,ids)=>{
+      const userID=await identity();
+      if(!ids.length)return false;
+      const copies=checked(await cloudClient().from('shiye_records').select('id,record')
+        .eq('user_id',userID).eq('store','blobs').in('id',ids)
+        .abortSignal(AbortSignal.timeout(5000)));
+      const available=await boundedMap(copies,4,async copy=>{
+        const metadata=copy.record;
+        if(!metadata?.storagePath||metadata.storageProvider!=='cloudbase')return null;
+        if(!metadata.storagePath.startsWith(userID+'/'))throw Error('图片不属于当前账号');
+        const localBlob=await cached('image:'+metadata.storagePath);
+        if(usableBlob(localBlob))return copy.id;
+        if(objectStorage?.probe){
+          if(await objectStorage.probe(metadata.storagePath,metadata.storageProvider))return copy.id;
+          // A definite storage 404 is evidence that metadata alone cannot render
+          // the card. Other probe failures throw and keep the outbox intact.
+          return null;
+        }
+        try{if(usableBlob(await downloadObject(metadata.storagePath,metadata.storageProvider)))return copy.id;}
+        catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
+        return null;
+      });
+      return available.filter(Boolean);
+    });
+    if(recovered.changed){
+      const byOperation=new Map(recovered.rows.map(row=>[row.operationID,row]));
+      const held=[],updated=[];
+      for(const row of result.rows){
+        if(row.record?.kind!=='batch'){updated.push(row);continue;}
+        const repair=byOperation.get(row.operationID);
+        if(!repair){
+          held.push({kind:'batch',reason:'unrecoverable-import',row:{
+            ...row,record:row.record.payload
+          }});
+          continue;
+        }
+        if(repair.record!==row.record.payload){
+          held.push({kind:'batch',reason:'original-before-import-recovery',row:{
+            ...row,record:row.record.payload
+          }});
+          updated.push({...row,operationID:crypto.randomUUID(),record:{
+            ...row.record,payload:repair.record
+          }});
+        }else updated.push(row);
+      }
+      if(typeof cache.repairUnifiedOutbox==='function'){
+        result=await cache.repairUnifiedOutbox(user,result.rows,updated,held);
+      }else{
+        await cache.put(user,'sync-quarantine',[...result.quarantine,...held]);
+        await cache.put(user,'unified-outbox',updated);
+        result={rows:updated,quarantine:[...result.quarantine,...held]};
+      }
+    }
+  }
+  if(recover&&typeof cache.repairUnifiedOutbox==='function'){
+    const split=await splitPendingAssetImportRows(result.rows,{isCommitted:row=>
+      wasCommitted(row.operationID,row.baseRevision)});
+    if(split)result=await cache.repairUnifiedOutbox(user,result.rows,split,[]);
+  }
+  unifiedOutboxBefore=outboxStamps(result.rows);
+  unifiedQuarantine=structuredClone(result.quarantine);
+  projectOutboxQuarantine=unifiedQuarantine.filter(item=>item.kind==='project').map(item=>item.row);
+  return result.rows;
+}
+const unifiedSync=createProjectSync({
+  authoritativeCommit:true,
+  autoFlushDelayMs:10000,
+  // A long backlog must not make a new independent import wait while every
+  // older image is hashed and uploaded. Same-key edits still retain order.
+  prepareLimit:2,
+  retryConflicts:()=>true,
+  coalesce:planMetadataBatch,
+  splitCoalesced:splitMetadataBatch,
+  load:()=>loadUnifiedOutbox(true),
+  reload:()=>loadUnifiedOutbox(false),
+  write:async(rows,options={})=>{
+    await persistOutbox('unified-outbox',unifiedOutboxBefore,rows,options);
+    unifiedOutboxBefore=outboxStamps(rows);
   },
-  onCommitted:(record,committedRevision)=>{if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);},
+  commit:(envelope,operationID,baseRevision)=>{
+    const payload=envelope.payload;
+    if(envelope.kind==='project')
+      return cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(payload),operationID,baseRevision,true);
+    if(envelope.kind!=='batch')throw Error('不支持的待同步操作类型');
+    return payload.operations?
+      cloudTransaction(payload.names,tx=>{for(const op of payload.operations){
+        const store=tx.objectStore(op.store);
+        if(op.action==='put')store.put(op.item);
+        else if(op.action==='delete')store.delete(op.id);
+        else store.clear();
+      }},operationID,baseRevision,true):
+      cloudTransaction(['assets','blobs','projects'],tx=>{
+        for(const store of ['assets','blobs','projects'])
+          for(const item of payload[store]||[])tx.objectStore(store).put(item);
+      },operationID,baseRevision,true);
+  },
+  revision:()=>revision,
+  reconcile:async(envelope,operationID,baseRevision)=>{
+    if(envelope.kind==='batch')
+      return reconcileImport(envelope.payload,operationID,baseRevision);
+    if(envelope.kind!=='project')return 'conflict';
+    if(await wasCommitted(operationID,baseRevision))return 'committed';
+    if(await wasResetAfter(baseRevision))
+      throw Error('账号已清空；本机旧作品已保留，不能自动重新上传');
+    const latest=await version(),record=envelope.payload;
+    if(latest===baseRevision)return 'rebase';
+    if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
+      before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
+    // A real concurrent edit must keep both complete Scene documents. The
+    // local branch is redirected to a new work after the outbox switch commits.
+    const remote=await cloudRecord('projects',record.id);
+    if(!remote)return record.forkOrigin?'rebase':'conflict';
+    // Before LWW arbitration, capture both editable variants in the user's
+    // private account cache. Even the losing snapshot remains recoverable
+    // after the outbox entry is retired. Failure aborts arbitration: do not
+    // discard a local version without first preserving the pair.
+    const safetyKey='pre-conflict-scene:'+record.id+':'+operationID;
+    const completeRemote=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
+    if(!cache||cacheDisabled)
+      throw Error('无法安全创建冲突前备份；保留待同步修改，请先检查本机存储');
+    const userKey=await account(),savedAt=new Date().toISOString();
+    const pair={kind:'shiye-pre-conflict-scene-pair',at:savedAt,
+      local:structuredClone(record),remote:structuredClone(completeRemote),
+      baseRevision,remoteRevision:latest};
+    // Unlike disposable image thumbnails, conflict protection must never be
+    // best-effort. Stop reconciliation if IndexedDB cannot persist the pair.
+    await cache.put(userKey,safetyKey,pair);
+    const savedList=await cache.get(userKey,'pre-conflict-scene-index')||[];
+    if(!savedList.some(entry=>entry.key===safetyKey))
+      await cache.put(userKey,'pre-conflict-scene-index',[
+        {key:safetyKey,id:record.id,title:record.title||'未命名作品',at:savedAt},
+        ...savedList
+      ].slice(0,20));
+    if(projectSemanticFingerprint(record)===projectSemanticFingerprint(completeRemote)){
+      remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));return 'remote';
+    }
+    const localScene=sceneFingerprint(record),remoteScene=sceneFingerprint(completeRemote);
+    let baseScene=record.__cloudBaseSceneFingerprint;
+    // Older queued edits may carry the fingerprint of a thin listing. The
+    // immutable document path still identifies the complete Scene they opened.
+    // Recover that base before deciding that a continuation is a new branch.
+    if(baseScene!==remoteScene){
+      try{
+        const memory=snapshots.get('projects');
+        const saved=memory?.revision===baseRevision?memory:await cached('records:projects');
+        const previous=saved?.revision===baseRevision?
+          saved.records.find(item=>item.id===record.id):null;
+        const opening=record.projectDocumentPath?record:previous;
+        if(opening?.projectDocumentPath){
+          const opened=await cloudProjectDocument({...opening,
+            __cloudDocumentHydrated:false,__cloudSessionId:undefined});
+          if(sceneFingerprint(opened)===remoteScene)baseScene=remoteScene;
+        }
+      }catch{/* Keep the queued edit if its old document is unavailable. */}
+    }
+    if(baseScene&&record.__cloudBaseMetadata&&
+      (localScene===baseScene||remoteScene===baseScene)){
+      const merged=mergeProjectMetadata(record.__cloudBaseMetadata,record,completeRemote,
+        localScene===baseScene?completeRemote:record);
+      if(projectSemanticFingerprint(merged)===projectSemanticFingerprint(completeRemote)){
+        remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));return 'remote';
+      }
+      return {kind:'replace',record:syncEnvelope('project',merged)};
+    }
+    if(localScene===remoteScene){
+      // Only project-list metadata differs; keep the latest explicit edit.
+      const winner=latestEditedProject(record,remote);
+      if(winner==='remote')remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));
+      return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
+    }
+    return 'conflict';
+  },
+  onCommitted:(envelope,committedRevision)=>{
+    const record=envelope.kind==='project'?envelope.payload:null;
+    if(record?.__cloudSessionId){
+      editorBases.set(record.__cloudSessionId,committedRevision);
+      editorSceneBases.set(record.__cloudSessionId,{scene:sceneFingerprint(record),
+        metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))});
+      if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-sync-project-committed',{
+        detail:{id:record.id,sessionID:record.__cloudSessionId,revision:committedRevision,
+          sceneFingerprint:sceneFingerprint(record),
+          metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))}}));
+    }
+  },
+  onReplaced:(source,target)=>{
+    if(source.kind!=='project'||target.kind!=='project')return;
+    const record=target.payload;
+    if(record.__cloudSessionId)editorSceneBases.set(record.__cloudSessionId,
+      {scene:record.__cloudBaseSceneFingerprint||sceneFingerprint(record),
+        metadata:record.__cloudBaseMetadata||
+          Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))});
+    if(typeof window==='undefined')return;
+    window.dispatchEvent(new CustomEvent('shiye-sync-project-replaced',{
+      detail:{sourceID:source.payload.id,sourceSessionID:source.payload.__cloudSessionId,
+        sourceFingerprint:projectSemanticFingerprint(source.payload),target:structuredClone(target.payload)}}));
+  },
+  onConflict:async(envelope,_baseRevision,operationID)=>{
+    if(envelope.kind!=='project')return null;
+    const {copy}=await availableConflictCopy(envelope.payload,{epoch:accountEpoch,
+      branchID:envelope.payload.__cloudSessionId||operationID,
+      fingerprint:projectSemanticFingerprint,
+      load:async id=>{const row=await cloudRecord('projects',id);
+        return row?.projectDocumentPath?cloudProjectDocument(row):row;}});
+    return syncEnvelope('project',copy);
+  },
+  onForked:(source,target)=>{
+    notifyCloudSuperseded();
+    if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-sync-forked',{
+      detail:{sourceID:source.payload.id,sourceSessionID:source.payload.__cloudSessionId,
+        target:structuredClone(target.payload)}}));
+  },
+  onSuperseded:envelope=>{
+    const target=remoteProjectWinners.get(envelope.id);
+    remoteProjectWinners.delete(envelope.id);
+    if(target&&envelope.kind==='project'){
+      const session=envelope.payload.__cloudSessionId;
+      if(session){editorBases.set(session,revision);
+        editorSceneBases.set(session,{scene:sceneFingerprint(target),
+          metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,target[key]]))});}
+      if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-sync-project-replaced',{
+        detail:{sourceID:envelope.payload.id,sourceSessionID:session,
+          sourceFingerprint:projectSemanticFingerprint(envelope.payload),
+          target:{...target,__cloudSessionId:session,__cloudBaseRevision:revision,
+            __cloudBaseSceneFingerprint:sceneFingerprint(target),
+            __cloudBaseMetadata:Object.fromEntries(projectMetadataFields.map(key=>[key,target[key]]))}}}));
+    }
+    notifyCloudSuperseded();
+  },
   onStatus:reportSync,
+  onDiagnostic:event=>syncDiagnostics.record(event),
+  runExclusive:withAccountSyncLock,
+  requiresPrepare:envelope=>envelope.kind==='batch'&&(
+    envelope.payload.operations?.some(op=>op.store==='blobs'&&op.action==='put')||
+    envelope.payload.blobs?.length>0),
+  prepare:async (envelopes,rows)=>{
+    const puts=[];
+    for(const [index,envelope] of envelopes.entries()){
+      if(envelope.kind!=='batch')continue;
+      const batch=envelope.payload;
+      const operations=batch.operations||['assets','blobs','projects'].flatMap(store=>(batch[store]||[])
+        .map(item=>({action:'put',store,item})));
+      const auxiliary=auxiliaryBlobIDs(operations);
+      for(const op of operations)if(op.action==='put'&&op.store==='blobs')
+        puts.push({item:op.item,makePreview:!auxiliary.has(op.item.id),
+          operationID:rows[index].operationID});
+    }
+    // At most three large Blob reads/hashes may be live on mobile Safari.
+    // Failed images are recorded by durable operation ID rather than retried
+    // again under the account lock. Other records remain independent.
+    const failures=await prepareUploadJobs(puts,op=>
+      encode('blobs',op.item,{makePreview:op.makePreview}));
+    for(const [id,error] of failures)failures.set(id,
+      markSyncPhase(error||Error('图片预上传失败'),'预上传图片'));
+    return failures;
+  },
+  recordKeys:syncAffectedKeys,
 });
+const selectedRows=async kind=>(await unifiedSync.pending())
+  .filter(row=>row.record?.kind===kind).map(row=>({
+    ...row,record:structuredClone(row.record.payload)
+  }));
+const resolveEnvelope=async(kind,id,serial,{record=null,baseRevision=null}={})=>
+  unifiedSync.resolvePending((kind==='project'?'project:':'batch:')+id,serial,{
+    record:record?syncEnvelope(kind,record):null,baseRevision
+  });
+const projectSync={
+  stage:(record,opts)=>unifiedSync.stage(syncEnvelope('project',record),opts),
+  pending:()=>selectedRows('project'),
+  resolvePending:(id,serial,opts)=>resolveEnvelope('project',id,serial,opts),
+  cancelPendingFor:ids=>unifiedSync.cancelPendingFor(ids.map(id=>'project:'+id)),
+  status:()=>unifiedSync.status(),
+};
+const importSync={
+  stage:(record,opts)=>unifiedSync.stage(syncEnvelope('batch',record),opts),
+  stageMany:(records,opts)=>unifiedSync.stageMany(records.map(record=>syncEnvelope('batch',record)),opts),
+  pending:()=>selectedRows('batch'),
+  resolvePending:(id,serial,opts)=>resolveEnvelope('batch',id,serial,opts),
+  status:()=>unifiedSync.status(),
+};
+// A reset is a high-priority epoch barrier. Outboxes staged before a
+// deliberate all-data reset must NEVER revive old artwork after reconnect.
+async function wasResetAfter(baseRevision){
+  const user=await identity();
+  const {data,error}=await cloudClient().from('shiye_records')
+    .select('record').eq('user_id',user).eq('store','meta')
+    .eq('id','shiye-reset-barrier').maybeSingle();
+  if(error)throw Error('无法核对账号清空版本，暂不上传旧资料');
+  const resetRevision=Number(data?.record?.revision);
+  return Number.isSafeInteger(resetRevision)&&resetRevision>baseRevision;
+}
 async function wasCommitted(operationID,baseRevision){
   if(!operationID)throw Error('待同步记录缺少 operationID');
-  const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
-  if(row)await version(); // Invalidate stale snapshots after a lost response.
-  return !!row;
+  const user=await identity();
+  // Current commits write a v3 receipt. Check it before the legacy receipt so
+  // a lost response needs only one network round trip to confirm success.
+  const receipt=checked(await cloudClient().from('shiye_commit_receipts_v3')
+    .select('result').eq('user_id',user).eq('operation_id',operationID).maybeSingle());
+  const durable=receipt||checked(await cloudClient().from('shiye_commits')
+    .select('revision').eq('user_id',user).eq('operation_id',operationID).maybeSingle());
+  if(durable)await version(); // Invalidate stale snapshots after a lost response.
+  return !!durable;
+}
+async function committedOperationIDs(operationIDs){
+  const ids=[...new Set(operationIDs.filter(Boolean))],committed=new Set();
+  if(!ids.length)return committed;
+  const user=await identity(),client=cloudClient();
+  // Rebuilding a large queue used to issue one or two receipt requests per
+  // operation. Read only receipt IDs in bounded batches; a failed lookup
+  // still aborts the rebuild and leaves the original durable rows intact.
+  for(let offset=0;offset<ids.length;offset+=100){
+    const batch=ids.slice(offset,offset+100);
+    const current=checked(await client.from('shiye_commit_receipts_v3')
+      .select('operation_id').eq('user_id',user).in('operation_id',batch));
+    for(const row of current)committed.add(row.operation_id);
+    const missing=batch.filter(id=>!committed.has(id));
+    if(missing.length){
+      const legacy=checked(await client.from('shiye_commits')
+        .select('operation_id').eq('user_id',user).in('operation_id',missing));
+      for(const row of legacy)committed.add(row.operation_id);
+    }
+  }
+  if(committed.size)await version();
+  return committed;
 }
 async function reconcileImport(batch,operationID,baseRevision){
   if(await wasCommitted(operationID,baseRevision))return 'committed';
+  if(await wasResetAfter(baseRevision))
+    throw Error('账号已清空；本机待同步资料已保留，不能自动重新上传');
   const latest=await version();
+  // If the server cursor never advanced, an aborted request is unconfirmed,
+  // not remotely won. Do not drop a local delete or restore on a 404 lookup.
+  if(latest===baseRevision)return 'rebase';
   // Edits/deletes rebase only over a complete, disjoint change log. An
   // append-only import may instead prove absence by its unique record IDs.
-  if(batch.operations)return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:batch.operations})?'rebase':'conflict';
+  if(!batch.operations&&batch.projects?.length)batch={...batch,
+    names:['assets','blobs','projects'],
+    operations:['assets','blobs','projects'].flatMap(store=>(batch[store]||[])
+      .map(item=>({store,action:'put',item})))};
+  if(batch.operations){
+    const client=cloudClient(),user=await identity();
+    const nonoverlap=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:batch.operations});
+    if(nonoverlap)return 'rebase';
+    // Resolve only the objects actually modified since our baseline. A batch
+    // can contain disjoint assets and projects: a stale item must not block
+    // independent updates or a newer item in the same transaction.
+    const operations=[];
+    // A queued explicit restore contains BOTH meta:tombstone delete and the
+    // corresponding record PUT. It may follow an unacknowledged delete.
+    const restorePairs=new Set(batch.operations.filter(op=>op.action==='put'&&['assets','series','projects'].includes(op.store))
+      .filter(op=>batch.operations.some(marker=>marker.store==='meta'&&marker.action==='delete'&&marker.id==='tombstone:'+op.store+':'+op.item?.id))
+      .map(op=>op.store+':'+op.item.id));
+    for(const op of batch.operations){
+      const sameKeyFree=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:[op]});
+      if(sameKeyFree){operations.push(op);continue;}
+      // A store-wide clear cannot erase records added by another device after
+      // its baseline. Treat the newer cloud collection as the winner instead
+      // of sending the user to a whole-batch conflict dialog.
+      if(op.action==='clear')continue;
+      const id=op.item?.id??op.id;
+      // A paired restore also consumes its Recently Deleted card, regardless
+      // of device timestamp skew or the original deletion's write time.
+      if(op.store==='trash'&&op.action==='delete'){
+        const card=await cloudRecord('trash',id);
+        const liveStore=card?.kind==='project'?'projects':card?.kind==='asset'?'assets':null;
+        if(liveStore&&restorePairs.has(liveStore+':'+card.item?.id)){operations.push(op);continue;}
+      }
+      if(op.store==='meta'&&op.action==='delete'&&typeof op.id==='string'){
+        const pair=[...restorePairs].find(key=>op.id==='tombstone:'+key);
+        if(pair&&await cloudRecord('meta',op.id)){operations.push(op);continue;}
+      }
+      if(op.action==='put'&&restorePairs.has(op.store+':'+id)){
+        const marker=await cloudRecord('meta','tombstone:'+op.store+':'+id);
+        const live=await cloudRecord(op.store,id);
+        if(marker&&!live){operations.push(op);continue;}
+      }
+      // A newer logical delete is authoritative for an old material/series
+      // metadata save. Keep project documents for the separate-work path and
+      // keep byte-bearing import batches intact for recovery.
+      if(op.action==='put'&&['assets','series'].includes(op.store)&&
+        !batch.operations.some(other=>other.store==='blobs'&&other.action==='put')&&
+        await cloudRecord('meta','tombstone:'+op.store+':'+id)&&
+        !await cloudRecord(op.store,id))continue;
+      // A byte-bearing import can also contain a later metadata edit. Merge
+      // that edit against its saved base; orphaned losing bytes are pruned
+      // below after the winning asset has been determined.
+      if(op.action==='put'&&['assets','series'].includes(op.store)&&op.baseRecord){
+        const remote=await cloudRecord(op.store,id);
+        const merged=mergeConcurrentMetadata(op.baseRecord,op.item,remote);
+        if(merged){
+          if(merged.changed)operations.push({...op,item:merged.record,baseRecord:remote});
+          continue;
+        }
+      }
+      // Scene edits still use the separate-work conflict path. Other records
+      // settle by the edit timestamp carried with the durable operation; a
+      // missing/equal timestamp keeps the already committed cloud version.
+      if(op.store==='projects'&&op.action==='put'&&!op.item.isSnapshot){
+        const remote=await cloudRecord('projects',id);
+        if(remote){
+          const full=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
+          const local=op.item.projectDocumentPath?await cloudProjectDocument(op.item):op.item;
+          // A details dialog submits a project summary, not an editor Scene.
+          // Preserve the current cloud Scene and merge only the fields changed
+          // from the summary that was actually shown to this device.
+          if(op.baseRecord&&sameField(op.item.drafts,op.baseRecord.drafts)){
+            const merged=mergeConcurrentMetadata(op.baseRecord,op.item,full);
+            if(merged){
+              if(merged.changed)operations.push({...op,item:merged.record,baseRecord:full});
+              continue;
+            }
+          }
+          const localScene=sceneFingerprint(local),remoteScene=sceneFingerprint(full);
+          if(localScene===remoteScene){
+            if(compareRecordEdits(local,full,{localTimestamp:op.modifiedAt})==='local')operations.push(op);
+            continue;
+          }
+          // Restores/imports may carry editable works in a batch rather than
+          // the editor outbox. Preserve their divergent Scene as a new work
+          // too, instead of leaving the entire batch in manual conflict.
+          const {copy,existing}=await availableConflictCopy(local,{epoch:accountEpoch,
+            branchID:batch.id+':'+projectSemanticFingerprint(local),
+            fingerprint:projectSemanticFingerprint,
+            load:async key=>{const row=await cloudRecord('projects',key);
+              return row?.projectDocumentPath?cloudProjectDocument(row):row;}});
+          if(!existing)operations.push({...op,item:copy});
+          continue;
+        }
+      }
+      if(op.action==='put'){
+        const remote=await cloudRecord(op.store,id);
+        if(!remote){
+          const marker=['assets','series'].includes(op.store)
+            ?await cloudRecord('meta','tombstone:'+op.store+':'+id):null;
+          if(!marker||compareRecordEdits(op.item,marker,
+            {localTimestamp:op.modifiedAt})==='local')operations.push(op);
+        }else if(op.store!=='blobs'&&compareRecordEdits(op.item,remote,
+          {localTimestamp:op.modifiedAt})==='local')operations.push(op);
+        continue;
+      }
+      if(op.action==='delete'){
+        const remote=await cloudRecord(op.store,id);
+        if(remote&&compareRecordEdits({updatedAt:op.modifiedAt},remote,
+          {localTimestamp:op.modifiedAt})==='local')operations.push(op);
+        continue;
+      }
+      return 'conflict';
+    }
+    // A remote image edit may win while this batch also carries its old
+    // candidate bytes. Keep bytes only if the winning asset still references
+    // them; independent blob operations remain untouched.
+    const sourceAssets=batch.operations.filter(op=>op.store==='assets'&&op.action==='put');
+    const winningAssets=new Map();
+    for(const source of sourceAssets){
+      const kept=operations.find(op=>op.store==='assets'&&op.action==='put'&&
+        op.item.id===source.item.id);
+      winningAssets.set(source.item.id,kept?.item||await cloudRecord('assets',source.item.id));
+    }
+    for(let i=operations.length-1;i>=0;i--){
+      const op=operations[i];if(op.store!=='blobs'||op.action!=='put')continue;
+      const sources=sourceAssets.filter(asset=>assetBlobIDs(asset.item).includes(op.item.id));
+      if(sources.length&&!sources.some(asset=>assetBlobIDs(winningAssets.get(asset.item.id))
+        .includes(op.item.id)))operations.splice(i,1);
+    }
+    // A generated tombstone must travel with the delete it describes. If a
+    // newer cloud edit won, suppress its old marker too.
+    const keptDeletes=new Set(operations.filter(op=>op.action==='delete')
+      .map(op=>op.store+':'+op.id));
+    for(let i=operations.length-1;i>=0;i--){
+      const op=operations[i];
+      if(op.store==='meta'&&op.action==='put'&&op.item?.kind==='tombstone'&&
+        batch.operations.some(source=>source.action==='delete'&&
+          op.item.id==='tombstone:'+source.store+':'+source.id)&&
+        !keptDeletes.has(op.item.store+':'+op.item.targetID))operations.splice(i,1);
+    }
+    if(!operations.length)return 'remote';
+    return {kind:'replace',record:syncEnvelope('batch',{...batch,operations})};
+  }
+  if(batch.assets?.length&&!batch.projects?.length){
+    const recovered=await reconcileInterruptedAssetImport(batch,cloudRecord);
+    if(recovered){
+      if(!recovered.length)return 'remote';
+      const {assets,blobs,projects,...rest}=batch;
+      return {kind:'replace',record:syncEnvelope('batch',{
+        ...rest,names:[...new Set(recovered.map(op=>op.store))],operations:recovered
+      })};
+    }
+    const operations=[],neededBlobs=new Set();
+    for(const asset of batch.assets){
+      const remote=await cloudRecord('assets',asset.id);
+      const tombstone=!remote?await cloudRecord('meta','tombstone:assets:'+asset.id):null;
+      const localWins=!remote?(!tombstone||compareRecordEdits(asset,tombstone)==='local'):
+        compareRecordEdits(asset,remote)==='local';
+      if(localWins)operations.push({store:'assets',action:'put',item:asset});
+      for(const id of assetBlobIDs(localWins?asset:remote))neededBlobs.add(id);
+    }
+    for(const blob of batch.blobs)if(neededBlobs.has(blob.id))
+      operations.push({store:'blobs',action:'put',item:blob});
+    if(!operations.length)return 'remote';
+    const {assets,blobs,projects,...rest}=batch;
+    return {kind:'replace',record:syncEnvelope('batch',{
+      ...rest,names:[...new Set(operations.map(op=>op.store))],operations
+    })};
+  }
   const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
   if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
   let present=0;
@@ -66,169 +727,547 @@ async function reconcileImport(batch,operationID,baseRevision){
     }));
     present+=found.filter(Boolean).length;
   }
-  return present===records.length?'committed':present===0?'rebase':'conflict';
+  if(present===0)return 'rebase';
+  // Legacy single-project import batches are not acknowledgements. A newer
+  // copy may own the same ID; expose a deliberate version choice instead of
+  // automatically keeping/overwriting either document.
+  if(batch.projects?.length&&!batch.assets?.length&&!batch.blobs?.length)return 'conflict';
+  // Mixed old imports can contain original blobs or source inventory. Until
+  // their exact bytes are provably acknowledged, never silently drop them.
+  return 'conflict';
 }
 // This durable, account-scoped outbox retains the complete batch, including
 // original bytes. Only a successful cloud acknowledgement removes it.
-const importSync=createProjectSync({
-  load:async()=>{
-    if(!cache)return [];
-    const key=await account(),rows=await cache.get(key,'import-outbox')||[];
-    const result=await recoverImportOutbox(rows,async(asset,ids)=>{
-      const user=await identity();
-      if(!ids.length)return false;
-      const copies=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',user).eq('store','blobs').in('id',ids).abortSignal(AbortSignal.timeout(5000)));
-      const available=[];
-      for(const copy of copies){
-        const record=copy.record;
-        // Metadata alone is not a cloud backup. A crash can leave a row whose
-        // COS object was never uploaded. Check only broken local imports, and
-        // treat 404 as loss; timeout/403 remain indeterminate and are retried.
-        if(!record?.storagePath||!['cos','supabase'].includes(record.storageProvider))continue;
-        if(!record.storagePath.startsWith(user+'/'))throw Error('图片不属于当前账号');
-        const cachedImage=await cached('image:'+record.storagePath);
-        if(usableBlob(cachedImage)){available.push(copy.id);continue;}
-        if(record.storageProvider==='cos'&&objectStorage?.probe){if(await objectStorage.probe(record.storagePath))available.push(copy.id);continue;}
-        try{if(usableBlob(await downloadObject(record.storagePath,record.storageProvider)))available.push(copy.id);}
-        catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
-      }
-      return available;
-    });
-    if(!result.changed)return rows;
-    // Do not show a local ghost after a confirmed cloud miss. This changes
-    // only the broken, uncommitted outbox row; no cloud data is deleted.
-    try{await cache.put(key,'import-outbox',result.rows);return result.rows;}
-    catch{return rows;}
-  },
-  write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全暂存导入资料，请勿关闭页面');await cache.put(await account(),'import-outbox',rows);},
-  commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
-  revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
-  recordKeys:batch=>batch.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id}))),
-});
-async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
-async function pendingOverride(store,id){let result;for(const op of await pendingOperations(store)){if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}return result;}
-async function overlayImports(store,records){const map=new Map(records.map(r=>[r.id,r]));for(const op of await pendingOperations(store)){if(op.action==='clear')map.clear();else if(op.action==='delete')map.delete(op.id);else map.set(op.item.id,op.item);}return [...map.values()];}
+async function pendingOperations(store){await identity();return unifiedSync.inspectPending(rows=>{const operations=[];for(const row of rows){if(row.record?.kind!=='batch')continue;const batch=row.record.payload;operations.push(...(batch.operations?.filter(op=>op.store===store)||(batch[store]||[]).map(item=>({action:'put',store,item}))));}return operations;});}
+async function pendingOverride(store,id){await identity();return unifiedSync.inspectPending(rows=>{let result;for(const row of rows){if(row.record?.kind!=='batch')continue;const batch=row.record.payload;
+  const operations=batch.operations|| (batch[store]||[]).map(item=>({action:'put',store,item}));
+  for(const op of operations){if(op.store!==store)continue;if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}
+}return result;});}
+async function pendingProjectEdits(){
+  return unifiedSync.inspectPending(rows=>[...rows].sort((a,b)=>a.serial-b.serial)
+    .flatMap(row=>row.record?.kind==='project'?
+      [{action:'put',item:row.record.payload}]:row.record?.kind==='batch'?
+      (row.record.payload.operations||
+        (row.record.payload.projects||[]).map(item=>({store:'projects',action:'put',item})))
+        .filter(op=>op.store==='projects'):[]));
+}
+function applyProjectEdits(map,edits){
+  for(const op of edits){
+    if(op.action==='clear'){map.clear();continue;}
+    if(op.action==='delete'){map.delete(op.id);continue;}
+    const previous=map.get(op.item.id);
+    const merged=previous&&op.baseRecord&&sameField(op.item.drafts,op.baseRecord.drafts)
+      ?mergeConcurrentMetadata(op.baseRecord,op.item,previous):null;
+    map.set(op.item.id,merged?.record||op.item);
+  }
+  return map;
+}
+async function overlayImports(store,records){
+  const map=new Map(records.map(r=>[r.id,r]));
+  // Apply every project save, detail edit and delete in durable queue order.
+  // This makes a reopened page match the latest local state before upload.
+  if(store==='projects')return [...applyProjectEdits(map,await pendingProjectEdits()).values()];
+  for(const op of await pendingOperations(store)){
+    if(op.action==='clear')map.clear();
+    else if(op.action==='delete')map.delete(op.id);
+    else map.set(op.item.id,op.item);
+  }
+  return [...map.values()];
+}
 const cached=async key=>{try{const id=await account();return cacheDisabled?undefined:await cache?.get(id,key);}catch{return undefined;}};
 const remember=async(key,value)=>{try{const id=await account();if(!cacheDisabled)await cache?.put(id,key,value);}catch{/* Cache quota/failure cannot fail a cloud operation. */}};
-const checked=result=>{if(result.error)throw Error(result.error.message||'云端数据服务不可用');return result.data;};
-async function identity(){return owner??=(await requireCloudUser()).id;}
-async function version(){const id=await identity();const row=checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',id).single());revision=Number(row.revision);return revision;}
+async function rememberSnapshots(before,changedStores){
+  if(cacheDisabled)return;
+  const saved=[...snapshots].filter(([,snapshot])=>snapshot?.revision===revision);
+  if(typeof cache?.putSnapshotBatch==='function'){
+    try{await cache.putSnapshotBatch(await account(),before,revision,saved,changedStores);}
+    catch{/* A disposable read cache must not fail a confirmed cloud commit. */}
+    return;
+  }
+  // Cache adapters without an atomic revision head retain the original full
+  // snapshot contract, including the small in-memory test adapter.
+  await Promise.all(saved.map(([store,snapshot])=>remember('records:'+store,snapshot)));
+}
+const checked=result=>{if(result.error){const failure=Error(result.error.message||'云端数据服务不可用');
+  for(const key of ['code','status','statusCode'])if(result.error[key]!=null)failure[key]=result.error[key];
+  // PostgREST puts the HTTP status on the response, not necessarily on error.
+  if(failure.status==null&&Number.isInteger(result.status))failure.status=result.status;
+  throw failure;}return result.data;};
+async function identity(){
+  const id=owner??=(await requireCloudUser()).id;
+  // Read-only tabs must subscribe too. Otherwise the channel exists only
+  // after that tab writes, and a second open page misses committed changes.
+  channel();
+  return id;
+}
+let versionRead;
+async function version(){
+  // The five collection reads at startup share one version request. A later
+  // refresh still starts a new request after this one settles.
+  if(versionRead)return versionRead;
+  const task=(async()=>{
+    const id=await identity();
+    const row=checked(await cloudClient().from('shiye_revisions').select('revision,account_epoch').eq('user_id',id).single());
+    if(!row.account_epoch)throw Error('云端同步协议尚未升级；本机修改已保留');
+    if(accountEpoch&&accountEpoch!==row.account_epoch){
+      // Account reset rotates the epoch in the same transaction as its marker.
+      // Reuse this revision read to detect it; fetch the marker only on change.
+      resetInProgress=true;
+      unifiedSync.pause();
+      try{onAccountEpochChanged();}catch{}
+      throw Object.assign(Error('账号资料已重新开始；旧草稿已保留，不能自动写入'),
+        {code:'ACCOUNT_EPOCH_CHANGED'});
+    }
+    accountEpoch=row.account_epoch;
+    revision=Number(row.revision);
+    return revision;
+  })();
+  versionRead=task;
+  try{return await task;}finally{if(versionRead===task)versionRead=null;}
+}
 async function cloudAll(store){
-  await identity();if(revision===undefined)await version();
-  const saved=snapshots.get(store)||await cached('records:'+store);
+  await identity();
+  // IndexedDB and the remote revision endpoint are independent reads. Start
+  // the local snapshot immediately, then compare it only after the revision
+  // arrives. This removes one network round trip from a cold account open.
+  const savedTask=snapshots.has(store)
+    ?Promise.resolve(snapshots.get(store)):cached('records:'+store);
+  if(revision===undefined)await version();
+  const saved=await savedTask;
   if(saved?.revision===revision){snapshots.set(store,saved);return overlayImports(store,await Promise.all(saved.records.map(async r=>withProjectBase(store,await decode(store,structuredClone(r)),saved.revision))));}
-  const rows=[],readRevision=revision;
-  for(let offset=0;;offset+=500){const page=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));rows.push(...page);if(page.length<500)break;}
-  const snapshot={revision:readRevision,records:rows.map(row=>row.record)};snapshots.set(store,snapshot);await remember('records:'+store,snapshot);
-  return overlayImports(store,await Promise.all(snapshot.records.map(async record=>withProjectBase(store,await decode(store,structuredClone(record)),snapshot.revision))));
+  // PostgREST pagination consists of several independent HTTP transactions.
+  // Do not cache a mixed-revision library when another device edits mid-read.
+  for(let attempt=0;attempt<3;attempt++){
+    const readRevision=revision;
+    const rows=await readCloudPages(async(offset,size)=>checked(await cloudClient()
+      .from('shiye_records').select('record').eq('user_id',owner).eq('store',store)
+      .order('id').range(offset,offset+size-1)),
+    {initialSize:store==='assets'?8:500});
+    const verified=Number(checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',owner).single()).revision);
+    if(verified!==readRevision){revision=verified;continue;}
+    const snapshot={revision:readRevision,records:rows.map(row=>row.record)};
+    snapshots.set(store,snapshot);await remember('records:'+store,snapshot);
+    return overlayImports(store,await Promise.all(snapshot.records.map(async record=>withProjectBase(store,await decode(store,structuredClone(record)),snapshot.revision))));
+  }
+  throw Error('读取期间其他设备持续修改资料；未缓存不完整的结果，请重试');
+}
+// Explicit repair/read path for a saved image whose IndexedDB copy is
+// corrupt or Safari cannot decode it. Do not trust the local cached bytes.
+// A missing remote record remains missing; never synthesize an image or
+// overwrite any Cloud record from the recovery path.
+async function cloudReloadBlob(id){
+  if(typeof id!=='string'||!id)return undefined;
+  const user=await identity();
+  const {data,error}=await cloudClient().from('shiye_records')
+    .select('record').eq('user_id',user).eq('store','blobs')
+    .eq('id',id).maybeSingle();
+  if(error)throw Error('无法读取云端原始图片记录：'+error.message);
+  const record=data?.record;
+  if(!record)return undefined;
+  if(record.storageProvider!=='cloudbase'||
+     !record.storagePath?.startsWith(user+'/'))
+     throw Error('云端原始图片路径不属于当前账号');
+  const blob=await downloadObject(record.storagePath,record.storageProvider);
+  if(!usableBlob(blob))throw Error('云端原始图片尚未上传完整');
+  images.set(record.storagePath,Promise.resolve(blob));
+  await remember('image:'+record.storagePath,blob).catch(error=>
+    console.warn('原图已重新下载，但本机缓存写入待重试',error?.message));
+  return {id,data:blob};
 }
 async function cloudGet(store,id){
+  if(store==='projects'){
+    const edits=(await pendingProjectEdits()).filter(op=>op.action==='clear'||
+      (op.item?.id??op.id)===id);
+    if(edits.length)return applyProjectEdits(new Map(),edits).get(id);
+  }
   const pending=await pendingOverride(store,id);
   if(pending&&!(store==='blobs'&&pending.record&&!usableBlob(pending.record.data)))return structuredClone(pending.record);
   // Safari can restore an outbox row without its Blob bytes after a forced
   // termination. A valid cloud copy takes precedence over that broken row.
   if(pending?.record){const remote=await cloudRecord(store,id);return remote?decode(store,remote):undefined;}
   if(store==='blobs'&&id.startsWith('project-cover:'))return {id,data:await cloudPreview(id)};
-  const record=await cloudRecord(store,id);return record?store==='projects'?cloudProjectDocument(withProjectBase(store,record,revision)):decode(store,record):undefined;
+  const record=await cloudRecord(store,id);
+  if(!record)return undefined;
+  if(store==='projects')return withProjectBase(store,await cloudProjectDocument(record),revision);
+  return decode(store,record);
+}
+// A recovery-only export of exact legacy projects held aside by the v2 reader.
+async function cloudLegacyProjectBackup(){
+ const legacy=(await cloudAll('projects')).filter(isLegacySceneProject);
+ if(!legacy.length)throw Error('当前账号没有待导出的旧版作品');
+ const projects=[];
+ for(const summary of legacy){
+  const full=summary.projectDocumentPath?await cloudProjectDocument(summary):summary;
+  const {__cloudBaseRevision,__cloudSessionId,...source}=full;
+  projects.push(structuredClone(source));
+ }
+ return new Blob([JSON.stringify({format:'shiye-legacy-project-recovery',
+  version:1,exportedAt:new Date().toISOString(),projects},null,2)],{type:'application/json'});
 }
 async function cloudProjectDocument(record){
   const path=record.projectDocumentPath;if(!path)return record;
-  if(!['cos','supabase'].includes(record.projectDocumentProvider))throw Error('作品文档缺少当前存储服务标记');
+  // A hydrated document may still carry the path of the version it opened.
+  // Re-reading that path here would replace the user's edited Scene with its
+  // old bytes immediately before upload.
+  if(record.__cloudDocumentHydrated===true)return record;
+  supportedProvider(record.projectDocumentProvider);
   if(!path.startsWith((await identity())+'/'))throw Error('作品不属于当前账号');
   if(!documents.has(path)){
     const task=(async()=>{let blob=await cached('project-document:'+path);if(!(blob instanceof Blob)){blob=await downloadObject(path,record.projectDocumentProvider);await remember('project-document:'+path,blob);}const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));if(full.id!==record.id||!Array.isArray(full.drafts))throw Error('作品完整数据损坏');return full;})().catch(error=>{documents.delete(path);throw error;});documents.set(path,task);if(documents.size>8)documents.delete(documents.keys().next().value);
   }
-  return mergeProjectSummary(structuredClone(await documents.get(path)),record);
+  const full=mergeProjectSummary(structuredClone(await documents.get(path)),record);
+  if(record.__cloudSessionId){
+    const scene=sceneFingerprint(full);
+    const metadata=Object.fromEntries(projectMetadataFields.map(key=>[key,full[key]]));
+    editorSceneBases.set(record.__cloudSessionId,{scene,metadata});
+    full.__cloudBaseSceneFingerprint=scene;
+    full.__cloudBaseMetadata=metadata;
+  }
+  full.__cloudDocumentHydrated=true;
+  return full;
 }
 async function cloudRecord(store,id){
   await identity();if(revision===undefined)await version();
   if(store!=='blobs'){const saved=snapshots.get(store)||await cached('records:'+store);if(saved?.revision===revision){snapshots.set(store,saved);return structuredClone(saved.records.find(r=>r.id===id));}}
-  if(store==='blobs'){const saved=await cached('blob-record:'+id);if(saved?.revision===revision)return saved.record;}
+  if(store==='blobs'){
+    const saved=blobRecords.get(id)||await cached('blob-record:'+id);
+    if(saved&&(saved.revision===revision||blobRevisionProof.valid(id,saved.revision,revision))){
+      if(saved.revision!==revision)retainBlobRecord(id,{revision,record:saved.record});
+      else retainBlobRecord(id,saved);
+      return structuredClone(saved.record);
+    }
+  }
+  if(store==='blobs')return batchBlobRecord(id);
   const row=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).eq('id',id).maybeSingle());
-  if(row&&store==='blobs')await remember('blob-record:'+id,{revision,record:row.record});return row?.record;
+  return row?.record;
 }
-async function cloudPreview(id){
-  const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
-  if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
-  await identity();const old=revision===undefined?await cached('blob-record:'+id):null;
-  const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
-  if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
+const variantBlobKey=(path,tier)=>(tier===COVER_EDGE?'thumbnail480':'preview'+tier)+':'+path;
+async function rememberImageVariant(path,tier,blob){
+  await remember(variantBlobKey(path,tier),blob);
+  // A tiny persistent index lets a later browser session reuse a cached 960px
+  // image for a 480px request without probing ten IndexedDB blobs or storage.
+  const key='cached-image-variants:'+path;
+  const old=await cached(key),tiers=[...new Set([
+    ...(Array.isArray(old)?old.filter(n=>DISPLAY_TIERS.includes(n)):[]),tier
+  ])].sort((a,b)=>a-b);
+  await remember(key,tiers);
+}
+async function cachedSufficientVariant(path,required){
+  const index=await cached('cached-image-variants:'+path);
+  if(!Array.isArray(index))return null;
+  for(const tier of index.filter(n=>DISPLAY_TIERS.includes(n)&&n>required).sort((a,b)=>a-b)){
+    const blob=await cached(variantBlobKey(path,tier));
+    if(usableBlob(blob))return blob;
+  }
+  return null;
+}
+async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
+  const variant=imageVariant(pixels),edge=Number(variant.slice(7));
+  const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
+  if(id.startsWith('project-cover:')){const match=/^project-cover:(cloudbase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
+  const record=await cloudRecord('blobs',id);if(!record)return undefined;
+  supportedProvider(record.storageProvider);
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(usableBlob(saved))return saved;
-  if(record.thumbnailPath){
+  const thumbnailKey=variantBlobKey(record.storagePath,edge),saved=await cached(thumbnailKey);
+  // A previously loaded thumb must be a zero-network read.
+  if(usableBlob(saved))return saved;
+  // On a cold cover miss these independent account-scoped cache lookups used
+  // to run one after another for every visible card. Keep the hit-only fast
+  // path above, then overlap the remaining reads before any network request.
+  const [higher,localOriginal]=await Promise.all([
+    cachedSufficientVariant(record.storagePath,edge),
+    cached('image:'+record.storagePath)
+  ]);
+  if(usableBlob(higher)){
+    const reduced=await makeThumbnail(higher,edge);
+    if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
+    return higher;
+  }
+  // A saved original is already on this device. Derive the requested display
+  // size from it before asking CloudBase, including while online. Image decode
+  // is asynchronous; the derived thumbnail is persisted for later visits.
+  if(usableBlob(localOriginal)){
+    try{
+      const reduced=await makeThumbnail(localOriginal,edge);
+      if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
+    }catch(error){console.warn('本地图像缩略图暂不可用，尝试云端',error?.message);}
+  }
+  if(variant==='preview480'&&record.thumbnailPath?.endsWith('-preview480.webp')){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
-    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
+    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await rememberImageVariant(record.storagePath,edge,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
-  // Only missing COS thumbnails use CI. The original remains byte-identical
-  // for segmentation, editing, coordinates, and export.
-  if(record.storageProvider==='cos'&&objectStorage?.preview){
-    try{const preview=await objectStorage.preview(record.storagePath);if(usableBlob(preview)){await remember(thumbnailKey,preview);return preview;}}
-    catch(error){console.warn('CI 预览暂不可读，尝试原图',error?.message);}
+  // An interrupted metadata commit can leave a deterministic immutable WebP
+  // without thumbnailPath. Prefer that file if present.
+  if(variant==='preview480'&&!record.thumbnailPath?.endsWith('-preview480.webp')){
+    try{const stored=await downloadObject(record.storagePath+'-preview480.webp',record.storageProvider);
+      if(usableBlob(stored)){await rememberImageVariant(record.storagePath,edge,stored);return stored;}
+    }catch{/* One-time cache miss. */}
   }
-  const {data}=await decode('blobs',record);
-  const blob=await makeThumbnail(data);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
+  if(!objectStorage?.preview)throw Error('CloudBase 图片封面尚不可用');
+  const preview=await objectStorage.preview(record.storagePath,variant,record.storageProvider);
+  if(!usableBlob(preview))throw Error('CloudBase 图片封面为空');
+  await rememberImageVariant(record.storagePath,edge,preview);
+  return preview;
 }
-async function makeThumbnail(data){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,360/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=480){
+  if(typeof document==='undefined')return null;
+  const bitmap=await decodeImageBlob(data);
+  try{
+    const scale=Math.min(1,edge/Math.max(bitmap.width,bitmap.height));
+    const width=Math.max(1,Math.round(bitmap.width*scale)),height=Math.max(1,Math.round(bitmap.height*scale));
+    if(typeof OffscreenCanvas==='function'){
+      const canvas=new OffscreenCanvas(width,height);
+      canvas.getContext('2d').drawImage(bitmap,0,0,width,height);
+      return await canvas.convertToBlob({type:'image/webp',quality:.9});
+    }
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    canvas.getContext('2d').drawImage(bitmap,0,0,width,height);
+    return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));
+  }finally{bitmap.close?.();}
+}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
-  if(!['cos','supabase'].includes(storageProvider))throw Error('图片缺少当前存储服务标记');
+  supportedProvider(storageProvider);
   if(!storagePath?.startsWith((await identity())+'/'))throw Error('图片不属于当前账号');
   if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(usableBlob(saved))return saved;const data=await downloadObject(storagePath,storageProvider);if(!usableBlob(data))throw Error('云端图片为空');await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
   const data=await images.get(storagePath);imageSizes.delete(storagePath);imageSizes.set(storagePath,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [path,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(path===storagePath)continue;images.delete(path);imageSizes.delete(path);bytes-=size;}return {...metadata,data};
 }
-async function encode(store,record){
+function auxiliaryBlobIDs(operations){
+  const auxiliary=new Set(),display=new Set();
+  const add=(set,id)=>{if(typeof id==='string'&&id)set.add(id);};
+  for(const op of operations){
+    if(op.action!=='put')continue;
+    const item=op.item;
+    if(op.store==='assets'){
+      for(const key of ['candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId','photoBlobId'])add(auxiliary,item[key]);
+      for(const key of ['blobId','originalBlobId','originalCutoutBlobId'])add(display,item[key]);
+    }else if(op.store==='projects'){
+      add(auxiliary,item.originalImportPhotoBlobID);
+      for(const key of ['snapshotBlobId','previewBlobId'])add(display,item[key]);
+    }else if(op.store==='meta'){
+      for(const key of ['templateBlobId','exampleBlobId'])add(display,item[key]);
+    }
+  }
+  for(const id of display)auxiliary.delete(id);
+  return auxiliary;
+}
+async function encode(store,record,{makePreview=true}={}){
+  // Sanitize the CloudBase RPC representation without touching its durable
+  // IndexedDB original.
+  if(store!=='blobs')record=cloudMetadataRecord(store,record);
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
-    const {__cloudBaseRevision,__cloudSessionId,...persisted}=record;record=persisted;
+    const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,
+      __cloudDocumentHydrated,projectDocumentPath,projectDocumentProvider,
+      projectDocumentEncoding,...persisted}=record;
+    record={...persisted,sceneAssetIDs:sceneMaterialIDs(persisted),
+      sceneBlobIDs:sceneMaterialBlobIDs(persisted)};
     const text=JSON.stringify(record);let blob=new Blob([text],{type:'application/json'}),encoding;
-    if(blob.size<=LARGE_PROJECT_BYTES)return record;
-    if(typeof CompressionStream==='function'&&typeof DecompressionStream==='function'){blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();encoding='gzip';}
-    const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''),path=`${await identity()}/${hash}-project.json${encoding?'.gz':''}`;
-    const provider=writeProvider(),uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
-    const summary={...projectSummary(record,path,encoding),projectDocumentProvider:provider};
-    try{const preview=await projectPreview(record);if(preview instanceof Blob){const cover=path+'-preview.webp',result=await uploadObject(cover,preview,preview.type||'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){const d=summary.drafts.find(d=>d.id===record.activeDraftID)||summary.drafts[0];d.coverImageID=`project-cover:${provider}:${cover}`;await remember('thumbnail:'+cover,preview);}}}catch{/* A missing optional preview cannot discard the editable work. */}
-    await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);return summary;
+    const inline=blob.size<=LARGE_PROJECT_BYTES,provider=writeProvider();
+    let path;
+    if(!inline){
+      if(typeof CompressionStream==='function'&&typeof DecompressionStream==='function'){blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();encoding='gzip';}
+      const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+      path=(await objectRoot())+hash+'-project.json'+(encoding?'.gz':'');
+      const uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);
+      if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
+    }
+    const summary=inline?structuredClone(record):{...projectSummary(record,path,encoding),projectDocumentProvider:provider};
+    // Store a separate small WebP even when the editable project fits inline.
+    // The scene digest avoids re-rendering when only metadata changes.
+    const active=record.drafts?.find(d=>d.id===record.activeDraftID)||record.drafts?.[0];
+    const cover=summary.drafts?.find(d=>d.id===record.activeDraftID)||summary.drafts?.[0];
+    if(active&&cover&&!record.isSnapshot){
+      const {coverImageID,coverSceneHash,...scene}=active;
+      const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(scene)));
+      const sceneHash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+      if(coverImageID?.endsWith('-preview480.webp')&&coverSceneHash===sceneHash){cover.coverImageID=coverImageID;cover.coverSceneHash=sceneHash;}
+      else{
+        delete cover.coverImageID;delete cover.coverSceneHash;
+        try{
+          const preview=await projectPreview(record);
+          if(usableBlob(preview)){
+            const coverPath=(await objectRoot())+sceneHash+'-preview480.webp';
+            const result=await uploadObject(coverPath,preview,preview.type||'image/webp',provider);
+            if(!result.error||String(result.error.statusCode)==='409'||result.error.statusCode===409){
+              cover.coverImageID='project-cover:'+provider+':'+coverPath;
+              cover.coverSceneHash=sceneHash;
+              await remember('thumbnail:'+coverPath,preview);
+            }
+          }
+        }catch(error){console.warn('作品云存储快照生成或上传失败；保留可编辑正文，下次同步重试',record.id,error);}
+      }
+    }
+    if(!inline){await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);}
+    return summary;
   }
   if(store!=='blobs')return record;
   if(!usableBlob(record.data))throw Error('图片字节丢失或为空；云端元数据未修改');
   const bytes=await record.data.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  const storagePath=`${await identity()}/${hash}`,provider=writeProvider();
-  if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}
-  // The optional thumbnail is independent of the original PUT. Start both
-  // together, but never commit metadata until the original is acknowledged.
-  // This avoids serial upload latency without changing the safety boundary.
-  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview360.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail:'+storagePath,thumbnail);return path;}catch{return null;}})();
-  let thumbnailPath;
-  await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
+  const storagePath=`${await objectRoot()}${hash}`,provider=writeProvider();
+  if(!uploads.has(storagePath)){const task=(async()=>{
+    await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);
+  })().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}
+  await uploads.get(storagePath);
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
-  const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
+  // Thumbnail decoding and upload are optional idle work. The original is
+  // durable before metadata commit; preview processing never delays the save.
+  if(makePreview&&typeof window!=='undefined'&&!previewJobs.has(storagePath)){
+    previewJobs.add(storagePath);const expectedOwner=owner;
+    scheduleForegroundIdle(()=>{void (async()=>{
+      if(await identity()!==expectedOwner)return;
+      const source=await cached('image:'+storagePath);
+      if(!usableBlob(source))return;
+      const preview=await makeThumbnail(source,480);
+      if(!usableBlob(preview))return;
+      await uploadObject(storagePath+'-preview480.webp',preview,'image/webp',provider);
+      await rememberImageVariant(storagePath,480,preview);
+    })().catch(error=>console.warn('云存储封面待补齐，原图已保留',error?.message))
+      .finally(()=>previewJobs.delete(storagePath));},{minIdleMs:800,delayMs:500});
+  }
+  const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider};
 }
-function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
+async function protectReferencedAssetDeletes(operations){
+  const deletionIDs=new Set(operations.filter(op=>op.store==='assets'&&op.action==='delete').map(op=>op.id));
+  if(!deletionIDs.size)return;
+  // Do not use cloudAll here: it overlays the pending outbox and would wait
+  // for this very transaction to finish.
+  const remote=async store=>{
+    const records=[];
+    for(let offset=0;;offset+=500){
+      const rows=checked(await cloudClient().from('shiye_records').select('record')
+        .eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));
+      records.push(...rows.map(row=>row.record));
+      if(rows.length<500)break;
+    }
+    return records;
+  };
+  const [projects,trash]=await Promise.all([remote('projects'),remote('trash')]);
+  const sources=[...projects.filter(row=>Array.isArray(row?.drafts)),
+    ...trash.filter(row=>row.kind==='project'&&Array.isArray(row.item?.drafts)).map(row=>row.item),
+    ...operations.filter(op=>op.store==='projects'&&op.action==='put').map(op=>op.item),
+    ...operations.filter(op=>op.store==='trash'&&op.action==='put'&&op.item?.kind==='project').map(op=>op.item.item)];
+  const referenced=await referencedAssetIDsInProjects({
+    db:{completeProject:project=>project.projectDocumentPath?cloudProjectDocument(project):project},
+    projects:sources,ids:deletionIDs
+  });
+  for(const op of operations){
+    if(op.store!=='assets'||op.action!=='delete'||!referenced.has(op.id))continue;
+    const saved=await cloudRecord('assets',op.id);
+    if(!saved)throw Error('作品引用的素材记录尚未恢复，暂不能删除：'+op.id);
+    op.action='put';op.item=hiddenAssetCopy(saved);delete op.id;
+  }
+}
+async function verifyNewProjectSources(operations){
+  const projectPuts=operations.filter(op=>op.store==='projects'&&op.action==='put'&&!op.item?.isSnapshot);
+  if(!projectPuts.length)return;
+  const assetPuts=new Set(operations.filter(op=>op.store==='assets'&&op.action==='put').map(op=>op.item.id));
+  const needed=new Set();
+  for(const op of projectPuts){
+    const current=new Set(sceneMaterialIDs(op.item));
+    if(!current.size)continue;
+    const remote=await cloudRecord('projects',op.item.id);
+    const old=new Set(remote?(Array.isArray(remote.sceneAssetIDs)
+      ?remote.sceneAssetIDs:sceneMaterialIDs(remote.projectDocumentPath?await cloudProjectDocument(remote):remote)):[]);
+    for(const id of current)if(!old.has(id)&&!assetPuts.has(id))needed.add(id);
+  }
+  if(!needed.size)return;
+  const ids=[...needed],found=new Set();
+  for(let offset=0;offset<ids.length;offset+=100){
+    const rows=checked(await cloudClient().from('shiye_records').select('id')
+      .eq('user_id',owner).eq('store','assets').in('id',ids.slice(offset,offset+100)));
+    for(const row of rows)found.add(row.id);
+  }
+  const missing=ids.filter(id=>!found.has(id));
+  if(missing.length)throw Error('作品引用的素材尚未同步到云端；作品保留在本机待重试：'+missing.join('、'));
+}
+function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionOverride=null,background=false){
+  assertAccountWritable();
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
-    writesInFlight++;reportSync();
+    assertAccountWritable();
+    writesInFlight++;activeDirect={startedAt:Date.now(),phase:'准备上传',done:0,total:operations.filter(op=>op.action==='put').length};reportSync();
     try{
     await identity();if(revision===undefined)await version();
     const previous=revision;
-    const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
-    const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
-    for(const op of operations)if(op.store==='blobs'&&op.action==='put')await remember('blob-record:'+op.item.id,{revision,record:op.item});
+    const commitBase=baseRevisionOverride??previous;
+    await protectReferencedAssetDeletes(operations);
+    await verifyNewProjectSources(operations);
+    operations.push(...recordTombstones(operations).slice(operations.length));
+    const puts=operations.filter(op=>op.action==='put'),auxiliary=auxiliaryBlobIDs(operations);activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
+    for(let offset=0;offset<puts.length;offset+=3)try{
+      if(background)await yieldToForeground({minIdleMs:300,allowHidden:true});
+      await Promise.all(puts.slice(offset,offset+3).map(async op=>{
+        try{op.item=await encode(op.store,op.item,{makePreview:op.store!=='blobs'||!auxiliary.has(op.item.id)});}
+        catch(error){throw markSyncPhase(error,'编码与上传 '+op.store);}
+      }));
+      activeDirect.done=Math.min(puts.length,offset+3);reportSync();
+    }catch(error){throw markSyncPhase(error,'编码云端记录');}
+    // Metadata operation count alone does not bound request body size.
+    assertCloudCommitSize(operations);
+    assertAccountWritable();activeDirect.phase='提交事务';reportSync();
+    let data;
+    const rpcStartedAt=Date.now();
+    try{data=checked(await cloudClient().rpc('shiye_commit_v3_guarded',{
+      operations,base_revision:commitBase,operation_id:operationID,
+      expected_epoch:accountEpoch,sync_protocol_version:3
+    }));}catch(error){
+      error.rpcDurationMs=Date.now()-rpcStartedAt;
+      throw markSyncPhase(error,'云端提交事务');
+    }
+    if(data?.status!=='applied'||!Number.isSafeInteger(Number(data.revision))||
+      data.accountEpoch!==accountEpoch)
+      throw Error('云端同步收据不完整；本机修改已保留');
+    revision=Number(data.revision);
+    // A WebP cover becomes usable only after both its object PUT and the
+    // metadata commit succeed. Update the current Works UI immediately rather
+    // than waiting for a full collection reload (which recreated every card).
+    if(typeof window!=='undefined')for(const op of operations){
+      if(op.store!=='projects'||op.action!=='put'||op.item.isSnapshot)continue;
+      const cover=op.item.drafts?.find(d=>d.id===op.item.activeDraftID)||op.item.drafts?.[0];
+      if(!cover?.coverImageID)continue;
+      window.dispatchEvent(new CustomEvent('shiye-project-cover-ready',{detail:{
+        projectID:op.item.id,updatedAt:op.item.updatedAt,draftID:cover.id,
+        coverImageID:cover.coverImageID,coverSceneHash:cover.coverSceneHash
+      }}));
+    }
+    if(revision===previous+1)blobRevisionProof.accept(previous,revision,{
+      blobIDs:operations.filter(op=>op.store==='blobs'&&op.action!=='clear').map(op=>op.item?.id||op.id),
+      allBlobs:operations.some(op=>op.store==='blobs'&&op.action==='clear')
+    });
+    else{blobRevisionProof.clear();blobRecords.clear();}
+    for(const op of operations)if(op.store==='blobs'&&op.action==='put'){
+      const saved={revision,record:op.item};retainBlobRecord(op.item.id,saved);
+      await remember('blob-record:'+op.item.id,saved);
+    }
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.
+    if(revision!==previous+1)snapshots.clear();
+    const changedStores=new Set(operations.map(op=>op.store));
     for(const store of ['assets','series','projects','trash','meta','blobs']){
+      if(revision!==previous+1)break;
       const saved=snapshots.get(store)||await cached('records:'+store);if(saved?.revision!==previous)continue;
+      if(!changedStores.has(store)){snapshots.set(store,{revision,records:saved.records});continue;}
       const records=new Map(saved.records.map(r=>[r.id,r]));for(const op of operations.filter(o=>o.store===store)){if(op.action==='clear')records.clear();else if(op.action==='delete')records.delete(op.id);else records.set(op.item.id,op.item);}
-      const next={revision,records:[...records.values()]};snapshots.set(store,next);await remember('records:'+store,next);
+      snapshots.set(store,{revision,records:[...records.values()]});
     }
-    await projectSync.advance(previous,revision,operations);
-    await importSync.advance(previous,revision,operations);
-    }finally{writesInFlight--;reportSync();}
+    if(revision===previous+1)await rememberSnapshots(previous,changedStores);
+    syncDiagnostics.record({action:'direct-commit',kind:'direct',baseRevision:previous,
+      cloudRevision:revision,pending:unifiedSync.status().pending,
+      durationMs:Date.now()-activeDirect.startedAt});
+    try{channel()?.postMessage({source:sessionTag,type:'committed',revision});}
+    catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
+    }finally{writesInFlight--;activeDirect=null;reportSync();}
   };
-  const pending=queue.then(run);queue=pending.catch(()=>{});return pending;
+  const pending=queue.then(run).catch(error=>{
+    syncDiagnostics.record({action:'failed',kind:'direct',baseRevision:revision,pending:unifiedSync.status().pending,
+      cloudRevision:revision,error});
+    throw error;
+  });queue=pending.catch(()=>{});return pending;
 }
 async function cloudCheckpoint(){
   await cloudFlushProjects();
@@ -236,54 +1275,559 @@ async function cloudCheckpoint(){
   if(revision!==undefined&&revision!==current)throw Error('另一设备已更新资料，请刷新后重试；未导出不一致的备份');
   return current;
 }
-async function cloudCachedCollections(){await identity();const result={},savedRows=[];for(const store of ['assets','series','projects','trash']){const saved=await cached('records:'+store);if(!saved||savedRows.length&&saved.revision!==savedRows[0].revision)return null;savedRows.push(saved);result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}revision=savedRows[0].revision;return result;}
+async function cloudCachedCollections(){
+  await identity();
+  // Read all account-scoped snapshots in one IndexedDB burst. Metadata is
+  // optional for older caches; the four catalog collections still form an
+  // all-or-nothing verified view at one revision.
+  const stores=['assets','series','projects','trash','meta'];
+  const rows=await Promise.all(stores.map(store=>cached('records:'+store)));
+  const base=rows[0]?.revision;
+  if(base===undefined||rows.slice(0,4).some(row=>!row||row.revision!==base))return null;
+  const result={};
+  await Promise.all(stores.map(async(store,index)=>{
+    const saved=rows[index];
+    if(!saved||saved.revision!==base)return;
+    result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));
+  }));
+  blobRevisionProof.clear();blobRecords.clear();revision=base;
+  return result;
+}
 async function cloudRefresh(){
   await queue;
-  const before=revision,current=await version(),changed=before!==undefined&&before!==current;
+  const before=revision;
+  const missing=['assets','series','projects','trash','meta','blobs'].filter(store=>!snapshots.has(store));
+  const [current,cachedRows]=await Promise.all([
+    version(),Promise.all(missing.map(store=>cached('records:'+store)))
+  ]);
+  missing.forEach((store,index)=>{if(cachedRows[index])snapshots.set(store,cachedRows[index]);});
+  // Reconciliation may already have read the latest global revision.
+  // Download decisions MUST also compare the cached collection revisions:
+  // otherwise a remote-won edit stays invisible until another change occurs.
+  const stale=[...snapshots.values()].some(row=>row.revision!==current);
+  const changed=(before!==undefined&&before!==current)||stale;
   if(!changed)return {revision:current,changed:false};
-  for(const store of ['assets','series','projects','trash','meta','blobs'])if(!snapshots.has(store)){const saved=await cached('records:'+store);if(saved)snapshots.set(store,saved);}
-  const delta=await readCloudDelta({client:cloudClient(),owner,before,after:current,snapshots});
-  if(delta){for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
+  const deltaBefore=snapshots.get('projects')?.revision??snapshots.get('assets')?.revision??before;
+  const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
+  if(delta){blobRevisionProof.accept(deltaBefore,current,delta);for(const [store,snapshot] of delta.snapshots)snapshots.set(store,snapshot);
+    await rememberSnapshots(deltaBefore,delta.changedStores);
+    return {revision:current,changed:true,incremental:true,changedStores:delta.changedStores,
+      changedKeys:delta.changedKeys,
+      blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
+  blobRevisionProof.clear();blobRecords.clear();
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
+async function cloudCheckVersion(){return version();}
+// Migration is an explicit user action. Scan raw account records rather than
+// cloudAll('blobs'), which would needlessly download every original image.
+// Only known converters may produce write operations; unknown formats stay put.
+async function cloudMigrationInventory(){
+ await identity();
+ const start=await version(),stores=['assets','series','projects','blobs','meta','trash'],collections={};
+ for(const store of stores){
+  const records=[];
+  for(let offset=0;;offset+=250){
+   const page=checked(await cloudClient().from('shiye_records').select('record')
+    .eq('user_id',owner).eq('store',store).order('id').range(offset,offset+249));
+   records.push(...page.map(row=>row.record));
+   if(page.length<250)break;
+  }
+  collections[store]=records;
+ }
+ const end=await version();
+ if(start!==end)throw Error('迁移扫描期间云端资料被修改，请重新扫描；尚未修改任何作品');
+ return {account:owner,revision:start,collections};
+}
+async function cloudMigrationOriginalProject(record){
+ await identity();
+ if(!record?.projectDocumentPath)return structuredClone(record);
+ const path=record.projectDocumentPath;
+  if(!path.startsWith(owner+'/')||record.projectDocumentProvider!=='cloudbase')
+  throw Error('完整作品路径或存储服务不合法，不允许迁移');
+ const blob=await downloadObject(path,record.projectDocumentProvider);
+ const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));
+ if(full?.id!==record.id||!Array.isArray(full.drafts))throw Error('原始作品文档与摘要不一致');
+ // Return the unmodified cloud document, not a summary merge that can
+ // overwrite old leaf arrays with empty metadata placeholders.
+ return full;
+}
+async function cloudMigrationCommit({expectedRevision,changes}){
+ if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0||!Array.isArray(changes)||changes.length>200)
+  throw Error('迁移计划不合法');
+ if(!changes.length)return {updated:0,revision:expectedRevision};
+ if(changes.some(change=>!['projects','trash'].includes(change.store)||
+   !change.converted||change.id!==change.converted.id))throw Error('迁移写入目标不安全');
+ await identity();await queue;
+ const [pendingProjects,pendingImports]=await Promise.all([projectSync.pending(),importSync.pending()]);
+ // A queued phone edit to work A must not block migration of unrelated work
+ // B. Keep both outboxes durable and refuse overlapping records, deletes,
+ // clears, tombstones or unknown corrupt queue entries.
+ const conflicts=migrationPendingConflicts(changes,{projects:pendingProjects,imports:pendingImports,quarantined:projectOutboxQuarantine});
+ if(conflicts.length)throw Error('有 '+conflicts.length+' 项本机待同步操作与拟转换资料重叠；待同步数据仍保留，请先处理对应项目');
+ const current=await version();
+ if(current!==expectedRevision)throw Error('迁移扫描后云端版本已变化，请重新扫描；未覆盖任何资料');
+ const stores=[...new Set(changes.map(row=>row.store))];
+ await cloudTransaction(stores,tx=>{
+  for(const change of changes)tx.objectStore(change.store).put(change.converted);
+ });
+ return {updated:changes.length,revision};
+}
 async function cloudStageProject(record){
+  assertAccountWritable();
   if(!usableProjectSnapshot(record))throw Error('作品编辑数据不完整；云端已保存版本未被覆盖');
   await identity();if(revision===undefined)await version();
   const known=(snapshots.get('projects')||await cached('records:projects'))?.records.some(item=>item.id===record.id);
-  // An untagged existing editor document cannot claim the current global
-  // cursor as its base. Stage it durably but require conflict reconciliation.
-  const baseRevision=record.__cloudSessionId&&editorBases.has(record.__cloudSessionId)?editorBases.get(record.__cloudSessionId):Number.isSafeInteger(record.__cloudBaseRevision)?record.__cloudBaseRevision:known?0:revision;
-  if(record.__cloudSessionId&&!editorBases.has(record.__cloudSessionId))editorBases.set(record.__cloudSessionId,baseRevision);
+  // Bind every newly created work to an editor session BEFORE staging it.
+  // Otherwise its acknowledged first save cannot advance a reliable local
+  // baseline and the very next save may be misclassified as a stale edit.
+  // Existing untagged documents remain conservative (base revision zero).
+  record.__cloudSessionId||=crypto.randomUUID();
+  const registered=editorBases.get(record.__cloudSessionId);
+  const sceneBase=editorSceneBases.get(record.__cloudSessionId);
+  if(sceneBase){record.__cloudBaseSceneFingerprint=sceneBase.scene;
+    record.__cloudBaseMetadata=sceneBase.metadata;}
+  const baseRevision=registered!==undefined?registered:
+    Number.isSafeInteger(record.__cloudBaseRevision)?record.__cloudBaseRevision:known?0:revision;
+  if(registered===undefined)editorBases.set(record.__cloudSessionId,baseRevision);
   return projectSync.stage(record,{baseRevision});
 }
-async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
+async function cloudStageImport(batch){
+  assertAccountWritable();await identity();if(revision===undefined)await version();
+  const prepared={...batch,id:crypto.randomUUID()};
+  await importSync.stageMany(splitIndependentAssetImport(prepared));
+  return {pending:true};
+}
+let metadataMutationTail=Promise.resolve();
 async function cloudStageMutation(names,fn){
-  const operations=[],result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
+  if(!names.some(store=>['assets','series','projects'].includes(store)))
+    return stageMutationNow(names,fn);
+  // Only local metadata staging is serialized. Network uploads remain
+  // independent, while two rapid edits of the same record keep their order.
+  const before=metadataMutationTail;
+  let release;
+  metadataMutationTail=new Promise(resolve=>{release=resolve;});
+  await before;
+  try{return await stageMutationNow(names,fn);}
+  finally{release();}
+}
+async function stageMutationNow(names,fn){
+  assertAccountWritable();
+  const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
-  await identity();if(revision===undefined)await version();await importSync.stage({id:crypto.randomUUID(),names,operations});
+  const batchID=crypto.randomUUID();
+  operations.push(...recordTombstones(operations).slice(operations.length));
+  names=[...new Set([...names,...operations.map(op=>op.store)])];
+  await identity();if(revision===undefined)await version();
+  const metadataStores=new Set(['assets','series','projects']);
+  const metadataPuts=operations.filter(op=>op.action==='put'&&metadataStores.has(op.store));
+  const metadataKeys=new Set(metadataPuts.map(op=>op.store+'\0'+op.item.id));
+  // A second offline edit must be based on the first pending edit, including
+  // its field stamps. Otherwise both edits get the same counter and a later
+  // revert to the cloud value can disappear during conflict resolution.
+  const pendingBases=metadataKeys.size?await unifiedSync.inspectPending(rows=>{
+    const latest=new Map();
+    for(const row of [...rows].sort((a,b)=>a.serial-b.serial)){
+      if(row.record?.kind!=='batch')continue;
+      const batch=row.record.payload;
+      const prior=batch.operations||[...metadataStores].flatMap(store=>
+        (batch[store]||[]).map(item=>({action:'put',store,item})));
+      for(const op of prior){
+        if(!metadataStores.has(op.store))continue;
+        if(op.action==='clear'){
+          for(const key of metadataKeys)if(key.startsWith(op.store+'\0'))latest.set(key,null);
+          continue;
+        }
+        const key=op.store+'\0'+(op.item?.id??op.id);
+        if(!metadataKeys.has(key))continue;
+        if(op.action==='delete')latest.set(key,null);
+        else if(op.action==='put')latest.set(key,op.item);
+      }
+    }
+    return latest;
+  }):new Map();
+  // The verified snapshot the user edited is the base, even when a background
+  // pull has since advanced the account cursor. Pending writes are newer.
+  const authoritativeBases=new Map();
+  await Promise.all([...new Set(metadataPuts.map(op=>op.store))].map(async store=>{
+    const memory=snapshots.get(store);
+    const saved=memory?.revision===revision?memory:await cached('records:'+store);
+    // A background pull can advance the global revision while the editor is
+    // still showing this verified snapshot. It remains the edit's true base.
+    if(!saved)return;
+    authoritativeBases.set(store,new Map(saved.records.map(item=>[item.id,item])));
+  }));
+  for(const op of operations){
+    if(!metadataStores.has(op.store))continue;
+    if(op.action==='clear'){
+      for(const key of metadataKeys)if(key.startsWith(op.store+'\0'))pendingBases.set(key,null);
+      continue;
+    }
+    const key=op.store+'\0'+(op.item?.id??op.id);
+    if(op.action==='delete'){pendingBases.set(key,null);continue;}
+    if(op.action!=='put')continue;
+    const base=pendingBases.has(key)?pendingBases.get(key):authoritativeBases.get(op.store)?.get(op.item.id);
+    if(base){
+      op.baseRecord=structuredClone(base);
+      op.item=stampMetadataEdit(op.baseRecord,op.item,batchID);
+    }
+    pendingBases.set(key,op.item);
+  }
+  const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
+  if(!deletedIDs.length){await importSync.stageMany(
+    splitWideMetadataMutation({id:batchID,names,operations}));return;}
+  // Persist the delete + full trash snapshot before touching older pending
+  // saves. Waiting for the network-held account lock here made Delete appear
+  // frozen while an unrelated upload retried. The unified outbox serializes
+  // local stages; tombstones prevent an older PUT from reviving a later delete.
+  await importSync.stage({id:batchID,names,operations});
+  try{await projectSync.cancelPendingFor(deletedIDs);}
+  catch(error){console.warn('旧作品保存待后台清理；删除事务已安全暂存',error?.message);}
 }
 async function cloudPendingProjects(){await identity();return projectSync.pending();}
+// Metadata-only lookup: do NOT download every full-resolution photo just to
+// build the backup list. Fetch each Blob individually while ZIP is streamed.
+async function cloudBackupBlobIDs(){
+  await identity();
+  for(let attempt=0;attempt<3;attempt++){
+    const before=await version(),ids=[];
+    for(let offset=0;;offset+=500){
+      const page=checked(await cloudClient().from('shiye_records').select('id').eq('user_id',owner).eq('store','blobs').order('id').range(offset,offset+499));
+      ids.push(...page.map(item=>item.id));if(page.length<500)break;
+    }
+    if(await version()===before)return ids;
+  }
+  throw Error('云端资料持续变化，请稍后重新导出；没有生成混合版本备份');
+}
+
 // Read the shared durable queue, not just this tab's in-memory status. This
 // intentionally does not contact the server, so logout remains possible when
 // the network is unavailable after local staging succeeds.
-async function cloudPendingLocalSummary(){const key=await account();const [projects,imports]=await Promise.all([cache?.get(key,'project-outbox'),cache?.get(key,'import-outbox')]);return {projects:projects?.length||0,imports:imports?.length||0};}
-async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
-async function cloudDiscardPending(){await identity();if(writesInFlight||!importSync.canDiscard()||!projectSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=(await importSync.discard())+(await projectSync.discard());reportSync();return count;}
-async function cloudFlushProjects(){await identity();if(revision===undefined)await version();await importSync.flush();return projectSync.flush();}
-async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
+async function cloudPendingLocalSummary(){const rows=await unifiedSync.pending();return {projects:projectSyncRows(rows).length,imports:importSyncRows(rows).length,quarantined:unifiedQuarantine.length};}
+// Manual conflict handling is separate from ordinary synchronization. No
+// pending bytes are discarded until the user reviews and explicitly chooses.
+async function reviewedConflict(kind,id){
+ if(!['project','batch'].includes(kind)||typeof id!=='string'||!id)throw Error('冲突记录标识无效');
+ await identity();
+ const sync=kind==='project'?projectSync:importSync;
+ const row=(await sync.pending()).find(item=>item.record?.id===id);
+ if(!row)throw Error('待同步记录已改变或已完成，请重新打开同步详情');
+ if(await wasCommitted(row.operationID,row.baseRevision))
+   throw Error('服务器已经确认这次保存，请重新打开同步详情刷新作品');
+ let local,store='projects',operations=null;
+ if(kind==='project')local=row.record;
+ else{
+  const ops=row.record?.operations||['assets','blobs','projects'].flatMap(name=>
+    (row.record?.[name]||[]).map(item=>({store:name,action:'put',item})));
+  if(Array.isArray(ops)&&ops.length===1&&['projects','assets','series'].includes(ops[0]?.store)&&ops[0]?.action==='put'){
+    local=ops[0].item;store=ops[0].store;
+  }
+  else if(Array.isArray(ops)&&ops.length>0&&ops.length<=80&&
+    ops.every(op=>op&&typeof op.store==='string'&&['put','delete','clear'].includes(op.action)&&
+      (op.action==='clear'||typeof(op.item?.id??op.id)==='string'&&(op.item?.id??op.id)))){
+    local=row.record;store='batch';operations=ops;
+  }
+  else if(!row.record?.operations&&Array.isArray(row.record?.projects)&&row.record.projects.length===1&&
+    !(row.record.assets||[]).length&&!(row.record.blobs||[]).length)
+    local=row.record.projects[0];
+  else throw Error('此批次的操作结构无法安全核对；原始待同步记录仍保留');
+ }
+ if(store==='projects'?!usableProjectSnapshot(local):store==='batch'?false:
+   !local||typeof local.id!=='string'||!local.id||typeof local.title!=='string')
+   throw Error('本机待同步记录结构不完整；原始待同步记录仍保留');
+ if(await wasResetAfter(row.baseRevision))
+   throw Error('账号在此修改之后执行过清空；不能把清空前的资料重新上传');
+ const current=await version();
+ if(current<=row.baseRevision)throw Error('云端没有比本机基线更新的版本，可直接尝试同步');
+ const untouched=await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
+  before:row.baseRevision,after:current,operations:operations||[{store,action:'put',item:local}]});
+ if(untouched)throw Error('云端变化与此作品无关，请先尝试正常同步');
+ if(store==='batch'){
+  const remote=await boundedMap(operations,6,async op=>{
+   const id=op.item?.id??op.id,stored=op.action==='clear'?null:await cloudRecord(op.store,id);
+   return {store:op.store,id,action:op.action,record:stored&&op.store==='projects'&&stored.projectDocumentPath?
+     await cloudProjectDocument(stored):stored};
+  });
+  const label=`${operations.length} 条待同步变更`;
+  return {kind,id,store,mode:'batch',serial:row.serial,baseRevision:row.baseRevision,
+   revision:current,local:structuredClone(local),remote:structuredClone(remote),
+   localAllowed:!operations.some(op=>op.action==='clear'),
+   overview:{local:{id:local.id,title:label,updatedAt:null,kind:operations.map(op=>op.store+'·'+op.action).join('、')},
+    remote:{id:local.id,title:`对应云端记录 ${remote.filter(item=>item.record).length} 条`,updatedAt:null},
+    items:operations.map((op,index)=>({store:op.store,action:op.action,id:op.item?.id??op.id??null,
+      localTitle:op.item?.title||op.item?.name||null,
+      remoteTitle:remote[index].record?.title||remote[index].record?.name||null}))}};
+ }
+ const stored=await cloudRecord(store,local.id);
+ const remote=stored?(store==='projects'&&stored.projectDocumentPath?await cloudProjectDocument(stored):stored):null;
+ const summary=project=>({id:project?.id||null,title:project?.title||'未命名作品',
+  updatedAt:project?.updatedAt||null,drafts:project?.drafts?.length||0,
+  layers:(project?.drafts||[]).reduce((n,d)=>n+(Array.isArray(d.layers)?d.layers.length:0),0)});
+ const metadataSummary=record=>({id:record?.id||null,title:record?.title||'未命名',
+  updatedAt:record?.updatedAt||null,kind:record?.kind||null});
+ return {kind,id,store,mode:store==='projects'?'project':'metadata',serial:row.serial,baseRevision:row.baseRevision,
+  revision:current,local:structuredClone(local),remote:remote?structuredClone(remote):null,
+  overview:{local:store==='projects'?summary(local):metadataSummary(local),
+    remote:remote?(store==='projects'?summary(remote):metadataSummary(remote)):null}};
+}
+// Offline recoveries are never uploaded implicitly: the user selects a
+// copy, which is staged under a NEW project ID so the current cloud scene
+// cannot be overwritten by a stale pre-conflict version.
+async function cloudListPreConflictScenes(){
+ await identity();return structuredClone(await cached('pre-conflict-scene-index')||[]);
+}
+async function cloudRestorePreConflictScene(key){
+ await identity();
+ const index=await cloudListPreConflictScenes();
+ if(!index.some(entry=>entry.key===key))throw Error('找不到可恢复的冲突前画布');
+ const pair=await cached(key);
+ if(pair?.kind!=='shiye-pre-conflict-scene-pair'||!usableProjectSnapshot(pair.local))
+   throw Error('冲突前存档内容不完整，不能恢复');
+ const copy=forkConflictingEditableWork(pair.local);
+ if(!copy)throw Error('无法建立独立恢复作品');
+ copy.title=String(pair.local.title||'作品').slice(0,60)+' · 冲突前恢复';
+ copy.__cloudSessionId=crypto.randomUUID();
+ await cloudStageProject(copy);
+ return {id:copy.id,title:copy.title};
+}
+async function cloudConflictReview(kind,id){
+ const {kind:k,id:key,store,mode,serial,baseRevision,revision,overview,localAllowed}=await reviewedConflict(kind,id);
+ return {kind:k,id:key,store,mode,serial,baseRevision,revision,overview,localAllowed};
+}
+async function cloudConflictBackup(kind,id){
+ const review=await reviewedConflict(kind,id);
+ const {kind:k,serial,baseRevision,revision,local,remote}=review;
+ if(review.mode==='batch')throw Error('混合批次无需单独备份，请直接比较并选择版本');
+ const payload={format:'shiye-scene-conflict-backup',version:1,account:await identity(),
+  savedAt:new Date().toISOString(),queueKind:k,pendingID:id,serial,baseRevision,
+  cloudRevision:revision,local,remote};
+ const bytes=new TextEncoder().encode(JSON.stringify(payload,null,2));
+ if(bytes.byteLength>36*1024*1024)throw Error('冲突双方备份超过 36 MB，请先使用待同步应急备份');
+ const digest=await crypto.subtle.digest('SHA-256',bytes);
+ const hash=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
+ return {blob:new Blob([bytes],{type:'application/json'}),sha256:hash,
+  kind:k,id,serial,revision,localID:local.id};
+}
+async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choice}={}){
+ if(!['project','batch'].includes(kind)||!['cloud','local','both'].includes(choice)||
+    !Number.isSafeInteger(serial)||!Number.isSafeInteger(expectedRevision))
+   throw Error('冲突选择参数不合法');
+ return withAccountSyncLock(async()=>{
+  const review=await reviewedConflict(kind,id);
+  if(review.serial!==serial||review.revision!==expectedRevision)
+   throw Error('确认期间云端或本机版本发生变化；请重新比较');
+  const sync=kind==='project'?projectSync:importSync;
+  const {local,remote}=review;
+  const pending=(await sync.pending()).find(item=>item.record?.id===id);
+  if(!pending||pending.serial!==serial)throw Error('本机作品又被编辑，请重新检查版本');
+  if(review.mode==='batch'){
+   if(choice==='both')throw Error('混合批次不能自动复制为两份，请选择保留云端或本机');
+   if(choice==='cloud'){
+    await sync.resolvePending(id,serial);notifyCloudSuperseded();
+    return {choice,originalID:local.id};
+   }
+   if(!review.localAllowed)throw Error('整库清空操作不能覆盖另一设备的修改；可选择保留云端版');
+   if(review.remote.some(item=>item.store==='blobs'&&item.record))
+    throw Error('云端图片与本机图片编号重叠，不能直接覆盖；原始待同步记录仍保留');
+   await sync.resolvePending(id,serial,{record:pending.record,baseRevision:expectedRevision});
+   return {choice,originalID:local.id};
+  }
+  if(review.mode==='metadata'){
+   if(choice==='both')throw Error('素材或系列不能自动复制为两份，请选择保留云端或本机');
+   if(choice==='cloud'){
+    if(!remote)throw Error('云端没有这条记录，不能选择保留云端版本');
+    await sync.resolvePending(id,serial);notifyCloudSuperseded();
+    return {choice,originalID:local.id,remoteID:remote.id};
+   }
+   // Rebase the same local operation; ordinary revision CAS still guards the next upload.
+   await sync.resolvePending(id,serial,{record:pending.record,baseRevision:expectedRevision});
+   return {choice,originalID:local.id};
+  }
+  if(choice==='cloud'){
+   if(!remote)throw Error('云端没有这份作品，不能选择保留云端版本');
+   await sync.resolvePending(id,serial);
+   notifyCloudSuperseded();
+   return {choice,originalID:local.id,remoteID:remote?.id||null};
+  }
+  if(choice==='both'){
+   const copy=forkConflictingEditableWork(local);
+   if(!copy)throw Error('本机旧稿无法安全复制，原始数据保持不变');
+   copy.__cloudSessionId=crypto.randomUUID();
+   editorBases.set(copy.__cloudSessionId,expectedRevision);
+   const replacement=kind==='project'?copy:
+     {...pending.record,id:crypto.randomUUID(),names:['projects'],
+       operations:[{store:'projects',action:'put',item:copy}]};
+   await sync.resolvePending(id,serial,{record:replacement,baseRevision:expectedRevision});
+   if(kind==='project'&&typeof window!=='undefined')
+    window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{detail:{
+     originalId:local.id,copyId:copy.id,title:copy.title,
+     originalSessionId:local.__cloudSessionId,newSessionId:copy.__cloudSessionId
+    }}));
+   return {choice,originalID:local.id,copyID:copy.id};
+  }
+  // Choosing local explicitly keeps the remote document under a distinct
+  // recoverable ID BEFORE replacing the remote project's original ID. These
+  // two writes form ONE revision-CAS transaction, never timestamp overwrite.
+  if(!remote||!usableProjectSnapshot(remote))
+   throw Error('云端原稿缺失或无法校验，不能直接覆盖；可以选择保留双方');
+  const retained=forkConflictingEditableWork(remote);
+  if(!retained)throw Error('无法安全保存云端旧版，未覆盖任何作品');
+  retained.title=String(remote.title||'未命名作品').slice(0,60)+' · 覆盖前云端备份';
+  const fresh=structuredClone(local);
+  delete fresh.__cloudBaseRevision;delete fresh.__cloudSessionId;
+  // The pending operation ID makes a lost acknowledgement idempotent.
+  await cloudTransaction(['projects'],tx=>{
+   tx.objectStore('projects').put(retained);
+   tx.objectStore('projects').put(fresh);
+  },pending.operationID);
+  await sync.resolvePending(id,serial);
+  if(local.__cloudSessionId)editorBases.set(local.__cloudSessionId,revision);
+  notifyCloudSuperseded();
+  return {choice,originalID:local.id,remoteBackupID:retained.id};
+ });
+}
+async function cloudResetBaseline(){
+  await version();
+  return {expected_revision:revision,expected_epoch:accountEpoch};
+}
+async function cloudRunExclusiveReset(task){
+  if(typeof task!=='function')throw Error('账号清理任务无效');
+  await identity();
+  // Freeze immediately, BEFORE acquiring a lock. Previously we drained an
+  // arbitrarily large backlog, so emptying an account could appear hung.
+  resetInProgress=true;
+  unifiedSync.pause();
+  return withAccountSyncLock(async()=>{
+    // Only transactions already in progress may finish; enqueued old tasks
+    // fail fast against resetInProgress. Server revision CAS protects races. 
+    await queue;
+    // No automatic retry or resumption of old edits after a partial purge.
+    // The caller is responsible for explicit recovery or finishing the reset.
+    return task();
+  });
+}
+function cloudAbortExclusiveReset(){
+  // Called only when the server has not accepted the reset. A failed probe or
+  // start request must not leave this browser permanently read-only.
+  resetInProgress=false;
+  void unifiedSync.resume().catch(()=>{});
+}
+async function cloudCloseCacheBeforeRemoteReset(){
+  resetInProgress=true;
+  unifiedSync.pause();
+  cacheDisabled=true;
+  await cache?.close?.();
+}
+async function cloudPurgeLocalAfterReset(){
+  const user=await account();
+  // Disable reads and background upload at this instance before erasing the
+  // durable outbox. Caller has already stopped editing and received reset:true.
+  cacheDisabled=true;
+  accountEpoch=undefined;revision=undefined;
+  images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();
+  uploads.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();
+  if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
+  const count=await cache.purgeAccount(user);
+  await cache.close?.();
+  syncDiagnostics.clear();
+  return count;
+}
+async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision,failureClass:row.lastFailureClass})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,failureClass:row.lastFailureClass,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:unifiedSync.status().error?.message||null,quarantined:unifiedQuarantine.length};}
+function cloudRecordSyncDiagnostic(event){syncDiagnostics.record(event);}
+function cloudSyncDiagnosticReport({online=null}={}){
+  const status=unifiedSync.status();
+  return syncDiagnostics.report({pending:status.pending+writesInFlight,conflicts:status.conflicts,
+    retrying:status.retrying,nextAttemptAt:status.nextAttemptAt,
+    uploading:status.uploading||writesInFlight>0,
+    revision,writesInFlight,quarantined:unifiedQuarantine.length,online,active:activeDirect?{...activeDirect,elapsedMs:Date.now()-activeDirect.startedAt}:null});
+}
+async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
+async function cloudRebuildPending(local){
+  assertAccountWritable();await identity();
+  const result=await unifiedSync.rebuild(async rows=>{
+    const confirmed=await committedOperationIDs(rows.map(row=>row.operationID));
+    const pending=rows.filter(row=>!confirmed.has(row.operationID));
+    if(pending.length&&await wasResetAfter(Math.min(...pending.map(row=>row.baseRevision))))
+      throw Error('账号曾被清空；旧队列不能直接恢复，请通过旧数据转换入口处理');
+    // Rebuilding an outbox never grants a new edit baseline. A different
+    // account-wide revision may belong to an unrelated entity, while a real
+    // change to this entity must still pass normal reconcile/fork handling.
+    // Keep each row's original proof and receipt identity when its payload is
+    // byte-for-byte unchanged; a refreshed local snapshot gets a new ID.
+    const rebuilt=[];
+    for(const row of pending){
+      const records=rebuildSyncRecords([row],local);
+      for(const record of records)rebuilt.push({record,
+        baseRevision:row.baseRevision,
+        operationID:records.length===1&&
+          !JSON.stringify(record).includes('"blobs"')&&
+          JSON.stringify(record)===JSON.stringify(row.record)
+          ?row.operationID:undefined});
+    }
+    return {rows:rebuilt};
+  });
+  syncDiagnostics.record({action:'rebuilt',kind:'queue',pending:result.pending,
+    cloudRevision:revision,removed:result.replaced-result.pending});
+  reportSync();return result;
+}
+async function cloudFlushProjects({background=false}={}){
+  await identity();
+  if(background){
+    // A focus/online wake with an empty local outbox needs no PostgreSQL read.
+    // If a saved upload exists after a cold start, establish its epoch and
+    // revision before the scheduled commit can begin.
+    const pending=await unifiedSync.resumeScheduled();
+    if(pending&&revision===undefined)await version();
+    return;
+  }
+  if(revision===undefined)await version();
+  return unifiedSync.flush();
+}
+async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();await cache?.clear(id);syncDiagnostics.clear();}catch(error){cacheDisabled=false;throw error;}}
+async function cloudPreviewCacheBytes(){return cache?.previewBytes(await account())??0;}
+async function cloudClearPreviewCache(){return cache?.clearPreviews(await account())??{count:0,bytes:0};}
 function cloudResumeCache(){cacheDisabled=false;}
-return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument};
+async function cloudEmergencySnapshot(){
+  if(!owner||!cache)throw Error('尚无已验证的本机账号缓存，无法离线导出待同步数据');
+  const key=await account(),rows=await unifiedSync.pending();
+  return {account:key,projects:projectSyncRows(rows),imports:importSyncRows(rows)};
+}
+async function cloudRestoreEmergency(snapshot){
+  if(!owner||!cache||cacheDisabled)throw Error('请先登录目标账号，再恢复应急资料');
+  const key=await account();if(snapshot.account!==key)throw Error('应急资料不属于当前账号，未改动本机数据');
+  if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
+  return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
+}
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudCheckVersion,cloudClearCache,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
-const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCloudBaseStorage({storage:cloudStorage,enabled:Boolean(import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID)})});
+export const cloudCloseCacheBeforeRemoteReset=()=>current.cloudCloseCacheBeforeRemoteReset();
+export const cloudSetResetCleanupPending=(...args)=>current.cloudSetResetCleanupPending(...args);
+export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);
+export const cloudResetBaseline=()=>current.cloudResetBaseline();
+export const cloudAbortExclusiveReset=()=>current.cloudAbortExclusiveReset();
+export const cloudPurgeLocalAfterReset=(...args)=>current.cloudPurgeLocalAfterReset(...args);
+export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);
+export const cloudListPreConflictScenes=()=>current.cloudListPreConflictScenes();
+export const cloudRestorePreConflictScene=(key)=>current.cloudRestorePreConflictScene(key);
+export const cloudConflictBackup=(...args)=>current.cloudConflictBackup(...args);
+export const cloudResolveProjectConflict=(...args)=>current.cloudResolveProjectConflict(...args);
+export const cloudLegacyProjectBackup=(...args)=>current.cloudLegacyProjectBackup(...args);
+export const cloudMigrationInventory=(...args)=>current.cloudMigrationInventory(...args);
+export const cloudMigrationOriginalProject=(...args)=>current.cloudMigrationOriginalProject(...args);
+export const cloudMigrationCommit=(...args)=>current.cloudMigrationCommit(...args);
 export const cloudAll=(...args)=>current.cloudAll(...args);
 export const cloudGet=(...args)=>current.cloudGet(...args);
+export const cloudReloadBlob=(...args)=>current.cloudReloadBlob(...args);
 export const cloudTransaction=(...args)=>current.cloudTransaction(...args);
 export const cloudCheckpoint=(...args)=>current.cloudCheckpoint(...args);
 export const cloudCachedCollections=(...args)=>current.cloudCachedCollections(...args);
 export const cloudRefresh=(...args)=>current.cloudRefresh(...args);
+export const cloudCheckVersion=()=>current.cloudCheckVersion();
 export const cloudClearCache=(...args)=>current.cloudClearCache(...args);
+export const cloudPreviewCacheBytes=(...args)=>current.cloudPreviewCacheBytes(...args);
+export const cloudClearPreviewCache=(...args)=>current.cloudClearPreviewCache(...args);
 export const cloudResumeCache=(...args)=>current.cloudResumeCache(...args);
 export const cloudPreview=(...args)=>current.cloudPreview(...args);
 export const cloudStageProject=(...args)=>current.cloudStageProject(...args);
@@ -292,6 +1836,12 @@ export const cloudStageMutation=(...args)=>current.cloudStageMutation(...args);
 export const cloudPendingProjects=(...args)=>current.cloudPendingProjects(...args);
 export const cloudPendingLocalSummary=(...args)=>current.cloudPendingLocalSummary(...args);
 export const cloudPendingDetails=(...args)=>current.cloudPendingDetails(...args);
+export const cloudSyncDiagnosticReport=(...args)=>current.cloudSyncDiagnosticReport(...args);
+export const cloudRecordSyncDiagnostic=(...args)=>current.cloudRecordSyncDiagnostic(...args);
 export const cloudDiscardPending=(...args)=>current.cloudDiscardPending(...args);
+export const cloudRebuildPending=(...args)=>current.cloudRebuildPending(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);
+export const cloudEmergencySnapshot=(...args)=>current.cloudEmergencySnapshot(...args);
+export const cloudRestoreEmergency=(...args)=>current.cloudRestoreEmergency(...args);
+export const cloudBackupBlobIDs=(...args)=>current.cloudBackupBlobIDs(...args);

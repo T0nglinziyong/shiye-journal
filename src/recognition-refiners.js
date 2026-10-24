@@ -1,83 +1,114 @@
-import {visionTask} from './vision-runtime.js';
+import {visionTask,visionParallelTasks,visionParallelism} from './vision-runtime.js';
+import {keepPhysicalBeforeUnsafeRegularization} from './material-physical-mask-guard.js';
 
-const noPost=Object.freeze({edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false});
-const hasPost=postprocess=>Object.values(postprocess||{}).some(value=>value!==false);
+const chunks=(items,count)=>{
+  const out=Array.from({length:Math.min(count,items.length)},()=>[]);
+  items.forEach((item,i)=>out[i%out.length].push(item));
+  return out.filter(Boolean).filter(group=>group.length);
+};
 
-async function postprocessCandidates({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{}}){
-  if(!candidates.length||!hasPost(postprocess))return candidates;
-  onProgress({status:'boundary-postprocess',total:candidates.length});
-  try{
-    return await visionTask('material-boundary-refine',{
-      pixels:frame.data,width,height,candidates,mode:'postprocess',postprocess,
-      chromaEdges:preprocess.chromaEdges!==false
+export async function finalizeCandidates({
+  candidates,frame,sourceFrame=frame,width,height,preprocess={},postprocess={},
+  onProgress=()=>{},onAnalysis=()=>{},paperWidthMM=210,paperHeightMM=297,mergeSharedCarrier=true
+}){
+  if(!candidates.length)return candidates;
+  onAnalysis({candidates,frame,sourceFrame,width,height,preprocess,paperWidthMM,paperHeightMM});
+  let out=candidates;
+  if(mergeSharedCarrier===false){
+    onProgress({status:'boundary-postprocess',engine:'separate-carrier',total:out.length});
+    out=await visionTask('separate-shared-carrier',{
+      candidates:out,pixels:sourceFrame.data,width,height
     });
-  }catch(error){
-    onProgress({status:'fallback',engine:'postprocess',message:error.message});
-    return candidates;
   }
-}
-
-// Only loaded for the optional browser model. Traditional proposals remain
-// available as the explicit fallback when the model rejects an object.
-export async function refineCandidatesWithSlimSAM({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{}}){
-  const {refineMaterialsInBrowser}=await import('./slimsam-runtime.js');
-  const boxes=candidates.map(candidate=>[
-    candidate.x*width,candidate.y*height,
-    (candidate.x+candidate.w)*width,(candidate.y+candidate.h)*height
-  ]);
-  const seeds=candidates.map(candidate=>{
-    const mask=candidate.mask,points=[];
-    if(!mask)return points;
-    for(const fy of [.25,.5,.75])for(const fx of [.25,.5,.75]){
-      const x=Math.floor(mask.width*fx),y=Math.floor(mask.height*fy),radius=Math.max(2,Math.round(Math.min(mask.width,mask.height)*.04));
-      const inside=[[0,0],[-radius,0],[radius,0],[0,-radius],[0,radius]]
-        .every(([dx,dy])=>mask.alpha[(y+dy)*mask.width+x+dx]>127);
-      if(inside)points.push([(candidate.x+candidate.w*x/mask.width)*width,(candidate.y+candidate.h*y/mask.height)*height]);
-    }
-    return points;
-  });
-  const masks=await refineMaterialsInBrowser(frame.data,width,height,boxes,onProgress,seeds),result=[];
-  let rejected=0;
-  for(let index=0;index<candidates.length;index++){
-    const mask=masks[index];
-    if(!mask){result.push(candidates[index]);rejected++;continue;}
-    const region=await visionTask('material-mask',{alpha:mask.alpha,width,height});
-    if(!region){result.push(candidates[index]);rejected++;}
-    else result.push({...candidates[index],...region,modelConfidence:mask.score,edgeMethod:'browser-slimsam'});
-  }
-  if(rejected)onProgress({status:'fallback',count:rejected});
-  return postprocessCandidates({candidates:result,frame,width,height,preprocess,postprocess,onProgress});
-}
-
-export async function refineCandidatesWithBrowserContours({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{},mode='auto'}){
-  // Recognition and finishing are deliberately separate. Auto spends the
-  // expensive contour engine only on uncertain candidates; the enabled
-  // finishing stages then see the same resulting masks for every method.
-  const refineAll=mode!=='auto',threshold=.74,selected=[],selectedIndices=[];
-  for(let i=0;i<candidates.length;i++){
-    if(refineAll||(candidates[i].recognitionConfidence??0)<threshold){selected.push(candidates[i]);selectedIndices.push(i);}
-  }
-  let out=[...candidates];
-  if(selected.length){
-    onProgress({status:'contour-refinement',engine:mode,total:selected.length});
+  if(postprocess.shapeRegularization!==false){
+    onProgress({status:'boundary-postprocess',engine:'shape-regularization',total:out.length});
     try{
       const refined=await visionTask('material-boundary-refine',{
-        pixels:frame.data,width,height,candidates:selected,mode,postprocess:noPost,
+        pixels:frame.data,width,height,candidates:out,mode:'postprocess',
+        postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false},
         chromaEdges:preprocess.chromaEdges!==false
       });
-      for(let i=0;i<selectedIndices.length;i++)out[selectedIndices[i]]=refined[i]||selected[i];
-    }catch(error){
-      onProgress({status:'fallback',engine:mode,message:error.message});
-    }
+      out=out.map((candidate,i)=>keepPhysicalBeforeUnsafeRegularization(candidate,refined[i]));
+    }catch(error){onProgress({status:'fallback',engine:'shape-regularization',message:error.message});}
   }
-  return postprocessCandidates({candidates:out,frame,width,height,preprocess,postprocess,onProgress});
+  if(postprocess.apertures!==false){
+    onProgress({status:'boundary-postprocess',engine:'repeated-apertures',total:out.length});
+    try{
+      out=await visionTask('restore-repeated-apertures',{
+        pixels:sourceFrame.data,width,height,candidates:out,paperWidthMM,paperHeightMM
+      });
+    }catch(error){onProgress({status:'fallback',engine:'repeated-apertures',message:error.message});}
+  }
+  return out;
 }
 
-export async function refineCandidatesPostprocess(context){
-  return postprocessCandidates(context);
+async function parallelFinalPipeline(context){
+  const {candidates,frame,sourceFrame=frame,width,height,preprocess={},
+    onProgress=()=>{},paperWidthMM=210,paperHeightMM=297,method='morphgac'}=context;
+  if(!candidates.length)return candidates;
+  const groups=chunks(candidates,Math.min(visionParallelism(),candidates.length));
+  onProgress({status:'contour-refinement',engine:method,total:candidates.length});
+  try{
+    const results=await visionParallelTasks('process-material-boxes',groups.map(boxes=>({
+      // One frame copy per worker/chunk, never one copy per material.
+      pixels:new Uint8ClampedArray(frame.data),
+      sourcePixels:new Uint8ClampedArray(sourceFrame.data),
+      transferInput:true,
+      width,height,boxes,method,paperWidthMM,paperHeightMM,mergeSharedCarrier:true,
+      chromaEdges:preprocess.chromaEdges!==false,
+      shapeRegularization:false,
+      apertures:false
+    })));
+    // Keep uncertain candidates in the review UI. Their full RGB bounding
+    // rectangle is an editable fallback, not a claim of reliable segmentation.
+    // Dropping them here made the eighth (scalloped ticket) disappear.
+    return finalizeCandidates({...context,candidates:results.flat().sort((a,b)=>a.y-b.y||a.x-b.x)});
+  }catch(error){
+    onProgress({status:'fallback',engine:method,message:error.message});
+    // A box is only a proposal, never a finished cutout. Returning proposals
+    // here made an OpenCV/runtime failure look like successful segmentation.
+    throw Error('素材边缘分割失败，已保留候选框但未生成素材：'+(error?.message||'图像引擎暂不可用'),{cause:error});
+  }
 }
-export async function refineCandidatesAuto(context){return refineCandidatesWithBrowserContours({...context,mode:'auto'});}
-export async function refineCandidatesHybrid(context){return refineCandidatesWithBrowserContours({...context,mode:'hybrid'});}
-export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'morphgac'});}
-export async function refineCandidatesWithGrabCut(context){return refineCandidatesWithBrowserContours({...context,mode:'grabcut'});}
-export async function refineCandidatesWithActiveContour(context){return refineCandidatesWithBrowserContours({...context,mode:'active'});}
+
+export async function refineCandidatesAuto(context){
+  if(context.candidateDiscovery==='unified'||context.candidateDiscovery==='research')return refineCandidatesUnified(context);
+  return parallelFinalPipeline({...context,method:'morphgac'});
+}
+export async function refineCandidatesUnified({candidates,frame,sourceFrame=frame,width,height,
+  mergeSharedCarrier=true,onProgress=()=>{},onAnalysis=()=>{},postprocess={},preprocess={},paperWidthMM=210,paperHeightMM=297}){
+  if(!candidates.length)return candidates;
+  onProgress({status:'contour-refinement',engine:'unified-v8-v5',total:candidates.length});
+  try{
+    // One worker retains the shared page gradient and all neighboring masks.
+    // Splitting candidates across workers would copy the whole page twice and
+    // remove the V5 inter-carrier overlap guard.
+    const base=await visionTask('process-material-boxes',{
+      pixels:new Uint8ClampedArray(frame.data),
+      transferInput:true,width,height,boxes:candidates,method:'unified',
+      paperWidthMM,paperHeightMM,mergeSharedCarrier:true
+    });
+    return finalizeCandidates({candidates:base,frame,sourceFrame,width,height,mergeSharedCarrier,
+      onProgress,onAnalysis,postprocess,preprocess,paperWidthMM,paperHeightMM});
+  }catch(error){
+    throw Error('统一识别分割失败，已保留候选框但未生成素材：'+(error?.message||'图像引擎暂不可用'),{cause:error});
+  }
+}
+export async function refineCandidatesWithMorphGAC(context){
+  return parallelFinalPipeline({...context,method:'morphgac'});
+}
+export async function refineCandidatesWithGrabCut(context){
+  return parallelFinalPipeline({...context,method:'grabcut'});
+}
+export async function refineCandidatesHybrid(context){
+  return parallelFinalPipeline({...context,method:'adaptive'});
+}
+export async function refineCandidatesPhysical(context){
+  return parallelFinalPipeline({...context,method:'physical'});
+}
+export async function refineCandidatesAdaptive(context){
+  return parallelFinalPipeline({...context,method:'adaptive'});
+}
+export async function refineCandidatesPostprocess(context){
+  return finalizeCandidates(context);
+}

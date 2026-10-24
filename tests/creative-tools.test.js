@@ -18,7 +18,7 @@ const crop=values=>({op:'crop',box:{unit:'ratio',mode:'keep',values},angle:0,fin
 const placed=()=>success(draft(),[call('place_materials',{items:[{asset:'m1',piece:'p1',x:.5,y:.5},{asset:'m2',piece:'p2',x:.2,y:.25}]})]);
 
 test('the advertised current tools plus atomic craft plan all execute editable changes or inspection',()=>{
-  const names=['apply_craft_plan','compose_story_page','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','inspect_materials','finish_design'];
+  const names=['apply_craft_plan','compose_story_page','compose_page','place_materials','draw_tape_strips','edit_materials','upsert_materials','move_elements','arrange_elements','align_elements','fit_text_to','upsert_primitives','upsert_text','style_elements','group_elements','ungroup_elements','delete_elements','set_paper','inspect_materials','finish_design'];
   assert.deepEqual(agentTools.map(t=>t.function.name).sort(),names.sort());
   assert.deepEqual(Object.keys(toolContracts).sort(),names.sort());
   let d=success(draft(),[call('compose_story_page',{grammar:'diary',title:'光落在纸上',lead:'窗边的光留下柔软的影子。',notes:['纸面的纹理接住了光。','蓝色让这一页安静下来。'],microcopy:'留住一个小片刻',focal:'m2',support:'m1',paper:'#FCFAF0',ink:'#30463D',accent:'#547DA4'})]);
@@ -26,9 +26,9 @@ test('the advertised current tools plus atomic craft plan all execute editable c
   d=success(d,[call('compose_page',{graphics:[{key:'g1',kind:'rectangle',width:.3,height:.25,x:.5,y:.6}],texts:[{key:'t1',content:'写下真实看到的光。',width:.25,x:.5,y:.6,font_size:24}]})]);
   d=success(d,[call('place_materials',{items:[{asset:'m3',piece:'p3',x:.5,y:.6}]}),call('edit_materials',{items:[{piece:'p3',operations:[{op:'tape',unit:'mm',start:20,length:50}]}]})]);
   assert.ok(Math.abs(d.items.find(i=>i.creativePieceID==='p3').width-50/297*1000)<1e-6);
-  d=success(d,[call('upsert_materials',{items:[{asset:'m2',piece:'p4',unit:1,operations:[{op:'whole'}],placement:{x:.8,y:.4,rotation:0,z:20}}],remove:[]})]);
-  d=success(d,[call('move_elements',{items:[{key:'p4',relative_to:'g1',offset:[.7,0]}]}),call('arrange_elements',{keys:['p3','p4'],mode:'row',x:.5,y:.5,gap_mm:4})]);
-  d=success(d,[call('fit_text_to',{key:'t1',target:'g1',padding_mm:[2,2,2,2],color:'#20483D'}),call('upsert_primitives',{items:[{key:'frame',kind:'frame',match_size_to:'p4',padding_mm:[2,2,2,2],fill:null}]}),call('upsert_text',{items:[{key:'t1',content:'纸面留下柔软的影子。',width:.3,x:.5,y:.7,font_size:24}]})]);
+  d=success(d,[call('upsert_materials',{items:[{asset:'m2',piece:'story-p1',unit:0,operations:[{op:'whole'}],placement:{x:.8,y:.4,rotation:0,z:20}}],remove:[]})]);
+  d=success(d,[call('move_elements',{items:[{key:'story-p1',relative_to:'g1',offset:[.7,0]}]}),call('arrange_elements',{keys:['p3','story-p1'],mode:'row',x:.5,y:.5,gap_mm:4})]);
+  d=success(d,[call('fit_text_to',{key:'t1',target:'g1',padding_mm:[2,2,2,2],color:'#20483D'}),call('upsert_primitives',{items:[{key:'frame',kind:'frame',match_size_to:'story-p1',padding_mm:[2,2,2,2],fill:null}]}),call('upsert_text',{items:[{key:'t1',content:'纸面留下柔软的影子。',width:.3,x:.5,y:.7,font_size:24}]})]);
   d=success(d,[call('delete_elements',{keys:['frame']}),call('set_paper',{color:'#F0F5EE',pattern:'grid',intent:'留下连续的阅读空间'})]);
   const inspected=run(d,[call('inspect_materials',{keys:['p3','m1']})]);assert.equal(inspected.committed,false);assert.equal(inspected.results[0].data.materials[0].widthMM,50);assert.equal(inspected.results[0].data.materials[1].sourceRef.blobId,'paper-image');
   d=success(d,[call('finish_design',{summary:'光和纸的对话'})]);assert.equal(d.agentRun.status,'finished');
@@ -41,10 +41,12 @@ test('compose_page is atomic and prior calls survive an invalid component',()=>{
 
 test('page bleed and oversized text remain editable without changing real material size',()=>{
   const paper={...assets[0],physicalWidthMM:163.63,physicalHeightMM:212.75};
-  const result=applyToolCalls(directPageToTools({version:3,style:'自由构图',intent:null,
+  const result=applyToolCalls(directPageToTools({version:2,style:'自由构图',intent:null,
     paper:{color:'#FCFAF0',pattern:'plain'},
-    items:[{asset:'m1',piece:'底纸',unit:0,operations:[{op:'whole'}],placement:{x:.255,y:.505,rotation:-1,z:2},relation:null}],
-    text_blocks:[{content:'多行文字可有意跨过纸边，不应被误认作实物违规。'.repeat(8),font_style:'sans',x:.3,y:.9,width:.24,height:.04,font_size:28,color:'#30463d'}]
+    layers:[
+      {type:'material',id:'base',asset:'m1',piece:'底纸',unit:0,operations:[{op:'whole'}],placement:{x:.255,y:.505,rotation:-1,z:2}},
+      {type:'text',id:'caption',content:'多行文字可有意跨过纸边，不应被误认作实物违规。'.repeat(8),font_style:'sans',x:.3,y:.9,width:.24,height:.04,font_size:28,color:'#30463d'}
+    ]
   }),draft({mode:'spread',ratio:'a5'}),[paper],{m1:'paper'});
   assert.equal(result.results[0].ok,true,JSON.stringify(result.results));
   const page=result.draft,placed=page.items[0];
@@ -75,7 +77,7 @@ test('nonoverlapping source slices share one inventory unit; overlapping copies 
   const over=run(base,[call('place_materials',{items:[{asset:'m2',piece:'p3',unit:2}]})]);assert.equal(over.results[0].ok,false);
 });
 
-test('only an explicitly registered repeatable tape roll can supply repeated segments',()=>{
+test('tape may use independent segments without managing remaining roll length',()=>{
   const roll={...assets[2],supply:{kind:'tapeRoll',quantity:1,availableLengthMM:120},tapeRepeatMode:'repeatablePattern',tapeRepeatPeriodMM:20};
   const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:0,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
   const current=applyToolCalls([call('upsert_materials',{items:strips,remove:[]})],draft(),[roll],aliases,{processing:'自由拆解'});
@@ -83,11 +85,25 @@ test('only an explicitly registered repeatable tape roll can supply repeated seg
   assert.equal(current.draft.items.length,2);
   assert.ok(current.draft.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
   const ordinary=run(draft(),[call('upsert_materials',{items:[{asset:'m3',piece:'ordinary-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'ordinary-b',unit:1,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}],remove:[]})]);
-  assert.equal(ordinary.results[0].ok,false);
+  assert.equal(ordinary.results[0].ok,true);
 });
 
 test('arrange preserves all material dimensions in row, column and unequal grid',()=>{
   for(const mode of ['row','column','grid']){const d=placed(),sizes=d.items.map(i=>[i.width,i.height]);const arranged=success(d,[call('arrange_elements',{keys:['p1','p2'],mode,x:.5,y:.5,gap_mm:3,columns:2})]);assert.deepEqual(arranged.items.map(i=>[i.width,i.height]),sizes);assert.ok(arranged.items.every(i=>i.generationBaseline.x===i.x&&i.generationBaseline.y===i.y));}
+});
+
+test('AI alignment shares the manual Scene rule and keeps real material dimensions',()=>{
+  const d=placed(),widths=d.items.map(item=>item.width);
+  const aligned=success(d,[call('align_elements',{keys:['p1','p2'],mode:'left'})]);
+  assert.deepEqual(aligned.items.map(item=>item.width),widths);
+  assert.ok(aligned.items.every(item=>item.generationBaseline.x===item.x));
+  const left=item=>item.x-item.width/2;
+  assert.ok(Math.abs(left(aligned.items[0])-left(aligned.items[1]))<1e-6);
+  const locked=structuredClone(aligned);
+  locked.layers.find(layer=>layer.id===aligned.items[1].id).locked=true;
+  const rejected=run(locked,[call('align_elements',{keys:['p1','p2'],mode:'right'})]);
+  assert.equal(rejected.results[0].ok,false);
+  assert.equal(rejected.draft.items[0].x,locked.items[0].x);
 });
 
 test('fit_text_to preserves every character, shrinks to fit, and rolls back impossible fitting',()=>{
@@ -103,12 +119,16 @@ test('inspection reports scanned visible bounds and processed source dimensions'
   const unscanned=run(d,[call('fit_text_to',{key:'missing',target:'p1'})]);assert.equal(unscanned.results[0].ok,false);
 });
 
-test('page v3 decodes atomically into real editable layers and current relations',()=>{
-  const page={version:3,style:'留白叙事',intent:'光与纹理',paper:{color:'#FCFAF0',pattern:'dots'},items:[{asset:'m1',piece:'p1',unit:0,role:'衬底',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:10},relation:null},{asset:'m2',piece:'p2',unit:0,role:'主角',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:11},relation:{kind:'underlay',target:'p1',offset_mm:[0,0],rotation_offset:0}}],text_blocks:[{content:'窗边的光',font_style:'serif',x:.5,y:.8,width:.6,height:.1,font_size:32,color:'#30463D'}]};
-  const calls=directPageToTools(page);assert.equal(calls.length,1);const d=success(draft(),calls);assert.equal(d.style,'airy');assert.equal(d.items.length,2);assert.equal(d.textBlocks.length,1);assert.equal(d.items[1].x,d.items[0].x);assert.equal(d.items[1].zIndex,9);
+test('Scene v2 direct layers decode atomically into real editable layers and current relations',()=>{
+  const page={version:2,style:'留白叙事',intent:'光与纹理',paper:{color:'#FCFAF0',pattern:'dots'},layers:[
+    {type:'material',id:'p1',asset:'m1',piece:'p1',unit:0,role:'衬底',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:10},relation:null},
+    {type:'material',id:'p2',asset:'m2',piece:'p2',unit:0,role:'主角',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:11},relation:{kind:'underlay',target:'p1',offset_mm:[0,0],rotation_offset:0}},
+    {type:'text',id:'text-caption',content:'窗边的光',font_style:'serif',x:.5,y:.8,width:.6,height:.1,font_size:32,color:'#30463D'}
+  ]};
+  const calls=directPageToTools(page);assert.equal(calls.length,1);const d=success(draft(),calls);assert.equal(d.style,'airy');assert.equal(d.items.length,2);assert.equal(d.textBlocks.length,1);assert.equal(d.items.find(i=>i.creativePieceID==='p2').x,d.items.find(i=>i.creativePieceID==='p1').x);assert.equal(d.items.find(i=>i.creativePieceID==='p2').zIndex,9);
   const decoded=applyToolCalls(JSON.stringify(page),draft(),assets,aliases);assert.equal(decoded.results[0].ok,true);
-  const bleed=structuredClone(page);bleed.items[1].placement.x=3;bleed.items[1].relation=null;const accepted=run(draft(),directPageToTools(bleed));assert.equal(accepted.results[0].ok,true);
-  const bad=structuredClone(page);bad.items[1].placement.x=4;bad.items[1].relation=null;assert.throws(()=>directPageToTools(bad),/合同不合法/);
+  const bleed=structuredClone(page);bleed.layers[1].placement.x=3;bleed.layers[1].relation=null;const accepted=run(draft(),directPageToTools(bleed));assert.equal(accepted.results[0].ok,true);
+  const bad=structuredClone(page);bad.layers[1].placement.x=4;bad.layers[1].relation=null;assert.throws(()=>directPageToTools(bad),/合同不合法/);
 });
 
 test('unsupported decorative cuts, unknown fields, NaN, rotation overflow and locked edits fail explicitly',()=>{

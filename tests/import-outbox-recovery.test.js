@@ -61,7 +61,7 @@ test('a remote primary survives missing local bytes; uncertain network never del
   assert.deepEqual(uncertain.rows,input);
 });
 test('an interrupted work import is atomic: a lost background removes the pending work',async()=>{
-  const work={id:'work',activeDraftID:'page',drafts:[{id:'page',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  const work={id:'work',activeDraftID:'page',drafts:[{id:'page',sceneVersion:2,canvas:{width:700,height:1000},layers:[]}]};
   const input=[{...row([asset('background','lost'),asset('cutout','good')],[{id:'lost',data:new Blob([])},{id:'good',data:new Blob(['visible'])}]),record:{id:'batch',assets:[asset('background','lost'),asset('cutout','good')],blobs:[{id:'lost',data:new Blob([])},{id:'good',data:new Blob(['visible'])}],projects:[work]}}];
   const result=await recoverImportOutbox(input,async()=>false);
   assert.deepEqual(result.rows,[]);assert.equal(result.removed,1);
@@ -80,4 +80,15 @@ test('a cutout edit missing its local image falls back to the acknowledged cloud
   ]},serial:1,baseRevision:2}];
   const result=await recoverImportOutbox(input,async()=>false);
   assert.equal(result.changed,true);assert.deepEqual(result.rows,[]);
+});
+
+test('a validated pending source blob protects its dependent cutouts after reopening',async()=>{
+  const photo={id:'photo',data:new Blob(['source'])};
+  const source={record:{id:'source',names:['blobs'],operations:[
+    {store:'blobs',action:'put',item:photo}]},serial:1,baseRevision:2};
+  const card={record:{id:'card',assets:[{id:'a',blobId:'photo'}],blobs:[],
+    projects:[],dependsOnBlobIDs:['photo']},serial:2,baseRevision:2};
+  const result=await recoverImportOutbox([source,card],async()=>false);
+  assert.equal(result.changed,false);
+  assert.deepEqual(result.rows,[source,card]);
 });

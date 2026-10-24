@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>拾页素材识别流程 · 当前 test 分支</title>
+  <style>
+    :root{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#233a31;background:#f5f6f1}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:32px 20px 72px}
+    h1{font-size:clamp(28px,4vw,42px);line-height:1.15;margin:8px 0 12px}h2{font-size:23px;margin:0 0 18px}h3{font-size:16px;margin:0 0 6px}
+    p{line-height:1.65;margin:7px 0}small,.muted{color:#60766b}code{font-size:.9em;background:#edf1e9;padding:2px 5px;border-radius:5px;overflow-wrap:anywhere}
+    .eyebrow{letter-spacing:.15em;text-transform:uppercase;color:#3d7460;font-size:12px;font-weight:800}
+    .intro{max-width:780px;color:#506459}.pill-row{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 26px}
+    .pill{border-radius:99px;background:#e5eee6;padding:7px 12px;color:#315b45;font-size:13px;font-weight:700}
+    section{margin-top:35px}.flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+    .step,.branch,.note{background:white;border:1px solid #dfe7dc;border-radius:17px;padding:18px;box-shadow:0 2px 12px #1e44300a}
+    .step{position:relative;min-height:145px}.step::after{content:"↓";position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);font-size:22px;color:#739981;z-index:2}
+    .step.wide{grid-column:1/-1;min-height:0}.step.wide::after{bottom:-25px}.step.last::after{display:none}
+    .num{display:inline-grid;place-items:center;width:29px;height:29px;border-radius:9px;background:#244b39;color:white;font-size:13px;font-weight:800;margin-bottom:10px}
+    .step p,.branch p{font-size:14px}.stage{font-size:12px;color:#658371;font-weight:800;letter-spacing:.08em;margin-bottom:8px}
+    .split{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}
+    .branch{border-top:4px solid #709b7f}.branch.manual{border-top-color:#cb9a5e}.branch h3{font-size:18px}
+    .branch ul{font-size:14px;line-height:1.6;margin:9px 0 0;padding-left:20px}
+    .join{grid-column:1/-1;text-align:center;color:#668b74;font-weight:800;padding:2px 0 0}
+    .compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .compare .branch{border-top-color:#244b39}.compare .branch.old{border-top-color:#a89078}
+    .compare li{margin:7px 0}.note{background:#fffdf6;border-color:#eadfc1}.note strong{color:#765f29}
+    .settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+    .setting{background:#fff;border:1px solid #dfe7dc;border-radius:14px;padding:15px 17px}
+    .setting h3{margin:0 0 4px}.setting p{font-size:13px;margin:4px 0}
+    .setting .meta{color:#47755e;font-size:12px;font-weight:800;letter-spacing:.03em}
+    .setting.caveat{border-color:#e6c99b;background:#fffaf0}.setting.caveat .meta{color:#936326}
+    .source{font-size:13px;line-height:1.75}.source a{color:#315f48;text-underline-offset:3px}
+    @media(max-width:650px){main{padding:22px 14px 55px}.flow,.split,.compare,.settings{grid-template-columns:1fr}.step{min-height:0}.step::after{display:none}.split,.join{grid-column:1}.join{display:none}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">拾页 · 当前 test 分支</div>
+  <h1>素材识别：从照片到透明素材</h1>
+  <p class="intro">这张图描述当前默认的 <b>统一候选 + 自动分割</b>。所有纸张校正、找素材和抠图都在本机浏览器的图像 Worker 中进行；保存后的 AI 名称与标签整理是另一条后台流程。</p>
+  <div class="pill-row"><span class="pill">默认候选：统一 V8</span><span class="pill">默认分割：V5 轮廓仲裁</span><span class="pill">分析图：长边 900 px</span><span class="pill">结果：透明 Mask + 可编辑素材</span></div>
+
+  <section aria-labelledby="flow-title">
+    <h2 id="flow-title">当前默认流程</h2>
+    <div class="flow">
+      <article class="step wide"><span class="num">1</span><h3>导入照片与固定解码</h3><p>接收照片，默认统一路径中的 JPEG 使用固定版本 MozJPEG 解码，并按 EXIF 方向旋转。缓存原始整数像素，避免设备各自的图片显示解码改变识别输入。非 JPEG 仍走浏览器解码。</p></article>
+      <article class="step wide"><span class="num">2</span><h3>找纸张四角</h3><p>照片缩至长边不超过 800 px，用两级 Canny、亮度阈值和 Lab 白纸区域形成候选，再按四边证据、形状及纸张比例选四角。这是提交 <code>2c0c72b</code> 的算法及边界触图修正；用户可拖动四角复核。</p></article>
+      <article class="step wide"><span class="num">3</span><h3>透视校正</h3><p>按所选纸张长宽比把原图校正为清晰的页面（最长 4096 px）；统一识别另从固定像素生成长边 900 px 的分析图。没有纸张或未找到可信四角时，保留可手动选择的画面范围。</p></article>
+      <div class="split" aria-label="自动识别和手动补框两条路径">
+        <article class="branch"><div class="stage">自动路径</div><h3>4A · 整页发现素材</h3><ul><li>在校正后的原始 RGB 分析图上建立亮度、颜色和边缘证据。</li><li>研究 V8 结合连通区域、物理载体边缘及受约束的漏检补全，决定素材数量和候选位置。</li><li>可选光照、降噪和局部对比只作用于后续边界分割，不改变默认整页候选身份。</li></ul></article>
+        <article class="branch manual"><div class="stage">人工路径</div><h3>4B · 手动补框</h3><ul><li>用户画框或调整旋转框，直接指定这一件素材的位置。</li><li>跳过整页候选发现，检查框内是否有可区分的颜色或边缘。</li><li>自动分割设置下使用局部 MorphGAC；若显式选择物理、GrabCut 或自适应，则使用所选方法。</li></ul></article>
+      </div>
+      <div class="join">两条路径在逐件分割后汇合 ↓</div>
+      <article class="step wide"><span class="num">5</span><h3>为每件素材生成真正的透明 Mask</h3><p>默认自动路径把同一页的候选交给 V5：共享页面梯度，比较观察到的外轮廓与多边形、凸包、四边形、椭圆等形状；综合边缘强度、连续性、与原轮廓重合度及侵入邻近素材的风险，选择边界。候选框只是提议；空 Mask 或分割错误不能作为完成的素材。</p></article>
+      <article class="step wide"><span class="num">6</span><h3>检查、修边与提取</h3><p>有纸张尺寸时，过滤短边小于 9 mm 的自动结果。用户检查边缘、移除误检或补框。使用高分辨率校正图提取颜色，再把真实 Mask 放大应用到裁切图。统一路径的规则形状仲裁在 V5 内完成；其他分割方法可按设置做形状和孔洞后处理。候选框矩形不会充当透明边缘。</p></article>
+      <article class="step wide"><span class="num">7</span><h3>确认并可靠保存</h3><p>确认选中的素材后，把透明图片、Mask、候选局部原图及尺寸和位置元数据一次性写入本机暂存，再在后台同步云端。导入作品则以同一批识别素材创建可编辑画布；导入快照只保存校正后的整页，不走素材分割。</p></article>
+      <article class="step wide last"><span class="num">8</span><h3>后台 AI 整理（可选）</h3><p>只有开启自动整理且配置支持视觉的模型后，才调用外部模型给素材取名、打标签；作品也可整理标题与风格标签。它不参与纸张校正、候选框或透明 Mask 的计算，失败时已保存的素材和作品仍保留。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="settings-title">
+    <h2 id="settings-title">每项设置会改变哪一步？</h2>
+    <p class="muted">以下按当前代码的实际行为说明。设置页中的全局值会作为以后导入的默认值；导入检查页的纸张、光照、形状、孔洞和颜色选项可覆盖当前照片。导入中只改纸张尺寸会先重新计算毫米数；更改四角并应用校正会重新识别。批量导入时，后台还会预识别下一张照片。</p>
+    <div class="settings">
+      <article class="setting"><div class="meta">步骤 4 · 数量与位置</div><h3>候选框发现</h3><p><b>默认：统一 V8。</b>它决定有几件、框在哪里。可选原版连通区域或物理载体算法；在统一与非统一路径之间切换时，会换识别解码模式并清除本张照片旧校正与候选缓存。</p></article>
+      <article class="setting"><div class="meta">步骤 5 · 透明边界</div><h3>Mask 分割</h3><p><b>默认：自动。</b>配统一候选时执行 V5；配原版或物理候选时执行 MorphGAC。也可显式选 MorphGAC、物理轮廓、GrabCut 或自适应。它不重新决定整页素材数量。</p></article>
+      <article class="setting"><div class="meta">步骤 2–4、6 · 校正与尺寸</div><h3>默认纸张 / 自定义尺寸</h3><p><b>默认：A4。</b>纸张比例参与四角评分和透视校正；毫米尺寸参与背景安全带、物理尺度与自动结果的 9 mm 短边过滤。选“无纸张”会跳过找角与校正，也不作这项毫米过滤。</p></article>
+      <article class="setting"><div class="meta">步骤 2–3 · 校正方向</div><h3>自动 / 竖向 / 横向</h3><p><b>默认：自动。</b>决定校正页的宽高方向，从而改变分析图的纵横比与实际尺寸换算；手动指定适合自动方向判断不符的照片。</p></article>
+      <article class="setting"><div class="meta">步骤 3、6 · 尺寸校准</div><h3>未检测到纸边时使用整张图</h3><p><b>默认：开。</b>未得到校正页时，仍把所选画面范围按纸张尺寸估算毫米数。它不会凭空生成四角或透视校正，也不会把整张照片自动当作一件透明素材。</p></article>
+      <article class="setting"><div class="meta">步骤 4–5 · 载体身份</div><h3>合并共同载体</h3><p><b>默认：开。</b>同一张浅色纸片上的图案倾向作为一件；关闭后尝试拆分独立图案。该选择传给候选发现与分割处理，可能改变件数或边界。</p></article>
+      <article class="setting caveat"><div class="meta">步骤 5 · 有效范围有限</div><h3>边缘分析分辨率</h3><p><b>默认：900 px；可选 1200 / 1600 px。</b>统一候选路径固定在 900 px，改这个值不会提高这条路径的分析分辨率；手动补框及非统一候选路径才使用选定值。最终裁切仍取高清校正图。</p></article>
+      <article class="setting"><div class="meta">步骤 5 · 分割前处理</div><h3>亮度均衡 / 轻度去噪 / 局部对比增强</h3><p><b>默认：全关。</b>开启后只处理送入单件边界分割的分析图；统一 V8 的整页候选始终基于原始校正 RGB，因此这些开关通常不改变件数，但可能改变 Mask。</p></article>
+      <article class="setting"><div class="meta">步骤 4 · 颜色边缘</div><h3>Lab 色差边缘</h3><p><b>默认：开。</b>控制整页前景证据中的颜色差，可能改变候选；统一 V5 自己计算的共享梯度仍包含 Lab 颜色通道，此开关并不关闭 V5 的全部颜色证据。</p></article>
+      <article class="setting caveat"><div class="meta">步骤 5 · 统一路径中不生效</div><h3>规则形状规整 / 重复孔洞恢复</h3><p><b>默认：全开。</b>当前统一 V5 已有内部形状仲裁，但不会读取这两个后处理开关，也不会运行非统一路径的重复孔洞恢复步骤。这两个开关只控制 MorphGAC、物理、GrabCut 和自适应等非统一自动分割路径；手动补框另有独立处理。</p></article>
+      <article class="setting"><div class="meta">步骤 6 · 最终颜色</div><h3>素材颜色</h3><p><b>默认：自动校正。</b>有校正纸页时估计纸面光照与色偏，并同时应用于透明素材和其可编辑局部原图；选“保留照片颜色”跳过它。不会改变件数、Mask 或毫米尺寸。</p></article>
+      <article class="setting"><div class="meta">步骤 8 · 保存之后</div><h3>自动整理素材 / 作品</h3><p><b>默认：开。</b>素材需要支持视觉的模型、打开素材图片并配置有效密钥；作品需要可用模型与密钥。它只整理素材名称、标签或作品标题、风格标签；不参与本机图像识别。失败不撤销已经保存的图片与画布。</p></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="compare-title">
+    <h2 id="compare-title">与旧识别流程的主要区别</h2>
+    <div class="compare">
+      <article class="branch old"><h3>之前：原版候选 + MorphGAC</h3><ul><li>候选主要由前景证据的连通区域产生。</li><li>每个框独立进入 MorphGAC 边缘分割。</li><li>不同浏览器的 JPEG 解码和画布读回可能改变识别像素。</li><li>旧版找纸角曾使用不同分辨率的级联尝试。</li></ul></article>
+      <article class="branch"><h3>现在：统一候选 + 自动 V5</h3><ul><li>整页 V8 在固定 900 px 分析图上合并多类证据，先确定素材身份。</li><li>V5 共享页面边缘证据，对每件素材仲裁实际轮廓及规则形状。</li><li>默认 JPEG 使用固定解码器和 EXIF 方向，减少跨设备像素差异。</li><li>找纸角统一使用 800 px 算法；候选算法和 Mask 算法在设置中可分别选择。</li></ul></article>
+    </div>
+  </section>
+
+  <section class="note" aria-labelledby="limit-title"><h2 id="limit-title">效果边界</h2><p>当前五张实拍在网页测试中识别出 <strong>7、8、7、5、4 件</strong>，与本地测试数量一致。数量一致不等于每个边缘都正确：极浅色素材和更强模糊仍需复核；实体 iPhone Safari 尚未完成同等验收。设置里的 <code>原版候选 + MorphGAC</code> 是显式回退组合，统一路径发生错误时不会悄悄换成旧算法并假称成功。</p></section>
+
+  <section class="source"><h2>代码与研究记录</h2><p><a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/recognition-raster.js">固定解码</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/paper-quad-optimized.js">纸张四角</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/perspective.js">透视校正</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/paper-analysis.js">整页候选</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/material-unified-segmentation.js">统一分割</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/manual-import-recognition.js">手动补框</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/src/import-save.js">保存</a> · <a href="https://github.com/T0nglinziyong/shiye-journal/blob/test/docs/recognition-research-integration.md">真实案例与测试边界</a></p></section>
+</main>
+</body>
+</html>

@@ -18,6 +18,7 @@ export function createOfflineTaskStore({name='shiye-offline-tasks-current'}={}){
       await transaction.done;
     },
     async load(account,bundleId){if(!valid(account,bundleId))return null;return structuredClone((await (await db()).get('tasks',key(account,bundleId)))?.source||null);},
+    async remove(account,bundleId){if(!valid(account,bundleId))return;await (await db()).delete('tasks',key(account,bundleId));},
   };
 }
 

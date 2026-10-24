@@ -1,82 +1,159 @@
-import {openDB,unwrap} from 'idb';
+import {openDB} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
-import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
+import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
+import {cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudCheckVersion,cloudPreview,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
 export async function stageImport(batch){if(cloudEnabled)return cloudStageImport(batch);await transaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);});return {pending:false};}
-export const stageProject=record=>cloudEnabled?cloudStageProject(record):put('projects',record);
+export const scanLegacyAccountData=()=>{if(!cloudEnabled)throw Error('此功能需要已登录的云端账号');return cloudMigrationInventory();};
+export const readOriginalLegacyProject=record=>cloudMigrationOriginalProject(record);
+export const commitLegacyAccountMigration=plan=>cloudMigrationCommit(plan);
+export const stageProject=record=>{prepareProjectScene(record);return cloudEnabled?cloudStageProject(record):put('projects',record);};
 export const pendingProjects=()=>cloudEnabled?cloudPendingProjects():Promise.resolve([]);
+export const reviewSyncConflict=(kind,id)=>cloudConflictReview(kind,id);
+export const backupSyncConflict=(kind,id)=>cloudConflictBackup(kind,id);
+export const resolveSyncConflict=selection=>cloudResolveProjectConflict(selection);
+export const listPreConflictScenes=()=>cloudListPreConflictScenes();
+export const restorePreConflictScene=key=>cloudRestorePreConflictScene(key);
 export const pendingSyncDetails=()=>cloudEnabled?cloudPendingDetails():Promise.resolve({projects:[],batches:[],error:null});
+export const syncDiagnosticReport=options=>cloudEnabled?cloudSyncDiagnosticReport(options):null;
+export const recordSyncDiagnostic=event=>{if(cloudEnabled)cloudRecordSyncDiagnostic(event);};
+export async function createEmergencyBackup(){
+  if(!cloudEnabled)throw Error('应急待同步备份仅适用于云端账号');
+  return createPendingRecovery(await cloudEmergencySnapshot());
+}
+export async function restoreEmergencyBackup(file){
+  if(!cloudEnabled)throw Error('应急恢复仅适用于云端账号');
+  const parsed=await parsePendingRecovery(file);
+  return cloudRestoreEmergency(parsed);
+}
+// Only used when a previously-saved image Blob cannot be decoded from
+// IndexedDB. Refetches signed remote original bytes without changing metadata.
+export const reloadCloudBlob=id=>cloudEnabled?cloudReloadBlob(id):get('blobs',id);
 export const discardPendingSync=()=>cloudEnabled?cloudDiscardPending():Promise.resolve(0);
+export const rebuildPendingSync=local=>cloudEnabled?cloudRebuildPending(local):Promise.resolve({replaced:0,pending:0});
+export const runExclusiveAccountReset=task=>cloudEnabled?cloudRunExclusiveReset(task):Promise.reject(Error('此模式不支持云端清理'));
+export const accountResetBaseline=()=>cloudEnabled?cloudResetBaseline():Promise.reject(Error('此模式不支持云端清理'));
+export const abortExclusiveAccountReset=()=>{if(cloudEnabled)cloudAbortExclusiveReset();};
+export async function purgeLocalAfterCloudReset(){
+  if(!cloudEnabled)throw Error('只有已登录云端账号可以执行云端清空');
+  await cloudPurgeLocalAfterReset();
+  if(connection){const old=connection;connection=undefined;(await old).close();}
+}
 export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve();
 export const completeProject=record=>cloudEnabled?cloudProjectDocument(record):Promise.resolve(record);
-export const cachedCollections=()=>cloudEnabled?cloudCachedCollections():Promise.resolve(null);
+let legacyProjectSummaries=[];
+// Report the exact existing cloud rows that have been held aside. The rows
+// remain on the server until the owner explicitly decides what to do with them.
+export const legacyProjectInfo=()=>structuredClone(legacyProjectSummaries);
+export const exportLegacyProjectBackup=()=>cloudEnabled?cloudLegacyProjectBackup():Promise.reject(Error('仅当前云端账号支持旧版作品原始备份')); 
+function selectCurrentProjects(rows){
+ const result=partitionProjectList(rows);
+ legacyProjectSummaries=result.quarantined;
+ return result.projects;
+}
+export async function cachedCollections(){
+ const cached=cloudEnabled?await cloudCachedCollections():null;
+ return cached?{...cached,projects:selectCurrentProjects(cached.projects)}:null;
+}
 export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
-export const previewBlob=id=>cloudEnabled?cloudPreview(id):get('blobs',id).then(r=>r?.data);
+export const checkCloudVersion=()=>cloudEnabled?cloudCheckVersion():Promise.resolve(null);
+export const previewBlob=(id,pixels=720,options)=>cloudEnabled?cloudPreview(id,pixels,options):get('blobs',id).then(r=>r?.data);
+export const previewCacheBytes=()=>cloudEnabled?cloudPreviewCacheBytes():Promise.resolve(null);
+export const clearPreviewCache=()=>cloudEnabled?cloudClearPreviewCache():Promise.resolve({count:0,bytes:0});
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
+const browserRegression=import.meta.env?.MODE==='browser-test';
 let connection;
-const CONFIG_KEY='shiye-data-server-v1';
-let backend;
-let sameOriginServer=false;
-export function storageConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
-export function setStorageConfig(config){if(config)localStorage.setItem(CONFIG_KEY,JSON.stringify(config));else localStorage.removeItem(CONFIG_KEY);backend=undefined;sameOriginServer=false;}
-export function isSameOriginServer(){return sameOriginServer;}
+// CloudBase is the sole remote backend. IndexedDB remains available for
+// private offline caches, recoverable backups and pending write queues.
 export async function storageMode(){return storageRouter.mode();}
-async function resolveBackend(){
-  if(cloudEnabled)return {cloud:true};
-  if(backend)return backend;
-  const config=storageConfig();
-  if(config?.url){const url=new URL(config.url);if(url.protocol!=='https:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw Error('远程数据地址必须使用 HTTPS');if(document.querySelector('meta[name="shiye-server"]')&&url.origin!==location.origin)throw Error('自托管站点只允许使用同域名数据服务，请清除旧服务器配置');const candidate={url:url.origin,token:config.token||''},health=await serverRequest('/api/health',{backend:candidate});if(health.server!=='shiye-local')throw Error('该地址不是拾页数据服务');sameOriginServer=url.origin===location.origin;await serverRequest('/api/store/meta',{backend:candidate});return backend=candidate;}
-  let r;try{r=await fetch('/api/health',{cache:'no-store'});}catch(error){if(document.querySelector('meta[name="shiye-server"]'))throw Error('拾页服务器暂时不可用，请检查 4090 电脑及网络；未切换到浏览器存储');return backend={};}
-  if(r.ok){let health;try{health=await r.json();}catch{}if(health?.server==='shiye-local'){sameOriginServer=true;const candidate={url:location.origin,token:''};await serverRequest('/api/store/meta',{backend:candidate});return backend=candidate;}}
-  if(document.querySelector('meta[name="shiye-server"]'))throw Error('拾页数据服务响应异常；未切换到浏览器存储');
-  return backend={};
-}
-async function serverRequest(path,{backend:target,method='GET',data}={}){const b=target||await resolveBackend(),r=await fetch(b.url+path,{method,headers:{...(b.token?{Authorization:`Bearer ${b.token}`}:{ }),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store'});let result;try{result=await r.json();}catch{throw Error('数据服务没有返回有效 JSON');}if(!r.ok){const error=Error(result.error||`数据服务 HTTP ${r.status}`);error.status=r.status;throw error;}return result;}
 async function localDatabase(){
-  if(connection)return connection;
-  connection=openDB(DB,1,{upgrade(db){for(const name of STORES)if(!db.objectStoreNames.contains(name))db.createObjectStore(name,{keyPath:'id'});}}).catch(e=>{connection=undefined;throw e;});return connection;
-}
-async function localAll(name){return (await localDatabase()).getAll(name);}
-async function serverAll(name){return Promise.all((await serverRequest(`/api/store/${name}`)).map(decodeItem.bind(null,name)));}
-async function serverGet(name,id){try{return await decodeItem(name,await serverRequest(`/api/store/${name}/${encodeURIComponent(id)}`));}catch(e){if(e.message==='不存在')return undefined;throw e;}}
-async function serverTransaction(names,fn){
-  const operations=[],tx={objectStore(name){if(!names.includes(name))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store:name,item}),delete:id=>operations.push({action:'delete',store:name,id}),clear:()=>operations.push({action:'clear',store:name})};}};
-  const result=fn(tx);if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');
-  for(const op of operations)if(op.store==='blobs'&&op.action==='put')op.item={...op.item,data:await toBase64(op.item.data)};
-  await serverRequest('/api/transaction',{method:'POST',data:{operations}});
-}
-async function browserTransaction(names,fn){
-  const tx=(await localDatabase()).transaction(names,'readwrite');
-  try{const result=fn(unwrap(tx));if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');}
-  catch(e){tx.abort();await tx.done.catch(()=>{});throw e;}
-  await tx.done;
+ if(connection)return connection;
+ connection=openDB(DB,1,{upgrade(db){for(const name of STORES)if(!db.objectStoreNames.contains(name))db.createObjectStore(name,{keyPath:'id'});}}).catch(error=>{connection=undefined;throw error;});
+ return connection;
 }
 const storageRouter=createStorageRouter(
-  async()=>cloudEnabled?'cloud':(await resolveBackend()).url?'server':'browser',
-  {
-    cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation},
-    server:{all:serverAll,get:serverGet,transaction:serverTransaction},
-    browser:{all:localAll,get:(name,id)=>localDatabase().then(db=>db.get(name,id)),transaction:browserTransaction}
-  }
+ async()=>{if(browserRegression)return 'browser';if(!cloudEnabled)throw Error('缺少 CloudBase 配置，停止数据操作；不创建独立浏览器数据源');return 'cloud';},
+ {cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation},
+  browser:{
+   all:async name=>(await localDatabase()).getAll(name),
+   get:async(name,id)=>(await localDatabase()).get(name,id),
+   transaction:async(names,fn)=>{const tx=(await localDatabase()).transaction(names,'readwrite');
+    try{const result=await fn(tx);await tx.done;return result;}
+    catch(error){try{tx.abort();await tx.done;}catch{}throw error;}}
+  }}
 );
-export const all=name=>storageRouter.all(name);
-export const get=(name,id)=>storageRouter.get(name,id);
-export async function put(name,item){return transaction([name],tx=>tx.objectStore(name).put(item));}
+export async function all(name){const rows=await storageRouter.all(name);return name==='projects'?selectCurrentProjects(rows):rows;}
+export async function get(name,id){const record=await storageRouter.get(name,id);return name==='projects'&&record?prepareProjectScene(record):record;}
+export async function put(name,item){if(name==='projects')prepareProjectScene(item);return transaction([name],tx=>tx.objectStore(name).put(item));}
 export async function remove(name,id){return transaction([name],tx=>tx.objectStore(name).delete(id));}
 export const transaction=(names,fn)=>storageRouter.transaction(names,fn);
-const toBase64=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
-function fromBase64(value){const [prefix,body]=value.split(',');const type=/data:([^;]+)/.exec(prefix)?.[1]||'application/octet-stream';const b=atob(body);const arr=new Uint8Array(b.length);for(let i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);return new Blob([arr],{type});}
-async function decodeItem(name,item){return name==='blobs'?{...item,data:fromBase64(item.data)}:item;}
-export async function createBackup({browserOnly=false}={}){
-  const data={format:'shiye-pwa',version:1,createdAt:new Date().toISOString(),stores:{}};
+async function backupBlobIDs({browserOnly=false}={}){return cloudEnabled&&!browserOnly?cloudBackupBlobIDs():(await localDatabase()).getAllKeys('blobs');}
+export async function createBackup({browserOnly=false,onChunk,onProgress=()=>{}}={}){
   const snapshot=cloudEnabled&&!browserOnly?await cloudCheckpoint():null;
-  if(!browserOnly&&(cloudEnabled||(await resolveBackend()).url)){for(const name of STORES)data.stores[name]=await all(name);}else{const tx=(await localDatabase()).transaction(STORES);const values=await Promise.all(STORES.map(name=>tx.objectStore(name).getAll()));await tx.done;STORES.forEach((name,i)=>{data.stores[name]=values[i];});}
-  data.stores.blobs=await Promise.all(data.stores.blobs.map(async x=>({...x,data:await toBase64(x.data)})));
-  if(snapshot!==null){data.stores.projects=await Promise.all(data.stores.projects.map(cloudProjectDocument));data.stores.trash=await Promise.all(data.stores.trash.map(async row=>row.kind==='project'?{...row,item:await cloudProjectDocument(row.item)}:row));}
-  if(snapshot!==null&&await cloudCheckpoint()!==snapshot)throw Error('备份期间资料已变化，请重试');
-  return new Blob([JSON.stringify(data)],{type:'application/json'});
+  const records={};
+  if(browserOnly||!cloudEnabled){
+    const tx=(await localDatabase()).transaction(STORES.filter(name=>name!=='blobs'));
+    const names=STORES.filter(name=>name!=='blobs');
+    const values=await Promise.all(names.map(name=>tx.objectStore(name).getAll()));await tx.done;
+    names.forEach((name,i)=>{records[name]=values[i];});
+  }else{
+    for(const name of STORES.filter(name=>name!=='blobs'))records[name]=await all(name);
+  }
+  if(snapshot!==null){
+    records.projects=await Promise.all(records.projects.map(cloudProjectDocument));
+    records.trash=await Promise.all(records.trash.map(async row=>row.kind==='project'?{...row,item:await cloudProjectDocument(row.item)}:row));
+  }
+  const blobIDs=await backupBlobIDs({browserOnly});
+  const {createZipBackup}=await import('./backup-archive.js');
+  return createZipBackup({
+    records,blobIDs,loadBlob:async id=>{
+      const value=browserOnly?(await localDatabase()).get('blobs',id):get('blobs',id);
+      return await value;
+    },onChunk,onProgress,
+    beforeFinalize:snapshot===null?null:async()=>{
+      if(await cloudCheckpoint()!==snapshot)throw Error('云端资料在备份期间变化，请重新导出，未产生完整备份');
+    }
+  });
 }
-export async function restoreBackup(file){if(file.size>1024*1024*1024)throw Error('备份超过 1 GB，请在电脑端转换或分批导入');const data=JSON.parse(await file.text());if(data.format!=='shiye-pwa'||data.version!==1||!data.stores||STORES.some(x=>!Array.isArray(data.stores[x])))throw Error('不是拾页 PWA 完整备份');const values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};await confirmedTransaction(STORES,tx=>{for(const name of STORES){tx.objectStore(name).clear();for(const item of values[name])tx.objectStore(name).put(item);}});}
+export async function prepareBackupRestore(file){
+  const restoreAccountID=cloudEnabled?(await (await import('./cloud-session.js')).requireCloudUser()).id:null;
+  const header=new Uint8Array(await file.slice(0,4).arrayBuffer());
+  const isZip=header.length>=4&&header[0]===0x50&&header[1]===0x4b&&header[2]===0x03&&header[3]===0x04;
+  if(!isZip)throw Error('请选择当前 .shiyepwa ZIP 完整备份；旧数据请使用独立转换工具');
+  const {stageBackup}=await import('./backup-staging.js');
+  const {validateRestoredRecords}=await import('./backup-integrity.js');
+  const staged=await stageBackup(file),values=staged.stores;
+  const repairs=[];
+  try{validateRestoredRecords(values,{repairs});}catch(error){await staged.dispose();throw error;}
+  const counts=Object.fromEntries(STORES.map(name=>[name,values[name].length]));
+  let applied=false,applying=false,disposed=false;
+  const dispose=async()=>{disposed=true;await staged.dispose();};
+  return {counts,repairs,dispose,apply:async()=>{
+    if(applied||applying||disposed)throw Error('此备份恢复任务已经执行或正在执行，请重新选择文件');
+    applying=true;
+    try{
+    if(cloudEnabled){
+      const current=(await (await import('./cloud-session.js')).requireCloudUser()).id;
+      if(current!==restoreAccountID)throw Error('预检后登录账号已变化，请重新选择备份文件');
+      await cloudFlushProjects();
+      const pending=await cloudPendingDetails();
+      if(pending.projects.length||pending.batches.length||pending.quarantined)
+        throw Error('本账号仍有待同步或待检查的本机修改；请先完成同步或导出应急包，再恢复完整备份');
+    }
+    applied=true;
+    // The six IDB stores are replaced in one transaction. A failed request
+    // leaves the prior database intact; preflight itself never writes it.
+    await confirmedTransaction(STORES,tx=>{
+      for(const name of STORES){
+        tx.objectStore(name).clear();
+        for(const item of values[name])tx.objectStore(name).put(item);
+      }
+    });
+    }finally{applying=false;await dispose();}
+  }};
+}
+export async function restoreBackup(file){return (await prepareBackupRestore(file)).apply();}

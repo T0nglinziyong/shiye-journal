@@ -1,0 +1,178 @@
+{
+  "protocolVersion": 1,
+  "transactionId": "complex-initial",
+  "baseSceneRevision": "sha256:ee6b63d2babb8a115c8a6d2580fdb3bf208597dab7c0d7c57d31f620aae29f36",
+  "operations": [
+    {
+      "op": "material.craft",
+      "plan": {
+        "format": "shiye-craft-plan",
+        "version": 2,
+        "commandId": "complex-art",
+        "baseSceneHash": "sha256:28aaf27303d01d04e66617f6522b1493d91215bf3ab8582b8ca7fa1d3fe002ef",
+        "pieces": [
+          {
+            "id": "left",
+            "asset": "m1",
+            "sourceRevision": "sha256:ccb0846274bf4b9ad0a8d034fa6e83088fc506e9bf9f6bd3b475b75651ba2d59",
+            "unit": 0,
+            "extraction": {
+              "type": "rect_crop",
+              "boxMM": [
+                0,
+                0,
+                40,
+                80
+              ]
+            },
+            "centerMM": [
+              35,
+              155
+            ],
+            "treatments": [
+              {
+                "op": "edge",
+                "style": "torn",
+                "edges": [
+                  "bottom"
+                ],
+                "depth_mm": 1,
+                "period_mm": 8,
+                "seed": 42
+              }
+            ]
+          },
+          {
+            "id": "right",
+            "asset": "m1",
+            "sourceRevision": "sha256:ccb0846274bf4b9ad0a8d034fa6e83088fc506e9bf9f6bd3b475b75651ba2d59",
+            "unit": 0,
+            "extraction": {
+              "type": "rect_crop",
+              "boxMM": [
+                40,
+                0,
+                40,
+                80
+              ]
+            },
+            "centerMM": [
+              82,
+              155
+            ],
+            "treatments": []
+          },
+          {
+            "id": "frame",
+            "asset": "m2",
+            "sourceRevision": "sha256:0d510f09c963fb0d4973b887d3e0e079131d0929c7b8ff5d5890558b810ee98e",
+            "unit": 0,
+            "extraction": {
+              "type": "whole"
+            },
+            "centerMM": [
+              150,
+              95
+            ],
+            "treatments": [
+              {
+                "op": "window",
+                "shape": "rectangle",
+                "box": [
+                  0.1,
+                  0.2,
+                  0.15,
+                  0.6
+                ]
+              },
+              {
+                "op": "window",
+                "shape": "rectangle",
+                "box": [
+                  0.75,
+                  0.2,
+                  0.15,
+                  0.6
+                ]
+              }
+            ]
+          },
+          {
+            "id": "strip",
+            "asset": "m3",
+            "sourceRevision": "sha256:20cdf19939f975a923e906f4870bb55732dd8d6fc8d778c006844895e99c1c07",
+            "unit": 0,
+            "extraction": {
+              "type": "whole"
+            },
+            "centerMM": [
+              150,
+              95
+            ],
+            "treatments": []
+          }
+        ],
+        "sourcePartitions": [
+          {
+            "asset": "m1"
+          }
+        ],
+        "weaves": [
+          {
+            "piece": "strip",
+            "target": "frame",
+            "holes": [
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "text.add",
+      "id": "caption",
+      "content": "把今天折成几片，留一点光从纸窗穿过。",
+      "xMm": 148,
+      "yMm": 175,
+      "widthMm": 110,
+      "fontSizePt": 23,
+      "color": "#304638"
+    },
+    {
+      "op": "ink.add",
+      "id": "highlight",
+      "points": [
+        {
+          "xMm": 100,
+          "yMm": 188
+        },
+        {
+          "xMm": 195,
+          "yMm": 188
+        }
+      ],
+      "widthMm": 3,
+      "color": "#e8d66b",
+      "penStyle": "marker"
+    },
+    {
+      "op": "material.decision",
+      "asset": "m1",
+      "choice": "crafted",
+      "reason": "素材参与实际画面工艺组合"
+    },
+    {
+      "op": "material.decision",
+      "asset": "m2",
+      "choice": "crafted",
+      "reason": "素材参与实际画面工艺组合"
+    },
+    {
+      "op": "material.decision",
+      "asset": "m3",
+      "choice": "crafted",
+      "reason": "素材参与实际画面工艺组合"
+    }
+  ]
+}

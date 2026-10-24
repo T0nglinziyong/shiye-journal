@@ -1,0 +1,21 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-add",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.add",
+      "id": "photo",
+      "asset": "m1",
+      "place": {
+        "reference": "page",
+        "at": [
+          50,
+          60
+        ],
+        "unit": "mm",
+        "anchor": "center"
+      }
+    }
+  ]
+}

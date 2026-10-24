@@ -1,6 +1,8 @@
+import {reconstructionInstruction} from './image-workflow.js';
 import {reviewFinalCreativeScene} from './creative-visual-review.js';
 import {multimodalCraftGuide,visualMaterialIDs} from './craft-vision.js';
 import {craftSceneHash} from './craft-fingerprint.js';
+import {attachSceneV2} from './scene-v2.js';
 import {describeCraftSources} from './craft-task.js';
 import {applyToolCalls} from './creative.js';
 export {agentTools} from './creative-contract.js';
@@ -12,44 +14,55 @@ import {visualStyleBrief} from './creative-style-brief.js';
 import {creativeLayeringGuide} from './creative-layering-guide.js';
 import {creativeContentBrief} from './creative-content-brief.js';
 import {creativePageBrief} from './creative-page-brief.js';
+import {structureReferenceGuide,purposeMethod} from './creative-design-guide.js';
 import {sceneFingerprint} from './offline-result-review.js';
 import {applyScenePatch,patchSceneHash} from './scene-patch.js';
 import {createCreativeBudget} from './ai-budget.js';
 import {classifyJournalMaterial} from './journal-case-study.js';
-import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
-import {journalAbstractTemplateGuide,selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 
-const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制纸张、照片、贴纸，同一件裁下的非重叠余料可继续使用。胶带视为连续可裁取，但不能拉伸已校准的宽度或图案。文字和数字图形是可编辑图层。素材可先矩形裁片，再用 mask 做不规则、圆角或花边外轮廓；diagonal 用直线斜裁并指定保留侧，window 在素材内部开透明孔，两者可组合。把直线、自由矢量、手写笔与荧光笔拆成可编辑元素；让文字与素材形成有机关系。根据用途与风格建立主视觉、连续阅读区和细节，避免无意堆在中央、遮住正文、重复空相框或每段机械加白底。判断留白是否服务于主题与阅读：真实素材少时，可用有内容的可编辑文字、线条、底色或图形补充信息与节奏，也可有意识地保留空白；不要为填满面积而添加无关内容。不凭空制造实物。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字参考本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
-const purposes={日常记录:'用相关观察、图像和可编辑文字形成日记感；正文可是一段完整多行记录，也可分成若干短段。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，避免无意义空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
+const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、来源区域和加工由本地工具判定，不得缩放或复制纸张、照片、贴纸，同一件裁下的非重叠余料可继续使用。胶带视为连续可裁取，但不能拉伸已校准的宽度或图案。文字和数字图形是可编辑图层。素材可先矩形裁片，再用 mask 做不规则、圆角或花边外轮廓；diagonal 用直线斜裁并指定保留侧，window 在素材内部开透明孔，两者可组合。把直线、自由矢量、手写笔与荧光笔拆成可编辑元素；可以使用共享 Scene 的多边形矢量蒙版为实体裁片、图形与文字剪外轮廓或开窗；透明纸、胶带可用 multiply 正片叠底；组只用于同步选中移动，不改变实物尺寸；让文字与素材形成有机关系。根据用途与风格建立主视觉、连续阅读区和细节，避免无意堆在中央、遮住正文、重复空相框或每段机械加白底。判断留白是否服务于主题与阅读：真实素材少时，可用有内容的可编辑文字、线条、底色或图形补充信息与节奏，也可有意识地保留空白；不要为填满面积而添加无关内容。不凭空制造实物。无经历时可以写态度、疑问、愿望或轻松自言自语，不编日期地点经历；按本次内容策略决定。位置默认页面比例，文字参考本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
+
 export function creativeScene(d,aliases={}){
- const map=Object.fromEntries(Object.entries(aliases).map(([k,v])=>[v,k])),g=x=>({key:x.creativePieceID||x.agentKey||x.key||x.id,x:x.x/d.canvas.width,y:x.y/d.canvas.height,width:x.width/d.canvas.width,height:x.height/d.canvas.height,rotation:x.rotation||0,z:x.zIndex||0});
- return {canvas:d.canvas,pageMode:d.pageMode,pageRatio:d.pageRatio,pageHeightMM:d.physicalPageHeightMM,paper:{color:d.paperColor,pattern:d.paperPattern,ruling:d.paperRuling,centerGutter:d.drawCenterGutter},materials:d.items.filter(x=>!x.isParked).map(x=>({...g(x),asset:map[x.assetID],cropRect:x.cropRect||null,materialMask:x.materialMask||null,opacity:x.opacity??1,flipped:!!x.isFlippedHorizontally})),texts:d.textBlocks.filter(x=>!x.isHidden).map(x=>({...g(x),content:x.content,fontSize:x.fontSize,fontName:x.fontName||null,style:x.style,color:x.color,alignment:x.alignment,letterSpacing:x.letterSpacing||0,lineSpacing:x.lineSpacing||0,fixedLineHeight:x.fixedLineHeight||null,paragraphSpacing:x.paragraphSpacing||0,bold:!!x.bold,italic:!!x.italic,underline:!!x.underline,strikethrough:!!x.strikethrough})),graphics:d.primitives.filter(x=>!x.hidden).map(x=>({...g(x),kind:x.kind,fill:x.fill,stroke:x.stroke,lineWidth:x.lineWidth,cornerRadius:x.cornerRadius,vectorPaths:x.vectorPaths||null,vectorLayers:x.vectorLayers||null})),inkStrokes:(d.strokes||[]).map(s=>({points:s.points?.length||0,color:s.color,width:s.width,opacity:s.opacity,penStyle:s.penStyle}))};
+ const map=Object.fromEntries(Object.entries(aliases).map(([k,v])=>[v,k]));
+ const norm=(x,axis)=>Number.isFinite(x)?Number((x/d.canvas[axis]).toFixed(5)):null;
+ const walk=nodes=>(nodes||[]).filter(n=>!n.isParked&&!n.hidden&&!n.isHidden).map(n=>{
+   const style={id:n.id,type:n.type,opacity:n.opacity??1,blendMode:n.blendMode||'normal',
+     ...(n.vectorMask?{vectorMask:n.vectorMask}:{})};
+   if(n.type==='group')return {...style,name:n.name,children:walk(n.children)};
+   if(n.type==='ink')return {...style,stroke:{points:n.points?.length||0,width:n.width,color:n.color,penStyle:n.penStyle},zIndex:n.zIndex};
+   const base={...style,x:norm(n.x,'width'),y:norm(n.y,'height'),width:norm(n.width,'width'),height:norm(n.height,'height'),rotation:n.rotation||0,zIndex:n.zIndex??0};
+   if(n.type==='material')return {...base,asset:map[n.assetID]||'未授权素材',cropRect:n.cropRect||null,materialMask:n.materialMask||null,sourceUnit:n.materialUnitIndex??0,
+     ...(n.manualVisualCopy?{manualVisualCopy:true}:{})};
+   if(n.type==='text')return {...base,content:n.content,fontSize:n.fontSize,fontName:n.fontName||null,color:n.color,style:n.style};
+   return {...base,kind:n.kind,fill:n.fill,stroke:n.stroke,vectorPaths:n.vectorPaths||null,vectorLayers:n.vectorLayers||null};
+ });
+ return {version:2,canvas:d.canvas,pageMode:d.pageMode,pageRatio:d.pageRatio,
+   pageHeightMM:d.physicalPageHeightMM,paper:{color:d.paperColor,pattern:d.paperPattern},
+   layers:walk(d.layers)};
 }
-const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.items,d.textBlocks,d.primitives,d.strokes]);
+const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.layers]);
+
 export function buildCreativeMessages(o){
- const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false,userTemplates=[]}=o;
+ const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='original',textPresentation='mixed',userText='',providedFacts='',styles=[draft.style],pagePurposes=['自由创作'],processing,requiredAssetIDs=[],materialPriority={},includeStructureReference=true}=o;
  const effectiveTextMode=contentPolicy==='visual'?'none':textMode;
  const contentBrief=creativeContentBrief({policy:contentPolicy,userText,providedFacts,topic:prompt,purposes:pagePurposes});
  const priority=id=>requiredAssetIDs.includes(id)||materialPriority.required?.includes(id)?'必须使用':materialPriority.available?.includes(id)?'可以使用（仅备选）':'优先使用';
- const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，优先级 ${priority(id)}，${a.kind}，${a.role}，图文职责 ${classifyJournalMaterial(a).join('、')}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，库存 ${a.kind==='tape'?'连续胶带，可多次裁取但宽度与图案不得拉伸':a.supply?.quantity??1}，加工 ${assetProcessing[id]||processing||'保留完整'}，用法 ${materialUseHints[id]||'由生成器选择'}${materialUseRequired[id]?'（每个方案必做）':''}，标签 ${(a.tags||[]).join('、')}`]:[];});
- const policy=effectiveTextMode==='none'?'不生成文字。':effectiveTextMode==='requested'?'仅用户明确要求文字时配文。':'按用途生成真实内容的图文手账。';
- const pageBrief=creativePageBrief({styles,purposes:pagePurposes,textMode:effectiveTextMode,contentPolicy,userText,theme:prompt,pageMode:draft.pageMode});
- const reference=includeStructureReference?'可以参考主图与旁注、错层图文、分栏收藏或留白封面等不同阅读结构；根据本次真实素材和用途自由选择，不复制固定坐标。':'';
+ const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，优先级 ${priority(id)}，${a.kind}，${a.role}，图文职责 ${classifyJournalMaterial(a).join('、')}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，取用规则 ${a.kind==='tape'?'可取多个独立段，不得拉伸宽度或伪造无缝图案':'单方案一份源素材，可裁成非重叠片段'}，标签 ${(a.tags||[]).join('、')}`]:[];});
+ const policy=effectiveTextMode==='none'?'不生成文字。':effectiveTextMode==='requested'?'仅用户明确要求文字时配文。':'按内容策略与用途创作有表达的图文手帐。';
+ const pageBrief=creativePageBrief({styles,purposes:pagePurposes,textMode:effectiveTextMode,contentPolicy,textPresentation,userText,theme:prompt,pageMode:draft.pageMode,materials:assets.filter(a=>Object.values(aliases).includes(a.id))});
+ const spreadPreference=draft.pageMode==='spread'?'双页是一张加宽画布，中心 x=0.5 为装订中缝。优先把每件实体素材完整安排在左半页或右半页，尽量不要横跨中缝；这是视觉建议而非强制规则，合理的跨页设计允许保留。':'';
+ const reference=includeStructureReference?structureReferenceGuide:'';
  const mode=creativeProtocol(o).instruction;
- const first=[{type:'text',text:`【本次任务】\n纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高${draft.physicalPageHeightMM}mm。\n风格：${styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}。\n用途：${pagePurposes.map(p=>p+'：'+(purposes[p]||'遵守主题要求。')).join('\n')||'不预设，由本次主题决定'}\n${contentBrief}\n优先级：必须使用每版落实；优先使用先考虑，合适时采用；可以使用只是备选；不使用的素材未发送，不得猜测或引用。\n【构思参考（非硬性配额）】\n${pageBrief}\n优先素材逐件审视：合适的多用，不适合的可以不放；不按数量或覆盖率评分。数字图形也可以成为视觉主角，但不能伪装成未拥有的真实素材。\n【真实素材】\n${list.join('\n')}\n【当前画布】\n${JSON.stringify(creativeScene(draft,aliases))}`}];
+ const first=[{type:'text',text:`【本次任务】\n纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高${draft.physicalPageHeightMM}mm。\n风格：${styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}。\n用途：${pagePurposes.map(p=>p+'：'+purposeMethod(p)).join('\n')||'不预设，由本次主题决定'}\n素材加工方式：${processing||'自由拆解'}，统一适用于本次素材。\n${contentBrief}\n优先级：必须使用每版落实；优先使用先考虑，合适时采用；可以使用只是备选；不使用的素材未发送，不得猜测或引用。\n【构思参考（非硬性配额）】\n${pageBrief}\n${spreadPreference}\n有图片时逐件观察，比较完整使用、合适的真实加工与舍弃；结束前核对选择是否体现在实际图层，工具模式在 finish_design 的 summary 简述关键取舍，直接页模式在内部完成核对。完整使用可以是最佳选择，不按工艺或素材数量评分。数字图形也可以成为视觉主角，但不能伪装成未拥有的真实素材。\n【真实素材】\n${list.join('\n')}\n【当前画布】\n${JSON.stringify(creativeScene(draft,aliases))}`}];
  const snapshotMode=['image','pdf'].includes(o.deliveryMode);
- if(snapshotMode)first[0].text=`创作一页将以${o.deliveryMode==='pdf'?'PDF':'图片'}快照交付的手帐。纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高 ${draft.physicalPageHeightMM} mm。风格方向：${styles.join('、')||'不预设'}；用途：${pagePurposes.join('、')||'不预设'}。这些是方向，不是固定模板。\n${contentBrief}\n${pageBrief}\n真实素材与库存：\n${list.join('\n')}\n当前画布：${JSON.stringify(creativeScene(draft,aliases))}`;
+ if(snapshotMode)first[0].text=`创作一页将以${o.deliveryMode==='pdf'?'PDF':'图片'}快照交付的手帐。纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高 ${draft.physicalPageHeightMM} mm。风格方向：${styles.join('、')||'不预设'}；用途：${pagePurposes.join('、')||'不预设'}。这些是方向，不是固定模板。\n素材加工方式：${processing||'自由拆解'}，统一适用于本次素材。\n${contentBrief}\n${pageBrief}\n${spreadPreference}\n真实素材与来源约束：\n${list.join('\n')}\n当前画布：${JSON.stringify(creativeScene(draft,aliases))}`;
  first[0].text+='\n【工艺场景基线】'+craftSceneHash(draft)+'\n【可用来源版本与已确认区域】'+JSON.stringify(describeCraftSources(assets,aliases));
+ if(o.referenceImage){if(!/^data:image\/(png|jpeg|webp);base64,/.test(o.referenceImage))throw Error('重建参考必须是本次本机图像，不接受外链');first.push({type:'text',text:reconstructionInstruction},{type:'image_url',image_url:{url:o.referenceImage}});}
  images.forEach((input,i)=>{const url=typeof input==='string'?input:input.url,label=typeof input==='string'?Object.keys(aliases)[i]:input.asset;if(url)first.push({type:'text',text:'素材 '+label+' 的图片：'},{type:'image_url',image_url:{url}});});
- const referenceContext={styles,purposes:pagePurposes,materials:assets.filter(asset=>Object.values(aliases).includes(asset.id)),userTemplates};
- const selectedCases=selectJournalReferenceCases(referenceContext);
- const selectedTemplates=selectJournalAbstractTemplates(selectedCases,referenceContext);
- const caseBrief=sendPresetReferences||referenceImages.length?`【本次匹配案例】\n${journalReferenceGuide(selectedCases)}\n【来自用户教程的抽象模板】\n${journalAbstractTemplateGuide(selectedTemplates)}`:'';
- referenceImages.forEach((input,i)=>{const url=typeof input==='string'?input:input.url;first.push({type:'text',text:`${input.kind==='template'?'抽象模板':'匹配案例'} ${i+1}/${referenceImages.length}：${input.title||selectedCases[i]?.title||'手帐构图'}。只借鉴图文关系；参考图里的照片、文字和贴纸不能当成本次可用素材。`},{type:'image_url',image_url:{url}});});
- if(snapshotMode)return [{role:'system',content:`你是自由创作的手帐设计师。画面可大胆使用文字、数字手绘笔迹、荧光笔、自由矢量形状、色层及素材间的有机叠放；风格、用途与样例只是启发，不设素材数量、留白、密度、标题字数或固定版式指标。唯一硬性限制是真实纸张尺寸、实物素材的尺寸与库存、裁片不能重叠重复使用、胶带保持真实宽度。未发送的实体素材不能凭空出现。坐标是画布中心的 0–1 比例，实体宽高始终由素材库决定。\n${caseBrief}\n${multimodalCraftGuide}\n为让拾页生成快照，必须按机器可读合同返回页面，不要把整页内容当成一个新实体素材。${creativeProtocol(o).instruction}`},{role:'user',content:first}];
- const geometry='所有 placement 与文字/图形 x,y 都是中心点而非左上角。ratio 默认归一化到当前画布；实物按已确认毫米尺寸放置，不缩放、不超库存。图层可有意伸出纸边形成出血，页面预览及导出只显示纸内部分；重要文字与图像内容尽量留在纸内。unit 从0开始，库存1必须 unit:0。piece 是唯一片段ID，不是工序名称，各材料不得共用 whole 等ID。relation.target、relative_to、fit target 指已创建的 piece/key，不能填素材 alias 或 canvas。直接页文字 x,y 同样为中心（不是左上），完整行高可能扩展；长段可分栏或调整字号。文字重叠、对比偏低或框内显示不全会作为排版建议反馈，但不阻止有意的创意处理。没有素材图片时，你只知道名称、标签、尺寸：禁止猜测色彩深浅、星月具体形状/位置、人物姿态/动作/持球手方向、纸面纹理，只能写已给的色名、主题关联与这次排版的尺寸和留白关系。';
+ if(snapshotMode)return [{role:'system',content:`你是自由创作的手帐设计师。画面可大胆使用文字、数字手绘笔迹、荧光笔、自由矢量形状、色层及素材间的有机叠放；风格、用途与样例只是启发，不设素材数量、留白、密度、标题字数或固定版式指标。唯一硬性限制是真实纸张尺寸、实物素材的尺寸与单方案来源约束、裁片不能重叠重复使用、胶带保持真实宽度。未发送的实体素材不能凭空出现。坐标是画布中心的 0–1 比例，实体宽高始终由素材库决定。\n${multimodalCraftGuide}\n为让拾页生成快照，必须按机器可读合同返回页面，不要把整页内容当成一个新实体素材。${creativeProtocol(o).instruction}`},{role:'user',content:first}];
+ const geometry='所有 placement 与文字/图形 x,y 都是中心点而非左上角。ratio 默认归一化到当前画布；实物按已确认毫米尺寸放置，不缩放、普通素材每方案只取用一份。图层可有意伸出纸边形成出血，页面预览及导出只显示纸内部分；重要文字与图像内容尽量留在纸内。普通素材 unit 必须为0；胶带可为不同独立段使用不同 unit。piece 是唯一片段ID，不是工序名称，各材料不得共用 whole 等ID。relation.target、relative_to、fit target 指已创建的 piece/key，不能填素材 alias 或 canvas。直接页文字 x,y 同样为中心（不是左上），完整行高可能扩展；长段可分栏或调整字号。文字重叠、对比偏低或框内显示不全会作为排版建议反馈，但不阻止有意的创意处理。没有素材图片时，你只知道名称、标签、尺寸：禁止猜测色彩深浅、星月具体形状/位置、人物姿态/动作/持球手方向、纸面纹理，只能依据已给信息联想或表达态度；排版尺寸和留白关系不写成正文。';
  const printType=creativeTypographyGuide(draft);
- return [{role:'system',content:[`【通用创作与物理规则】\n${system}\n${multimodalCraftGuide}`,`【坐标与排版】\n${geometry}\n${printType}`,`【文字、素材与图形的关系】\n${policy}\n${creativeLayeringGuide}\n${customLayoutPrompt}\n${reference}`,caseBrief,`【本次 API 创作模式】\n${mode}`].filter(Boolean).join('\n')},{role:'user',content:first}];
+ return [{role:'system',content:[`【通用创作与物理规则】\n${system}\n${multimodalCraftGuide}`,`【坐标与排版】\n${geometry}\n${printType}`,`【文字、素材与图形的关系】\n${policy}\n${creativeLayeringGuide}\n${customLayoutPrompt}\n${reference}`,`【本次 API 创作模式】\n${mode}`].filter(Boolean).join('\n')},{role:'user',content:first}];
 }
 export function buildCreativePayload(o,messages){
  const deepseek=new URL(o.endpoint||'https://api.deepseek.com/chat/completions').host==='api.deepseek.com',mode=o.reasoningMode||'automatic',thinking=deepseek?(mode==='automatic'||o.disableThinking!==false?{type:'disabled'}:mode==='low'?{type:'enabled'}:null):null;
@@ -57,10 +70,10 @@ export function buildCreativePayload(o,messages){
 }
 export async function runCreativeAgent(o){
  if(o.deliveryMode==='image')throw Error('画面图片必须由图像模型直接生成，不能把可编辑页面截图伪装成生成图片');
- const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
+ const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=12,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
  if(!key?.trim())throw Error('请输入自己的 API 密钥');if(new URL(endpoint).protocol!=='https:')throw Error('API 地址必须使用 HTTPS');
  const options={...o,visualAssetIDs:visualMaterialIDs(o.images,o.aliases),textMode:o.contentPolicy==='visual'?'none':o.textMode,allowNoText:o.contentPolicy==='visual'||o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
- let working=structuredClone(draft),turn=0,noProgress=0,nextPhase='creation';if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),budget=createCreativeBudget(maxTurns);
+ let working=attachSceneV2(structuredClone(draft)),turn=0,noProgress=0,nextPhase='creation';if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),budget=createCreativeBudget(maxTurns);
  try {for(;;){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');const counts=budget.begin(nextPhase);turn=counts.totalRequests;nextPhase='creation';const before=editableSceneState(working),beforePatchHash=await patchSceneHash(working);
   const payload=buildCreativePayload(o,messages),protocol=creativeProtocol(o),native=protocol.native;

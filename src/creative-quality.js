@@ -30,9 +30,23 @@ export function reviewCreativeDraft(d,{measureText}={}){
   const measure=measureText?text=>measureText(text,t):ctx?text=>ctx.measureText(text).width:text=>[...text].reduce((n,ch)=>n+t.fontSize*(/[\u0000-\u00ff]/u.test(ch)?.65:1)+(t.letterSpacing||0),0);
   if(textLines(t,measure).height>t.height+2)warnings.push('完整文字超出文字框：'+(t.agentKey||t.id));
  }
+ // A spread is one wide Draft (no independent pages[]). Gutter avoidance
+ // applies ONLY to AI quality guidance; a human may freely cross the fold.
+ if(d.pageMode==='spread'){
+  const fold=d.canvas.width/2;
+  for(const item of d.items||[]){
+   if(item.isParked||item.hidden||item.isHidden)continue;
+   const angle=(item.rotation||0)*Math.PI/180;
+   const half=(Math.abs(Math.cos(angle))*item.width+Math.abs(Math.sin(angle))*item.height)/2;
+   if(item.x-half<fold&&item.x+half>fold){
+    warnings.push('双页中缝穿过实体素材：'+(item.creativePieceID||item.id)+'（建议放在左页或右页；跨页构图合理时可保留）');
+   }
+  }
+ }
  for(let i=0;i<texts.length;i++)for(let j=i+1;j<texts.length;j++){
   const a=texts[i],b=texts[j],w=Math.min(a.x+a.width/2,b.x+b.width/2)-Math.max(a.x-a.width/2,b.x-b.width/2),h=Math.min(a.y+a.height/2,b.y+b.height/2)-Math.max(a.y-a.height/2,b.y-b.height/2);
   if(w>2&&h>2)warnings.push('文字框相互遮挡：'+(a.agentKey||a.id)+' / '+(b.agentKey||b.id));
  }
- return {materials:(d.items||[]).filter(x=>!x.isParked&&!x.isHidden&&!x.hidden).length,textBlocks:texts.length,graphics:(d.primitives||[]).length,warnings:[...new Set(warnings)],craft:craftUsage(d)};
+ const reading={characters:texts.reduce((sum,t)=>sum+[...String(t.content||'').replace(/\s/g,'')].length,0),excerpts:texts.filter(t=>String(t.content||'').trim()).map(t=>({id:t.id||t.agentKey,text:String(t.content).slice(0,160)}))};
+ return {reading,materials:(d.items||[]).filter(x=>!x.isParked&&!x.isHidden&&!x.hidden).length,textBlocks:texts.length,graphics:(d.primitives||[]).length,warnings:[...new Set(warnings)],craft:craftUsage(d)};
 }

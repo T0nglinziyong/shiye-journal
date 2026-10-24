@@ -1,11 +1,12 @@
+import {sceneMaterialIDs,sceneMaterialBlobIDs} from './scene-material-references.js';
 export const LARGE_PROJECT_BYTES=128*1024;
 export function projectSummary(project,path,encoding){
-  const {editHistory,manualArchives,initialEditorSnapshot,manualEditorSnapshot,draftHistorySnapshots,...summary}=project;
-  return {...summary,projectDocumentPath:path,...(encoding?{projectDocumentEncoding:encoding}:{}),drafts:project.drafts.map(d=>{const {items,primitives,textBlocks,strokes,makingSteps,...meta}=d;return {...meta,items:[],primitives:[],textBlocks:[],strokes:[],makingSteps:[]};})};
+  const {editHistory,manualArchives,manualArchiveStore,initialEditorSnapshot,manualEditorSnapshot,draftHistorySnapshots,autoSceneSnapshots,autoSceneSnapshotStore,sceneOperations,sceneOperationsSinceSnapshot,sceneFirstUnsnapshottedAt,lastAutoSceneSnapshotAt,...summary}=project;
+  return {...summary,sceneAssetIDs:sceneMaterialIDs(project),sceneBlobIDs:sceneMaterialBlobIDs(project),projectDocumentPath:path,...(encoding?{projectDocumentEncoding:encoding}:{}),drafts:project.drafts.map(d=>{const {layers,makingSteps,...meta}=d;return {...meta,layers:[],makingSteps:[]};})};
 }
 export function mergeProjectSummary(document,summary){
   const {projectDocumentPath,projectDocumentEncoding,projectDocumentProvider,drafts,...metadata}=summary;
-  return {...document,...metadata,drafts:document.drafts.map(d=>{const latest=drafts.find(row=>row.id===d.id);if(!latest)return d;const {items,primitives,textBlocks,strokes,makingSteps,...meta}=latest;return {...d,...meta};})};
+  return {...document,...metadata,drafts:document.drafts.map(d=>{const latest=drafts.find(row=>row.id===d.id);if(!latest)return d;const {layers,makingSteps,...meta}=latest;return {...d,...meta};})};
 }
 export async function projectBlobText(blob,encoding){
   if(!encoding)return blob.text();

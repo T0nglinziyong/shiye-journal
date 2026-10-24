@@ -1,0 +1,54 @@
+{
+  "protocolVersion": 1,
+  "transactionId": "simple-initial",
+  "baseSceneRevision": "sha256:ee6b63d2babb8a115c8a6d2580fdb3bf208597dab7c0d7c57d31f620aae29f36",
+  "operations": [
+    {
+      "op": "material.add",
+      "id": "hero",
+      "asset": "m1",
+      "placement": {
+        "xMm": 75,
+        "yMm": 105
+      }
+    },
+    {
+      "op": "text.add",
+      "id": "heading",
+      "content": "把寻常日子，慢慢记下来。",
+      "xMm": 75,
+      "yMm": 35,
+      "widthMm": 100,
+      "fontSizePt": 24,
+      "color": "#304638"
+    },
+    {
+      "op": "shape.add",
+      "id": "accent",
+      "kind": "ellipse",
+      "xMm": 128,
+      "yMm": 58,
+      "widthMm": 13,
+      "heightMm": 13,
+      "fill": "#d5e2d6"
+    },
+    {
+      "op": "material.decision",
+      "asset": "m1",
+      "choice": "intact",
+      "reason": "保留印刷内容完整轮廓"
+    },
+    {
+      "op": "material.decision",
+      "asset": "m2",
+      "choice": "omitted",
+      "reason": "本页主题暂不需要这一件素材"
+    },
+    {
+      "op": "material.decision",
+      "asset": "m3",
+      "choice": "omitted",
+      "reason": "本页主题暂不需要这一件素材"
+    }
+  ]
+}

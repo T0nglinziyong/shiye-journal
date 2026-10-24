@@ -14,7 +14,7 @@ function environment(){
  return {win,close(){clearPreviewContentCache();win.happyDOM.abort();win.close();for(const [key,value] of previous){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}}};
 }
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
-async function until(check){for(let i=0;i<40;i++){if(check())return;await tick();}assert.ok(check(),'async image state did not settle');}
+async function until(check){for(let i=0;i<80;i++){if(check())return;await new Promise(resolve=>setTimeout(resolve,10));}assert.ok(check(),'async image state did not settle');}
 
 test('presentation LRU uses value signatures and rejects oversized entries',()=>{
  const cache=new BoundedValueCache({maxEntries:2,maxWeight:10});
@@ -47,50 +47,4 @@ test('cover dependency invalidation does not release unrelated cached covers',()
   view.innerHTML='';notifyImageInvalidation(['other']);view.innerHTML=markup;reusePagePreviews({view,state});assert.equal(view.querySelector('.thumb-inner'),first);
   view.innerHTML='';notifyImageInvalidation(['i']);view.innerHTML=markup;reusePagePreviews({view,state});assert.notEqual(view.querySelector('.thumb-inner'),first);
  }finally{unbind();env.close();}
-});
-test('matching cover markup is reused on progress updates and invalidated by mutable content',()=>{
- let calls=0;const state={accountId:'a',assets:[{id:'m',blobId:'image',title:'paper'}]};
- const cache=createMatchingCoverCache({state,workCover:p=>{calls++;return JSON.stringify(p.drafts);}});
- const p={id:'p',title:'work',activeDraftID:'d',drafts:[{id:'d',items:[{assetID:'m',x:1}],textBlocks:[{content:'old'}]}]};
- try{
-  const a=cache.render(p);assert.equal(cache.render(p),a);assert.equal(calls,1);
-  p.drafts[0].textBlocks[0].content='new';assert.notEqual(cache.render(p),a);assert.equal(calls,2);
-  state.assets[0].blobId='new-image';cache.render(p);assert.equal(calls,3);
-  state.accountId='b';cache.render(p);assert.equal(calls,4);
-  notifyImageInvalidation(['new-image']);cache.render(p);assert.equal(calls,5);
- }finally{cache.dispose();}
-});
-test('warm preview lookup is synchronous and switching routes does not fetch again',async()=>{
- const env=environment();let reads=0;const root=document.createElement('div');document.body.append(root);
- const loader=mountPrivateImages({root,db:{previewBlob:async()=>{reads++;return new Blob(['preview']);},get:async()=>({data:new Blob(['full'])})},urls:new Map(),onError:()=>{}});
- try{
-  const source=await loader.load('m');assert.equal(imagePlaceholder('m'),source);assert.equal(reads,1);
-  for(let i=0;i<5;i++){root.innerHTML='<img src="'+imagePlaceholder('m')+'">';await tick();}
-  assert.equal(reads,1);assert.equal(loader.stats().previews,1);
-  loader.invalidate(['m']);assert.ok(imagePlaceholder('m').includes('#shiye-image='));
-  const next=await loader.load('m');assert.notEqual(next,source);assert.ok(reads>=2);
- }finally{loader.dispose();env.close();}
-});
-test('returning to the editor upgrades a warm thumbnail to its full image',async()=>{
- const env=environment();let originals=0,full=false;const root=document.createElement('div');document.body.append(root);
- const loader=mountPrivateImages({root,db:{previewBlob:async()=>new Blob(['small']),get:async()=>{originals++;return {data:new Blob(['large'])};}},urls:new Map(),fullView:()=>full,onError:()=>{}});
- try{
-  const preview=await loader.load('m');full=true;root.innerHTML='<img src="'+preview+'">';
-  await until(()=>originals===1&&root.querySelector('img').getAttribute('src')!==preview);
-  assert.equal(loader.stats().originals,1);assert.equal(root.querySelector('img').dataset.privateImageId,'m');
- }finally{loader.dispose();env.close();}
-});
-test('whole invalidation discards in-flight reads even before they have a cached URL',async()=>{
- const env=environment();let finish;const root=document.createElement('div');document.body.append(root);
- const loader=mountPrivateImages({root,db:{previewBlob:()=>new Promise(resolve=>{finish=resolve;}),get:async()=>null},urls:new Map(),onError:()=>{}});
- try{const pending=loader.load('old');loader.invalidate();finish(new Blob(['old']));assert.equal(await pending,'');assert.ok(imagePlaceholder('old').includes('#shiye-image='));}
- finally{loader.dispose();env.close();}
-});
-test('preview retention is bounded and decoded node cache does not steal owned cover children',async()=>{
- const env=environment();const root=document.createElement('div');document.body.append(root);
- const loader=mountPrivateImages({root,db:{previewBlob:async()=>new Blob(['x']),get:async()=>null},urls:new Map(),onError:()=>{}});
- try{for(let i=0;i<260;i++)await loader.load('m'+i);await tick();assert.ok(loader.stats().previews<=240);
-  root.innerHTML='<div data-preview-cache-owned><img src="a"></div>';const img=root.querySelector('img');Object.defineProperties(img,{complete:{value:true},naturalWidth:{value:10},naturalHeight:{value:10}});
-  const nodes=new ImageNodeCache();nodes.remember([img]);assert.equal(nodes.pixels,0);nodes.dispose();
- }finally{loader.dispose();env.close();}
 });

@@ -1,18 +1,25 @@
-.cloud-login .panel{padding:28px}
+.cloud-login{box-sizing:border-box;width:min(440px,100%);margin:clamp(24px,8vh,88px) auto;padding:16px}
+.cloud-login .panel{padding:clamp(20px,5vw,28px)}
 .cloud-login form{display:grid;gap:18px;margin-top:24px}
 .cloud-login form[hidden]{display:none}
 .cloud-login label{display:grid;gap:8px}
 .cloud-login input{box-sizing:border-box;width:100%;min-height:46px;font-size:16px}
 .cloud-login [role=status]{min-height:24px;margin-bottom:0}
 .cloud-login [data-switch]{margin-top:14px}
+.cloud-login-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:#edf0ea;border-radius:12px}
+.cloud-login-modes button{min-width:0;border:0;border-radius:9px;padding:9px 3px;background:transparent;color:inherit;cursor:pointer;font-size:13px}
+.cloud-login-modes button[aria-selected=true]{background:#fff;box-shadow:0 1px 5px #26382b20}
+.cloud-login-link{justify-self:end;padding:2px 0;border:0;background:transparent;color:var(--forest,#315a43);cursor:pointer}
+.cloud-login-oauth{border-top:1px solid #dce1d6;margin-top:20px;padding-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+.cloud-login-oauth p{flex-basis:100%;margin:0}
 .cloud-login [hidden],.cloud-account-menu [hidden]{display:none!important}
 .cloud-account{position:relative}
 .cloud-account>.btn{cursor:pointer}
 .cloud-account-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:100;width:210px;max-width:calc(100vw - 32px);padding:12px;background:var(--paper,#fff);border:1px solid #dce1d6;border-radius:14px;box-shadow:0 8px 28px #26382b20;display:grid;gap:8px}
 .cloud-account-menu .btn{width:100%;justify-content:center;white-space:nowrap}
 .cloud-account-menu[hidden]{display:none}
-.cloud-admin-backdrop{position:fixed;inset:0;z-index:9000;background:#1d2c2588;display:grid;place-items:center;padding:16px}
-.cloud-admin-panel,.cloud-password-panel{box-sizing:border-box;width:min(760px,100%);max-height:min(88vh,850px);overflow:auto;padding:24px;background:var(--paper,#fff);border-radius:18px;box-shadow:0 16px 60px #15241a55}
+.cloud-admin-backdrop{position:fixed;inset:0;z-index:9000;background:#1d2c2588;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;padding:16px}
+.cloud-admin-panel,.cloud-password-panel{box-sizing:border-box;min-width:0;width:min(760px,100%);max-height:min(88vh,850px);overflow:auto;padding:24px;background:var(--paper,#fff);border-radius:18px;box-shadow:0 16px 60px #15241a55}
 .cloud-admin-heading,.cloud-dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .cloud-admin-heading h2,.cloud-password-panel h2{margin:0}
 .cloud-admin-panel>p{color:var(--muted,#68756a)}
@@ -31,3 +38,6 @@
 .cloud-password-panel form{display:grid;gap:16px;margin-top:20px}
 .cloud-password-panel label{display:grid;gap:6px}
 .cloud-password-panel input{box-sizing:border-box;width:100%;min-height:42px;font-size:16px}
+.cloud-identity-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;overflow-wrap:anywhere}
+.cloud-identity-row .btn{flex:none}
+.cloud-identity-form{border-top:1px solid #dce1d6;padding-top:16px}

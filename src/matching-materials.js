@@ -1,4 +1,4 @@
-import {isCurrentBuiltinMaterial} from './current-materials.js';
+import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 import {classifyJournalMaterial,relevantJournalFamilies} from './journal-case-study.js';
 const purposeKinds={
   日常记录:['paper','photo','sticker','tape','text'],旅途记录:['photo','paper','tape','sticker'],
@@ -6,6 +6,7 @@ const purposeKinds={
   影像故事:['photo','paper','tape'],主题封面:['photo','sticker','paper','text']
 };
 const styleTerms={
+  随材而定:[],自动安排:[],清新淡雅:['清新','轻盈','淡雅'],童趣可爱:['童趣','可爱','卡通'],杂志排版:['标题','印刷','排版','杂志'],疏朗留白:['素','简'],均衡编排:[],丰富层叠:['拼贴','纸','胶带'],
   韩系清新:['浅','绿','粉','清新','柔和'],美式拼贴:['鲜明','拼贴','色块','贴纸'],
   复古旧物:['复古','旧','票','暖','牛皮'],极简留白:['素','简','单色','白'],
   杂志编辑:['照片','标题','排版','杂志'],日系文具:['文具','方格','便签','纸'],
@@ -15,16 +16,19 @@ const styleTerms={
 };
 const purposeTerms={旅途记录:['旅','票','地图','路线'],清单计划:['清单','待办','计划','便签'],影像故事:['照片','摄影','胶片'],图文收藏:['收藏','照片','插画'],主题封面:['标题','主题','封面']};
 const uniq=items=>[...new Set(items.filter(Boolean))];
+// Existing automatically organized materials were left pending by older builds.
+// Permit them in suggestions without silently changing the user's review flag.
+const usableForMatching=a=>a?.reviewStatus==='ready'||a?.autoOrganized===true&&a?.reviewStatus==='pendingReview';
 const descriptors=a=>uniq([a.title,a.kind,a.role,a.texture,...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[]),...(a.semanticTags||[]),...(a.placementHints||[]),...(a.semanticColorNames||[])]);
 export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[],excluded=[]}={}){
   const selected=assets.filter(a=>basket.includes(a.id)),excludedSet=new Set(excluded),kinds=uniq(purposes.flatMap(p=>purposeKinds[p]||[]));
-  const hasPersonal=assets.some(a=>a?.reviewStatus==='ready'&&!a.isProjectInternal&&!isCurrentBuiltinMaterial(a));
-  const desiredRoles=new Set(relevantJournalFamilies({styles,purposes}).flatMap(family=>family.materials));
+  const hasPersonal=assets.some(a=>usableForMatching(a)&&!a.isProjectInternal&&!isCurrentBuiltinMaterial(a)&&!a.isCreativePreset);
+  const desiredRoles=new Set(relevantJournalFamilies({styles,purposes,materials:selected}).flatMap(family=>family.materials));
   const selectedRoles=new Set(selected.flatMap(classifyJournalMaterial));
   const styleWords=uniq(styles.flatMap(s=>styleTerms[s]||[s])),purposeWords=uniq(purposes.flatMap(p=>purposeTerms[p]||[]));
   const basketTags=new Set(selected.flatMap(descriptors).map(t=>t.toLocaleLowerCase()));
   const basketKinds=new Set(selected.map(a=>a.kind));
-  return assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&a.reviewStatus==='ready'&&!a.isProjectInternal&&(a.supply?.quantity??1)>0)
+  return assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&usableForMatching(a)&&!a.isProjectInternal&&a.usageStatus!=='used')
     .map(a=>{
       const terms=descriptors(a),words=terms.join(' ').toLocaleLowerCase();
       const reasons=[];let score=0;
@@ -42,7 +46,7 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
       const usefulRoles=classifyJournalMaterial(a).filter(role=>desiredRoles.has(role)&&!selectedRoles.has(role));
       if(usefulRoles.length){score+=Math.min(2,usefulRoles.length)*3;reasons.push('补足图文结构');}
       if(a.physicalWidthMM&&a.physicalHeightMM)score++;
-      if(hasPersonal&&isCurrentBuiltinMaterial(a))score-=5;
+      if(hasPersonal&&(isCurrentBuiltinMaterial(a)||a.isCreativePreset))score-=5;
       return {asset:a,score,reasons};
     }).sort((a,b)=>b.score-a.score||a.asset.title.localeCompare(b.asset.title,'zh-CN'));
 }

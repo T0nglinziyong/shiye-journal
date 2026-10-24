@@ -1,0 +1,122 @@
+/* Shared utility dialogs leave their full width to the content. */
+#app[hidden]{display:none!important}
+.utility-dialog{position:relative;min-width:0}
+.utility-dialog :is(p,li,small,code,pre){overflow-wrap:anywhere}
+#modal [role="alert"],#view [role="alert"],#toast{max-width:100%;overflow-wrap:anywhere}
+#toast{max-width:calc(100vw - 36px);white-space:normal}
+.utility-dialog>.dialog-close{position:absolute;top:24px;right:24px;float:none;z-index:1;display:grid;place-items:center;width:44px;height:36px;padding:0;border:0;border-radius:999px;background:#e9eae9;color:#23342b;font-size:28px;font-weight:400;line-height:1}
+.utility-dialog>h2:first-of-type,.utility-dialog>.stack>h2:first-child,.utility-dialog>.offline-handoff>h2:first-child{margin-top:0;padding-right:60px;min-height:36px;display:flex;align-items:center}
+.utility-dialog .offline-handoff-heading{padding-right:60px}
+.utility-dialog>.offline-handoff,.utility-dialog .offline-handoff>*{min-width:0}
+.utility-dialog .offline-handoff-step>div{min-width:0}
+.utility-dialog .offline-handoff-step small{overflow-wrap:anywhere}
+.utility-dialog.manual-layout-dialog>h2{line-height:1.3}
+@media(max-width:600px){.utility-dialog{padding:20px}.utility-dialog>.dialog-close{top:20px;right:20px}.utility-dialog>h2:first-of-type{font-size:22px;line-height:1.3}}
+/* Counts stay with paging controls instead of falling into a separate row. */
+#view .catalog-toolbar .four-filter-controls .catalog-page-controls{margin-left:0}
+#view .catalog-toolbar .four-filter-controls .catalog-total{margin:0 0 0 2px}
+@media(max-width:699px){#view .catalog-toolbar .four-filter-controls{align-content:start}#view .catalog-toolbar .four-filter-controls .catalog-total{align-self:center}}
+/* Asset detail actions share one wrapping row. */
+#view .detail-small{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#view .detail-small>button{white-space:nowrap}
+/* Import paper controls live on the cover. */
+#view .review-background-card .review-paper-controls{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:calc(100% - 10px);display:grid;grid-template-columns:minmax(0,1fr) 58px 36px;align-items:center;gap:4px;padding:5px;border-radius:12px;background:#fffefaf2;box-shadow:0 2px 10px #203c2c20}
+#view .review-background-card .review-paper-controls>*{box-sizing:border-box;width:100%;height:34px;min-width:0;min-height:34px;margin:0;padding:4px 6px;border:1px solid #d5e1d4;border-radius:8px;background:#fffefa;color:#3f5d44;font-size:12px}
+#view .review-background-card .review-paper-controls input[type=color]{padding:2px}
+#view .review-background-card .review-paper-controls button{white-space:nowrap;text-align:center;display:grid;place-items:center}
+/* Asset editor pins the preview while only the lower fields scroll. */
+.cloud-admin-panel.material-editor-dialog{display:flex;flex-direction:column;overflow:hidden;max-height:min(88dvh,850px);padding:16px}
+.material-editor-dialog .asset-edit-head{display:grid!important;grid-template-columns:1fr auto 1fr;align-items:center;flex:none;position:static!important;padding:0 0 10px!important;margin-bottom:10px}
+.material-editor-dialog .asset-edit-head h2{text-align:center;white-space:nowrap}
+.material-editor-dialog .asset-edit-head>#asset-dialog-close{justify-self:start}
+.material-editor-dialog .asset-edit-head>#save-asset{justify-self:end}
+.material-editor-dialog .asset-edit-head>button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:7px 13px;border-radius:20px;border:1px solid #dbe2d8;font-size:14px;white-space:nowrap}
+.material-editor-dialog .asset-edit-head>#save-asset{background:#52634b;color:white;border-color:#52634b}
+.material-editor-dialog>.material-editor{flex:1;min-height:0;gap:9px}
+.material-editor-dialog .material-editor-preview{flex:none;width:min(100%,36dvh,360px);height:auto;min-height:0;aspect-ratio:1}
+.material-editor-dialog .material-editor-controls{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+/* Cutout steps follow the fixed preview on both mobile and desktop. */
+@media(min-width:700px){#modal.cutout-dialog .cutout-modal{grid-template-areas:"header header" "compare controls" "preview controls" "steps controls" "hint controls"}}
+@media(max-width:699px){.cloud-admin-panel.material-editor-dialog{max-height:min(92dvh,850px)}.material-editor-dialog .material-editor-preview{width:min(100%,34dvh,300px);height:auto}}
+/* Other React dialogs use the same title / right action alignment. */
+.cloud-admin-panel .dialog-head:not(.asset-edit-head),
+#modal .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:38px;margin-bottom:12px}
+.cloud-admin-panel .dialog-head:not(.asset-edit-head)>h2,
+#modal .dialog-head>h2{flex:1;min-width:0;margin:0;line-height:1.3}
+.cloud-admin-panel .dialog-head:not(.asset-edit-head)>button,
+#modal .dialog-head>button{
+  flex:none;min-width:44px;min-height:36px;padding:6px 12px;
+  border:0;border-radius:999px;background:#e9eae9;
+  color:#334c39;font-size:14px;line-height:1.2;white-space:nowrap;
+}
+.cloud-admin-panel .cloud-admin-heading>button{flex:none;white-space:nowrap}
+@media(max-width:600px){
+  .cloud-admin-panel .dialog-head:not(.asset-edit-head)>h2,
+  #modal .dialog-head>h2{font-size:20px}
+}
+#view .catalog-page-summary{display:inline-flex;align-items:center;gap:7px;flex:none;min-height:34px;white-space:nowrap}
+#view .catalog-page-summary .catalog-page-controls{margin:0}
+#view .catalog-page-summary .catalog-total{margin:0}
+
+#view .review-background-card .import-work-paper-preview.has-columns::before{content:'';position:absolute;inset:10% 0;background-image:linear-gradient(#82978b77,#82978b77),linear-gradient(#82978b77,#82978b77),linear-gradient(#82978b77,#82978b77),linear-gradient(#82978b77,#82978b77);background-size:1px 100%;background-position:8% 0,48% 0,52% 0,92% 0;background-repeat:no-repeat;pointer-events:none}
+#view .review-background-card .review-paper-controls{z-index:1}
+
+/* Keep material editor tabs visible between the fixed preview and the scrollable form. */
+.material-editor-dialog .asset-editor-tabs{display:flex;flex:none;width:100%;gap:4px;padding:3px;border-radius:10px;background:#eceee7;overflow:visible}
+.material-editor-dialog .asset-editor-tabs button{flex:1;min-width:0;min-height:38px;padding:6px 3px;border:0;border-radius:8px;background:transparent;color:#52634b;font-size:clamp(11px,2.6vw,14px);white-space:nowrap}
+.material-editor-dialog .asset-editor-tabs button.selected{background:#fffefa;color:#284b36;font-weight:700;box-shadow:0 1px 4px #203c2c22}
+.material-editor-dialog .material-editor-controls{display:block}
+.material-editor-dialog .material-info-panel{min-height:0}
+/* Series context is a label beside the back action, never a floating heading. */
+#view .detail-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px}
+#view .detail-topline .detail-back{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0}
+#view .detail-topline .detail-category{float:none;display:inline-flex;align-items:center;min-height:36px;text-align:right}
+/* Three numbered cutout controls are the step navigation and sit below the image. */
+#modal .cutout-steps button{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:34px;padding:5px 3px;border:0;border-radius:9px;background:#eef2e9;color:#667862;font-size:clamp(10px,2.5vw,12px);line-height:1.2;cursor:pointer}
+#modal .cutout-steps button b{display:grid;place-items:center;flex:0 0 19px;width:19px;height:19px;border-radius:50%;background:#dfe7d9}
+#modal .cutout-steps button.current{background:#e1ecdf;color:#31583a;font-weight:700}
+#modal .cutout-steps button.current b{background:#477459;color:white}
+#modal .cutout-steps button.passed{color:#42604f}
+#modal .cutout-steps button:disabled{opacity:.58;cursor:wait}
+#modal.cutout-dialog .cutout-modal{grid-template-areas:"header header" "compare controls" "preview controls" "steps controls";grid-template-rows:auto auto minmax(0,1fr) auto}
+@media(max-width:699px){#modal.cutout-dialog .cutout-modal{display:flex;flex-direction:column}#modal .cutout-steps button{min-height:31px}}
+/* The material picker keeps search above two equal, compact filters on every tab. */
+.swift-material-picker .canvas-material-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 0 2px}
+.swift-material-picker .canvas-material-filters[hidden]{display:none}
+.swift-material-picker .canvas-material-filters select{width:100%;min-width:0;max-width:none;height:32px;min-height:32px;padding-block:4px}
+.swift-material-picker .canvas-material-search{box-sizing:border-box;width:100%;height:32px;min-height:32px;padding-block:4px}
+@media(max-width:600px){.swift-material-picker{height:min(60dvh,500px)!important}}
+.swift-picker-popover.swift-tape-picker{width:min(280px,calc(100vw - 24px))!important;height:min(52dvh,390px)!important;max-height:calc(100dvh - 24px)!important;box-sizing:border-box;overflow:hidden}
+.swift-tape-picker .popover-content{display:flex;flex-direction:column;min-height:0;height:calc(100% - 38px);gap:7px;overflow:hidden}
+.swift-tape-picker .canvas-material-search{flex:none;box-sizing:border-box;width:100%;height:32px;min-height:32px;padding-block:4px}
+.swift-tape-picker .canvas-picker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:6px;min-height:0;max-height:none;flex:1;overflow-y:auto;overscroll-behavior:contain}
+.swift-tape-picker .canvas-picker-grid>button{display:grid;grid-template-rows:64px auto;align-content:start;justify-items:center;gap:4px;min-width:0;min-height:92px;height:auto;padding:5px;overflow:hidden}
+.swift-tape-picker .canvas-picker-grid .material-piece-image{display:grid;place-items:center;width:100%;height:64px;overflow:hidden}
+.swift-tape-picker .canvas-picker-grid .material-piece-image img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
+.tape-flat-preview{display:block;width:100%;height:100%;object-fit:contain}
+.card-image>.tape-flat-preview,.material-editor-preview>.tape-flat-preview{max-width:100%;max-height:100%}
+.series-cover>.tape-flat-preview,.series-detail-cover>.tape-flat-preview{flex:1 1 0;width:0;min-width:0;height:calc(100% - 16px);object-fit:contain}
+.tape-flat-fields{margin-top:8px}
+.tape-range-field{display:block;min-width:0;margin:8px 0!important}
+.tape-range-field>span{display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.tape-range-field output{font-variant-numeric:tabular-nums;color:#52634b;white-space:nowrap}
+.tape-range-field input[type=range]{display:block;width:100%;height:32px;margin:3px 0;touch-action:none}
+.tape-source-guide{position:absolute;inset:0;overflow:hidden;background:#f2f4ed}
+.tape-source-guide>img{display:block;width:100%;height:100%;object-fit:contain}
+.tape-guide-image-box{position:absolute;overflow:hidden}
+.tape-guide-image-box>img{display:block;width:100%;height:100%;object-fit:fill}
+.tape-guide-crop{position:absolute;box-sizing:border-box;border:2px dashed #2e7652;
+ box-shadow:0 0 0 1000px #263d3433;pointer-events:none}
+.tape-guide-repeat{position:absolute;top:0;bottom:0;border-left:2px dashed #d7773b;
+ pointer-events:none;color:#7a421f}
+.tape-guide-repeat.horizontal{top:auto;left:0;right:0;bottom:auto;border-left:0;border-top:2px dashed #d7773b}
+.tape-guide-repeat b{position:absolute;top:2px;left:3px;background:#fffefaee;border-radius:4px;
+ padding:1px 3px;font-size:11px;line-height:14px;white-space:nowrap}
+.swift-tape-picker .canvas-picker-grid>button>span{font-size:12px;line-height:16px;max-width:100%;overflow-wrap:anywhere;text-align:center}
+.project-preview-cover{grid-template-columns:minmax(0,1fr)}
+.project-preview-cover .preview-paper{justify-self:center;min-width:0;max-width:90%}
+.works-grid .card-image>.thumb-sheet{width:94%!important;height:auto;aspect-ratio:1.42!important;max-width:100%;max-height:100%}
+/* Range controls must not inherit the text field's 11px side padding. That
+   padding clips both ends of the native track, especially on iOS Safari. */
+input[type=range]{box-sizing:border-box;min-width:0;padding:0;border:0;border-radius:0;
+ background:transparent;overflow:visible;accent-color:#52634b}

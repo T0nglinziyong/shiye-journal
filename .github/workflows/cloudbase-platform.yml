@@ -1,0 +1,69 @@
+name: CloudBase platform contracts
+
+on:
+  pull_request:
+    branches: [test]
+  push:
+    branches: [test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudbase-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+      - name: Built-in Node runtime contracts (no cloud credentials)
+        run: node --test --test-concurrency=2 tests/cloudbase-continuation.test.js tests/cloudbase-client-contract.test.js tests/cloudbase-service.test.js tests/cloudbase-transport.test.js tests/cloudbase-user.test.js
+      - name: Enforce CloudBase-only source and deploy paths
+        run: node scripts/audit-cloudbase-platform.mjs
+      - name: Install application dependencies
+        run: npm ci
+      - name: Focused synchronization, COS and storage regression suite
+        run: node --test --test-force-exit --test-concurrency=2 tests/cloud-store.test.js tests/project-sync.test.js tests/cos-upload.test.js tests/cloud-record-guard.test.js tests/storage-usage-ui.test.js
+      - name: Build explicit function deployment file allowlist
+        run: node scripts/build-cloudbase-functions.mjs
+
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-cloudbase-fixture
+          POSTGRES_DB: shiye_cloudbase_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d shiye_cloudbase_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+      - name: Install PostgreSQL test client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Real PostgreSQL and pgvector on a disposable local service
+        env:
+          SHIYE_DB_TEST_DISPOSABLE: 'true'
+          SHIYE_TEST_DATABASE_URL: postgresql://postgres:local-cloudbase-fixture@127.0.0.1:5432/shiye_cloudbase_test
+        run: node scripts/test-cloudbase-platform-db.mjs

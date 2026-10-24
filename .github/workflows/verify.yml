@@ -2,9 +2,9 @@ name: Verify Shiye
 
 on:
   push:
-    branches: [main, recognition-official-engines]
+    branches: [main, test]
   pull_request:
-    branches: [main]
+    branches: [main, test]
   workflow_dispatch:
 
 permissions:
@@ -12,12 +12,17 @@ permissions:
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  verify:
+  unit-and-ui:
+    name: checks / ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [unit-a-m, unit-n-z, unit-presentation, ui]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -27,5 +32,75 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Unit tests and built UI smoke
-        run: npm test && npm run test:ui
+      - name: Prepare unit runtime
+        if: matrix.shard != 'ui'
+        run: npm run pretest
+      - name: First half of unit tests
+        if: matrix.shard == 'unit-a-m'
+        run: node --test --test-force-exit --test-concurrency=2 tests/[a-m]*.test.js
+      - name: Second half of unit tests
+        if: matrix.shard == 'unit-n-z'
+        shell: bash
+        run: |
+          files=()
+          for file in tests/[n-z]*.test.js; do
+            if [[ "$file" != tests/presentation-cache*.test.js ]]; then
+              files+=("$file")
+            fi
+          done
+          node --test --test-force-exit --test-concurrency=2 "${files[@]}"
+      - name: Isolated presentation resource and browser-cache contracts
+        if: matrix.shard == 'unit-presentation'
+        run: node --test --test-concurrency=1 tests/presentation-cache*.test.js
+      - name: Built UI and deployment smoke
+        if: matrix.shard == 'ui'
+        run: npm run test:ui
+      - name: Package local box acceptance harness
+        if: github.event_name == 'pull_request' && matrix.shard == 'ui'
+        run: |
+          mkdir -p /tmp/shiye-box-harness/scripts
+          cp -R src /tmp/shiye-box-harness/
+          cp scripts/box-real-case-runner.mjs scripts/segmentation-real-case-runner.mjs /tmp/shiye-box-harness/scripts/
+          cp package.json package-lock.json /tmp/shiye-box-harness/
+          mkdir -p /tmp/shiye-box-harness/node_modules/@techstark
+          cp -R node_modules/@techstark/opencv-js /tmp/shiye-box-harness/node_modules/@techstark/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.event_name == 'pull_request' && matrix.shard == 'ui'
+        with:
+          name: box-discovery-harness
+          path: /tmp/shiye-box-harness/
+          retention-days: 1
+          compression-level: 6
+
+  verify:
+    needs: unit-and-ui
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'All unit-test partitions and built UI checks succeeded'
+
+  deploy-cloudbase-test:
+    name: Deploy CloudBase test
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: cloudbase-test
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: test
+          persist-credentials: false
+      - name: Only release the tested branch head
+        env:
+          TESTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Check deployment contract
+        run: node --test tests/cloudbase-test-release.test.js
+      - name: Release existing CloudBase app and verify public version
+        env:
+          TCB_DEPLOY_SECRET_ID: ${{ secrets.TCB_DEPLOY_SECRET_ID }}
+          TCB_DEPLOY_SECRET_KEY: ${{ secrets.TCB_DEPLOY_SECRET_KEY }}
+        run: node scripts/cloudbase-test-release.mjs

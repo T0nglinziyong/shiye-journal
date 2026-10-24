@@ -1,8 +1,10 @@
 import {validateDisplaySlices} from './craft-display.js';
+import {validateSceneExtensions,attachSceneV2} from './scene-model.js';
 import {zipSync,strToU8,strFromU8} from 'fflate';
 import {uid} from './domain.js';
 import {materialMaskPoints} from './material-mask.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
+import {readArchivePayload,archivePayload} from './scene-archive.js';
 
 export const NATIVE_ENTRY='native.shiyeproject.json';
 const paint=value=>value==null||typeof value==='string'&&value.length<=64&&(
@@ -21,16 +23,21 @@ function validateVectorGeometry(shape){
     layer.rects!==undefined&&(!Array.isArray(layer.rects)||layer.rects.length>512||!layer.rects.every(rectangle))
   )))throw Error('工程包多色图形数据无效');
 }
-export function createNativeProjectPackage(project){
+export function createNativeProjectDocument(project){
   if(!project?.drafts?.length||project.isSnapshot)throw Error('只有可编辑作品可以打包');
   const {__cloudBaseRevision,__cloudSessionId,editHistory:_temporaryHistory,...portableProject}=project;
-  const document={format:'shiye-native-project',version:1,project:portableProject};
-  return new Blob([zipSync({[NATIVE_ENTRY]:strToU8(JSON.stringify(document))},{level:6})],{type:'application/zip'});
+  return {format:'shiye-native-project',version:1,project:portableProject};
+}
+export function createNativeProjectPackage(project){
+  return new Blob([zipSync({[NATIVE_ENTRY]:strToU8(JSON.stringify(createNativeProjectDocument(project)))},{level:6})],{type:'application/zip'});
 }
 export function importNativeProjectPackage(bytes,assets){
   const {kind,files}=readProjectPackageEntries(bytes);
   if(kind!=='native')return null;
   let envelope;try{envelope=JSON.parse(strFromU8(files[NATIVE_ENTRY]));}catch{throw Error('工程包页面数据无效');}
+  return importNativeProjectDocument(envelope,assets);
+}
+export function importNativeProjectDocument(envelope,assets){
   if(envelope?.format!=='shiye-native-project'||envelope.version!==1)throw Error('工程包格式不受支持');
   const source=envelope.project,known=new Set(assets.map(a=>a.id));
   if(!source||typeof source.title!=='string'||!Array.isArray(source.drafts)||!source.drafts.length||source.drafts.length>40)throw Error('工程包缺少可编辑页面');
@@ -44,27 +51,53 @@ export function importNativeProjectPackage(bytes,assets){
   if(!draftIDs.has(source.activeDraftID))throw Error('工程包当前方案引用无效');
   for(const draft of source.initialEditorSnapshot?.drafts||[])validateNativeDraft(draft,known);
   for(const draft of Object.values(source.draftHistorySnapshots||{}))validateNativeDraft(draft,known);
-  for(const archive of source.manualArchives||[])for(const draft of archive.drafts||[])validateNativeDraft(draft,known);
+  if((source.manualArchives||[]).length>250)throw Error('手账存档数量超出限制');
+  for(const archive of source.manualArchives||[]){
+    if(!source.manualArchiveStore?.[archive.ref])throw Error('手账存档缺少压缩数据');
+    const restored=readArchivePayload(source.manualArchiveStore[archive.ref],archive.ref);
+    if(!restored.some(d=>d.id===archive.activeDraftID))throw Error('存档当前方案引用无效');
+    for(const draft of restored)validateNativeDraft(draft,known);
+  }
   // Undo stacks are session-local. Retain the actual current scene and all
   // immutable archives, but do not resurrect a foreign session's undo state.
   const project=structuredClone(source),draftMap=new Map(),objectMap=new Map(),groupMap=new Map();
   const mapped=(map,id)=>{if(typeof id!=='string'||!id)throw Error('工程包对象 ID 无效');if(!map.has(id))map.set(id,uid());return map.get(id);};
   const remapDraft=d=>{
+    attachSceneV2(d);
     d.id=mapped(draftMap,d.id);delete d.craftReceipts;
     for(const field of ['items','primitives','textBlocks','strokes'])for(const item of d[field]||[])delete item.aiManaged;
     for(const list of ['items','primitives','textBlocks'])for(const item of d[list]||[]){item.id=mapped(objectMap,item.id);if(item.creativeGroupID)item.creativeGroupID=mapped(groupMap,item.creativeGroupID);}
     for(const stroke of d.strokes||[])stroke.id=stroke.id?mapped(objectMap,stroke.id):uid();
+    const walk=nodes=>{for(const node of nodes||[])if(node.type==='group'){node.id=mapped(groupMap,node.id);walk(node.children);}};walk(d.layers);
   };
   project.drafts.forEach(remapDraft);
   if(project.initialEditorSnapshot){project.initialEditorSnapshot.drafts?.forEach(remapDraft);project.initialEditorSnapshot.activeDraftID=mapped(draftMap,project.initialEditorSnapshot.activeDraftID);}
   if(project.draftHistorySnapshots){const histories={};for(const [oldID,draft] of Object.entries(project.draftHistorySnapshots)){remapDraft(draft);histories[mapped(draftMap,oldID)]=draft;}project.draftHistorySnapshots=histories;}
-  for(const archive of project.manualArchives||[]){archive.id=uid();archive.drafts?.forEach(remapDraft);archive.activeDraftID=mapped(draftMap,archive.activeDraftID);}
   const reviseReferences=d=>{for(const item of d.items||[])for(const slice of item.craftDisplaySlices||[])if(objectMap.has(slice.targetId))slice.targetId=objectMap.get(slice.targetId);for(const item of d.items||[])for(const key of ['target','target2'])if(item.materialRelation?.[key]&&objectMap.has(item.materialRelation[key]))item.materialRelation[key]=objectMap.get(item.materialRelation[key]);};
+  // Archive snapshots are compressed and deduplicated by SHA-256. On import,
+  // rewrite all IDs before re-hashing, including references inside each draft.
+  const archiveStore={};
+  for(const archive of project.manualArchives||[]){
+    const saved=readArchivePayload(project.manualArchiveStore[archive.ref],archive.ref);
+    saved.forEach(remapDraft);
+    saved.forEach(reviseReferences);
+    const encoded=archivePayload(saved);
+    archiveStore[encoded.hash]=encoded.payload;
+    archive.id=uid();archive.ref=encoded.hash;
+    archive.activeDraftID=mapped(draftMap,archive.activeDraftID);
+  }
+  project.manualArchiveStore=archiveStore;
   for(const draft of project.drafts)reviseReferences(draft);
   for(const draft of project.initialEditorSnapshot?.drafts||[])reviseReferences(draft);
   for(const draft of Object.values(project.draftHistorySnapshots||{}))reviseReferences(draft);
-  for(const archive of project.manualArchives||[])for(const draft of archive.drafts||[])reviseReferences(draft);
-  project.id=uid();delete project.__cloudBaseRevision;delete project.__cloudSessionId;project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};project.createdAt=project.updatedAt=new Date().toISOString();return project;
+
+  project.id=uid();delete project.__cloudBaseRevision;delete project.__cloudSessionId;project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};
+  // A newly imported project starts at the artwork it contains, regardless of
+  // an earlier blank baseline or history bundled by the exporting device.
+  project.initialEditorSnapshot={drafts:project.drafts.map(draft=>structuredClone(draft)),activeDraftID:project.activeDraftID};
+  project.draftHistorySnapshots={...project.draftHistorySnapshots,
+    [project.drafts[0].id]:structuredClone(project.drafts[0])};
+  project.createdAt=project.updatedAt=new Date().toISOString();return project;
 }
 
 export function validatePackageValue(root){
@@ -83,9 +116,10 @@ export function validatePackageValue(root){
 }
 
 export function validateNativeDraft(draft,known){
+  attachSceneV2(draft);validateSceneExtensions(draft);
   const canvas=draft?.canvas;
   if(!canvas||![canvas.width,canvas.height].every(n=>Number.isFinite(n)&&n>0&&n<=10000)||!['items','primitives','textBlocks','strokes'].every(key=>Array.isArray(draft[key])&&draft[key].length<=5000))throw Error('工程包图层数据无效');
-  if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','grid','dots','columns'].includes(draft.paperPattern))throw Error('工程包纸张样式无效');
+  if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','grid','dots','columns'].includes(draft.paperPattern)||draft.paperColumns!==undefined&&typeof draft.paperColumns!=='boolean')throw Error('工程包纸张样式无效');
   const ids=new Set();
   for(const list of ['items','primitives','textBlocks'])for(const item of draft[list]){
     if(!item||typeof item.id!=='string'||!item.id||ids.has(item.id)||![item.x,item.y,item.width,item.height].every(n=>Number.isFinite(n)&&Math.abs(n)<=100000)||item.width<=0||item.height<=0)throw Error('工程包图层几何或 ID 无效');

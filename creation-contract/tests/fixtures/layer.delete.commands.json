@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layer-delete",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layer.delete",
+      "target": "dot",
+      "dependentLinks": "reject"
+    }
+  ]
+}

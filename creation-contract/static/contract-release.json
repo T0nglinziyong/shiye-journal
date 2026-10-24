@@ -1,0 +1,15 @@
+{
+  "kitVersion": "1.0.0",
+  "contractVersion": "2.0.0-candidate.1",
+  "commandProtocolVersion": 2,
+  "status": "integration-required",
+  "runtimeImplementationIncluded": false,
+  "fullSceneSchemaIncluded": false,
+  "standaloneModules": [
+    "command-help.cjs",
+    "placement-math.cjs"
+  ],
+  "documentedCommonOperations": 25,
+  "productionSupportedCapabilities": [],
+  "releaseGate": "CODEX_HANDOFF.md and tests/acceptance.json"
+}

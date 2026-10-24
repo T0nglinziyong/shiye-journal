@@ -1,0 +1,283 @@
+/* Mobile editor fixes: tight, keyboard-free typography controls. */
+.editing .canvas-context-tools .canvas-text-format{
+  display:inline-flex;flex:none;align-items:center;gap:3px;
+  height:40px;padding:0 3px;background:transparent;
+}
+.editing .canvas-context-tools .canvas-text-format>select{
+  width:70px;min-width:66px;max-width:76px;min-height:36px;
+  padding:3px 2px;font-size:14px;background:transparent;border:0;box-shadow:none;
+}
+.editing .canvas-font-size-stepper{
+  display:inline-flex;flex:none;align-items:center;justify-content:center;
+  gap:0;height:36px;border:0;background:transparent;white-space:nowrap;
+}
+.editing .canvas-font-size-stepper button.font-step{
+  display:grid;place-items:center;width:30px;min-width:30px;
+  min-height:34px;padding:0;font-size:25px;font-weight:500;
+  touch-action:manipulation;
+}
+.editing .canvas-font-size-stepper input[type=number]{
+  display:block;width:42px;min-width:42px;min-height:32px;padding:0 2px;
+  text-align:center;font-size:14px;color:#3b5141;font-variant-numeric:tabular-nums;
+  border:0;background:transparent;box-shadow:none;appearance:textfield;
+}
+.editing .canvas-font-size-stepper input::-webkit-inner-spin-button,
+.editing .canvas-font-size-stepper input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.editing .canvas-context-tools .shape-quick-color{
+  display:inline-flex;align-items:center;gap:3px;flex:none;
+  font-size:12px;color:#47604b;white-space:nowrap;
+}
+.editing .canvas-context-tools .shape-quick-color input[type=color]{
+  width:28px;height:30px;border-radius:6px;cursor:pointer;
+}
+.editing .canvas-context-tools select.shape-quick-select{
+  max-width:75px;min-width:58px;padding:4px;
+  font-size:12px;flex:none;
+}
+.editing .canvas-context-tools button.shape-detail-quick,
+.editing .canvas-context-tools button.shape-add-quick{
+  font-size:12px;white-space:nowrap;padding:3px 5px;
+}
+/* A tile's picture and its caption occupy independent rows.
+   Earlier min-height + fixed grid rows clipped the caption on iPhone. */
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button{
+  box-sizing:border-box;display:grid;
+  grid-template-rows:132px minmax(34px,auto);
+  align-content:start;justify-items:center;gap:7px;
+  min-height:190px;height:auto;overflow:hidden;
+  padding:6px 5px 9px;
+}
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button>.material-piece-image{
+  grid-row:1;display:grid;place-items:center;box-sizing:border-box;
+  width:100%;height:132px;min-width:0;min-height:0;overflow:hidden;
+}
+.swift-picker-popover.swift-material-picker .material-piece-image :is(img,canvas){
+  display:block;position:static;box-sizing:border-box;
+  width:auto;height:auto;min-width:0;min-height:0;
+  max-width:100%;max-height:100%;object-fit:contain;object-position:center;
+}
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button>img{
+  display:block;position:static;width:100%;height:74px;min-height:0;
+  max-height:74px;object-fit:contain;align-self:center;
+}
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button>span{
+  display:block;position:static;align-self:start;
+  box-sizing:border-box;max-width:100%;min-height:34px;
+  max-height:none;overflow-wrap:anywhere;word-break:break-word;
+  white-space:normal;text-overflow:clip;-webkit-line-clamp:unset;
+  font-size:12px;line-height:17px;text-align:center;
+}
+@media(max-width:520px){
+  .editing .canvas-context-tools .canvas-text-format{gap:2px;padding:0 2px}
+  .editing .canvas-context-tools .canvas-text-format>select{min-width:60px;width:64px}
+  .editing .canvas-context-tools .canvas-font-size-stepper button{width:29px;min-width:29px}
+}
+
+/* Scene v1: editing together without changing the physical size of members. */
+.canvas-physical-group-actions{display:flex;gap:7px;flex-wrap:wrap;padding:8px 2px 12px}
+.canvas-physical-group-actions>.btn{min-width:0;flex:1 1 125px;font-size:12px;padding:8px 9px}
+.canvas-physical-group-actions>.btn:disabled{opacity:.42}
+.canvas-object-settings .canvas-setting textarea{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;resize:vertical;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.5;margin-top:7px}
+.canvas-object-settings .object-setting-actions{display:flex;gap:6px;flex-wrap:wrap}
+.canvas-object-settings .object-setting-actions button{font-size:12px;min-height:31px}
+
+/* Scene v2: true compositing groups, no material scaling or duplicate stock. */
+.scene-v2-group{position:absolute;inset:0;pointer-events:none;isolation:isolate;transform:none;overflow:visible}
+.scene-v2-group>.canvas-object{pointer-events:auto}
+.scene-v2-group>.scene-ink-object{pointer-events:none}
+
+/* Scene v2 genuine nested group hierarchy. Leaves below remain freely reorderable. */
+.scene-v2-group-tree{display:grid;gap:6px;padding:0 2px 10px;max-height:220px;overflow:auto}
+.scene-v2-group-row{display:grid;grid-template-columns:minmax(70px,1fr);gap:5px;border:1px solid #e4e8df;border-radius:10px;background:#f8faf5;padding:6px}
+.scene-v2-group-label{display:block;width:100%;max-width:100%;border:0;background:transparent;text-align:left;font-size:12px;font-weight:650;color:#52634b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scene-v2-group-row-actions{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.scene-v2-group-row-actions .btn{font-size:11px;min-height:28px;padding:5px 7px}
+.scene-v2-group-row-actions select{font-size:11px;flex:1 1 110px;min-width:0;max-width:100%;height:29px}
+
+/* Shared catalog card rhythm: editable works, snapshots and template covers
+   match the aspect and vertical density of material-series covers. Existing
+   content stays centered/contained instead of stretching artwork. */
+:root{--shiye-catalog-cover-ratio:1.14}
+.works-grid,.series-grid,.journal-template-grid{row-gap:13px;column-gap:13px}
+.series-grid .series-cover,.series-grid .card-image,
+.works-grid .card-image,.journal-template-grid .card-image{
+  height:auto;min-height:0;aspect-ratio:var(--shiye-catalog-cover-ratio);
+}
+.works-grid .card,.series-grid .card,.journal-template-grid .card{min-width:0}
+.works-grid .card-image,.journal-template-grid .card-image{overflow:hidden}
+.works-grid .card-image>.thumb-sheet{
+  width:min(96%,100%)!important;max-height:96%;object-fit:contain;
+}
+.works-grid .card-body,.series-grid .card-body,.journal-template-grid .card-body{
+  padding-top:9px;padding-bottom:9px;
+}
+.works-grid .card-body h3,.series-grid .card-body h3,
+.journal-template-grid .card-body h3{line-height:1.35;margin-bottom:5px}
+.migration-audit-table{border-collapse:collapse;width:100%;font-size:13px}
+.migration-audit-table th,.migration-audit-table td{
+  padding:7px 9px;text-align:left;border-bottom:1px solid #dce3d9;
+}
+.canvas-layer-row [data-layer-move]{touch-action:none;cursor:grab;user-select:none}
+.canvas-layer-row.dragging [data-layer-move]{cursor:grabbing}
+
+/* Match catalog column widths as well as cover heights across series, Works
+   (editable pages and image snapshots), and journal templates. */
+.series-grid,.works-grid,.journal-template-grid{
+  grid-template-columns:repeat(auto-fill,minmax(clamp(150px,18vw,205px),1fr));
+}
+@media(max-width:680px){
+  .series-grid,.works-grid,.journal-template-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+/* Persistent recursive Scene v2 layer panel. Override obsolete flat list rows,
+   keep scrolling native and make ONLY the grip intercept touch dragging. */
+.swift-layer-popover.scene-layer-tree-popover .scene-layer-tree{
+ max-height:min(35dvh,300px);overflow-y:auto;overscroll-behavior:contain;
+ padding:2px 0 4px;touch-action:pan-y;
+}
+.scene-layer-tree-toolbar{display:flex;flex-wrap:nowrap;gap:5px;padding:2px 0 5px}
+.scene-layer-tree-toolbar .btn{font-size:11px;min-width:0;min-height:28px;padding:4px 6px;white-space:nowrap}
+.scene-layer-branch{min-width:0}
+.scene-layer-children{margin-left:13px;padding-left:6px;border-left:1px solid #d1dfd3;min-width:0}
+.scene-layer-tree-popover .scene-layer-node{
+ display:grid;grid-template-columns:32px minmax(42px,1fr) 27px 27px 28px;
+ gap:3px;align-items:center;min-height:34px;height:auto;
+ padding:2px 3px;border-radius:8px;margin:1px 0;position:relative;
+}
+.scene-layer-tree-popover .scene-layer-node[aria-expanded]{background:#f3f7f1}
+.scene-layer-tree-popover .scene-layer-node.selected{background:#e3f1e5;outline:1px solid #9bbba1}
+.scene-layer-tree-popover .scene-layer-node>button{
+ border:0;border-radius:5px;background:transparent;color:#4b6755;
+ padding:0;min-width:0;width:100%;height:30px;min-height:0;
+ touch-action:manipulation;line-height:1.1;
+}
+.scene-layer-tree-popover .scene-layer-node>button.scene-layer-pick{
+ display:flex;gap:5px;align-items:center;text-align:left;overflow:hidden;
+ justify-content:flex-start;padding:0 1px;white-space:nowrap;
+}
+.scene-layer-tree-popover .scene-layer-node>button.scene-layer-expand{
+ display:grid;grid-template-columns:1fr;place-items:center;height:32px;overflow:visible;
+ font-size:18px;font-weight:700;line-height:1;
+}
+.scene-layer-tree-popover .scene-layer-pick>span:last-child{
+ display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ font-size:12px;font-weight:600;min-width:0;
+}
+.scene-layer-tree-popover .scene-layer-symbol{
+ display:grid;place-items:center;min-width:20px;width:20px;height:23px;
+ background:#e6eee6;border-radius:5px;font-size:12px;
+}
+.scene-layer-tree-popover .scene-layer-node>button.scene-layer-grip{
+ touch-action:none;-webkit-user-select:none;user-select:none;
+ display:flex;align-items:center;justify-content:center;padding:0;background:#e7efe7;border-radius:6px;cursor:grab;
+}
+.scene-layer-grip-mark{display:block;flex:none;width:12px;height:10px;background:linear-gradient(to bottom,
+ #52705a 0 1px,transparent 1px 4px,#52705a 4px 5px,transparent 5px 9px,#52705a 9px 10px)}
+.swift-material-picker .popover-content{gap:4px}
+.swift-material-picker .canvas-material-search{height:36px;min-height:36px;margin:1px 0 0}
+.swift-material-picker .canvas-material-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 0 3px}
+.swift-material-picker .canvas-material-filters select{min-width:0;width:100%;height:36px;min-height:36px}
+.canvas-arrange-menu{display:grid;gap:7px}
+.canvas-arrange-menu>span{font-size:12px;color:#718075;margin-top:3px}
+.canvas-arrange-menu>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.canvas-arrange-menu button{min-width:0;min-height:34px;padding:5px 7px;border:1px solid #d7e0d7;
+ border-radius:8px;background:#f8faf6;color:#405849;text-align:center}
+.canvas-arrange-menu button:disabled{opacity:.45}
+.fabric-selected-actions{
+ transform:translate(-50%,-50%);gap:2px;padding:2px;
+ border:1px solid #416c59;border-radius:9px;background:#fffefa;
+ box-shadow:0 1px 5px #243b2c3d;backdrop-filter:none;
+}
+.fabric-selected-actions button{display:grid;place-items:center;min-width:30px;width:30px;height:28px;
+ border-radius:6px;font-size:19px;line-height:1}
+.fabric-selected-actions button:hover,.fabric-selected-actions button:focus-visible{background:#e6f0e8}
+.editor-inspector-range>div,.editor-crop-slider{display:grid;grid-template-columns:minmax(0,1fr);
+ align-items:center;gap:7px;margin-top:5px;min-width:0}
+.editor-inspector-range input[type=range],.editor-crop-slider input[type=range]{
+ width:100%;min-width:0;margin:0;accent-color:#52634b;touch-action:none}
+.editor-inspector-range button,.editor-crop-slider button{min-height:30px;padding:3px 6px;
+ border:1px solid #d5dfd4;border-radius:8px;background:#f8faf5;color:#405849;font-size:12px}
+.editor-crop-controls{display:grid;gap:9px;margin-top:9px}
+.editor-crop-controls>label{min-width:0}
+.cutout-bounded-slider{display:grid;grid-template-columns:minmax(0,1fr);
+ align-items:center;gap:8px;min-width:0;margin-top:5px}
+.cutout-bounded-slider input[type=range]{width:100%;min-width:0;margin:0!important;touch-action:none}
+.cutout-bounded-slider button{min-height:30px;padding:3px 7px;border:1px solid #d5dfd4;
+ border-radius:8px;background:#f8faf5;color:#405849;font-size:12px}
+.scene-layer-tree-popover .scene-layer-node.dragging{background:#e2eee3;transform:none;opacity:.84}
+.scene-layer-tree-popover .scene-layer-node.drop-target{box-shadow:inset 0 0 0 2px #59866b}
+.scene-layer-tree-popover .scene-layer-tree-status{font-size:11px;color:#6d806e;margin:6px 2px 0}
+@media(max-width:460px){
+ .scene-layer-tree-popover .scene-layer-node{
+  grid-template-columns:17px minmax(38px,1fr) 25px 25px 27px;gap:2px
+ }
+ .scene-layer-tree-popover .scene-layer-children{margin-left:8px;padding-left:4px}
+}
+/* Precisely scaled eraser contact circle; never part of editable Scene. */
+.canvas-page .canvas-eraser-cursor{
+ position:absolute;z-index:2140000003;border:1.5px solid #405949;
+ background:rgba(128,159,136,.17);outline:1px solid rgba(255,255,255,.85);
+ border-radius:50%;pointer-events:none;box-sizing:border-box;
+ transform:none!important;will-change:left,top;
+}
+.canvas-page .canvas-eraser-cursor[hidden]{display:none!important}
+.scene-layer-tree-popover .scene-layer-node .shiye-icon{
+ display:inline-block;width:18px;height:18px;stroke-width:1.8;
+ vertical-align:middle;pointer-events:none;
+}
+
+/* During the eraser gesture the Canvas shows the remaining vector paths,
+   avoiding a costly per-PointerEvent rewrite of nested SVG ink objects. */
+.canvas-page.erasing-ink .scene-ink-object{visibility:hidden}
+
+/* Conflict review belongs to Sync Details and never blocks the canvas. */
+.sync-version-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.sync-version-card{padding:12px 13px;background:#f6f8f4;border:1px solid #d7e0d4;border-radius:11px;min-width:0}
+.sync-version-card strong{font-size:13px;color:#354d3a}
+.sync-version-card p{margin:7px 0;overflow-wrap:anywhere}
+.sync-version-card small{color:#657b6a;line-height:1.5;overflow-wrap:anywhere}
+@media(max-width:520px){.sync-version-grid{grid-template-columns:1fr;gap:8px}}
+.editor-inspector-fields{gap:10px;min-width:0}
+.editing .swift-editor-workspace.show-inspector .editor-inspector{z-index:100}
+.editor-inspector-fields h3{font-size:13px;letter-spacing:.04em;margin:10px 0 0;color:#3e5848}
+.editor-inspector-fields .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.editor-inspector-fields label{min-width:0;margin:0;font-size:12px}
+.editor-inspector-fields input,.editor-inspector-fields select,.editor-inspector-fields textarea{min-width:0;width:100%}
+.editor-inspector-fields input[type=color]{height:38px;padding:3px}
+.editor-inspector-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.editor-inspector-fields .editor-inspector-check{display:flex;align-items:center;gap:7px;min-height:32px}
+.editor-inspector-check input{width:17px;height:17px;margin:0;flex:none}
+.editor-inspector-vector{display:grid;gap:9px}
+.editor-inspector-vector .muted,.editor-inspector-mask .muted{margin:0;font-size:12px}
+.editor-inspector-geometry{min-width:0;max-width:100%}
+.editor-inspector-geometry summary{cursor:pointer;font-weight:600}
+.editor-inspector-geometry textarea{display:block;max-width:100%;box-sizing:border-box;margin:8px 0;font:12px/1.45 ui-monospace,monospace}
+.editor-inspector-geometry small{display:block;margin-top:6px}
+.floating-editor-inspector{position:fixed;top:clamp(130px,19vh,210px);right:12px;
+  z-index:230;width:min(300px,calc(100vw - 16px));height:min(48dvh,430px);
+  min-height:190px;max-height:calc(100dvh - 16px);max-width:none;padding:0;
+  display:flex;flex-direction:column;background:#fffefa;border:1px solid #c9d9ca;
+  border-radius:16px;box-shadow:0 12px 32px #263c3052;overflow:hidden}
+.floating-editor-inspector .fabric-inspector-head{display:flex;flex:none;justify-content:space-between;
+  align-items:center;gap:8px;padding:10px 12px;background:#eaf1e8;
+  touch-action:none;cursor:grab;user-select:none}
+.floating-editor-inspector .fabric-inspector-head h2{margin:0;min-width:0;flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.floating-editor-inspector .fabric-inspector-head .floating-scene-panel-actions{flex:none;white-space:nowrap}
+.floating-editor-inspector .fabric-inspector-head .floating-scene-panel-actions button{
+  width:auto;min-width:44px;height:34px;min-height:34px;padding:5px 9px;
+  display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;line-height:1}
+.floating-editor-inspector-body{min-height:0;overflow:auto;padding:10px 10px 32px;overscroll-behavior:contain}
+@media(max-width:680px){.floating-editor-inspector{right:8px;bottom:calc(10px + env(safe-area-inset-bottom));
+  top:auto;height:min(46dvh,350px)}}
+.floating-panel-resize{position:absolute;right:3px;bottom:3px;z-index:3;
+  display:grid;place-items:center;width:32px;height:32px;border-radius:8px;
+  color:#55705e;cursor:ns-resize;touch-action:none;user-select:none}
+.floating-panel-resize::after{content:'↘';font-size:19px;line-height:1}
+.floating-panel-resize:focus-visible{outline:2px solid #416c59;outline-offset:-3px}
+.scene-layer-parked{display:grid;gap:4px;max-height:125px;overflow:auto;
+  padding:7px 4px;border-top:1px solid #dce5dc;font-size:12px}
+.scene-layer-parked>button{text-align:left;min-height:30px;padding:4px 7px;
+  border-radius:8px;background:#f3f7f1}
