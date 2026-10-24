@@ -1,6 +1,7 @@
 // Reusable geometry, independent of why it appears on the page. There is no
 // decoration object, target inference or hidden sizing/placement algorithm.
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
+import {validateShapeOptions} from './advanced-shape-options.js';
 export const graphicPresetKinds=Object.freeze([...commonShapes,...advancedShapes].map(([kind])=>kind==='rectangle'?'rect':kind).filter(kind=>kind!=='vector'));
 const presets=new Set(graphicPresetKinds);
 // Small, deterministic line studies compile into the same editable vector
@@ -73,13 +74,21 @@ export function replaceGraphicGeometry(node,geometry,scale){
  }
  if(node.type!=='shape')throw Error('基础图形/path 几何需要图形节点；不会隐式转换图层类型');
  if(geometry.kind!=='path'&&!presets.has(geometry.kind))throw Error('未知图形：'+geometry.kind);
- // A new geometric definition replaces the prior one, not an invisible stale
- // vectorPaths override. Explicit null/undefined clearing goes through kernel.
- for(const key of ['vectorPaths','vectorLayers','vectorSize','svgPaths','svgViewBox'])delete node[key];
+ const nextKind=geometry.kind==='rect'?'rectangle':geometry.kind;
+ const retainedOptions=node.kind===nextKind?node.shapeOptions:null;
+ // A new kind clears alternate geometry. Same-kind parameter updates retain
+ // unmentioned controls so AI can adjust one table dimension at a time.
+ for(const key of ['vectorPaths','vectorLayers','vectorSize','svgPaths','svgViewBox','shapeOptions'])delete node[key];
  if(geometry.kind==='path'){
   node.kind='vector';node.svgViewBox=structuredClone(geometry.viewBox);
   node.svgPaths=geometry.paths.map(path=>({d:path.d,...(path.fillRule?{fillRule:path.fillRule}:{}),...(path.style||{})}));
- }else node.kind=geometry.kind==='rect'?'rectangle':geometry.kind;
+ }else{
+  node.kind=nextKind;
+  if(geometry.options!==undefined||retainedOptions){
+   const options={...retainedOptions,...geometry.options};validateShapeOptions(node.kind,options);
+   node.shapeOptions=structuredClone(options);
+  }
+ }
  return node;
 }
 export function resizeGraphicInk(node,width,height){

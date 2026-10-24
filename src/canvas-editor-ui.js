@@ -5,6 +5,7 @@ import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './
 import {openPopover,closePopover} from './swift-popover.js';
 import {openEditorLayerTree} from './editor-layer-tree.js';
 import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines,textFontFamily,textLineHeight} from './editor-tools-model.js';
+import {advancedShapeControls,resolvedShapeOptions,validateShapeOptions} from './advanced-shape-options.js';
 import {shapeThumbnailTag as shapeSVG} from './shape-preview.js';
 import {isCurrentExampleProject} from './legacy-builtins.js';
 import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
@@ -413,6 +414,15 @@ export function mountCanvasEditor(c){
     fields.append(maskRow,maskActions);
     const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [...(kind==='material'?[]:[['width','宽度',1,d.canvas.width*2,.1],['height','高度',1,d.canvas.height*2,.1]]),['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
     if(kind==='shape'){
+      const controls=advancedShapeControls(o.kind);
+      if(controls.length){const heading=document.createElement('h3');heading.textContent='图形内容';fields.append(heading);
+        const current=resolvedShapeOptions(o.kind,o.shapeOptions||{});
+        for(const control of controls){
+          const update=value=>{const next={...o.shapeOptions,[control.key]:value};validateShapeOptions(o.kind,next);mutate('shapeOptions',next);};
+          if(control.type==='boolean')toggle(fields,control.label,current[control.key],update);
+          else range(fields,control.label,current[control.key],control.min,control.max,control.type==='integer'?1:.01,update);
+        }
+      }
       if(o.vectorLayers)vectorColors(o,fields);
       else {
         const heading=document.createElement('h3');heading.textContent='图形外观';fields.append(heading);

@@ -3,6 +3,7 @@ import {journalFontFamily} from './journal-fonts.js';
 import {textEffectInsets,textContentWidth,textFillStyle,paintTextGlyphs} from './text-effects.js';
 import {traceSmoothInk} from './ink-path-geometry.js';
 import {pressureInkOutline} from './pressure-ink.js';
+import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
 export const defaultTools={penStyle:'fountain',penWidth:4,penColor:'#2b5245',markerWidth:4,markerColor:'#2b5245',markerStraight:false,eraserWidth:20,eraserStyle:'standard',eraserOnlyHighlighter:false,wholeStroke:true,returnToPen:false,pencil:true};
 export const commonShapes=[['rectangle','色块'],['roundedRectangle','圆角色块'],['ellipse','圆形／椭圆'],['line','线条／下划线'],['frame','空心边框'],['star','星形'],['heart','爱心'],['raindrop','雨滴'],['cloud','云朵'],['sun','太阳'],['moon','月亮'],['flower','小花'],['leaf','树叶'],['sparkle','闪光'],['arrow','箭头'],['checkbox','勾选框'],['triangle','三角形'],['diamond','菱形'],['hexagon','六边形']];
 export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['linedNote','横线便笺'],['checklistTable','勾选清单'],['weeklyTable','一周计划表'],['habitTracker','习惯打卡表'],['calendarTable','月历格'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['postage','邮票齿边'],['washi','手帐胶带'],['bracket','括号'],['vector','自由图形']];
@@ -17,7 +18,33 @@ const postageEdge=()=>{
  return pts;
 };
 export function shapePaths(kind){return polygons[kind]?[polygons[kind]]:kind==='star'?[radial(10,i=>i%2?.2:.47)]:kind==='burst'?[radial(32,i=>i%2?.35:.47)]:kind==='sparkle'?[radial(8,i=>i%2?.08:.47,Math.PI/4)]:kind==='sun'?[radial(32,i=>i%2?.36:.48)]:kind==='flower'?[radial(160,(_,a)=>.34+.13*Math.cos(a*6))]:kind==='postage'?[postageEdge()]:kind==='scallop'?[radial(160,(_,a)=>.43+.04*Math.cos(a*10))]:null;}
-export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes','linedNote','checklistTable','weeklyTable','habitTracker','calendarTable'].includes(kind)?null:'#e7eef7',stroke:'#547da4',lineWidth:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});const paths=shapePaths(kind);if(paths)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;if(kind==='calendarTable')shape.height=125;return shape;}
+export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes','linedNote','checklistTable','weeklyTable','habitTracker','calendarTable'].includes(kind)?null:'#e7eef7',stroke:'#547da4',lineWidth:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});const paths=shapePaths(kind);if(paths&&!advancedShapeControls(kind).length)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;if(kind==='calendarTable')shape.height=125;return shape;}
+function parametricOutline(kind,o){
+  if(kind==='postage'){
+    const pts=[],inset=Math.min(.16,.04+o.depth);
+    for(let i=0;i<=o.count*2;i++)pts.push([.05+.90*i/(o.count*2),i%2?inset:.05]);
+    for(let i=1;i<=o.count*2;i++)pts.push([i%2?1-inset:.95,.05+.90*i/(o.count*2)]);
+    for(let i=1;i<=o.count*2;i++)pts.push([.95-.90*i/(o.count*2),i%2?1-inset:.95]);
+    for(let i=1;i<o.count*2;i++)pts.push([i%2?inset:.05,.95-.90*i/(o.count*2)]);
+    return pts.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z';
+  }
+  if(['burst','scallop'].includes(kind)){
+    const count=o.count*(kind==='burst'?2:12);
+    const pts=radial(count,(i,a)=>kind==='burst'?(i%2?.47-o.depth:.47):.44+o.depth*Math.cos(a*o.count));
+    return pts.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z';
+  }
+  if(kind==='ribbon')return `M.02 .1 H.98 L${.98-o.depth} .5 L.98 .9 H.02 L${.02+o.depth} .5 Z`;
+  if(kind==='tag')return `M${o.radius} .03 H${.98-o.depth} L.98 .5 L${.98-o.depth} .97 L${o.radius} .97 Q.03 .97 .03 ${.97-o.radius} V${.03+o.radius} Q.03 .03 ${o.radius} .03 Z`;
+  if(kind==='chevron')return `M.03 .03 H${.98-o.depth*3} L.98 .5 L${.98-o.depth*3} .97 H.03 L${.03+o.depth*3} .5 Z`;
+  if(kind==='bubble')return `M${.04+o.radius} .05 H${.96-o.radius} Q.96 .05 .96 ${.05+o.radius} V.72 H${o.tailPosition+o.depth} L${o.tailPosition} .97 L${o.tailPosition+o.depth*.2} .72 H.04 V${.05+o.radius} Q.04 .05 ${.04+o.radius} .05 Z`;
+  if(kind==='ticket')return `M${.04+o.radius} .05 H${.5-o.depth} L.5 ${.05+o.depth} L${.5+o.depth} .05 H${.96-o.radius} Q.96 .05 .96 ${.05+o.radius} V${.95-o.radius} Q.96 .95 ${.96-o.radius} .95 H${.5+o.depth} L.5 ${.95-o.depth} L${.5-o.depth} .95 H${.04+o.radius} Q.04 .95 .04 ${.95-o.radius} V${.05+o.radius} Q.04 .05 ${.04+o.radius} .05 Z`;
+  if(kind==='washi'){
+    const pts=[[.02,.05]];for(let i=1;i<o.count*2;i++)pts.push([i%2?.02+o.depth:.02,.05+.9*i/(o.count*2)]);
+    pts.push([.02,.95],[.98,.95]);for(let i=o.count*2-1;i>0;i--)pts.push([i%2?.98-o.depth:.98,.05+.9*i/(o.count*2)]);pts.push([.98,.05]);
+    return pts.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z';
+  }
+  return null;
+}
 // Geometry and stroke semantics are shared by thumbnails, Fabric and export.
 function baseShapeSVG(s){
  const safe=v=>String(v).replace(/["<>&]/g,'');
@@ -39,41 +66,44 @@ function baseShapeSVG(s){
  }
  // Shallow line boxes must not make their stroke sub-pixel.
  if(s.kind==='line')return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%"><path d="M1 50 H99" fill="none" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(dash==='dash'?'7 4':dash==='dot'?'1 3':'none')+'" stroke-width="'+Math.max(1,Number(s.lineWidth)||2)+'" vector-effect="non-scaling-stroke" stroke-linecap="round"/></svg>';
- const paths=Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(paths){const data=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');geometry=data?'<path fill-rule="evenodd" d="'+data+'"/>':'';}
+ const opts=advancedShapeControls(s.kind).length?resolvedShapeOptions(s.kind,s.shapeOptions||{}):{};
+ const outline=parametricOutline(s.kind,opts);
+ const paths=outline?null:Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(outline)geometry='<path fill-rule="evenodd" d="'+outline+'"/>';
+ else if(paths){const data=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');geometry=data?'<path fill-rule="evenodd" d="'+data+'"/>':'';}
  else if(s.kind==='raindrop')geometry='<path d="M.5 .03 C.37 .22 .12 .50 .12 .68 A.38 .31 0 0 0 .88 .68 C.88 .5 .63 .22 .5 .03 Z"/>';
  else if(s.kind==='cloud')geometry='<path d="M.23 .84 C.01 .84 .00 .51 .20 .46 C.18 .26 .39 .14 .56 .28 C.72 .12 .94 .29 .91 .48 C1.08 .60 .98 .85 .78 .85 Z"/>';
  else if(s.kind==='moon')geometry='<path d="M.66 .05 A.46 .46 0 1 0 .91 .75 A.39 .39 0 0 1 .66 .05 Z"/>';
  else if(s.kind==='leaf')geometry='<path d="M.10 .92 C.10 .30 .36 .08 .90 .08 C.91 .62 .64 .90 .10 .92 Z"/>';
- else if(s.kind==='wave')geometry='<path d="M.02 .50 Q.14 .12 .26 .50 T.50 .50 T.74 .50 T.98 .50" fill="none"/>';
- else if(s.kind==='zigzag')geometry='<path d="M.02 .75 L.20 .25 L.38 .75 L.56 .25 L.74 .75 L.92 .25" fill="none"/>';
- else if(s.kind==='bracket')geometry='<path d="M.43 .03 H.20 V.97 H.43 M.57 .03 H.80 V.97 H.57" fill="none"/>';
+ else if(s.kind==='wave')geometry='<path d="'+Array.from({length:opts.count},(_,i)=>`M${.02+i*.96/opts.count} .5 Q${.02+(i+.25)*.96/opts.count} ${.5-opts.depth} ${.02+(i+.5)*.96/opts.count} .5 T${.02+(i+1)*.96/opts.count} .5`).join(' ')+'" fill="none"/>';
+ else if(s.kind==='zigzag')geometry='<path d="'+Array.from({length:opts.count*2+1},(_,i)=>(i?'L':'M')+(.02+.96*i/(opts.count*2))+' '+(.5+(i%2?opts.depth:-opts.depth))).join(' ')+'" fill="none"/>';
+ else if(s.kind==='bracket')geometry=`<path d="M${.5-opts.depth} .03 H.20 V.97 H${.5-opts.depth} M${.5+opts.depth} .03 H.80 V.97 H${.5+opts.depth}" fill="none"/>`;
  else if(s.kind==='ellipse')geometry='<ellipse cx=".5" cy=".5" rx=".48" ry=".48"/>';
  else if(s.kind==='heart')geometry='<path d="M.5 .95 C-.1 .55 -.05 .05 .25 .05 C.4 .05 .5 .2 .5 .25 C.5 .2 .6 .05 .75 .05 C1.05 .05 1.1 .55 .5 .95 Z"/>';
  else if(s.kind==='arrow')geometry='<path d="M.03 .35 H.62 V.08 L.97 .5 L.62 .92 V.65 H.03 Z"/>';
  else if(['linedNote','checklistTable','weeklyTable','habitTracker','calendarTable'].includes(s.kind)){
   const lines=[];
   const grid=(cols,rows,{left=.04,top=.08,right=.96,bottom=.94}={})=>{
+   if(!opts.showInnerLines)return;
    for(let i=1;i<cols;i++){const x=left+(right-left)*i/cols;lines.push(`M${x} ${top}V${bottom}`);}
    for(let i=1;i<rows;i++){const y=top+(bottom-top)*i/rows;lines.push(`M${left} ${y}H${right}`);}
   };
   if(s.kind==='linedNote'){
-   for(let i=0;i<6;i++){const y=.21+i*.13;lines.push(`M.10 ${y}H.94`);}lines.push('M.08 .10V.92');
+   if(opts.showInnerLines)for(let i=0;i<opts.rows;i++){const y=.12+(i+1)*.78/(opts.rows+1);lines.push(`M.10 ${y}H.94`);}
   }else if(s.kind==='checklistTable'){
-   grid(1,5);for(let i=0;i<5;i++){const y=.08+i*.172+.086;lines.push(`M.09 ${y-.035}h.07v.07h-.07Z`,`M.21 ${y+.035}H.91`);}
+   grid(1,opts.rows);for(let i=0;i<opts.rows;i++){const y=.08+.86*(i+.5)/opts.rows;if(opts.showMarkers)lines.push(`M.09 ${y-.025}h.05v.05h-.05Z`);if(opts.showInnerLines)lines.push(`M.21 ${y+.025}H.91`);}
   }else if(s.kind==='weeklyTable'){
-   grid(7,3);lines.push('M.04 .20H.96');
-   for(let i=0;i<7;i++){const x=.04+.92*(i+.5)/7;lines.push(`M${x-.023} .13H${x+.023}`);}
+   grid(opts.columns,opts.rows);if(opts.showHeader){const y=.08+.86/opts.rows;lines.push(`M.04 ${y}H.96`);for(let i=0;i<opts.columns;i++){const x=.04+.92*(i+.5)/opts.columns;lines.push(`M${x-.018} ${.08+.86/(opts.rows*2)}H${x+.018}`);}}
   }else if(s.kind==='habitTracker'){
-   grid(7,5,{left:.18});lines.push('M.04 .08H.96','M.18 .08V.94');
-   for(let row=0;row<5;row++)for(let col=0;col<7;col++){
-    const x=.18+.78*(col+.5)/7,y=.08+.86*(row+.5)/5;
-    lines.push(`M${x-.018} ${y}a.018 .018 0 1 0 .036 0a.018 .018 0 1 0 -.036 0`);
+   grid(opts.columns,opts.rows,{left:.18});if(opts.showInnerLines)lines.push('M.18 .08V.94');
+   if(opts.showMarkers)for(let row=0;row<opts.rows;row++)for(let col=0;col<opts.columns;col++){
+    const x=.18+.78*(col+.5)/opts.columns,y=.08+.86*(row+.5)/opts.rows;
+    lines.push(`M${x-.012} ${y}a.012 .012 0 1 0 .024 0a.012 .012 0 1 0 -.024 0`);
    }
-  }else grid(7,6);
-  geometry='<rect x=".04" y=".08" width=".92" height=".86" rx=".018" fill="none"/>'+
-    '<path d="'+lines.join(' ')+'" fill="none" stroke-linecap="round"/>';
+  }else{grid(opts.columns,opts.rows);if(opts.showHeader)lines.push(`M.04 ${.08+.86/opts.rows}H.96`);}
+  geometry=(opts.showOuterBorder?'<rect x=".04" y=".08" width=".92" height=".86" rx=".018" fill="none" stroke="'+stroke+'"/>':'')+
+    '<path d="'+lines.join(' ')+'" fill="none" stroke="'+stroke+'" stroke-linecap="round"/>';
  }
- else if(['grid','dots','stripes'].includes(s.kind)){const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,''),px=18/Math.max(1,s.width),py=18/Math.max(1,s.height);geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+sw+'" fill="'+stroke+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none"'+(s.kind==='stripes'?' transform="rotate(45)"':'')+'/>')+'</pattern></defs><rect width="1" height="1" fill="url(#'+id+')" stroke="none"/>';}
+ else if(['grid','dots','stripes'].includes(s.kind)){const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,''),px=opts.spacing/Math.max(1,s.width),py=opts.spacing/Math.max(1,s.height);geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+opts.dotSize/Math.max(1,s.width,s.height)+'" fill="'+stroke+'"/>':s.kind==='stripes'?'<path d="M0 '+py/2+' H'+px+'" transform="rotate('+opts.angle+' '+px/2+' '+py/2+')" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>')+'</pattern></defs><rect width="1" height="1" fill="url(#'+id+')" stroke="none"/>'+(opts.showOuterBorder?'<rect x=".005" y=".005" width=".99" height=".99" fill="none" stroke="'+stroke+'"/>':'');}
  else geometry='<rect x=".015" y=".015" width=".97" height=".97" rx="'+(['roundedRectangle','frame','checkbox'].includes(s.kind)?Math.max(0,Math.min(.5,s.cornerRadius??.1)):'0')+'"/>';
  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%" fill="'+fill+'" fill-opacity="'+fillOpacity+'" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(strokeDashes||'none')+'" stroke-width="'+sw+'">'+geometry+'</svg>';
 }

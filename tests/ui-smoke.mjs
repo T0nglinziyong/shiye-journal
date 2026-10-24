@@ -21,8 +21,8 @@ await new Promise(resolve=>setTimeout(resolve,500));
 assert.match(window.document.querySelector('#view').textContent,/我的素材/);
 assert.ok(window.document.querySelector('.swift-series-controls input'));
 window.document.querySelector('.swift-tabs button:nth-child(2)').click();
-assert.equal(window.document.querySelectorAll('[data-act="detail"]').length,9);
-await waitFor(()=>/9 项/.test(window.document.querySelector('.library-count')?.textContent||''));
+assert.equal(window.document.querySelectorAll('[data-act="detail"]').length,27);
+await waitFor(()=>/27 项/.test(window.document.querySelector('.library-count')?.textContent||''));
 assert.ok([...window.document.querySelectorAll('.asset-grid [data-act="detail"] .chip')]
   .every(chip=>chip.textContent==='预设'));
 assert.equal(window.document.querySelector('.asset-grid > :first-child').dataset.act,'import');

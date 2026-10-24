@@ -4,7 +4,8 @@
 
 ## 公共参数
 - geometry：要画的几何。预设 kind 如 rect/ellipse/star/sparkle/flower/dots/bracket；`sketch` 直接生成可编辑手绘线形；自由 SVG 使用 path；压感笔迹使用 stroke。
-- 表格类预设也走 `graphic.add`：`linedNote` 横线便笺、`checklistTable` 勾选清单、`weeklyTable` 一周计划、`habitTracker` 打卡表、`calendarTable` 月历格。它们是空白可编辑矢量线框，颜色和线宽由 style 控制；内容另放可编辑文字层并按需要锚定表格。挑合适的一种即可。
+- 表格类预设也走 `graphic.add`：`linedNote` 横线便笺、`checklistTable` 勾选清单、`weeklyTable` 一周计划、`habitTracker` 打卡表、`calendarTable` 月历格。它们是空白可编辑矢量线框，颜色和线宽由 style 控制；内容另放可编辑文字层并按需要锚定表格。挑合适的一种即可。`geometry.options` 可调整 rows、columns、showOuterBorder、showInnerLines、showHeader、showMarkers，例如 `{"kind":"weeklyTable","options":{"rows":4,"columns":3,"showOuterBorder":false}}`；行列用本页实际内容决定，不默认填满空格。
+- 所有高级预设都可调内部结构：grid/dots/stripes 用 spacing、dotSize、angle；标签、缎带、对话框、花边、邮票齿边等按形状使用 depth、count、tailPosition、radius。只传需要修改的参数，详见 `describe graphic.add --full` 的 ShapeOptions；`layer.update.geometry` 使用同一结构进行局部改动。自由图形 `vector` 用可编辑路径表达，不需要预设参数。
 - place：唯一定位入口。页面毫米、比例、相对对象或父组的锚点/偏移均沿用原定义，不另设 target/placement。
 - size：统一宽高与 mm/ratio；ratio 明确 reference。预设和 path 必须给 size；stroke 可省略使用毫米点集本身的尺寸。单维通常保留比例，横/竖直笔迹的零跨度轴保留笔宽，不能从一条线拉出曲线。
 - style：填充用 fill，线条和笔迹都用 stroke，线宽 strokeWidthMm。opacity/blendMode/shadow 共用；penStyle 用于笔迹，填充和虚线等用于图形。不适用字段会报错，不默默忽略。

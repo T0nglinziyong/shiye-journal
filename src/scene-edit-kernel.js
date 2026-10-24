@@ -1,5 +1,6 @@
 import {validateGraphicEffects} from './graphic-effects.js';
 import {validateTextEffects} from './text-effects.js';
+import {validateShapeOptions} from './advanced-shape-options.js';
 // Shared in-memory editing kernel. No file IO, network, React, Fabric or CLI.
 // Only touched nodes are copied on the frequent property-update path.
 import {assertSceneEditable,findSceneNode,validateVectorMask} from './scene-v2.js';
@@ -12,7 +13,7 @@ import {AI_SCENE_POLICY,requireScenePolicy,assertPolicyPatch,assertPolicyOwnersh
 const textFields=new Set(['content','width','height','fontSize','fontName','style','bold','italic','lineSpacing','fixedLineHeight','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']);
 const forbidden=new Set(['id','type','children','assetID','sourceBlobId','sourceStaticPath','materialUnitIndex','craftProvenance','generationBaseline','aiManaged','managedFingerprint','manualVisualCopy','manualGeometryOverride']);
 const common=new Set(['x','y','rotation','width','height','opacity','blendMode','shadow','hidden','isHidden','isParked','locked','isLocked','zIndex','vectorMask','vectorMaskHistory','localTransform','layoutBox','layoutRotation']);
-const typed={text:new Set(['content','fontSize','fontName','style','color','alignment','bold','italic','underline','strikethrough','lineSpacing','fixedLineHeight','lineHeight','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']),shape:new Set(['graphicOutline','graphicGradient','kind','fill','stroke','lineWidth','fillOpacity','strokeOpacity','strokeDash','cornerRadius','vectorPaths','vectorLayers','vectorSize','svgPaths','svgViewBox']),ink:new Set(['graphicOutline','graphicGradient','points','color','penStyle']),material:new Set(['isFlippedHorizontally','materialRelation','craftDisplaySlices']),group:new Set(['name'])};
+const typed={text:new Set(['content','fontSize','fontName','style','color','alignment','bold','italic','underline','strikethrough','lineSpacing','fixedLineHeight','lineHeight','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']),shape:new Set(['graphicOutline','graphicGradient','kind','fill','stroke','lineWidth','fillOpacity','strokeOpacity','strokeDash','cornerRadius','shapeOptions','vectorPaths','vectorLayers','vectorSize','svgPaths','svgViewBox']),ink:new Set(['graphicOutline','graphicGradient','points','color','penStyle']),material:new Set(['isFlippedHorizontally','materialRelation','craftDisplaySlices']),group:new Set(['name'])};
 const copy=value=>structuredClone(value);
 function replace(target,value){for(const key of Object.keys(target))if(!Object.hasOwn(value,key))delete target[key];Object.assign(target,value);}
 function finiteNode(node){
@@ -23,6 +24,7 @@ function finiteNode(node){
  if(node.opacity!==undefined&&(node.opacity<0||node.opacity>1))throw Error('透明度需在 0–1 范围');
  for(const key of ['hidden','isHidden','isParked','locked','isLocked'])if(node[key]!==undefined&&typeof node[key]!=='boolean')throw Error('图层状态需为布尔值：'+key);
  if(node.type==='text'&&typeof node.content!=='string')throw Error('文字内容必须是字符串');
+ if(node.type==='shape'&&node.shapeOptions!==undefined)validateShapeOptions(node.kind,node.shapeOptions);
  if(node.textLayout&&(!(node.textLayout.minimumHeight>=0&&Number.isFinite(node.textLayout.minimumHeight))||node.textLayout.lineHeightRatio!==undefined&&!(node.textLayout.lineHeightRatio>0&&Number.isFinite(node.textLayout.lineHeightRatio))))throw Error('文字布局参数无效');
  if(node.points&&(!node.points.length||node.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||Math.abs(p.x)>100000||Math.abs(p.y)>100000)))throw Error('笔迹点无效');
  if(node.localTransform)assertRigidMatrix(node.localTransform);

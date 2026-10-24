@@ -12,6 +12,7 @@ import {importDefaultTitle} from './import-default-names.js';
 // Production deployment refresh marker: 2026-10-04
 import {materialKindName} from './material-taxonomy.js';
 import {withCreativePresetAssets,isCreativePreset} from './creative-presets.js';
+import {advancedShapeControls,validateShapeOptions} from './advanced-shape-options.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
@@ -1049,6 +1050,13 @@ function updateEditorInspector(id,value){
     }else if(id==='inspector-text-color'&&entry.kind==='text'&&color.test(value)){values.color=value;changed=true;}
     else if(['inspector-bold','inspector-italic','inspector-underline','inspector-strikethrough'].includes(id)&&entry.kind==='text'){
       values[id.slice(10)]=!!value;changed=true;
+    }else if(id.startsWith('inspector-shape-option-')&&entry.kind==='shape'){
+      const option=id.slice('inspector-shape-option-'.length);
+      const control=advancedShapeControls(entry.value.kind).find(item=>item.key===option);
+      if(!control)return;
+      const next=control.type==='boolean'?value:Number(value);
+      values.shapeOptions={...entry.value.shapeOptions,[option]:next};
+      validateShapeOptions(entry.value.kind,values.shapeOptions);changed=true;
     }else if(id==='inspector-fill'&&entry.kind==='shape'&&color.test(value)){values.fill=value;changed=true;}
     else if(id==='inspector-stroke'&&entry.kind==='shape'&&color.test(value)){values.stroke=value;changed=true;}
     else if(id==='inspector-stroke-dash'&&entry.kind==='shape'&&['solid','dash','dot'].includes(value)){

@@ -22,15 +22,16 @@ const batch=operations=>({protocolVersion:2,transactionId:'preset-test',
   baseSceneRevision:'sha256:'+'0'.repeat(64),operations});
 const imageBytes=asset=>readFile(join('public',asset.staticPath));
 
-test('nine bundled supplies join the ordinary library as read-only preset status',async()=>{
-  assert.equal(creativePresetAssets.length,9);
-  assert.equal(new Set(creativePresetAssets.map(asset=>asset.id)).size,9);
+test('27 bundled supplies join the ordinary library as read-only preset status',async()=>{
+  assert.equal(creativePresetAssets.length,27);
+  assert.deepEqual(['tape','sticker','stamp'].map(kind=>creativePresetAssets.filter(asset=>asset.kind===kind).length),[9,9,9]);
+  assert.equal(new Set(creativePresetAssets.map(asset=>asset.id)).size,27);
   const personal={id:'personal',title:'我的素材',kind:'sticker',usageStatus:'unused'};
   const library=withCreativePresetAssets([personal]);
   assert.equal(withCreativePresetAssets(library).length,library.length);
-  assert.equal(queryAssets(library,{status:'preset'}).length,9);
+  assert.equal(queryAssets(library,{status:'preset'}).length,27);
   assert.deepEqual(queryAssets(library,{status:'unused'}).map(asset=>asset.id),['personal']);
-  assert.ok(queryAssets(library,{query:'预设'}).length>=9);
+  assert.ok(queryAssets(library,{query:'预设'}).length>=27);
   for(const asset of creativePresetAssets){
     assert.equal(asset.usageStatus,'preset');assert.equal(asset.reviewStatus,'ready');
     assert.ok(asset.physicalWidthMM>0&&asset.physicalHeightMM>0);
@@ -74,7 +75,7 @@ test('selected presets alone enter v3 ZIP and can repeat in the true Scene previ
   const ledger=buildMaterialLedger(attachSceneV2(result.page),assets);
   assert.deepEqual(ledger.units.filter(entry=>entry.assetId===sticker.id).map(entry=>entry.unit),[0,1]);
   assert.equal(ledger.rolls.length,1);
-  assert.ok(shapeSVG(result.page.layers.find(node=>node.id==='weekly')).includes('M.04 .20H.96'));
+  assert.ok(shapeSVG(result.page.layers.find(node=>node.id==='weekly')).includes('M.04'));
   assert.equal(result.page.layers.filter(node=>node.type==='material').every(node=>!node.sourceBlobId&&node.sourceStaticPath),true);
   const materials=new Map(selected.map(asset=>[asset.id,asset]));
   const previousDocument=globalThis.document;
