@@ -1,6 +1,7 @@
 // The executable public language. This is not a legacy-operation adapter.
 import base from '../creation-contract/static/api/common.schema.json' with {type:'json'};
 import {graphicPresetKinds} from './graphic-geometry.js';
+import {shapeOptionsJSONSchema} from './advanced-shape-options.js';
 const ref=name=>({$ref:'#/$defs/'+name});
 const obj=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const num=(minimum=-100000,maximum=100000)=>({type:'number',minimum,maximum});
@@ -10,6 +11,7 @@ const arr=(items,minItems=1,maxItems=128)=>({type:'array',items,minItems,maxItem
 const bool={type:'boolean'},id=ref('Id');
 export const creationCommonDefinitions=structuredClone(base.$defs);
 const d=creationCommonDefinitions;
+d.ShapeOptions=shapeOptionsJSONSchema;
 d.Reference.pattern='^(page|page\\.left|page\\.right|parent|node:[A-Za-z][A-Za-z0-9._-]*)$';
 d.Place.properties.referenceBounds.enum=['layout'];d.Place.properties.targetBounds.enum=['layout'];
 d.LayoutRule.properties.behavior={const:'once',default:'once'};d.Size.properties.aspect.default='free';
@@ -55,7 +57,7 @@ d.TapeCaps=obj({start:en('square','angled','torn'),end:en('square','angled','tor
 // The SAME geometry is accepted by creation and updates. No target/placement
 // shortcut, no decoration type, and no legacy shape/vector/ink wrapper fields.
 d.GraphicGeometry={oneOf:[
- obj({kind:{enum:graphicPresetKinds}},['kind']),
+ obj({kind:{enum:graphicPresetKinds},options:ref('ShapeOptions')},['kind']),
  {...obj({kind:{const:'sketch'},motif:en('loop','underline','corner','scallop','trail','rays'),seed:{type:'integer',minimum:1,maximum:2147483646},waypoints:arr(arr(num(0,1),2,2),2,6)},['kind','motif']),allOf:[{if:{required:['waypoints']},then:{properties:{motif:{const:'trail'}}}}]},
  obj({kind:{const:'path'},paths:ref('VectorPaths'),viewBox:ref('ViewBox')},['kind','paths','viewBox']),
  obj({kind:{const:'stroke'},points:ref('InkPoints'),unit:{const:'mm'}},['kind','points','unit'])

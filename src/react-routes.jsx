@@ -3,6 +3,7 @@ import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
+import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
 import {creationModeDescription} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
@@ -1099,6 +1100,13 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </>:null}
     {selected.kind==='shape'?<>
       <h3>图形外观</h3>
+      {advancedShapeControls(item.kind).length?<div className="editor-inspector-advanced">
+        <h4>图形内容</h4><div className="form-grid">{advancedShapeControls(item.kind).map(control=>{
+          const value=resolvedShapeOptions(item.kind,item.shapeOptions||{})[control.key];
+          return control.type==='boolean'?<React.Fragment key={control.key}>{check(`inspector-shape-option-${control.key}`,control.label,value)}</React.Fragment>:
+            <React.Fragment key={control.key}>{field(`inspector-shape-option-${control.key}`,control.label,value,'number',
+              {min:control.min,max:control.max,step:control.type==='integer'?1:.01})}</React.Fragment>;
+        })}</div></div>:null}
       <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
       {item.vectorLayers?.length?<div className="editor-inspector-vector"><p className="muted">多色矢量 · {item.vectorLayers.length} 层，路径保持独立</p>
         {item.vectorLayers.map((layer,index)=><div className="form-grid" key={index}>

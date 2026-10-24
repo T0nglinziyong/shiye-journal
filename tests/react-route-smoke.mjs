@@ -71,7 +71,7 @@ window.document.querySelector('.swift-tabs button:nth-child(2)').click();
 await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detail"]').length===40);
 const controls=window.document.querySelector('.catalog-page-controls');
 controls.querySelector('[aria-label="下一页"]').click();
-await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detail"]').length===14);
+await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detail"]').length===32);
 window.document.querySelector('.asset-grid [data-act="detail"]').click();
 await waitFor(()=>!!window.document.querySelector('.detail-page h1'));
 assert.match(window.document.querySelector('.detail-page h1').textContent,/素材/);
@@ -163,7 +163,7 @@ await waitFor(()=>!!window.document.querySelector('[data-react-page="settingsDis
 assert.equal(window.document.querySelector('#setting-page-items').value,'20');
 window.document.querySelector('#setting-page-items').value='80';
 window.document.querySelector('[data-act="settings-save"]').click();
-await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detail"]').length===54);
+await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detail"]').length===72);
 window.document.querySelector('#top-settings').click();
 await waitFor(()=>!!window.document.querySelector('.settings-list'));
 openSettings('AI 与创作');

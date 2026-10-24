@@ -1,6 +1,7 @@
 import {validateLettering} from './scene-lettering.js';
 import {validateGraphicEffects} from './graphic-effects.js';
 import {validateTextEffects} from './text-effects.js';
+import {validateShapeOptions} from './advanced-shape-options.js';
 // Scene v2: THE persisted editable layer tree. No parallel persisted arrays.
 // Existing editor/craft algorithms receive ephemeral leaf collection views,
 // whose supported mutations write through to the same tree.
@@ -399,6 +400,7 @@ export function validateSceneExtensions(d){
          node.svgPaths.some(path=>typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d)))
          throw Error('矢量路径格式无效');
      }
+     if(node.type==='shape'&&node.shapeOptions!==undefined)validateShapeOptions(node.kind,node.shapeOptions);
      if(node.type==='material'){
        if(typeof node.assetID!=='string'||!node.assetID)throw Error('缺少真实素材引用');
        if(node.sourceBlobId!==undefined&&(typeof node.sourceBlobId!=='string'||!node.sourceBlobId))
