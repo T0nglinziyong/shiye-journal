@@ -11,6 +11,9 @@ import {updateShell} from './react-shell.jsx';
 export async function runAssetBatchAction(c,selection,action,value){
   const {state,db,render}=c;
   const selected=()=>state.assets.filter(asset=>selection.selected.has(asset.id));
+  if(['delete','assign-series','assign-new-series','set-used','classify'].includes(action)
+    &&selected().some(asset=>asset.isCreativePreset))
+    throw Error('预设素材属于公共图库；可加入创作、导出或打印，不能修改图库原件');
   switch(action){
     case 'add-matching':{
       addMatchingFromLibrary(state,[...selection.selected]);finishSelection(selection);

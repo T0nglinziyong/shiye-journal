@@ -28,7 +28,7 @@ export function projectAssetIDs(project) {
 }
 export function markProjectAssetsUsed(project, assets, at = new Date().toISOString()) {
   const ids = projectAssetIDs(project);
-  return assets.filter(asset => ids.has(asset.id) && asset.kind!=='tape' &&
+  return assets.filter(asset => ids.has(asset.id) && asset.kind!=='tape' && !asset.isCreativePreset &&
     asset.usageStatus !== 'used').map(asset => withUsageStatus(asset, true, at));
 }
 export function seriesMembers(seriesID, assets, filters = {}) {

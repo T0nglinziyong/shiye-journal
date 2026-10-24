@@ -1,4 +1,4 @@
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
@@ -14,7 +14,9 @@ await writeFile(join(root,'version.json'),JSON.stringify({
 // editor, AI, PDF and font chunks are fetched when their feature opens.
 const html=await readFile(join(root,'index.html'),'utf8');
 const entryAssets=[...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match=>match[1]);
-const list=[...new Set(['/index.html','/manifest.webmanifest','/favicon-32.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png','/version.json',...entryAssets])];
+const creativePresetPaths=(await readdir(join(root,'creative-presets')))
+  .filter(name=>name.endsWith('.png')).map(name=>'/creative-presets/'+name);
+const list=[...new Set(['/index.html','/manifest.webmanifest','/favicon-32.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png','/version.json',...entryAssets,...creativePresetPaths])];
 const hasher=createHash('sha256');
 for(const asset of list){hasher.update(asset);hasher.update(await readFile(join(root,asset.slice(1))));}
 const hash=hasher.digest('hex').slice(0,12);

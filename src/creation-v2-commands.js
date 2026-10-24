@@ -126,7 +126,8 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   else if(item.op==='material.add'){
    if(find(doc,item.id))throw Error('图层编号已经存在：'+item.id);
    const asset=assetFor(doc,assets,item.asset),position=placeFor(doc,item.place,asset.physicalWidthMM,asset.physicalHeightMM,0,item.parent);
-   doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm'}]},assets);
+   doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm',
+     ...(asset.isCreativePreset?{unit:Math.max(-1,...allNodes(doc.page.layers).filter(node=>node.type==='material'&&node.assetID===asset.id).map(node=>node.materialUnitIndex??0))+1}:{})}]},assets);
    doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(['text.add','graphic.add'].includes(item.op)){
    const common={id:item.id,agentKey:item.id,x:doc.page.canvas.width/2,y:doc.page.canvas.height/2,rotation:0,zIndex:500,opacity:1,blendMode:'normal'};

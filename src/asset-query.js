@@ -6,7 +6,7 @@ const date=value=>{const parsed=Date.parse(value||'');return Number.isFinite(par
 export function searchableAssetText(asset){
   return normalized([asset.title,...asset.tags||[],...asset.styleTags||[],
     ...asset.contentTags||[],...asset.semanticTags||[],...asset.palette||[],
-    asset.kind,asset.role,asset.texture].filter(Boolean).join(' '));
+    asset.kind,asset.role,asset.texture,asset.isCreativePreset?'预设':null].filter(Boolean).join(' '));
 }
 export function queryAssets(assets,{query='',kind='all',status='all',seriesID='all',
   sort='newest',recent=false,now=Date.now()}={}){
@@ -18,10 +18,11 @@ export function queryAssets(assets,{query='',kind='all',status='all',seriesID='a
     if(recent&&(!Number.isFinite(Date.parse(asset.createdAt))||now-date(asset.createdAt)>30*864e5))return false;
     if(needle&&!searchableAssetText(asset).includes(needle))return false;
     switch(status){
-      case 'ready':return asset.reviewStatus==='ready';
-      case 'pendingReview':case 'unready':return asset.reviewStatus!=='ready';
+      case 'ready':return asset.reviewStatus==='ready'&&!asset.isCreativePreset;
+      case 'pendingReview':case 'unready':return asset.reviewStatus!=='ready'&&!asset.isCreativePreset;
       case 'used':return asset.usageStatus==='used';
-      case 'unused':return asset.usageStatus!=='used';
+      case 'unused':return asset.usageStatus!=='used'&&!asset.isCreativePreset;
+      case 'preset':return !!asset.isCreativePreset;
       case 'favorite':return !!asset.isFavorite;
       case 'inside':return !!asset.seriesID;
       case 'outside':return !asset.seriesID;

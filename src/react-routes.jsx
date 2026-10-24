@@ -492,7 +492,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
     onPageChange?.();
   };
   const kinds=materialKinds.map(([id])=>id);
-  const status=[['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],
+  const status=[['all','全部状态'],['preset','预设'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],
     ['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']];
   const sorts=[['newest','添加时间 · 降序'],['oldest','添加时间 · 升序'],
     ['name','名称 · 升序'],['name-desc','名称 · 降序']];
@@ -550,7 +550,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
         return <PressCard key={asset.id} className={`card ${selecting&&selection.selected.has(asset.id)?'batch-selected':''}`}
           data-card-revision={revision} data-act="detail"
           data-id={asset.id} data-react-action="true" aria-pressed={selecting?selection.selected.has(asset.id):undefined}
-          holdDisabled={selecting} onHold={()=>onEditAsset?.(asset.id)}
+          holdDisabled={selecting||asset.isCreativePreset} onHold={()=>onEditAsset?.(asset.id)}
           onActivate={()=>{if(selecting){toggleSelected(selection,asset.id);
             window.dispatchEvent(new Event('shiye-selection-refresh'));}
             else onAction('detail',asset.id);}}>
@@ -559,7 +559,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
           <div className="card-body"><h3 className={state.basket.includes(asset.id)?'in-matching-basket':''}>{asset.title}
             {state.basket.includes(asset.id)?<span className="basket-card-check" aria-label="已加入搭配素材篮">✓</span>:null}{asset.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3>
             <p>{kindName(asset.kind)} · {asset.physicalWidthMM?`${format(asset.physicalWidthMM)} × ${format(asset.physicalHeightMM)} mm`:'尺寸待确认'}</p>
-            <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
+            <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.isCreativePreset?'预设':asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
           </div>
         </PressCard>;
       })}
@@ -834,7 +834,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
     setRevision(revision=>revision+1);};
   const options=(items,value)=>items.map(([id,label])=><option key={id} value={id}>{label}</option>);
   const kinds=materialKinds;
-  const statuses=[['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],
+  const statuses=[['all','全部状态'],['preset','预设'],['ready','已整理'],['unready','未整理'],['used','已使用'],
     ['unused','未使用'],['favorite','已收藏'],['inside','系列中'],['outside','系列外']];
   return <section className="series-contents" data-react-page="seriesContents"><div className="catalog-toolbar">
     <div className="series-navigation"><button type="button" className="btn" id="series-return"
@@ -896,7 +896,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
         data-card-revision={JSON.stringify([asset.title,asset.kind,
         asset.physicalWidthMM,asset.physicalHeightMM,asset.reviewStatus,asset.isFavorite,asset.blobId])}
         data-act="detail" data-id={asset.id} data-react-action="true"
-        holdDisabled={selectionActive(selection,'asset')} onHold={()=>onEditAsset?.(asset.id)}
+        holdDisabled={selectionActive(selection,'asset')||asset.isCreativePreset} onHold={()=>onEditAsset?.(asset.id)}
         onActivate={()=>{
           if(selectionActive(selection,'asset')){toggleSelected(selection,asset.id);
             window.dispatchEvent(new Event('shiye-selection-refresh'));}
@@ -906,7 +906,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
             {selection.selected.has(asset.id)?'☑':'□'}</span>:null}</div>
         <div className="card-body"><h3>{asset.title}{asset.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3>
           <p>{kindName(asset.kind)} · {asset.physicalWidthMM?`${format(asset.physicalWidthMM)} × ${format(asset.physicalHeightMM)} mm`:'尺寸待确认'}</p>
-          <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
+          <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.isCreativePreset?'预设':asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
         </div>
       </PressCard>)}
     </div><p className="series-result-count">{range.total} 项</p>
@@ -1409,27 +1409,27 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
   const act=name=>()=>onAction(name);
   return <div className="detail-page" data-react-page="assetDetail">
     <div className="detail-topline"><button className="detail-back" data-act="detail-back" data-react-action="true" onClick={act('detail-back')}>‹　返回素材库</button>
-    <span className="detail-category">{seriesTitle||'系列外'}</span></div>
+    <span className="detail-category">{asset.isCreativePreset?'预设素材':seriesTitle||'系列外'}</span></div>
     <section className="detail-columns"><div className="detail-picture"><span>▣　透明素材预览</span>
       <RouteImage asset={asset} source={source} priority/>
     </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
-      <button className="detail-heart" data-act="detail-favorite" data-react-action="true" aria-label={asset.isFavorite?'取消收藏':'收藏'}
-        aria-pressed={!!asset.isFavorite} onClick={act('detail-favorite')}>{asset.isFavorite?'♥':'♡'}</button>
+      {!asset.isCreativePreset?<button className="detail-heart" data-act="detail-favorite" data-react-action="true" aria-label={asset.isFavorite?'取消收藏':'收藏'}
+        aria-pressed={!!asset.isFavorite} onClick={act('detail-favorite')}>{asset.isFavorite?'♥':'♡'}</button>:null}
       <h1>{asset.title}</h1><div className="detail-facts">
-        <div><small>真实尺寸</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
+        <div><small>{asset.isCreativePreset?'设计尺寸':'真实尺寸'}</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
         <div><small>素材类型</small><span>{kindName(asset.kind)}</span></div>
         <div><small>主要作用</small><span>{materialRoleName(asset.role)||'待记录'}</span></div>
         <div><small>材质</small><span>{asset.texture||'待记录'}</span></div>
       </div><div className="detail-tags">{tags.map(tag=><span key={tag}>{tag}</span>)}</div>
-      <div className="detail-dots">● ● ● ●</div><hr/><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p>
+      <div className="detail-dots">● ● ● ●</div><hr/><p>{asset.isCreativePreset?'预设使用方式':'实物可用操作'}</p><p>✓ 整件使用　 ✓ 旋转摆放{asset.isCreativePreset?'　 ✓ 重复使用':''}</p>
       <button className="btn primary detail-add" data-act="detail-add" data-react-action="true" onClick={act('detail-add')}>＋　加入本次创作</button>
       <div className="detail-links">
-        <button className="btn" data-act="detail-series" data-react-action="true" onClick={act('detail-series')}><DetailLinkIcon kind="folder"/><span className="detail-link-label">同系列</span></button>
+        {!asset.isCreativePreset?<button className="btn" data-act="detail-series" data-react-action="true" onClick={act('detail-series')}><DetailLinkIcon kind="folder"/><span className="detail-link-label">同系列</span></button>:null}
         <button className="btn" data-act="detail-similar" data-react-action="true" onClick={()=>setSimilarOpen(true)}><DetailLinkIcon kind="search"/><span className="detail-link-label">找相似</span></button>
         <button className="btn" data-act="detail-match" data-react-action="true" onClick={act('detail-match')}><DetailLinkIcon kind="sparkles"/><span className="detail-link-label">去搭配</span></button>
       </div><div className="detail-small">
-        <button data-act="detail-edit" data-react-action="true" onClick={act('detail-edit')}>✎　编辑素材信息</button>
-        <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button>
+        {!asset.isCreativePreset?<><button data-act="detail-edit" data-react-action="true" onClick={act('detail-edit')}>✎　编辑素材信息</button>
+        <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button></>:null}
         <button type="button" data-act="asset-print-pdf" data-react-action="true"
           onClick={onExportPrint}>▤　导出打印 PDF</button>
       </div>

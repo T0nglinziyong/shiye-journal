@@ -5,7 +5,7 @@ import {traceSmoothInk} from './ink-path-geometry.js';
 import {pressureInkOutline} from './pressure-ink.js';
 export const defaultTools={penStyle:'fountain',penWidth:4,penColor:'#2b5245',markerWidth:4,markerColor:'#2b5245',markerStraight:false,eraserWidth:20,eraserStyle:'standard',eraserOnlyHighlighter:false,wholeStroke:true,returnToPen:false,pencil:true};
 export const commonShapes=[['rectangle','色块'],['roundedRectangle','圆角色块'],['ellipse','圆形／椭圆'],['line','线条／下划线'],['frame','空心边框'],['star','星形'],['heart','爱心'],['raindrop','雨滴'],['cloud','云朵'],['sun','太阳'],['moon','月亮'],['flower','小花'],['leaf','树叶'],['sparkle','闪光'],['arrow','箭头'],['checkbox','勾选框'],['triangle','三角形'],['diamond','菱形'],['hexagon','六边形']];
-export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['postage','邮票齿边'],['washi','手帐胶带'],['bracket','括号'],['vector','自由图形']];
+export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['linedNote','横线便笺'],['checklistTable','勾选清单'],['weeklyTable','一周计划表'],['habitTracker','习惯打卡表'],['calendarTable','月历格'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['postage','邮票齿边'],['washi','手帐胶带'],['bracket','括号'],['vector','自由图形']];
 const polygons={triangle:[[.5,.04],[.96,.95],[.04,.95]],diamond:[[.5,.03],[.97,.5],[.5,.97],[.03,.5]],hexagon:[[.25,.04],[.75,.04],[.98,.5],[.75,.96],[.25,.96],[.02,.5]],ribbon:[[.02,.1],[.98,.1],[.84,.5],[.98,.9],[.02,.9],[.16,.5]],tag:[[.03,.03],[.78,.03],[.98,.5],[.78,.97],[.03,.97]],bubble:[[.04,.05],[.96,.05],[.96,.72],[.47,.72],[.23,.97],[.25,.72],[.04,.72]],chevron:[[.03,.03],[.63,.03],[.98,.5],[.63,.97],[.03,.97],[.38,.5]],ticket:[[.04,.05],[.4,.05],[.5,.15],[.6,.05],[.96,.05],[.96,.95],[.6,.95],[.5,.85],[.4,.95],[.04,.95]],washi:[[.02,.05],[.10,.14],[.02,.23],[.10,.32],[.02,.41],[.10,.5],[.02,.59],[.10,.68],[.02,.77],[.10,.86],[.02,.95],[.98,.95],[.90,.86],[.98,.77],[.90,.68],[.98,.59],[.90,.5],[.98,.41],[.90,.32],[.98,.23],[.90,.14],[.98,.05]]};
 const radial=(n,radii,offset=-Math.PI/2)=>Array.from({length:n},(_,i)=>{const a=offset+2*Math.PI*i/n,r=radii(i,a);return [.5+Math.cos(a)*r,.5+Math.sin(a)*r];});
 const postageEdge=()=>{
@@ -17,7 +17,7 @@ const postageEdge=()=>{
  return pts;
 };
 export function shapePaths(kind){return polygons[kind]?[polygons[kind]]:kind==='star'?[radial(10,i=>i%2?.2:.47)]:kind==='burst'?[radial(32,i=>i%2?.35:.47)]:kind==='sparkle'?[radial(8,i=>i%2?.08:.47,Math.PI/4)]:kind==='sun'?[radial(32,i=>i%2?.36:.48)]:kind==='flower'?[radial(160,(_,a)=>.34+.13*Math.cos(a*6))]:kind==='postage'?[postageEdge()]:kind==='scallop'?[radial(160,(_,a)=>.43+.04*Math.cos(a*10))]:null;}
-export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes'].includes(kind)?null:'#e7eef7',stroke:'#547da4',lineWidth:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});const paths=shapePaths(kind);if(paths)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;return shape;}
+export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes','linedNote','checklistTable','weeklyTable','habitTracker','calendarTable'].includes(kind)?null:'#e7eef7',stroke:'#547da4',lineWidth:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});const paths=shapePaths(kind);if(paths)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;if(kind==='calendarTable')shape.height=125;return shape;}
 // Geometry and stroke semantics are shared by thumbnails, Fabric and export.
 function baseShapeSVG(s){
  const safe=v=>String(v).replace(/["<>&]/g,'');
@@ -50,6 +50,29 @@ function baseShapeSVG(s){
  else if(s.kind==='ellipse')geometry='<ellipse cx=".5" cy=".5" rx=".48" ry=".48"/>';
  else if(s.kind==='heart')geometry='<path d="M.5 .95 C-.1 .55 -.05 .05 .25 .05 C.4 .05 .5 .2 .5 .25 C.5 .2 .6 .05 .75 .05 C1.05 .05 1.1 .55 .5 .95 Z"/>';
  else if(s.kind==='arrow')geometry='<path d="M.03 .35 H.62 V.08 L.97 .5 L.62 .92 V.65 H.03 Z"/>';
+ else if(['linedNote','checklistTable','weeklyTable','habitTracker','calendarTable'].includes(s.kind)){
+  const lines=[];
+  const grid=(cols,rows,{left=.04,top=.08,right=.96,bottom=.94}={})=>{
+   for(let i=1;i<cols;i++){const x=left+(right-left)*i/cols;lines.push(`M${x} ${top}V${bottom}`);}
+   for(let i=1;i<rows;i++){const y=top+(bottom-top)*i/rows;lines.push(`M${left} ${y}H${right}`);}
+  };
+  if(s.kind==='linedNote'){
+   for(let i=0;i<6;i++){const y=.21+i*.13;lines.push(`M.10 ${y}H.94`);}lines.push('M.08 .10V.92');
+  }else if(s.kind==='checklistTable'){
+   grid(1,5);for(let i=0;i<5;i++){const y=.08+i*.172+.086;lines.push(`M.09 ${y-.035}h.07v.07h-.07Z`,`M.21 ${y+.035}H.91`);}
+  }else if(s.kind==='weeklyTable'){
+   grid(7,3);lines.push('M.04 .20H.96');
+   for(let i=0;i<7;i++){const x=.04+.92*(i+.5)/7;lines.push(`M${x-.023} .13H${x+.023}`);}
+  }else if(s.kind==='habitTracker'){
+   grid(7,5,{left:.18});lines.push('M.04 .08H.96','M.18 .08V.94');
+   for(let row=0;row<5;row++)for(let col=0;col<7;col++){
+    const x=.18+.78*(col+.5)/7,y=.08+.86*(row+.5)/5;
+    lines.push(`M${x-.018} ${y}a.018 .018 0 1 0 .036 0a.018 .018 0 1 0 -.036 0`);
+   }
+  }else grid(7,6);
+  geometry='<rect x=".04" y=".08" width=".92" height=".86" rx=".018" fill="none"/>'+
+    '<path d="'+lines.join(' ')+'" fill="none" stroke-linecap="round"/>';
+ }
  else if(['grid','dots','stripes'].includes(s.kind)){const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,''),px=18/Math.max(1,s.width),py=18/Math.max(1,s.height);geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+sw+'" fill="'+stroke+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none"'+(s.kind==='stripes'?' transform="rotate(45)"':'')+'/>')+'</pattern></defs><rect width="1" height="1" fill="url(#'+id+')" stroke="none"/>';}
  else geometry='<rect x=".015" y=".015" width=".97" height=".97" rx="'+(['roundedRectangle','frame','checkbox'].includes(s.kind)?Math.max(0,Math.min(.5,s.cornerRadius??.1)):'0')+'"/>';
  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%" fill="'+fill+'" fill-opacity="'+fillOpacity+'" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(strokeDashes||'none')+'" stroke-width="'+sw+'">'+geometry+'</svg>';

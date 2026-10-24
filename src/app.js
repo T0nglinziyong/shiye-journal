@@ -11,6 +11,7 @@ import {automaticAssetClassification} from './asset-automatic-classification.js'
 import {importDefaultTitle} from './import-default-names.js';
 // Production deployment refresh marker: 2026-10-04
 import {materialKindName} from './material-taxonomy.js';
+import {withCreativePresetAssets,isCreativePreset} from './creative-presets.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
@@ -1324,7 +1325,7 @@ async function runAppAction(action,id,value){try{
     addMatchingFromLibrary(state,[state.detailAssetID]);
     void matchingSession.persist().catch(console.warn);
     updateShell({basketCount:state.basket.length});
-    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
+    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':if(!isCreativePreset(asset(state.detailAssetID)))openDetail(state.detailAssetID);break;case 'detail-check':if(!isCreativePreset(asset(state.detailAssetID)))await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':if(!isCreativePreset(asset(state.detailAssetID)))await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'series-add-cancel':{
     const seriesID=state.addingToSeries;
     state.addingToSeries=null;finishSelection(parity);state.seriesID=seriesID;route('library');break;
@@ -1332,6 +1333,8 @@ async function runAppAction(action,id,value){try{
   case 'series-add-confirm':{
     const seriesID=state.addingToSeries;
     if(!seriesID||!parity.selected.size)break;
+    if(state.assets.some(entry=>parity.selected.has(entry.id)&&isCreativePreset(entry)))
+      throw Error('预设素材属于公共图库，不能修改所属系列');
     const revised=state.assets.filter(entry=>parity.selected.has(entry.id))
       .map(entry=>({...entry,seriesID}));
     await db.transaction(['assets'],tx=>{for(const entry of revised)tx.objectStore('assets').put(entry);});
@@ -1882,7 +1885,7 @@ async function runAppAction(action,id,value){try{
   }
   case 'fabric-add-material':{
     const a=asset(id),d=current();if(!a||!d)break;
-    if(a.kind!=='tape'&&d.items.some(item=>item.assetID===a.id)){
+    if(a.kind!=='tape'&&!a.isCreativePreset&&d.items.some(item=>item.assetID===a.id)){
       toast('此方案已取用这件素材；可以编辑或裁切已有素材');break;
     }
     if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){
@@ -1891,7 +1894,7 @@ async function runAppAction(action,id,value){try{
     checkpoint();
     const item=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,
       Math.max(0,...d.layers.map(node=>node.zIndex||0))+1);
-    item.materialUnitIndex=a.kind==='tape'
+    item.materialUnitIndex=a.kind==='tape'||a.isCreativePreset
       ?Math.max(-1,...d.items.filter(existing=>existing.assetID===a.id)
         .map(existing=>existing.materialUnitIndex??0))+1:0;
     insertSceneLayer(d,item,{policy:USER_SCENE_POLICY});
@@ -2448,6 +2451,7 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
   const rows=Object.fromEntries(stores.map((store,index)=>[store,values[index]]));
   for(const store of stores){if(store==='meta')state.userTemplates=journalTemplateRecords(rows.meta);
     else state[store]=rows[store];}
+  if(stores.includes('assets'))state.assets=withCreativePresetAssets(state.assets);
   const meta=rows.meta;
   // Authenticated account metadata synchronizes display and all AI settings,
   // including provider-specific keys. Never serialize credentials into task ZIPs.
@@ -2727,6 +2731,7 @@ async function openCutoutCheck(id,candidate=null){
 }
 function openDetail(id){
   const record=state.assets.find(item=>item.id===id);if(!record)return;
+  if(isCreativePreset(record)){toast('预设素材为公共图库，加入创作后可在画布中编辑');return;}
   openOverlay(createElement(AssetEditorDialog,{asset:record,series:state.series,
     used:usedAssetIDs(state.assets).has(id),src:image(record.blobId)||record.staticPath,
     onClose:closeOverlay,onSave:async values=>{
@@ -3630,7 +3635,8 @@ async function openSyncDetails(){
       },onRebuild:async()=>{
         syncPausedByUser=false;
         await flushSave();
-        await db.rebuildPendingSync({projects:state.projects,assets:state.assets,
+        await db.rebuildPendingSync({projects:state.projects,
+          assets:state.assets.filter(entry=>!isCreativePreset(entry)),
           series:state.series,trash:state.trash});
         void cloudResumer.resume();
         const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
@@ -3732,6 +3738,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
   const cached=await db.cachedCollections();if(cached){
     const {meta:cachedMeta,...collections}=cached;
     Object.assign(state,collections);state.accountId=accountId;
+    state.assets=withCreativePresetAssets(state.assets);
     if(cachedMeta){
       const preferences=cloudPreferencesFromMeta(cachedMeta);
       const aiSettings=cloudAISettingsFromMeta(cachedMeta);
