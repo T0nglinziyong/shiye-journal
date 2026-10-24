@@ -426,7 +426,7 @@ export function mountCanvasEditor(c){
       if(o.vectorLayers)vectorColors(o,fields);
       else {
         const heading=document.createElement('h3');heading.textContent='图形外观';fields.append(heading);
-        for(const [key,name] of [['fill','填充颜色'],['stroke','边框颜色']]){
+        for(const [key,name] of [['fill','填充颜色'],['stroke',o.kind==='paperclip'?'回形针颜色':'边框颜色']]){
           const row=document.createElement('label');row.className='canvas-setting shape-color-control';row.textContent=name;
           const color=document.createElement('input');color.type='color';color.value=o[key]||'#ffffff';color.setAttribute('aria-label',name);
           color.onchange=()=>mutate(key,color.value);row.append(color);
