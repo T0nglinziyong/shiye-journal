@@ -13,6 +13,7 @@ import {importDefaultTitle} from './import-default-names.js';
 import {materialKindName} from './material-taxonomy.js';
 import {withCreativePresetAssets,isCreativePreset} from './creative-presets.js';
 import {advancedShapeControls,validateShapeOptions} from './advanced-shape-options.js';
+import {parseEditableGeometry} from './editable-geometry.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
@@ -1057,6 +1058,10 @@ function updateEditorInspector(id,value){
       const next=control.type==='boolean'?value:Number(value);
       values.shapeOptions={...entry.value.shapeOptions,[option]:next};
       validateShapeOptions(entry.value.kind,values.shapeOptions);changed=true;
+    }else if(id==='inspector-vector-geometry'&&entry.kind==='shape'){
+      if(!Array.isArray(value)||!(entry.value.vectorLayers?.length||entry.value.vectorPaths?.length))return;
+      const geometryKind=entry.value.vectorLayers?.length?'layers':'paths';
+      values[geometryKind==='layers'?'vectorLayers':'vectorPaths']=parseEditableGeometry(JSON.stringify(value),geometryKind);changed=true;
     }else if(id==='inspector-fill'&&entry.kind==='shape'&&color.test(value)){values.fill=value;changed=true;}
     else if(id==='inspector-stroke'&&entry.kind==='shape'&&color.test(value)){values.stroke=value;changed=true;}
     else if(id==='inspector-stroke-dash'&&entry.kind==='shape'&&['solid','dash','dot'].includes(value)){

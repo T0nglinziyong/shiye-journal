@@ -8,6 +8,7 @@ import {project,itemFromAsset,textBlock} from '../src/domain.js';
 import {attachSceneV2} from '../src/scene-v2.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
 import {assetSourceRevision} from '../src/material-anatomy.js';
+import {taskFingerprint} from '../src/task-fingerprint.js';
 import {applyWebSceneCommands,compileWebSceneInput,validateWebScene,webSceneDocument} from '../src/web-scene-workbench.js';
 import {validateMaterialDecisions} from '../src/creation-material-decisions.js';
 import {linkTestCanvas,tinyPNG} from './offline-canvas-test-support.mjs';
@@ -35,6 +36,19 @@ const fixture=async(p=project('图层测试'),sourceAssets=assets,withImages=fal
  return {task,files,doc};
 };
 const mask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[.2,.2],[.3,.2],[.3,.3],[.2,.3]]]};
+test('finished artwork imports after a compatible Scene schema revision',async()=>{
+ const {doc}=await fixture(),earlier=structuredClone(doc);
+ earlier.source.schemaHash='fnv1a32:530725b0';
+ earlier.source.taskHash=await taskFingerprint(earlier.source);
+ assert.throws(()=>validateWebScene(earlier.page,earlier.source,assets),/合同已变化/);
+ const imported=importEditableWork(JSON.stringify(earlier),assets);
+ assert.equal(imported.drafts[0].layers.length,earlier.page.layers.length);
+ assert.deepEqual(imported.candidateAssetIDs,['a']);
+ const tampered=structuredClone(earlier);tampered.page.unrecognizedField=true;
+ assert.throws(()=>importEditableWork(JSON.stringify(tampered),assets),/静态 Scene 字段/);
+ const brokenTask=structuredClone(earlier);brokenTask.source.schemaHash='fnv1a32:00000000';
+ assert.throws(()=>importEditableWork(JSON.stringify(brokenTask),assets),/指纹不匹配/);
+});
 test('compact page instructions compile all visual layers and material decisions',async()=>{
  const {doc,files}=await fixture();
  const input=JSON.parse(strFromU8(files['examples/instructions.json']));

@@ -13,6 +13,7 @@ const star=(ctx,cx,cy,r,inner=.48,points=5)=>{ctx.beginPath();for(let i=0;i<poin
   const a=-Math.PI/2+i*Math.PI/points,rad=i%2?r*inner:r,x=cx+Math.cos(a)*rad,y=cy+Math.sin(a)*rad;
   i?ctx.lineTo(x,y):ctx.moveTo(x,y);
 }ctx.closePath();};
+const centeredText=(ctx,text,x,y,maxWidth,font)=>{ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=font;ctx.fillText(text,x,y,maxWidth);ctx.restore();};
 const tapeOutline=(ctx,w,h)=>{ctx.beginPath();ctx.moveTo(0,1);for(let x=0;x<=w;x+=2)ctx.lineTo(x,0.6+Math.sin(x*2.7)*.42);
   ctx.lineTo(w,h-1);for(let x=w;x>=0;x-=2)ctx.lineTo(x,h-.6+Math.sin(x*2.3)*.42);ctx.closePath();};
 function tape(ctx,kind){
@@ -66,8 +67,8 @@ function tape(ctx,kind){
       }
       ctx.strokeStyle='rgba(94,139,161,.5)';ctx.lineWidth=.25;line(ctx,[[x,9.5],[x+20,9.5]]);ctx.stroke();
     }else if(kind==='vintage-script-tape'){
-      ctx.fillStyle='#7d6757';ctx.font='italic 3.2px serif';ctx.fillText('little moments',x+1,5.5);
-      ctx.font='italic 2.4px serif';ctx.fillText('collected today  /  10.24',x+1,9.1);
+      ctx.fillStyle='#7d6757';centeredText(ctx,'little moments',x+10,4.5,17.5,'italic 3px serif');
+      centeredText(ctx,'collected notes',x+10,8.1,17.5,'italic 2.4px serif');
       ctx.strokeStyle='rgba(129,104,77,.5)';ctx.lineWidth=.25;line(ctx,[[x,1.8],[x+20,1.8]]);ctx.stroke();
     }
   }
@@ -113,16 +114,16 @@ function paperStar(ctx){
 function dayPostmark(ctx){
   const x=16,y=16;ctx.strokeStyle='#a35e58';ctx.fillStyle='#a35e58';ctx.lineWidth=.9;
   circle(ctx,x,y,12.5);ctx.stroke();circle(ctx,x,y,10.7);ctx.lineWidth=.4;ctx.stroke();
-  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 4.7px serif';ctx.fillText('TODAY',x,12.8);
-  ctx.font='3px sans-serif';ctx.fillText('DAILY NOTES',x,20.5);
+  centeredText(ctx,'TODAY',x,12.8,18,'bold 4.7px serif');
+  centeredText(ctx,'DAILY NOTES',x,20.5,17,'3px sans-serif');
   for(const dx of [-7.4,7.4]){star(ctx,x+dx,y,.9,.38,4);ctx.fill();}
   ctx.lineWidth=.4;line(ctx,[[10.2,16.1],[21.8,16.1]]);ctx.stroke();
 }
 function archiveMark(ctx){
   ctx.strokeStyle='#556c80';ctx.fillStyle='#556c80';ctx.lineWidth=.75;ctx.strokeRect(1.4,1.4,38.2,21.2);
-  ctx.lineWidth=.28;ctx.strokeRect(2.7,2.7,35.6,18.6);ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.font='bold 7.2px serif';ctx.fillText('ARCHIVE',20.5,10.5);
-  ctx.font='3.1px sans-serif';ctx.fillText('SHIYE  ·  PAPER NOTES',20.5,17.1);
+  ctx.lineWidth=.28;ctx.strokeRect(2.7,2.7,35.6,18.6);
+  centeredText(ctx,'ARCHIVE',20.5,10.5,29,'bold 7.2px serif');
+  centeredText(ctx,'SHIYE  ·  PAPER NOTES',20.5,17.1,30,'3.1px sans-serif');
   for(const x of [5,36]){star(ctx,x,10,.85,.4,4);ctx.fill();}
 }
 function flowerSeal(ctx){
@@ -179,18 +180,18 @@ function stamp(ctx,kind){
     'library-date':'#647a69','ticket-seal':'#ad6d62','field-note-seal':'#75856f'};
   const w={'travel-postmark':39,'coffee-seal':31,'night-seal':31,'library-date':39,'ticket-seal':40,'field-note-seal':39}[kind];
   const h={'travel-postmark':28,'coffee-seal':31,'night-seal':31,'library-date':24,'ticket-seal':25,'field-note-seal':26}[kind];
-  ctx.strokeStyle=colors[kind];ctx.fillStyle=colors[kind];ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=.65;
+  ctx.strokeStyle=colors[kind];ctx.fillStyle=colors[kind];ctx.lineWidth=.65;
   if(['coffee-seal','night-seal'].includes(kind)){
     circle(ctx,w/2,h/2,12);ctx.stroke();circle(ctx,w/2,h/2,10.2);ctx.lineWidth=.3;ctx.stroke();
-    if(kind==='night-seal'){ctx.beginPath();ctx.arc(15.5,14,5,-1.3,1.9);ctx.arc(18,12,4.2,1.8,-1.3,true);ctx.fill();star(ctx,22,9,1.5,.4,4);ctx.fill();}
-    else{ctx.strokeRect(11,12,12,8);ctx.beginPath();ctx.arc(24,16,3,-Math.PI/2,Math.PI/2);ctx.stroke();}
-    ctx.font='bold 2.5px sans-serif';ctx.fillText(kind==='night-seal'?'GOOD NIGHT':'SLOW COFFEE',w/2,25);
+    if(kind==='night-seal'){ctx.beginPath();ctx.arc(15.5,12.4,4,-1.3,1.9);ctx.arc(18,10.8,3.4,1.8,-1.3,true);ctx.fill();star(ctx,22,8.8,1.3,.4,4);ctx.fill();}
+    else{ctx.strokeRect(11,10.7,12,7);ctx.beginPath();ctx.arc(24,14.2,2.8,-Math.PI/2,Math.PI/2);ctx.stroke();}
+    centeredText(ctx,kind==='night-seal'?'GOOD NIGHT':'SLOW COFFEE',w/2,21,15,'bold 2.5px sans-serif');
   }else{
     ctx.strokeRect(1.3,1.3,w-2.6,h-2.6);ctx.strokeRect(2.4,2.4,w-4.8,h-4.8);
-    if(kind==='travel-postmark'){ctx.font='bold 5px serif';ctx.fillText('POSTCARD',w/2,11);ctx.font='2.7px sans-serif';ctx.fillText('FROM THIS MOMENT',w/2,19);}
-    else if(kind==='library-date'){ctx.font='bold 5px serif';ctx.fillText('READ TODAY',w/2,9);ctx.font='3px monospace';ctx.fillText('____ / ____ / ____',w/2,17);}
-    else if(kind==='ticket-seal'){ctx.font='bold 5px serif';ctx.fillText('ADMIT ONE',w/2,10);ctx.font='2.6px sans-serif';ctx.fillText('A LITTLE JOY',w/2,17);}
-    else{ctx.font='bold 5px serif';ctx.fillText('FIELD NOTES',w/2,10);ctx.font='2.6px sans-serif';ctx.fillText('COLLECTED OUTSIDE',w/2,18);}
+    if(kind==='travel-postmark'){centeredText(ctx,'POSTCARD',w/2,11,w-9,'bold 5px serif');centeredText(ctx,'FROM THIS MOMENT',w/2,19,w-9,'2.7px sans-serif');}
+    else if(kind==='library-date'){centeredText(ctx,'READ TODAY',w/2,9,w-9,'bold 5px serif');centeredText(ctx,'____ / ____ / ____',w/2,17,w-9,'3px monospace');}
+    else if(kind==='ticket-seal'){centeredText(ctx,'ADMIT ONE',w/2,10,w-9,'bold 5px serif');centeredText(ctx,'A LITTLE JOY',w/2,17,w-9,'2.6px sans-serif');}
+    else{centeredText(ctx,'FIELD NOTES',w/2,10,w-9,'bold 5px serif');centeredText(ctx,'COLLECTED OUTSIDE',w/2,18,w-9,'2.6px sans-serif');}
   }
 }
 const drawers={'sage-check-tape':tape,'blue-rule-tape':tape,'coral-dot-tape':tape,

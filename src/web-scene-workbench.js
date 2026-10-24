@@ -55,9 +55,12 @@ function retainedMaterialArea(item,parents,draft){
   return geometryArea(geometry)/(item.width*item.height)*crop.width*crop.height;
 }
 const materialGeometry=n=>[n.assetID,n.width,n.height,n.cropRect,n.materialMask,n.materialUnitIndex,n.sourceBlobId,n.sourceStaticPath];
-export function validateWebScene(page,source,assets,{final=true}={}){
+export function validateWebScene(page,source,assets,{final=true,requireCurrentSchema=true}={}){
   validatePackageValue(page);assertTaskFingerprintSync(source);
-  if(source.schemaHash!==schemaFingerprint(webSceneContract))throw Error('网页版 Scene 合同已变化，请重新导出任务');
+  // A finished Scene is data, not a command against the package's bundled
+  // runtime. Validate it against the current contract and physical rules even
+  // when an older task embedded a different (but compatible) schema hash.
+  if(requireCurrentSchema&&source.schemaHash!==schemaFingerprint(webSceneContract))throw Error('网页版 Scene 合同已变化，请重新导出任务');
   if(!page||Object.keys(page).some(key=>!pageFields.has(key)))throw Error('page 只接受静态 Scene 字段，不接受工具日志、脚本或交互组件');
   validateValue(page,webSceneContract,'$.page');
   const base=validateCraftTask(source,assets),d=attachSceneV2(structuredClone(page));
@@ -114,7 +117,7 @@ export function importWebScene(input,assets,{trustedSource=null}={}){
   if(input.source?.taskBinding!=='local'||input.source?.packageLayout!=='v3')throw Error('创作包来源格式无效');
   assertTaskFingerprintSync(input.source);
   if(trustedSource&&!same(input.source,trustedSource))throw Error('作品来源与所选原始任务不一致');
-  const d=validateWebScene(input.page,input.source,assets),s=input.source;
+  const d=validateWebScene(input.page,input.source,assets,{requireCurrentSchema:false}),s=input.source;
   if(input.materialDecisions?.length)validateMaterialDecisions(input.materialDecisions,d,s);
   recordManagedChanges(attachSceneV2(structuredClone(input.source.baseDraft)),d);
   d.agentRun={status:'finished',visualReview:'须在 App 复核最终画面'};
