@@ -13,6 +13,10 @@ import {assetFromSourceSnapshot} from '../src/material-anatomy.js';
 import {toolContracts,validateValue} from '../src/creative-contract.js';
 
 test('each parametric preset exposes bounded editable controls',()=>{
+  assert.deepEqual(advancedShapeControls('grid').map(control=>control.key),
+    ['rows','columns','showOuterBorder']);
+  assert.doesNotThrow(()=>validateShapeOptions('grid',{spacing:18}),
+    'existing saved grids keep their spacing until explicitly reconfigured');
   assert.deepEqual([...advancedShapeOptionKinds].sort(),advancedShapes.map(([kind])=>kind).filter(kind=>kind!=='vector').sort());
   for(const kind of advancedShapeOptionKinds){
     const controls=advancedShapeControls(kind);assert.ok(controls.length>0,kind);

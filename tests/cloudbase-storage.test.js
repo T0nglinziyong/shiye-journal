@@ -52,3 +52,16 @@ test('a thrown duplicate is verified, while unrelated upload failures remain vis
   error=Object.assign(Error('permission denied'),{statusCode:403});
   await assert.rejects(store.upload('owner/old-photo',new Blob(['old-photo'])),/permission denied/);
 });
+
+test('a lost upload response is acknowledged only after the immutable object is found',async()=>{
+  let committed=true,probes=0;
+  const store=createCloudBaseStorage({storage:()=>({from:()=>({
+    upload:async()=>{throw Object.assign(Error('network request failed'),{name:'TypeError'});},
+    exists:async()=>{probes++;return {data:committed,error:null};}
+  })})});
+  await store.upload('owner/content-hash',new Blob(['bytes']));
+  assert.equal(probes,1);
+  committed=false;
+  await assert.rejects(store.upload('owner/missing-hash',new Blob(['bytes'])),/network request failed/);
+  assert.equal(probes,2);
+});
