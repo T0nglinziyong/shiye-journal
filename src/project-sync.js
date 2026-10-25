@@ -409,6 +409,14 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
               if(await splitConflictingBatch(row))continue;
               throw failure;
             }
+            // A server 409 with no newer revision visible cannot be safely
+            // rebased. A read replica or a concurrently finishing commit may
+            // simply not have exposed the new cursor yet. Keep the exact row
+            // and let the durable retry timer recheck it instead of spinning
+            // three synchronous commits and reporting a false manual conflict.
+            if(failureClass(failure)==='conflict')
+              throw markSyncPhase(new Error('云端版本尚未刷新；本机修改已保留，将稍后自动核对',{cause:failure}),
+                failure.syncPhase||'上传当前待同步记录');
             // Unchanged server revision means an unconfirmed upload, not a
             // competing edit. Retain the row for the normal retry path.
             throw markSyncPhase(new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure}),failure.syncPhase||'上传当前待同步记录');

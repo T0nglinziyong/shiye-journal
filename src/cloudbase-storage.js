@@ -24,6 +24,13 @@ export function createCloudBaseStorage({storage,bucketId=SHIYE_STORAGE_BUCKET,en
       /\bSTORAGE_KEY_ALREADY_EXISTS\b|\bresource already exists\b/i.test(message)||
       Number(error?.statusCode||error?.status)===409;
   };
+  const mayHaveReachedServer=error=>{
+    const status=Number(error?.statusCode||error?.status||error?.cause?.statusCode||error?.cause?.status);
+    // A lost upload response can arrive as a network exception, a timeout or
+    // a gateway error. Never turn explicit auth/validation rejections into a
+    // successful upload merely because an old object happens to exist.
+    return ![400,401,403,404,413,422].includes(status);
+  };
   return {enabled,provider:'cloudbase',defaultProvider:'cloudbase',setDiagnosticReporter:callback=>{report=typeof callback==='function'?callback:()=>{};},
     probe:path=>run('storage-probe',()=>exists(path)),
     download:path=>run('storage-get',async()=>{
@@ -53,8 +60,8 @@ export function createCloudBaseStorage({storage,bucketId=SHIYE_STORAGE_BUCKET,en
       }catch(error){
         // A retry after a lost response can find the same immutable object.
         // CloudBase reports this by code/message, often without HTTP status.
-        if(isExistingKey(error)||isExistingKey(error?.cause)){
-          if(await exists(path))return;
+        if(isExistingKey(error)||isExistingKey(error?.cause)||mayHaveReachedServer(error)){
+          try{if(await exists(path))return;}catch{/* Preserve the original upload error. */}
         }
         throw error;
       }

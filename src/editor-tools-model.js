@@ -108,7 +108,13 @@ function baseShapeSVG(s){
   geometry=(opts.showOuterBorder?'<rect x=".04" y=".08" width=".92" height=".86" rx=".018" fill="none" stroke="'+stroke+'"/>':'')+
     '<path d="'+lines.join(' ')+'" fill="none" stroke="'+stroke+'" stroke-linecap="round"/>';
  }
- else if(['grid','dots','stripes'].includes(s.kind)){const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,''),px=opts.spacing/Math.max(1,s.width),py=opts.spacing/Math.max(1,s.height);geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+opts.dotSize/Math.max(1,s.width,s.height)+'" fill="'+stroke+'"/>':s.kind==='stripes'?'<path d="M0 '+py/2+' H'+px+'" transform="rotate('+opts.angle+' '+px/2+' '+py/2+')" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>')+'</pattern></defs><rect width="1" height="1" fill="url(#'+id+')" stroke="none"/>'+(opts.showOuterBorder?'<rect x=".005" y=".005" width=".99" height=".99" fill="none" stroke="'+stroke+'"/>':'');}
+ else if(['grid','dots','stripes'].includes(s.kind)){
+  const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,'');
+  const fixedGrid=s.kind==='grid'&&(Object.hasOwn(s.shapeOptions||{},'rows')||Object.hasOwn(s.shapeOptions||{},'columns'));
+  const px=fixedGrid?1/opts.columns:opts.spacing/Math.max(1,s.width);
+  const py=fixedGrid?1/opts.rows:opts.spacing/Math.max(1,s.height);
+  geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+opts.dotSize/Math.max(1,s.width,s.height)+'" fill="'+stroke+'"/>':s.kind==='stripes'?'<path d="M0 '+py/2+' H'+px+'" transform="rotate('+opts.angle+' '+px/2+' '+py/2+')" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>')+'</pattern></defs><rect width="1" height="1" fill="url(#'+id+')" stroke="none"/>'+(opts.showOuterBorder?'<rect x=".005" y=".005" width=".99" height=".99" fill="none" stroke="'+stroke+'"/>':'');
+ }
  else geometry='<rect x=".015" y=".015" width=".97" height=".97" rx="'+(['roundedRectangle','frame','checkbox'].includes(s.kind)?Math.max(0,Math.min(.5,s.cornerRadius??.1)):'0')+'"/>';
  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%" fill="'+fill+'" fill-opacity="'+fillOpacity+'" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(strokeDashes||'none')+'" stroke-width="'+sw+'">'+geometry+'</svg>';
 }

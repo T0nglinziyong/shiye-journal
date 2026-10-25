@@ -6,8 +6,35 @@ import {createCanvas,loadImage} from 'canvas';
 import * as fabric from 'fabric/node';
 import {createFabricSceneBridge} from '../src/fabric-scene-bridge.js';
 import {renderSceneCanvas} from '../src/scene-renderer.js';
+import {configureShape,shapeSVG} from '../src/editor-tools-model.js';
 
 const bridge=createFabricSceneBridge(fabric);
+
+test('patterned advanced shapes keep their chosen colour and cell counts in the actual Fabric canvas',async()=>{
+  const canvas=new fabric.StaticCanvas(null,{width:230,height:170,backgroundColor:'#ffffff'});
+  try{
+    for(const kind of ['grid','dots','stripes']){
+      canvas.clear();canvas.backgroundColor='#ffffff';
+      const node={...configureShape({id:kind},kind),type:'shape',x:112,y:82,
+        width:150,height:105,stroke:'#527da4',shapeOptions:kind==='grid'?{rows:4,columns:6}:undefined};
+      const object=await bridge.fromNode(node);
+      canvas.add(object);canvas.renderAll();
+      const pixels=canvas.getContext().getImageData(0,0,230,170).data;
+      let black=0,blue=0;
+      for(let i=0;i<pixels.length;i+=4){
+        if(pixels[i]<45&&pixels[i+1]<45&&pixels[i+2]<45)black++;
+        if(pixels[i+2]>pixels[i]&&pixels[i+1]>pixels[i])blue++;
+      }
+      assert.equal(black,0,`${kind} painted a black block`);
+      assert.ok(blue>100,`${kind} lost its chosen colour`);
+      if(kind==='grid'){
+        const before=shapeSVG(node);
+        node.shapeOptions={rows:8,columns:3};
+        assert.notEqual(shapeSVG(node),before,'row and column edits must change the actual Scene projection');
+      }
+    }
+  }finally{await canvas.dispose();}
+});
 
 test('Fabric projects a Scene shape without changing its saved geometry',async()=>{
   const node={id:'shape-1',type:'shape',kind:'roundedRectangle',x:230,y:160,

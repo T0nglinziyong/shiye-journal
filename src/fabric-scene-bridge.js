@@ -4,7 +4,7 @@ import {scaleTextEffects} from './text-effects.js';
 import {applyScenePatchBatch} from './scene-edit-kernel.js';
 import {USER_SCENE_POLICY,requireScenePolicy,confirmSceneCapability} from './scene-edit-policy.js';
 import {findSceneNode} from './scene-v2.js';
-import {shapeSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
+import {shapeSVG,shapeThumbnailSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {geometryIntersection} from './craft-topology.js';
 import {validateVectorMask} from './scene-v2.js';
@@ -155,13 +155,27 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     }
     let object;
     if(node.type==='shape'){
-      const {objects,options}=await fabric.loadSVGFromString(shapeSVG(node));
-      if(!objects.length)throw Error('图形无法由画布引擎解析：'+node.id);
-      object=fabric.util.groupSVGElements(objects,options);
+      // Fabric keeps SVG pattern paints as unresolved url(#...) strings and
+      // paints them black. Decode only patterned shapes through the browser's
+      // SVG image renderer, which is also used by the Scene PNG exporter.
+      const patterned=['grid','dots','stripes'].includes(node.kind);
+      let options;
+      if(patterned){
+        const svg=shapeThumbnailSVG(node);
+        object=await fabric.FabricImage.fromURL('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));
+        options={width:object.width,height:object.height,
+          viewBoxWidth:object.width,viewBoxHeight:object.height};
+      }else{
+        const parsed=await fabric.loadSVGFromString(shapeSVG(node));
+        if(!parsed.objects.length)throw Error('图形无法由画布引擎解析：'+node.id);
+        object=fabric.util.groupSVGElements(parsed.objects,parsed.options);
+        options=parsed.options;
+      }
       if(hasGraphicEffects(node)){
         const frame=graphicPaintFrame(node),a=(node.rotation||0)*Math.PI/180,dx=(frame.right-frame.left)/2,dy=(frame.bottom-frame.top)/2;
         object.sceneFrameWidth=node.width;object.sceneFrameHeight=node.height;object.scenePaintInsets=frame;
-        object.set({originX:'center',originY:'center',left:node.x+dx*Math.cos(a)-dy*Math.sin(a),top:node.y+dx*Math.sin(a)+dy*Math.cos(a),scaleX:1,scaleY:1});
+        object.set({originX:'center',originY:'center',left:node.x+dx*Math.cos(a)-dy*Math.sin(a),top:node.y+dx*Math.sin(a)+dy*Math.cos(a),
+          scaleX:patterned?frame.width/object.width:1,scaleY:patterned?frame.height/object.height:1});
       }else{
         object.sceneFrameWidth=positive(options.viewBoxWidth||options.width);object.sceneFrameHeight=positive(options.viewBoxHeight||options.height);
         object.set({originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),scaleX:positive(node.width)/object.sceneFrameWidth,scaleY:positive(node.height)/object.sceneFrameHeight});
