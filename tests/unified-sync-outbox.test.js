@@ -27,6 +27,13 @@ test('a dependent card reads the shared blob without claiming to modify it',()=>
    {store:'blobs',id:'cut'},{store:'blobs',id:'photo',readOnly:true}]);
 });
 
+test('a work waits for its pending imported material without claiming to edit it',()=>{
+ const work=project('journal');
+ work.drafts[0].layers=[{id:'cutout',type:'material',assetID:'new-sticker'}];
+ assert.deepEqual(syncAffectedKeys(syncEnvelope('project',work)),[
+   {store:'projects',id:'journal'},{store:'assets',id:'new-sticker',readOnly:true}]);
+});
+
 test('older work wins only when its last actual edit timestamp is newer',()=>{
  const cloud={updatedAt:'2026-10-12T08:00:02Z'};
  assert.equal(latestEditedProject({updatedAt:'2026-10-12T08:00:03Z'},cloud),'local');

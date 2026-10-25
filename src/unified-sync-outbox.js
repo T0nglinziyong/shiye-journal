@@ -1,4 +1,5 @@
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
+import {sceneMaterialIDs} from './scene-material-references.js';
 
 export const syncEnvelope=(kind,record)=>({
   id:(kind==='project'?'project:':'batch:')+record.id,kind,payload:record
@@ -66,7 +67,10 @@ export function foldLegacySyncRows(unified=[],projects=[],imports=[],quarantine=
  return {rows:next,quarantine:held};
 }
 export const syncAffectedKeys=envelope=>envelope.kind==='project'
-  ?[{store:'projects',id:envelope.payload.id}]
+  ?[{store:'projects',id:envelope.payload.id},
+    // An imported material must reach the cloud before a work can refer to it.
+    // These are read dependencies, not writes to the material record.
+    ...sceneMaterialIDs(envelope.payload).map(id=>({store:'assets',id,readOnly:true}))]
   :[
     ...(envelope.payload.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||
       ['assets','blobs','projects'].flatMap(store=>(envelope.payload[store]||[]).map(item=>({store,id:item.id})))),

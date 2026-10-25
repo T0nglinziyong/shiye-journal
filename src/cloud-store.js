@@ -1182,7 +1182,11 @@ async function verifyNewProjectSources(operations){
     for(const row of rows)found.add(row.id);
   }
   const missing=ids.filter(id=>!found.has(id));
-  if(missing.length)throw Error('作品引用的素材尚未同步到云端；作品保留在本机待重试：'+missing.join('、'));
+  if(missing.length){
+    const error=Error('作品引用的素材尚未同步到云端；请等待素材同步完成，作品已留在本机');
+    error.code='SHIYE_SOURCE_PENDING';
+    throw markSyncPhase(error,'核对作品素材引用');
+  }
 }
 function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionOverride=null,background=false){
   assertAccountWritable();
@@ -1195,8 +1199,9 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
     await identity();if(revision===undefined)await version();
     const previous=revision;
     const commitBase=baseRevisionOverride??previous;
-    await protectReferencedAssetDeletes(operations);
-    await verifyNewProjectSources(operations);
+    try{await protectReferencedAssetDeletes(operations);
+      await verifyNewProjectSources(operations);}
+    catch(error){throw markSyncPhase(error,'核对作品素材引用');}
     operations.push(...recordTombstones(operations).slice(operations.length));
     const puts=operations.filter(op=>op.action==='put'),auxiliary=auxiliaryBlobIDs(operations);activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
     for(let offset=0;offset<puts.length;offset+=3)try{

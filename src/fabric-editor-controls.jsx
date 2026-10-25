@@ -116,6 +116,7 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
 
 function ShapePicker({draft,onPick}){
   const [tab,setTab]=useState('common');
+  const picked=useRef(false);
   const choices=tab==='used'?(draft.layers||[]).filter(node=>node.type==='shape'&&!node.hidden)
     .map(node=>[node.id,node.kind==='vector'?'自定义图形':node.kind,node]):
     tab==='advanced'?advancedShapes:commonShapes;
@@ -125,7 +126,9 @@ function ShapePicker({draft,onPick}){
   </div><div className="canvas-picker-grid">{choices.length?choices.map(([id,label,copy])=>{
     const sample=copy||configureShape(primitive(id,draft),id);
     const image='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(shapeThumbnailSVG(sample));
-    return <button key={id} type="button" data-shape-kind={copy?'used':id} onClick={()=>onPick(copy||id)}>
+    return <button key={id} type="button" data-shape-kind={copy?'used':id}
+      onClick={event=>{event.stopPropagation();if(picked.current)return;
+        picked.current=true;onPick(copy||id);}}>
       <img src={image} alt=""/><span>{label}</span></button>;
   }):<p>这一页还没有图形。</p>}</div></>;
 }

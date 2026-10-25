@@ -162,6 +162,7 @@ try{
   assert.equal(await evaluate('document.querySelector("[data-val=tape]")?.getAttribute("aria-pressed")'),'false');
   await click('[data-val="tape"]','.swift-tape-picker');
   await click('.swift-tape-picker .canvas-material-search');
+  await evaluate('document.querySelector(".swift-tape-picker .canvas-material-search").focus()');
   await command('Input.insertText',{text:'连续'});
   assert.equal(await evaluate('document.querySelectorAll(".swift-tape-picker [data-tape-id]").length'),1);
   await click('.swift-tape-picker [data-tape-id="demo-repeat-tape"]');

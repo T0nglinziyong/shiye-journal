@@ -1,6 +1,40 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProjectSync} from '../src/project-sync.js';
+import {syncAffectedKeys,syncEnvelope} from '../src/unified-sync-outbox.js';
+
+test('a work does not upload before its imported material while independent work proceeds',async()=>{
+  const material=syncEnvelope('batch',{id:'import',names:['assets'],operations:[
+    {store:'assets',action:'put',item:{id:'new-cutout'}}]});
+  const draft={id:'d',layers:[{id:'layer',type:'material',assetID:'new-cutout'}]};
+  const dependent=syncEnvelope('project',{id:'dependent',drafts:[draft]});
+  const independent=syncEnvelope('project',{id:'independent',drafts:[{id:'d',layers:[]}]});
+  let revision=1,rows=[material,dependent,independent].map((record,index)=>({
+    record,serial:index+1,baseRevision:1,operationID:'op-'+index}));
+  const uploaded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    recordKeys:syncAffectedKeys,authoritativeCommit:true,
+    commit:async record=>{if(record.id===material.id)throw Error('image offline');
+      uploaded.push(record.id);revision++;}});
+  await assert.rejects(sync.flush(),/image offline/);
+  assert.deepEqual(uploaded,[independent.id]);
+  assert.deepEqual((await sync.pending()).map(row=>row.record.id),[material.id,dependent.id]);
+});
+
+test('a missing material keeps its original error and a durable, delayed retry',async()=>{
+  let rows=[{record:{id:'project:work',kind:'project',payload:{id:'work'}},
+    serial:1,baseRevision:7,operationID:'source-operation'}],reconciles=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>7,clock:()=>1000,
+    reconcile:async()=>{reconciles++;return 'rebase';},
+    commit:async()=>{throw Object.assign(Error('素材尚未到达'),{code:'SHIYE_SOURCE_PENDING'});}});
+  await assert.rejects(sync.flush(),/素材尚未到达/);
+  assert.equal(reconciles,0);
+  assert.equal(sync.status().conflicts,0);
+  assert.equal(sync.status().pending,1);
+  assert.ok(sync.status().nextAttemptAt>=31000);
+});
 
 test('a changed work forks durably before the editor is redirected',async()=>{
   let disk=[{record:{id:'project:old',kind:'project',payload:{id:'old',title:'local'}},
