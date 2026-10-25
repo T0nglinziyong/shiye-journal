@@ -14,8 +14,8 @@ export const shapeOptionFields=Object.freeze({
   innerLength:{label:'内圈长度',type:'number',min:.3,max:.72}
 });
 const fields={
-  grid:['rows','columns','showOuterBorder'],dots:['spacing','dotSize','showOuterBorder'],
-  stripes:['spacing','angle','showOuterBorder'],
+  grid:['rows','columns','showOuterBorder'],dots:['rows','columns','dotSize','showOuterBorder'],
+  stripes:['rows','columns','angle','showOuterBorder'],
   linedNote:['rows','showOuterBorder','showInnerLines'],
   checklistTable:['rows','showOuterBorder','showInnerLines','showMarkers'],
   weeklyTable:['rows','columns','showOuterBorder','showInnerLines','showHeader'],
@@ -31,7 +31,7 @@ const fields={
 const defaults={rows:5,columns:7,showOuterBorder:true,showInnerLines:true,showInnerBorder:true,
   showHeader:true,showMarkers:true,spacing:18,dotSize:1.5,angle:45,
   depth:.12,count:8,tailPosition:.25,radius:.04,clipGap:.22,innerLength:.62};
-const overrides={grid:{rows:6,columns:8},linedNote:{rows:6},weeklyTable:{rows:3},habitTracker:{rows:5},calendarTable:{rows:6},
+const overrides={grid:{rows:6,columns:8},dots:{rows:6,columns:8},stripes:{rows:6,columns:8},linedNote:{rows:6},weeklyTable:{rows:3},habitTracker:{rows:5},calendarTable:{rows:6},
   wave:{count:4},zigzag:{count:5},burst:{count:16,depth:.12},scallop:{count:10,depth:.04},
   postage:{count:18,depth:.055},postageFrame:{count:10,depth:.055},
   ticketFrame:{depth:.12,radius:.04},washi:{count:10,depth:.08}};
@@ -53,9 +53,9 @@ export function resolvedShapeOptions(kind,provided={}){
   if(!provided||typeof provided!=='object'||Array.isArray(provided))throw Error('图形参数应为对象');
   const result={...defaults,...overrides[kind]};
   for(const [key,value] of Object.entries(provided)){
-    // Previously saved grids used a physical spacing. Keep rendering that
-    // value until the user explicitly chooses rows or columns in the editor.
-    if(!allowed.includes(key)&&!(kind==='grid'&&key==='spacing'))throw Error('该图形不支持参数：'+key);
+    // Former pattern spacing is accepted in saved scenes; repeat counts now
+    // determine density so resizing cannot add dots or stripes either.
+    if(!allowed.includes(key)&&!(['grid','dots','stripes'].includes(kind)&&key==='spacing'))throw Error('该图形不支持参数：'+key);
     const field=shapeOptionFields[key];
     if(field.type==='boolean'){
       if(typeof value!=='boolean')throw Error('图形参数需为布尔值：'+key);
@@ -65,6 +65,34 @@ export function resolvedShapeOptions(kind,provided={}){
   return result;
 }
 export function validateShapeOptions(kind,options){resolvedShapeOptions(kind,options);return true;}
+// Changing the number of cells adds/removes space at the same cell pitch.
+// Resizing the shape itself leaves shapeOptions alone and scales that pitch.
+export function shapeRepeatCountPatch(shape,key,count){
+  if(!['rows','columns','count'].includes(key)||!advancedShapeControls(shape.kind).some(control=>control.key===key))
+    throw Error('该图形没有可调整的重复数量：'+key);
+  const options=resolvedShapeOptions(shape.kind,shape.shapeOptions||{});
+  const next={...shape.shapeOptions,[key]:count};
+  let oldCount=options[key];
+  if(['grid','dots','stripes'].includes(shape.kind)&&!Object.hasOwn(shape.shapeOptions||{},'rows')&&
+      !Object.hasOwn(shape.shapeOptions||{},'columns')){
+    // A grid with no saved counts is rendered with the current defaults.
+    const rows=options.rows,columns=options.columns;
+    oldCount=key==='rows'?rows:columns;
+    next.rows=key==='rows'?count:rows;
+    next.columns=key==='columns'?count:columns;
+    delete next.spacing;
+  }
+  validateShapeOptions(shape.kind,next);
+  if(key==='count'){
+    // Horizontal motifs grow in length; washi teeth repeat vertically.
+    // Perimeter and radial motifs retain their approximate tooth/lobe pitch.
+    const axes=shape.kind==='washi'?['height']:
+      ['wave','zigzag'].includes(shape.kind)?['width']:['width','height'];
+    return {shapeOptions:next,...Object.fromEntries(axes.map(axis=>[axis,shape[axis]*count/oldCount]))};
+  }
+  const dimension=key==='rows'?'height':'width';
+  return {shapeOptions:next,[dimension]:shape[dimension]*count/oldCount};
+}
 export const shapeOptionsJSONSchema={type:'object',additionalProperties:false,properties:Object.fromEntries(
   Object.entries(shapeOptionFields).map(([key,field])=>[key,field.type==='boolean'?{type:'boolean'}:
     {type:field.type,minimum:field.min,maximum:field.max}]))};

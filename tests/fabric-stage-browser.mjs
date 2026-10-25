@@ -50,6 +50,22 @@ try{
   assert.ok(parity.material.meanRGBError<.1,JSON.stringify(parity));
   assert.ok(parity.text.meanRGBError<5,JSON.stringify(parity));
   assert.ok(parity.ink.meanRGBError<1,JSON.stringify(parity));
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers.push({id:'thin-paperclip',type:'shape',kind:'paperclip',x:500,y:150,
+      width:40,height:90,fill:null,stroke:'#547da4',lineWidth:1,zIndex:8});refresh();})()`);
+  await sleep(200);
+  const thinHit=await evaluate(`(()=>{
+    const canvas=window.__fabricCanvas,r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const hit=(x,y)=>canvas.findTarget(new PointerEvent('pointerdown',{
+      clientX:r.left+r.width*x/600,clientY:r.top+r.height*y/800,pointerType:'mouse'}))?.target?.sceneID;
+    return {near:hit(495,126),far:hit(550,150)||null,tolerance:canvas.targetFindTolerance,
+      padding:canvas.getObjects().find(object=>object.sceneID==='thin-paperclip')?.padding};
+  })()`);
+  assert.deepEqual(thinHit,{near:'thin-paperclip',far:null,tolerance:8,padding:10},
+    'A thin graphic needs a forgiving touch target without selecting distant blank space');
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers=draft.layers.filter(node=>node.id!=='thin-paperclip');refresh();})()`);
+  await sleep(100);
   const coverParity=await evaluate(`(async()=>{
     const {renderSceneCanvas}=await import('/src/scene-renderer.js');
     const {renderWorkCoverSnapshot}=await import('/src/work-cover-snapshot.js');

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCanvas,loadImage} from 'canvas';
 import {readFile} from 'node:fs/promises';
-import {advancedShapeControls,advancedShapeOptionKinds,validateShapeOptions} from '../src/advanced-shape-options.js';
+import {advancedShapeControls,advancedShapeOptionKinds,shapeRepeatCountPatch,validateShapeOptions} from '../src/advanced-shape-options.js';
 import {advancedShapes,configureShape,shapeSVG} from '../src/editor-tools-model.js';
 import {applyCreationV2Batch} from '../src/creation-v2-commands.js';
 import {webSceneDocument} from '../src/web-scene-workbench.js';
@@ -28,6 +28,49 @@ test('each parametric preset exposes bounded editable controls',()=>{
   }
   assert.throws(()=>validateShapeOptions('weeklyTable',{columns:0}),/范围/);
   assert.throws(()=>validateShapeOptions('weeklyTable',{surprise:true}),/不支持/);
+});
+
+test('resizing repeats keeps their count, while changing count keeps the cell pitch',()=>{
+  const grid=configureShape({id:'grid'},'grid');
+  const resized={...grid,width:grid.width*2,height:grid.height*1.5};
+  assert.deepEqual(resized.shapeOptions,{rows:6,columns:8});
+  assert.match(shapeSVG(resized),/width="0\.125" height="0\.16666666666666666"/);
+  for(const kind of ['dots','stripes']){
+    const pattern=configureShape({id:kind},kind);
+    assert.deepEqual(pattern.shapeOptions,{rows:6,columns:8});
+    assert.match(shapeSVG({...pattern,width:pattern.width*2}),/width="0\.125" height="0\.16666666666666666"/);
+    assert.equal(shapeRepeatCountPatch(pattern,'columns',12).width,pattern.width*12/8);
+  }
+  const columns=shapeRepeatCountPatch(grid,'columns',12);
+  assert.equal(columns.width,grid.width*12/8);
+  assert.equal(columns.shapeOptions.rows,6);
+  const rows=shapeRepeatCountPatch({...grid,...columns},'rows',9);
+  assert.equal(rows.height,grid.height*9/6);
+  const table=configureShape({id:'table'},'weeklyTable');
+  const moreRows=shapeRepeatCountPatch(table,'rows',6);
+  assert.equal(moreRows.height,table.height*2);
+  assert.equal(moreRows.shapeOptions.rows,6);
+  const wave=configureShape({id:'wave'},'wave');
+  const extraWaves=shapeRepeatCountPatch(wave,'count',8);
+  assert.equal(extraWaves.width,wave.width*2);
+  assert.equal(extraWaves.height,undefined);
+  const scallop=configureShape({id:'scallop'},'scallop');
+  const moreLobes=shapeRepeatCountPatch(scallop,'count',20);
+  assert.equal(moreLobes.width,scallop.width*2);
+  assert.equal(moreLobes.height,scallop.height*2);
+});
+
+test('table and pattern fills, strokes and opacity are reflected in rendered SVG',()=>{
+  for(const kind of ['weeklyTable','grid']){
+    const shape=configureShape({id:kind},kind);
+    Object.assign(shape,{fill:'#dcefd7',stroke:'#236f8f',lineWidth:4,
+      fillOpacity:.45,strokeOpacity:.7});
+    const svg=shapeSVG(shape);
+    assert.match(svg,/fill="#dcefd7"/);
+    assert.match(svg,/stroke="#236f8f"/);
+    assert.match(svg,/fill-opacity="0\.45"/);
+    assert.match(svg,/stroke-opacity="0\.7"/);
+  }
 });
 
 test('paperclip and border graphics remain hollow and use the selected outline color',async()=>{
@@ -73,6 +116,10 @@ test('unified Scene commands create and revise the new parametric graphics',asyn
     assert.equal(node.kind,kind);assert.equal(node.fill,null);assert.equal(node.stroke,'#c3755d');
   }
   assert.deepEqual(result.page.layers.find(item=>item.id==='graphic-1').shapeOptions,{count:8,showInnerBorder:false});
+  const changed=result.page.layers.find(item=>item.id==='graphic-1');
+  const scenePerMM=result.page.canvas.height/result.page.physicalPageHeightMM;
+  assert.ok(Math.abs(changed.width-24*scenePerMM*.8)<1e-6);
+  assert.ok(Math.abs(changed.height-30*scenePerMM*.8)<1e-6);
 });
 
 test('table cells and border options are preserved in Scene commands and raster',async()=>{
