@@ -232,7 +232,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
         canvas=new fabric.Canvas(canvasRef.current,{
           width:draft.canvas.width,height:draft.canvas.height,
           backgroundColor:draft.paperColor,preserveObjectStacking:true,
-          selection:!readOnly,perPixelTargetFind:true,
+          selection:!readOnly,perPixelTargetFind:true,targetFindTolerance:8,
           enableRetinaScaling:true,renderOnAddRemove:false
         });
         sessionRef.current=canvas;

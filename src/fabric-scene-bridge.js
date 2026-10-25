@@ -275,6 +275,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       evented:node.type!=='ink'&&!node.locked&&!node.isLocked&&
         !(node.type==='group'&&containsLocked(node.children)),
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
+    // The visible ink of tables, brackets and line art can be one pixel wide
+    // on a phone. Expand only their hit bounds; the Scene and export stay exact.
+    if(node.type==='shape')object.set({padding:10});
     if(node.shadow)object.set({shadow:new fabric.Shadow({color:node.shadow.color,blur:node.shadow.blur,offsetX:node.shadow.offsetX,offsetY:node.shadow.offsetY})});
     if(node.type!=='ink')configureControls(object);
     object.sceneID=node.ownerID||node.id;

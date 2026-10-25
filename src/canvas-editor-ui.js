@@ -5,7 +5,7 @@ import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './
 import {openPopover,closePopover} from './swift-popover.js';
 import {openEditorLayerTree} from './editor-layer-tree.js';
 import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines,textFontFamily,textLineHeight} from './editor-tools-model.js';
-import {advancedShapeControls,resolvedShapeOptions,validateShapeOptions} from './advanced-shape-options.js';
+import {advancedShapeControls,resolvedShapeOptions,shapeRepeatCountPatch,validateShapeOptions} from './advanced-shape-options.js';
 import {shapeThumbnailTag as shapeSVG} from './shape-preview.js';
 import {isCurrentExampleProject} from './legacy-builtins.js';
 import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
@@ -380,7 +380,8 @@ export function mountCanvasEditor(c){
   }
   function textParagraph(anchor,t,patch){const p=openPopover(anchor,{title:'段落',width:230,menu:true});for(const [id,name] of [['left','左对齐'],['center','居中'],['right','右对齐']])p.content.append(button((t.alignment===id?'✓ ':'')+name,()=>{p.close();patch('alignment',id);}));const entry=entries.find(e=>e.value.id===state.selected&&e.kind==='text');if(entry)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entry);}));}
   function objectInspector(entry){if(!entry)return;const o=entry.value,kind=entry.kind;body.innerHTML='<div class="canvas-object-settings"><header><h2>'+({material:'素材设置',shape:'图形设置',text:'文字设置'}[kind])+'</h2><button type="button" id="object-settings-done">完成</button></header><div id="object-settings-fields"></div></div>';const fields=body.querySelector('#object-settings-fields');body.querySelector('#object-settings-done').onclick=()=>modal.close();
-    const textDraft=kind==='text'?structuredClone(o):null;const mutate=(key,value)=>{if(textDraft){textDraft[key]=value;return;}checkpoint();o[key]=value;if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
+    const textDraft=kind==='text'?structuredClone(o):null;const mutateMany=values=>{if(textDraft){Object.assign(textDraft,values);return;}checkpoint();Object.assign(o,values);if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
+    const mutate=(key,value)=>mutateMany({[key]:value});
     const raiseWithinParent=(step)=>{
       const current=sceneLayerEntries(d,{hidden:true}).find(e=>e.value.id===o.id);
       if(!current)return;
@@ -414,18 +415,20 @@ export function mountCanvasEditor(c){
     fields.append(maskRow,maskActions);
     const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [...(kind==='material'?[]:[['width','宽度',1,d.canvas.width*2,.1],['height','高度',1,d.canvas.height*2,.1]]),['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
     if(kind==='shape'){
+      const appearance=document.createElement('section');appearance.className='shape-appearance-settings';
+      const appearanceHeading=document.createElement('h3');appearanceHeading.textContent='填充与线条';appearance.append(appearanceHeading);
       const controls=advancedShapeControls(o.kind);
       if(controls.length){const heading=document.createElement('h3');heading.textContent='图形内容';fields.append(heading);
         const current=resolvedShapeOptions(o.kind,o.shapeOptions||{});
         for(const control of controls){
-          const update=value=>{const next={...o.shapeOptions,[control.key]:value};validateShapeOptions(o.kind,next);mutate('shapeOptions',next);};
+          const update=value=>{if(['rows','columns','count'].includes(control.key))mutateMany(shapeRepeatCountPatch(o,control.key,value));
+            else {const next={...o.shapeOptions,[control.key]:value};validateShapeOptions(o.kind,next);mutate('shapeOptions',next);}};
           if(control.type==='boolean')toggle(fields,control.label,current[control.key],update);
           else range(fields,control.label,current[control.key],control.min,control.max,control.type==='integer'?1:.01,update);
         }
       }
-      if(o.vectorLayers)vectorColors(o,fields);
+      if(o.vectorLayers)vectorColors(o,appearance);
       else {
-        const heading=document.createElement('h3');heading.textContent='图形外观';fields.append(heading);
         for(const [key,name] of [['fill','填充颜色'],['stroke',o.kind==='paperclip'?'回形针颜色':'边框颜色']]){
           const row=document.createElement('label');row.className='canvas-setting shape-color-control';row.textContent=name;
           const color=document.createElement('input');color.type='color';color.value=o[key]||'#ffffff';color.setAttribute('aria-label',name);
@@ -434,15 +437,16 @@ export function mountCanvasEditor(c){
             const hidden=o[key]!==null;mutate(key,hidden?null:(key==='stroke'?'#547da4':'#e7eef7'));
             row.querySelector('button').textContent=hidden?'恢复'+name:'无'+name;
           }));
-          fields.append(row);
+          appearance.append(row);
         }
-        range(fields,'边框粗细',o.lineWidth,0,30,.5,v=>mutate('lineWidth',v));
-        const dashRow=document.createElement('label');dashRow.className='canvas-setting';dashRow.textContent='边框线型';const dash=document.createElement('select');for(const [id,name] of [['solid','实线'],['dash','虚线'],['dot','点线']])dash.append(new Option(name,id));dash.value=o.strokeDash||'solid';dash.setAttribute('aria-label','边框线型');dash.onchange=()=>mutate('strokeDash',dash.value);dashRow.append(dash);fields.append(dashRow);
-        range(fields,'填充不透明度',Math.round((o.fillOpacity??1)*100),0,100,1,v=>mutate('fillOpacity',v/100),false,'%');
-        range(fields,'边框不透明度',Math.round((o.strokeOpacity??1)*100),0,100,1,v=>mutate('strokeOpacity',v/100),false,'%');
-        if(['roundedRectangle','frame','checkbox'].includes(o.kind))range(fields,'圆角半径（边长比例）',o.cornerRadius??.1,0,.5,.005,v=>mutate('cornerRadius',v));
+        range(appearance,'线条粗细',o.lineWidth,0,30,.5,v=>mutate('lineWidth',v));
+        const dashRow=document.createElement('label');dashRow.className='canvas-setting';dashRow.textContent='线型';const dash=document.createElement('select');for(const [id,name] of [['solid','实线'],['dash','虚线'],['dot','点线']])dash.append(new Option(name,id));dash.value=o.strokeDash||'solid';dash.setAttribute('aria-label','线型');dash.onchange=()=>mutate('strokeDash',dash.value);dashRow.append(dash);appearance.append(dashRow);
+        range(appearance,'填充不透明度',Math.round((o.fillOpacity??1)*100),0,100,1,v=>mutate('fillOpacity',v/100),false,'%');
+        range(appearance,'线条不透明度',Math.round((o.strokeOpacity??1)*100),0,100,1,v=>mutate('strokeOpacity',v/100),false,'%');
+        if(['roundedRectangle','frame','checkbox'].includes(o.kind))range(appearance,'圆角半径（边长比例）',o.cornerRadius??.1,0,.5,.005,v=>mutate('cornerRadius',v));
       }
-      range(fields,'整体不透明度',Math.round((o.opacity??1)*100),0,100,1,v=>mutate('opacity',v/100),false,'%');
+      range(appearance,'整体不透明度',Math.round((o.opacity??1)*100),0,100,1,v=>mutate('opacity',v/100),false,'%');
+      fields.prepend(appearance);
     }
     if(kind==='shape'&&(o.vectorPaths||o.vectorLayers)){const geometryKey=o.vectorLayers?'vectorLayers':'vectorPaths',geometryKind=o.vectorLayers?'layers':'paths',row=document.createElement('label');row.textContent=o.vectorLayers?'多色图形色层（0–1 坐标 JSON）':'自由图形轮廓（0–1 坐标 JSON）';const input=document.createElement('textarea');input.rows=6;input.value=JSON.stringify(o[geometryKey]);const error=document.createElement('small');error.setAttribute('role','alert');input.oninput=()=>{try{parseEditableGeometry(input.value,geometryKind);error.textContent='';}catch(e){error.textContent=e.message;}};row.append(input,error);fields.append(row,button('应用图形轮廓',()=>{try{mutate(geometryKey,parseEditableGeometry(input.value,geometryKind));error.textContent='';}catch(e){error.textContent=e.message;}},'btn'));}
     if(kind==='text'){const cancel=button('取消',()=>modal.close());body.querySelector('header').prepend(cancel);body.querySelector('#object-settings-done').textContent='应用';body.querySelector('#object-settings-done').onclick=()=>[...fields.querySelectorAll('button')].find(b=>b.textContent==='应用文字设置').click();const select=(name,key,choices)=>{const row=document.createElement('label');row.textContent=name;const input=document.createElement('select');input.innerHTML=choices.map(([id,label])=>'<option value="'+id+'" '+(draftValue(key)===id?'selected':'')+'>'+label+'</option>').join('');input.onchange=()=>{textDraft[key]=input.value;if(key==='style')textDraft.fontName=null;};row.append(input);fields.append(row);};const draftValue=key=>textDraft[key];select('基础风格','style',[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']]);select('对齐','alignment',[['left','左对齐'],['center','居中'],['right','右对齐']]);const row=document.createElement('label');row.textContent='文字颜色';const color=document.createElement('input');color.type='color';color.value=textDraft.color;color.oninput=()=>textDraft.color=color.value;row.append(color);fields.append(row);onDialogClosed(modal,()=>{if(state.newTextID===o.id&&!o.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==o.id);state.selected=null;state.newTextID=null;state.undo.pop();saveProject();render();}});}

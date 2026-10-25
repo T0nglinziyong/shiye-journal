@@ -1080,6 +1080,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </select></label>
   </div>;
   const item=selected.value;
+  const shapeFillable=selected.kind==='shape'&&!['paperclip','wave','zigzag','bracket','line'].includes(item.kind);
   if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
     <h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
     <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
@@ -1110,28 +1111,34 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       </div>
     </>:null}
     {selected.kind==='shape'?<>
-      <h3>图形外观</h3>
-      {advancedShapeControls(item.kind).length?<div className="editor-inspector-advanced">
-        <h4>图形内容</h4><div className="form-grid">{advancedShapeControls(item.kind).map(control=>{
-          const value=resolvedShapeOptions(item.kind,item.shapeOptions||{})[control.key];
-          return control.type==='boolean'?<React.Fragment key={control.key}>{check(`inspector-shape-option-${control.key}`,control.label,value)}</React.Fragment>:
-            <React.Fragment key={control.key}>{field(`inspector-shape-option-${control.key}`,control.label,value,'number',
-              {min:control.min,max:control.max,step:control.type==='integer'?1:.01})}</React.Fragment>;
-        })}</div></div>:null}
-      {(item.vectorPaths?.length||item.vectorLayers?.length)?<VectorGeometryEditor key={item.id} item={item} onChange={onChange}/>:null}
-      <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
+      <h3>填充与线条</h3>
       {item.vectorLayers?.length?<div className="editor-inspector-vector"><p className="muted">多色矢量 · {item.vectorLayers.length} 层，路径保持独立</p>
         {item.vectorLayers.map((layer,index)=><div className="form-grid" key={index}>
           {field(`inspector-vector-fill-${index}`,`第 ${index+1} 层颜色`,layer.fill||'#ffffff','color')}
           {field(`inspector-vector-opacity-${index}`,'该层透明度',layer.opacity??1,'range',{min:0,max:1,step:.05})}
-        </div>)}</div>:<div className="form-grid">
-        {field('inspector-fill','填充颜色',item.fill||'#ffffff','color')}
-        {field('inspector-stroke',item.kind==='paperclip'?'回形针颜色':['postageFrame','ticketFrame'].includes(item.kind)?'边框颜色':'描边颜色',item.stroke||'#547da4','color')}
-        {field('inspector-line-width','描边粗细',item.lineWidth??0,'range',{min:0,max:30,step:.5})}
-        {choice('inspector-stroke-dash','线型',item.strokeDash||'solid',[[ 'solid','实线'],['dash','虚线'],['dot','点线']])}
-        {field('inspector-fill-opacity','填充透明度',item.fillOpacity??1,'range',{min:0,max:1,step:.05})}
-        {field('inspector-stroke-opacity','描边透明度',item.strokeOpacity??1,'range',{min:0,max:1,step:.05})}
+        </div>)}</div>:<div className="editor-inspector-appearance">
+        <div className="form-grid">
+          {shapeFillable?field('inspector-fill','填充颜色',item.fill||'#ffffff','color'):null}
+          {field('inspector-stroke',item.kind==='paperclip'?'回形针颜色':['postageFrame','ticketFrame'].includes(item.kind)?'边框颜色':'线条颜色',item.stroke||'#547da4','color')}
+          {field('inspector-line-width','线条粗细',item.lineWidth??0,'range',{min:0,max:30,step:.5})}
+          {choice('inspector-stroke-dash','线型',item.strokeDash||'solid',[[ 'solid','实线'],['dash','虚线'],['dot','点线']])}
+          {shapeFillable?field('inspector-fill-opacity','填充透明度',item.fillOpacity??1,'range',{min:0,max:1,step:.05}):null}
+          {field('inspector-stroke-opacity','线条透明度',item.strokeOpacity??1,'range',{min:0,max:1,step:.05})}
+        </div>
+        <div className="editor-inspector-checks">
+          {shapeFillable?<button type="button" className="btn mini" onClick={()=>onChange('inspector-fill',item.fill===null?'#e7eef7':null)}>{item.fill===null?'启用填充':'无填充'}</button>:null}
+          <button type="button" className="btn mini" onClick={()=>onChange('inspector-stroke',item.stroke===null?'#547da4':null)}>{item.stroke===null?'启用线条':'无线条'}</button>
+        </div>
       </div>}
+      {advancedShapeControls(item.kind).length?<div className="editor-inspector-advanced">
+        <h4>图形内容</h4><p className="muted">拉伸只缩放内部图案；修改重复数量会调整图形外框。</p><div className="form-grid">{advancedShapeControls(item.kind).map(control=>{
+          const value=resolvedShapeOptions(item.kind,item.shapeOptions||{})[control.key];
+          return control.type==='boolean'?<React.Fragment key={control.key}>{check(`inspector-shape-option-${control.key}`,control.label,value)}</React.Fragment>:
+            <React.Fragment key={control.key}>{field(`inspector-shape-option-${control.key}`,control.label,value,'number',
+              {min:control.min,max:control.max,step:control.type==='integer'?1:.01})}</React.Fragment>;
+      })}</div></div>:null}
+      {(item.vectorPaths?.length||item.vectorLayers?.length)?<VectorGeometryEditor key={item.id} item={item} onChange={onChange}/>:null}
+      <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>
       <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>

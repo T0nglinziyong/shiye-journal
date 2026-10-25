@@ -1,5 +1,6 @@
 import {validateGraphicEffects} from './graphic-effects.js';
 import {replaceGraphicGeometry} from './graphic-geometry.js';
+import {shapeRepeatCountPatch} from './advanced-shape-options.js';
 import {validateTextEffects} from './text-effects.js';
 // Public property language -> canonical Scene data, followed by ONE reflow.
 // Called by all create/update paths before anchors and linked dependencies.
@@ -38,7 +39,13 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
  if(change.locked!==undefined){next.isLocked=change.locked;next.locked=change.locked;}
  if(change.layoutBox){if(node.type!=='group'||!node.localTransform)throw Error('layoutBox 只适用于空间组');next.layoutBox={width:change.layoutBox.width*s,height:change.layoutBox.height*s};}
  if(change.kind!==undefined){if(node.type!=='shape'||node.svgPaths)throw Error('kind 只适用于基础图形');next.kind=change.kind==='rect'?'rectangle':change.kind;}
- if(change.geometry)replaceGraphicGeometry(next,change.geometry,s);
+ if(change.geometry){
+  if(node.type==='shape'&&!change.size&&change.geometry.kind===node.kind){
+   for(const key of ['rows','columns','count'])if(Object.hasOwn(change.geometry.options||{},key))
+    Object.assign(next,shapeRepeatCountPatch(next,key,change.geometry.options[key]));
+  }
+  replaceGraphicGeometry(next,change.geometry,s);
+ }
  if(change.size&&node.type!=='text'){
   if(node.type==='material'){
    assertSceneCapability(policy,'material.visualResize',[node],confirmation);
