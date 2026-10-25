@@ -2,11 +2,11 @@
 // names, payloads, URLs, raw server messages, tokens or complete stack traces.
 const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split','cos-ticket','cos-ticket-failed','cos-put','cos-put-failed','cos-put-verified','displayed']);
 const KINDS=new Set(['project','batch','direct','queue','lock','image']);
-const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','authorization','rate-limit','oversize','server','database-timeout','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
+const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','source-pending','authorization','rate-limit','oversize','server','database-timeout','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
 const PHASES=new Set([
   '读取本机待同步队列','写入本机待同步队列','从 IndexedDB 刷新同步队列',
   '上传当前待同步记录','获取同步锁或执行同步任务','浏览器同步锁参数格式错误',
-  '编码云端记录','云端提交事务','编码与上传 assets','编码与上传 blobs',
+  '编码云端记录','核对作品素材引用','云端提交事务','编码与上传 assets','编码与上传 blobs',
   '编码与上传 projects','编码与上传 series','编码与上传 trash','编码与上传 meta'
 ]);
 const PREFIX='shiye-sync-trace-v2:';
@@ -30,6 +30,7 @@ function errorStatus(error){
 function category(error){
   const message=String(error?.message||'');
   const status=errorStatus(error);
+  if(errorCode(error)==='SHIYE_SOURCE_PENDING')return 'source-pending';
   if(/云端版本未变化|unconfirmed/i.test(message))return 'unconfirmed-response';
   if(errorCode(error)==='STORAGE_KEY_ALREADY_EXISTS'||/STORAGE_KEY_ALREADY_EXISTS|CloudBase 云存储上传失败/i.test(message))return 'image-upload';
   if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(message)||status===409||['PT409','40001'].includes(errorCode(error)))return 'revision-conflict';
@@ -155,7 +156,8 @@ export function createSyncDiagnostics({limit=500,clock=()=>new Date().toISOStrin
       const lastDisplayedFailure=[...exported].reverse().find(event=>event.action==='displayed'&&event.failure)||null;
       return {format:'shiye-sync-diagnostics',version:3,diagnosticBuild:'cloudbase-error-evidence-v3',syncProtocolVersion:3,createdAt:clock(),day,scope:'本机最近 24 小时的安全运行元数据；不含作品、图片、账号标识、密钥或原始报错',
         categoryGuide:{'unconfirmed-response':'云端版本未变化，但上传响应未获确认；数据留在本机待重试',
-          'revision-conflict':'同一资料存在冲突；该项保留，其他项可继续',
+        'revision-conflict':'同一资料存在冲突；该项保留，其他项可继续',
+        'source-pending':'作品引用的素材尚未上传；作品在本机等待素材同步',
           authorization:'登录或权限验证失败','rate-limit':'请求频率受限',oversize:'元数据过大，等待修复，不应无限重试',server:'云端服务返回 5xx',
           'database-timeout':'数据库语句超过服务器执行时限',
           'local-storage':'本机持久队列读写失败','image-upload':'图片读取或对象上传失败',

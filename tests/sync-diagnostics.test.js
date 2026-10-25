@@ -28,6 +28,18 @@ test('unconfirmed response retains its safe root cause category',()=>{
   assert.equal(trace.report().events[0].failure.causeCategory,'revision-conflict');
 });
 
+test('a missing cloud material is reported as a dependency without exposing its ID',()=>{
+ const trace=createSyncDiagnostics({storage:null});
+ const error=Object.assign(Error('private asset 123'),{
+   code:'SHIYE_SOURCE_PENDING',syncPhase:'核对作品素材引用'});
+ trace.record({action:'failed',kind:'project',error});
+ const detail=trace.report().events[0].failure;
+ assert.equal(detail.category,'source-pending');
+ assert.equal(detail.code,'SHIYE_SOURCE_PENDING');
+ assert.equal(detail.phase,'核对作品素材引用');
+ assert.ok(!JSON.stringify(trace.report()).includes('private asset 123'));
+});
+
 test('unconfirmed response preserves safe Supabase timeout details from its cause',()=>{
   const trace=createSyncDiagnostics({storage:null});
   const cause=Object.assign(Error('private SQL text'),{

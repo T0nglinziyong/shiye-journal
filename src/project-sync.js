@@ -374,7 +374,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           markSyncPhase(failure,'上传当前待同步记录');
           // A 413 is a confirmed gateway rejection, never a competing edit.
           // In particular it must not cause an editable project to be forked.
-          if([400,401,403,404,413,422,429].includes(Number(failure?.status??failure?.cause?.status))||
+          if(failureCode(failure)==='SHIYE_SOURCE_PENDING'||
+            [400,401,403,404,413,422,429].includes(Number(failure?.status??failure?.cause?.status))||
             ['413','SHIYE_METADATA_INVALID','OPERATION_FORBIDDEN','42501'].includes(failureCode(failure))||
             failureCode(failure?.cause)==='413')throw failure;
           // The server may have committed before its response disappeared.
@@ -453,7 +454,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             if(manual)delete current.nextAttemptAt;
             else{
               current.attempt=(Number.isSafeInteger(current.attempt)?current.attempt:0)+1;
-              current.nextAttemptAt=clock()+retryDelay(current.attempt,current.operationID);
+              // A project waiting for a missing cloud material cannot make
+              // progress by polling PostgreSQL every few seconds.
+              current.nextAttemptAt=clock()+(failureCode(failure)==='SHIYE_SOURCE_PENDING'
+                ?Math.max(30000,retryDelay(current.attempt,current.operationID))
+                :retryDelay(current.attempt,current.operationID));
             }
             try{await persist();}catch(saveFailure){firstFailure??=saveFailure;}
           }
