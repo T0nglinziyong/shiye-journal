@@ -1,5 +1,6 @@
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
+import {NewLetteringForm} from './react-editor-lettering.jsx';
 import {materialPreviewKey} from './material-paint.js';
 import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {materialKinds} from './material-taxonomy.js';
@@ -417,6 +418,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         <input type="color" aria-label="文字颜色" value={text.color||'#30463d'}
           onChange={event=>textProperty('color',event.target.value)}/>
         <button type="button" aria-label="文字样式" data-popover-anchor="text-style" onClick={event=>setMenu({kind:'text-style',anchor:event.currentTarget})}>Aa</button>
+        <button type="button" data-popover-anchor="lettering" onClick={event=>setMenu({kind:'lettering',anchor:event.currentTarget})}>艺术标题</button>
 
       </>:selectedKind==='shape'?<>
         {!selectedNode.vectorLayers?<><label className="shape-quick-color">填充<input type="color" aria-label="填充颜色"
@@ -449,15 +451,16 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
     title={{shape:'添加图形',material:'选择素材',tape:'胶带工具',paper:'画布背景',layers:'图层',
       pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置',
       'slot-width':'修改粗细','slot-color':'修改当前颜色',
-      'text-paragraph':'段落','text-style':'文字样式',arrange:'排列所选'}[menu.kind]}
+      'text-paragraph':'段落','text-style':'文字样式',lettering:'艺术标题',arrange:'排列所选'}[menu.kind]}
     className={['shape','material','tape'].includes(menu.kind)?`swift-picker-popover swift-${menu.kind}-picker`:
       menu.kind==='layers'?'swift-menu swift-layer-popover':'swift-menu'}
     width={menu.kind==='paper'?260:menu.kind==='layers'?310:
       menu.kind==='slot-width'?270:menu.kind==='slot-color'?280:
       ['pen','eraser','highlighter','lasso'].includes(menu.kind)?280:
-      menu.kind==='text-style'?320:['text-paragraph','arrange'].includes(menu.kind)?230:
+      ['text-style','lettering'].includes(menu.kind)?320:['text-paragraph','arrange'].includes(menu.kind)?230:
       280} height={menu.kind==='layers'?360:menu.kind==='slot-color'?310:menu.kind==='shape'?550:440}
     picker={['shape','material','tape'].includes(menu.kind)}>
+    {menu.kind==='lettering'?<NewLetteringForm page={draft} defaults={text} onCreate={request=>{close();onAction('fabric-add-lettering',request);}}/>:null}
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
     {menu.kind==='material'?<MaterialPicker draft={draft} materials={materials}
       series={state.series||[]} source={source}

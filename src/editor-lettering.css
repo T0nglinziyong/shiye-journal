@@ -1,0 +1,12 @@
+.lettering-controls{padding-top:12px}
+.lettering-slider input[type=range]{width:100%;min-height:36px;accent-color:#53694c}
+.lettering-range-hints{display:flex;justify-content:space-between;color:var(--muted,#727c70);font-size:12px}
+.lettering-letter-picker,.lettering-nudge{display:flex;flex-wrap:wrap;gap:6px}
+.lettering-letter-picker button{min-width:42px;min-height:44px;border:1px solid #dce2d8;border-radius:10px;background:#fafbf8;color:#30463d;font-size:20px}
+.lettering-letter-picker button[aria-pressed=true]{background:#e4ecdf;border-color:#53694c;box-shadow:inset 0 0 0 1px #53694c}
+.lettering-nudge button{flex:1;min-width:40px;min-height:42px;border-radius:10px}
+.lettering-controls details>summary{font-size:13px;color:var(--muted,#727c70)}
+.lettering-controls details>.stack{padding-top:10px}
+.lettering-nudge button{padding:8px 4px;white-space:nowrap}
+.lettering-controls .editor-inspector-check{display:flex;align-items:center;gap:8px}
+.lettering-controls .editor-inspector-check input[type=checkbox]{width:20px;min-width:20px;height:20px;margin:0}

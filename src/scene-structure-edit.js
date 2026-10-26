@@ -81,6 +81,7 @@ export function copyEditableScene(page,ids,makeID,{policy=AI_SCENE_POLICY,confir
    delete value.layoutConstraint;
    if(node.type==='material')value.manualVisualCopy=true;
    if(node.children){value.children=node.children.map(clone);value.children.forEach(child=>child.creativeGroupID=value.id);}
+   if(value.lettering?.slots)value.lettering.slots=value.lettering.slots.map(id=>remap.get(id)||id);
    return value;
   };
   return sources.map(source=>{

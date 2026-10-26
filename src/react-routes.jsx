@@ -1,4 +1,5 @@
 import {EditorMaskPanel} from './react-editor-mask.jsx';
+import {EditorLetteringPanel} from './react-editor-lettering.jsx';
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {EditorLayoutPanel} from './react-editor-layout.jsx';
 import {creativeSourceIDs} from './creation-sources.js';
@@ -1092,7 +1093,8 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
   const parentLink=parent?<button type="button" className="btn mini" onClick={()=>onAction('fabric-inspector-select',parent.id)}>返回组合 · {parent.name||'手帐组合'}</button>:null;
   if(selected.kind==='group')return <div className="stack editor-inspector-fields">
     {parentLink}<h3>组合属性</h3>
-    {field('inspector-group-name','组合名称',item.name||'','text',{maxLength:100})}
+    {item.lettering?<EditorLetteringPanel page={draft} nodeID={item.id} onAction={onAction}/>:null}
+    <label>组合名称<input id="inspector-group-name" value={item.name||''} maxLength={100} onChange={event=>onChange('inspector-group-name',event.target.value)}/></label>
     {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
     {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[['normal','正常'],['multiply','正片叠底']])}
     {check('inspector-group-shadow-enabled','组合阴影',!!item.shadow)}

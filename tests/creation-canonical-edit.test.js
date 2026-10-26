@@ -121,3 +121,14 @@ test('inspector and AI display masks share geometry without changing material oc
   assert.deepEqual(node(manual,'paper').cropRect,node(initial,'paper').cropRect);
  }
 });
+
+test('manual and Command title reflow share editable geometry and rendered pixels',async()=>{
+ const {reflowEditorLettering}=await import('../src/editor-lettering.js');
+ const {run}=await fixture([]);const initial=run([{op:'text.lettering',id:'title',content:'去看看',place:at(),letters:[{index:1,rotationDeg:8,style:{color:'#aa5533'}}]}]);
+ const change={content:'去走走吧',gapMm:2,letters:[{index:1,offsetMm:[1,2],rotationDeg:12}]};
+ const ai=run([{op:'text.reflow',target:'title',...change}],initial),manual=structuredClone(initial);
+ reflowEditorLettering(manual.page,'title',change);
+ assert.deepEqual(node(ai,'title').children.map(n=>[n.id,n.content,n.x,n.y,n.fontSize,n.rotation,n.color]),node(manual,'title').children.map(n=>[n.id,n.content,n.x,n.y,n.fontSize,n.rotation,n.color]));
+ const render=async p=>(await renderSceneCanvas(p,{createCanvas:()=>createCanvas(1,1),waitForFonts:false})).canvas.toBuffer('image/png');
+ assert.deepEqual(await render(ai.page),await render(manual.page));
+});

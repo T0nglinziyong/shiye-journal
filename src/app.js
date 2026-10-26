@@ -1,4 +1,5 @@
 import {applyInspectorMask} from './scene-mask-edit.js';
+import {createEditorLettering,reflowEditorLettering} from './editor-lettering.js';
 import {applyInspectorLayout} from './editor-layout-model.js';
 import {creativeSourceIDs,assertCreativeSources} from './creation-sources.js';
 import {inspectorSelection,applyInkInspectorChange,applyGroupInspectorChange} from './editor-inspector-model.js';
@@ -1619,6 +1620,16 @@ async function runAppAction(action,id,value){try{
   case 'fabric-inspector-mask':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;
     checkpoint();applyInspectorMask(page,state.selected,id,state.assets);saveProject();break;
+  }
+  case 'fabric-inspector-lettering':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();reflowEditorLettering(page,state.selected,id);saveProject();break;
+  }
+  case 'fabric-add-lettering':{
+    const page=current();if(!page)break;
+    checkpoint();const node=createEditorLettering(page,uid(),id);
+    state.selected=node.id;state.multiSelected=[node.id];state.tool='select';
+    saveProject();render();break;
   }
   case 'fabric-inspector-layout':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;
