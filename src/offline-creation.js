@@ -1,3 +1,4 @@
+import {creationSourceForProject} from './creation-document.js';
 import {creationMethod} from './creation-methods.js';
 import {imageWorkflowRequest,imageWorkflowGuide} from './image-workflow.js';
 import {webSceneContract,webSceneDocument,importWebScene} from './web-scene-workbench.js';
@@ -31,10 +32,7 @@ export const EDITABLE_WORK_FORMAT='shiye-editable-project';
 export const EDITABLE_PACKAGE_ENTRY='project.shiyeproject.json';
 const validAlias=validMaterialAlias;
 const projectMode=(p,settings)=>p.creationMode||settings.creationMode||'edit';
-function sourceFor(p,aliases){
- const d=p.drafts[0],priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
- return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
-}
+
 export function createEditablePackageGuide(source,selected,settings={}){
  const materialDirection=creationMaterialContext(selected).mainCount<=3
   ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
@@ -56,7 +54,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   aliases=Object.fromEntries(entries.map(([alias,id])=>[short.get(alias),id]));
   previews=previews.map(entry=>({...entry,alias:short.get(entry.alias)||entry.alias}));
  }
- const source=sourceFor(p,aliases);source.creationMode=creationMode;source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';
+ const source=creationSourceForProject(p,aliases);source.creationMode=creationMode;source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';
  const selected=source.materials.map(({alias,assetID})=>{
   const asset=assets.find(item=>item.id===assetID);if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
   const hints=value=>Array.isArray(value)?value.filter(item=>typeof item==='string'&&item.trim()).slice(0,8).map(item=>item.trim().slice(0,40)):[];

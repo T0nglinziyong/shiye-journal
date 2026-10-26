@@ -3,10 +3,10 @@
 import {visualStyles} from './creative-style-brief.js';
 
 export const creationMethods={
-  relationships:{title:'图文关系',operations:['material.add','text.add','graphic.add','layer.update'],advice:'先观察轮廓、印刷字、朝向、可写面与实物大小，决定哪里需要图文对话。文字可以写在纸上、旁边或形成独立视觉块；首稿同时放入真实内容与关键细节，不先交付只有图片的骨架。'},
-  layering:{title:'错层拼贴',operations:['material.cut','material.split','layer.update','group.create'],advice:'叠层靠不同职责与可辨的边缘：主角、书写面、承托纸与连接片并不等大。错开边缘、局部半藏、让人物跨纸边，保留有用轮廓与阅读空间。阴影和随机旋转不能代替关系；无需每件材料都加工。'},
+  relationships:{title:'图文关系',operations:['material.add','text.add','graphic.add','layer.update'],advice:'先观察轮廓、印刷字、朝向、可写面与实物大小，决定哪里需要图文对话。把相关图文组成阅读单元，文字可写在纸上、沿轮廓或独立成块，不给每件素材机械配一张卡。首稿就放入真实内容与关键细节。'},
+  layering:{title:'错层拼贴',operations:['material.cut','material.split','layer.update','group.create'],advice:'叠层靠不同职责与可辨的边缘：主角、书写面、承托纸与连接片并不等大。错开边缘、局部半藏、让人物跨纸边，保留有用轮廓与阅读空间。双页可呼应颜色或局部形状而改变组合位置。阴影和随机旋转不能代替关系；无需每件材料都加工。'},
   writing:{title:'随想书写',operations:['text.add','text.fit','text.reflow','graphic.add'],advice:'从素材触发具体念头，可用轻松自言自语、俏皮态度、尚未完成的想法；展开与短注相互回应，不逐件描述图片或堆励志口号。没有用户事实时不编造亲历。按可写空间改变句长、段形和位置，不无限缩小字号。'},
-  lettering:{title:'标题变化',operations:['text.add','text.lettering','text.reflow','graphic.add'],advice:'先决定标题语气，再选大字、小辅助字、浅底深字、深底浅字或局部字形变化。印刷字本身可以做标题，不再造同义大字抢焦点。圈点、弧线、数字和符号回应具体词意；长正文仍可读，不混搭一堆字体。'},
+  lettering:{title:'标题变化',operations:['text.add','text.lettering','text.reflow','graphic.add'],advice:'先决定标题语气，再选大字、小辅助字、浅底深字、深底浅字或局部字形变化。印刷字本身可以做标题，不再造同义大字抢焦点。短标题可按词组改变字号、基线和轻重，圈点与符号回应词意，不把逐字随机旋转当成手写。长正文仍可读，不混搭一堆字体。'},
   tape:{title:'胶带连接',operations:['material.tape','layer.update','material.split'],advice:'先决定胶带是固定接缝、连接两组、局部边框还是文字底线，再定长短、方向与露出面积；不在所有照片四角贴同款。连续胶带用 material.tape 并尊重采样区间；有限纸条需实际分片，不能假作无限卷带。翻折只能表达静态外观，当前不交付可交互翻页机关。'},
   stamps:{title:'印章多用',operations:['material.add','layer.update','layer.duplicate','material.window','graphic.add'],advice:'同一边框可圈重点、容纳日期/短句、作淡底纹或照片窗口；淡底纹与前景需要足够对比。预设与数字图形可重复，普通实体须有合法来源。真实剪空用 material.window，透明矢量框用 graphic.add；不要用纸张底色盖住假装开窗。'},
   marks:{title:'圈注高亮',operations:['graphic.add','layer.update'],advice:'先选一句转折、一个日期或一处视线，再画局部高亮、圈线、箭头或记号。高亮放在文字下，按实际行宽和底色调笔宽、颜色与透明度。圆形可做色标、视觉停顿或主体，不必所有细节都用小星星。'},

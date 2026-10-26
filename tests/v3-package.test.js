@@ -57,6 +57,11 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   await write('work/commands.json',commands);
   const lock=join(dir,'work/.scene-write-lock');await mkdir(lock);await writeFile(join(lock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));await utimes(lock,new Date(Date.now()-120000),new Date(Date.now()-120000));
   ok('apply','work/commands.json');assert.equal(ok('apply','work/commands.json').replayed,true);
+  const summary=ok('inspect'),detailed=ok('inspect','--full');
+  assert.equal(summary.page.layers,undefined);assert.equal(summary.layers.length,3);
+  assert.deepEqual(summary.layers.find(n=>n.alias==='hero').world.centerMm,[60,70]);
+  assert.equal(detailed.page.layers.length,3);assert.equal(summary.sceneRevision,detailed.sceneRevision);
+  assert.ok(JSON.stringify(summary).length<JSON.stringify(detailed).length);
   const compact=ok('preview');assert.equal(compact.path,'output/preview.png');assert.equal(compact.geometryReview,undefined);assert.equal(compact.pixelReview,undefined);assert.ok(JSON.stringify(compact).length<1200);const saved=await read(compact.diagnosticsPath);assert.equal(saved.pngHash,compact.pngHash);const preview=ok('preview','--full');assert.equal(preview.pngHash,compact.pngHash);assert.equal(preview.geometryReview.pages.length,1);assert.equal(preview.geometryReview.materialFrames.length,0);assert.deepEqual(preview.geometryReview.graphicVocabulary,{kinds:['ellipse'],inkStrokes:0,pages:{page:1}});assert.equal(preview.pixelReview.pages.length,1);assert.ok(preview.pixelReview.pages[0].estimatedVisibleCoverage>0);ok('pack');
   const png=await readFile(join(dir,'output/preview.png'));assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
   assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,1);

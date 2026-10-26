@@ -1,3 +1,4 @@
+import {inspectCreationDocument,creationHelp} from './creation-inspection.js';
 import {verifyImageReference} from './image-reference-runtime.mjs';
 import {creationTaskBrief,describeCreationGuidance} from './creation-guidance.js';
 import {runGraphics} from './graphics-runtime.mjs';
@@ -9,7 +10,7 @@ import {statSync,readFileSync,writeFileSync,renameSync,mkdirSync,existsSync,rmSy
 import {hostname} from 'node:os';
 import {createHash} from 'node:crypto';
 import {applyCreationV2Batch,validateCreationV2Commands,describeCreationV2Command} from './creation-v2-commands.js';
-import {creationCommandRegistry,creationHelpTopics} from './creation-v2-contract.js';
+import {applyCreationTransaction,creationSceneRevision} from './creation-transaction.js';
 import {validateV3SceneDocument} from './v3-scene-schema.js';
 import {validateWebScene,webSceneDocument,inspectWebScene} from './web-scene-workbench.js';
 import {assetFromSourceSnapshot} from './material-anatomy.js';
@@ -22,7 +23,7 @@ const sha=x=>'sha256:'+createHash('sha256').update(x).digest('hex');
 const load=(p,max=8_000_000)=>{if(statSync(p).size>max)throw Error('文件过大：'+p);return JSON.parse(readFileSync(p,'utf8'));};
 const save=(p,x)=>writeFileSync(p,JSON.stringify(x,null,2)+'\n');
 const atomic=(p,x)=>{save(p+'.tmp',x);renameSync(p+'.tmp',p);};
-const revision=doc=>{const {v3Transactions:_receipts,...state}=doc;return sha(JSON.stringify(state));};
+const revision=creationSceneRevision;
 const fail=(code,issue,other={})=>Object.assign(Error(issue),{code,...other});
 function lockOwnerAlive(owner){
  if(!owner||owner.host!==hostname()||!Number.isSafeInteger(owner.pid)||owner.pid<=0)return true;
@@ -63,7 +64,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  if(command==='brief'){process.stdout.write(JSON.stringify({ok:true,...creationTaskBrief(task)})+'\n');return;}
  if(command==='guide'){process.stdout.write(JSON.stringify({ok:true,...describeCreationGuidance(Array.isArray(arg)?arg:arg?[arg]:[])})+'\n');return;}
  if(command==='graphics'){runGraphics(arg,current);return;}
- if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:2,tools:[{name:'graphics',readOnly:true,help:'graphics help'}],topics:creationHelpTopics,operations:Object.values(creationCommandRegistry).map(({name,available,advanced,summary})=>({name,available,advanced,summary}))})+'\n');return;}
+ if(command==='help'){process.stdout.write(JSON.stringify({ok:true,...creationHelp(),tools:[{name:'graphics',readOnly:true,help:'graphics help'}]})+'\n');return;}
  if(command==='describe'){const topics=Array.isArray(arg)?arg:[arg];const descriptions=(topics.length?topics:[undefined]).map(topic=>describeCreationV2Command(topic,{full}));process.stdout.write(JSON.stringify(descriptions.length===1?{ok:true,...descriptions[0]}:{ok:true,descriptions})+'\n');return;}
  if(command==='design-check'){const result={ok:true,sceneRevision:current,...auditCreationDesign(doc.page,{materials:task.materials,styles:task.styles})};save('output/design-advisory.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
  if(command==='fonts'){process.stdout.write(JSON.stringify({ok:true,...offlineFontCatalog()})+'\n');return;}
@@ -82,27 +83,22 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
   atomic(path,draft);process.stdout.write(JSON.stringify({ok:true,path,...draft})+'\n');return;
  }
  if(command==='check'||command==='apply'){
-  const input=load(arg||'work/commands.json');validateCreationV2Commands(input);
-  const receipts=doc.v3Transactions||{},commandHash=sha(JSON.stringify(input)),prior=receipts[input.transactionId];
-  if(prior){if(prior.commandHash!==commandHash)throw fail('TRANSACTION_CONFLICT','同一 transactionId 已用于不同命令');process.stdout.write(JSON.stringify({ok:true,replayed:true,...prior,currentSceneRevision:current})+'\n');return;}
-  if(input.baseSceneRevision!==current)throw fail('REVISION_CONFLICT','Scene 已变化；请运行 info 获取当前 sceneRevision',{currentSceneRevision:current});
-  const next=applyCreationV2Batch(doc,input,assets,{glyphOutline:localGlyphOutline}),nextRevision=revision(next);
-  if(command==='check'){validateV3SceneDocument(next);process.stdout.write(JSON.stringify({ok:true,dryRun:true,baseSceneRevision:current,proposedSceneRevision:nextRevision,operations:input.operations.length})+'\n');return;}
-  const receipt={transactionId:input.transactionId,commandHash,baseSceneRevision:current,sceneRevision:nextRevision,operations:input.operations.length,appliedAt:new Date().toISOString()};
-  next.v3Transactions={...receipts,[input.transactionId]:receipt};validateV3SceneDocument(next);
+  const input=load(arg||'work/commands.json');
+  const applied=applyCreationTransaction(doc,input,assets,{dryRun:command==='check',glyphOutline:localGlyphOutline}),next=applied.document;
+  if(command==='check'||applied.result.replayed){process.stdout.write(JSON.stringify(applied.result)+'\n');return;}
   // Scene and its receipt are one atomic file. Recheck content under the lock.
   withSceneLock(()=>{
    const latest=validateV3SceneDocument(load('scene.json'));
    if(revision(latest)!==current)throw fail('REVISION_CONFLICT','并发操作已修改 Scene',{currentSceneRevision:revision(latest)});
    const latestReceipts=latest.v3Transactions||{};
    if(latestReceipts[input.transactionId])throw fail('TRANSACTION_CONFLICT','事务已由并发操作提交；请重新读取 Scene');
-   next.v3Transactions={...latestReceipts,[input.transactionId]:receipt};atomic('scene.json',next);
+   next.v3Transactions={...latestReceipts,[input.transactionId]:next.v3Transactions[input.transactionId]};atomic('scene.json',next);
   });
   for(const name of ['preview.png','preview-capture.json','preview-report.json','project.shiyeproject.json','manifest.json'])rmSync('output/'+name,{force:true});
-  process.stdout.write(JSON.stringify({ok:true,...receipt})+'\n');return;
+  process.stdout.write(JSON.stringify(applied.result)+'\n');return;
  }
  const info=inspectWebScene(doc,assets);
- if(command==='inspect'){const result={...info,sceneRevision:current,ledger:buildMaterialLedger(doc.page,assets)};save('output/scene-summary.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
+ if(command==='inspect'){const result={...(full?info:inspectCreationDocument(doc)),sceneRevision:current,ledger:buildMaterialLedger(doc.page,assets),quality:info.quality};save('output/scene-summary.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
  if(!['preview','pack','review'].includes(command))throw fail('UNKNOWN_COMMAND','支持 brief/guide/graphics/info/fonts/design-check/self-test/help/describe/begin/check/apply/preview/inspect/review/pack');
  const draft=validateWebScene(doc.page,source,assets),sceneHash=craftSceneHash(draft);
  if(command==='preview'){

@@ -12,7 +12,7 @@ async function main(){
    'design-check':'design-check', 'self-test':'self-test',begin:'begin work/<name>.json',
    check:'check work/<name>.json',apply:'apply work/<name>.json',
    preview:'preview [--commands work/<name>.json] [--full]（默认只返回图像路径，详细诊断保存到文件）',
-   inspect:'inspect',review:'review pass|fail',pack:'pack'
+   inspect:'inspect [--full]（默认返回毫米位置和必要样式；--full 返回完整 Scene）',review:'review pass|fail',pack:'pack'
   };
   if(!usage[command])throw Object.assign(Error('未知工作台命令'),{code:'UNKNOWN_COMMAND'});
   process.stdout.write(JSON.stringify({ok:true,command,usage:usage[command],readOnly:true})+'\n');
