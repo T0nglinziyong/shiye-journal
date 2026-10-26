@@ -1,3 +1,4 @@
+import {EditorLayoutPanel} from './react-editor-layout.jsx';
 import {creativeSourceIDs} from './creation-sources.js';
 import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js';
 import {CreationModePicker} from './react-creation-mode.jsx';
@@ -1095,6 +1096,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </div>
     <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
+    <EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>
   </div>;
   return <div className="stack editor-inspector-fields">
     {selected.kind==='text'?<>
@@ -1179,6 +1181,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     <h3>图层外观</h3>
     <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
       {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>
+    <EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>
   </div>;
 }
 

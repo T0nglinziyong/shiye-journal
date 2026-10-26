@@ -496,6 +496,32 @@ try{
     'Moving a local group must persist the group transform');
   assert.deepEqual(persistedLocalGroupMove.child,[0,0],
     'Moving a local group must not rewrite child-local coordinates');
+  // Regression: a drag commit updates Scene followers AND their displayed
+  // Fabric objects without an unrelated React/inspector refresh.
+  await evaluate(`(async()=>{
+    const {applyInspectorLayout}=await import('/src/editor-layout-model.js');
+    const f=window.__fabricFixture;
+    f.draft.layers=[
+      {id:'12345678-1111-4111-8111-123456789abc',type:'shape',kind:'rectangle',x:180,y:220,width:100,height:60,rotation:0,fill:'#99aabb',zIndex:1},
+      {id:'linked-mark',type:'shape',kind:'ellipse',x:280,y:220,width:40,height:20,rotation:0,fill:'#cc5533',zIndex:2}];
+    applyInspectorLayout(f.draft,'linked-mark',{action:'place',reference:'node:12345678-1111-4111-8111-123456789abc'});
+    f.select([]);f.refresh();
+  })()`);
+  await sleep(250);
+  await evaluate(`(()=>{
+    const c=window.__fabricCanvas,object=c.getObjects().find(o=>o.sceneID==='12345678-1111-4111-8111-123456789abc');
+    object.set({left:object.left+35,top:object.top+50});object.setCoords();c.fire('object:modified',{target:object});
+  })()`);
+  let following;
+  for(let attempt=0;attempt<40;attempt++){
+    following=await evaluate(`(()=>{const o=window.__fabricCanvas.getObjects().find(o=>o.sceneID==='linked-mark');
+      const n=window.__fabricFixture.draft.layers.find(n=>n.id==='linked-mark');return {scene:[n.x,n.y],canvas:[o.left,o.top]};})()`);
+    if(Math.abs(following.canvas[0]-315)<.01&&Math.abs(following.canvas[1]-270)<.01)break;
+    await sleep(25);
+  }
+  assert.deepEqual(following.scene,[315,270]);
+  assert.ok(Math.abs(following.canvas[0]-315)<.01&&Math.abs(following.canvas[1]-270)<.01,
+    'Dragging must repaint linked followers immediately: '+JSON.stringify(following));
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
 }finally{await browser.close();}

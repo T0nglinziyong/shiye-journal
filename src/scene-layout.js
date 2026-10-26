@@ -13,7 +13,7 @@ function cleanConstraint(node){
 }
 function checkSize(node,size){
  if(!['shape','text','ink'].includes(node.type))throw Error('持续尺寸不能缩放实体素材或组合');
- if(!size||Object.keys(size).some(k=>!['width','height','unit','reference','aspect','behavior'].includes(k))||size.unit!=='ratio'||size.behavior!=='linked'||typeof size.reference!=='string'||!/^((page(\.left|\.right)?)|parent|node:[A-Za-z][A-Za-z0-9._-]*)$/.test(size.reference))throw Error('持续尺寸须为显式 reference、ratio、linked');
+ if(!size||Object.keys(size).some(k=>!['width','height','unit','reference','aspect','behavior'].includes(k))||size.unit!=='ratio'||size.behavior!=='linked'||typeof size.reference!=='string'||!/^((page(\.left|\.right)?)|parent|node:[A-Za-z0-9][A-Za-z0-9._-]*)$/.test(size.reference))throw Error('持续尺寸须为显式 reference、ratio、linked');
  if(size.width===undefined&&size.height===undefined)throw Error('持续尺寸需要 width 或 height');
  for(const key of ['width','height'])if(size[key]!==undefined&&!(Number.isFinite(size[key])&&size[key]>0&&size[key]<=100000))throw Error('持续尺寸比例无效');
  if(size.aspect!==undefined&&!['free','preserve'].includes(size.aspect))throw Error('持续尺寸宽高比规则无效');

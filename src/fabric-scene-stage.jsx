@@ -932,7 +932,12 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             }else if(node.type==='text'&&
               (Math.abs(object.scaleX-1)>.001||Math.abs(object.scaleY-1)>.001)){
               signatures.delete(renderKey(node));reconcileRef.current?.();
-            }else remember(object.sceneID);
+            }else{
+              remember(object.sceneID);
+              // The shared kernel may also move/resize linked followers.
+              // Reconcile signatures now, without waiting for an inspector render.
+              reconcileRef.current?.();
+            }
             callbacks.current.onChange?.(node,'transform');
           }catch(error){
             for(const key of Object.keys(node))delete node[key];

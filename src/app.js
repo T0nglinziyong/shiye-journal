@@ -1,3 +1,4 @@
+import {applyInspectorLayout} from './editor-layout-model.js';
 import {creativeSourceIDs,assertCreativeSources} from './creation-sources.js';
 import {inspectorSelection,applyInkInspectorChange} from './editor-inspector-model.js';
 import {canStartCreation} from './creation-methods.js';
@@ -1610,6 +1611,10 @@ async function runAppAction(action,id,value){try{
       saveRevision:saveVersions.get(state.activeProject.id)||0,
       selectedID:state.selected});
     state.fabricInspectorOpen=true;render();break;
+  }
+  case 'fabric-inspector-layout':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorLayout(page,state.selected,id);saveProject();break;
   }
   case 'fabric-inspector-save':{
     const session=state.inspectorSession;if(!session)break;

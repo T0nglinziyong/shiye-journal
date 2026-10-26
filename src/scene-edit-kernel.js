@@ -87,6 +87,12 @@ export function applySceneNodePatch(page,id,values,{policy=AI_SCENE_POLICY,confi
   restoreLayout.validate?.(policy,[id]);return node;
  }catch(error){restoreLayout();replace(node,before);throw error;}
 }
+// Detaching a relation is an edit, with the same lock/ownership gate as binding.
+// It keeps the currently resolved pose and needs no layout recomputation.
+export function detachSceneNodeLayout(page,id,scope='all',{policy=AI_SCENE_POLICY}={}){
+ requireScenePolicy(policy);const node=editable(page,id,{},policy);
+ assertPolicyOwnership(node,policy);return detachSceneLayout(page,id,scope);
+}
 export function applySceneNodeChange(page,id,change,{policy=AI_SCENE_POLICY,confirmation,linked='solve',created=false,measure}={}){
  const path=spatialPath(page.layers,id);if(!path)throw Error('图层不存在：'+id);
  const values=changedNodeProperties(page,path.node,change,path.ancestors.at(-1)?.id,{policy,confirmation});
