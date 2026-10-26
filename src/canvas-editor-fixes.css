@@ -190,7 +190,7 @@
  border:1px solid #416c59;border-radius:9px;background:#fffefa;
  box-shadow:0 1px 5px #243b2c3d;backdrop-filter:none;
 }
-.fabric-selected-actions button{display:grid;place-items:center;min-width:30px;width:30px;height:28px;
+.fabric-selected-actions button{display:grid;place-items:center;min-width:44px;width:44px;min-height:44px;height:44px;
  border-radius:6px;font-size:19px;line-height:1}
 .fabric-selected-actions button:hover,.fabric-selected-actions button:focus-visible{background:#e6f0e8}
 .editor-inspector-range>div,.editor-crop-slider{display:grid;grid-template-columns:minmax(0,1fr);

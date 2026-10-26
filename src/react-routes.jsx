@@ -2,6 +2,7 @@ import {EditorMaskPanel} from './react-editor-mask.jsx';
 import {EditorLetteringPanel} from './react-editor-lettering.jsx';
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {EditorLayoutPanel} from './react-editor-layout.jsx';
+import {editorActionPosition} from './editor-action-position.js';
 import {creativeSourceIDs} from './creation-sources.js';
 import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js';
 import {CreationModePicker} from './react-creation-mode.jsx';
@@ -1268,8 +1269,8 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
         y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
       const center=rect.left+anchor.x*rect.width/draft.canvas.width;
       const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
-      setPosition({left:Math.max(mode==='group'?108:88,Math.min(innerWidth-(mode==='group'?108:88),center)),
-        top:Math.max(58,Math.min(innerHeight-50,edge-30))});
+      const toolbarBottom=Math.max(0,...['.swift-editor-head','.swift-editor-toolbar'].map(selector=>document.querySelector(selector)?.getBoundingClientRect().bottom||0));
+      setPosition(editorActionPosition({x:center,y:edge,width:innerWidth,height:innerHeight,toolbarBottom,group:mode==='group'}));
     };
     const move=event=>{
       currentBounds=event.detail.bounds;
@@ -1279,6 +1280,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
     place();
     const observer=new MutationObserver(place);observer.observe(page,{attributes:true,attributeFilter:['style']});
     const resize=new ResizeObserver(place);resize.observe(canvas);
+    const toolbar=document.querySelector('.swift-editor-toolbar');if(toolbar)resize.observe(toolbar);
     addEventListener('resize',place);addEventListener('scroll',place,true);
     canvas.addEventListener('shiye:fabric-object-transform',move);
     page.addEventListener('panzoomchange',place);

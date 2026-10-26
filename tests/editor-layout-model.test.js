@@ -72,3 +72,41 @@ test('saved relative placement remains editable and unsafe Command ids remain re
  assert.doesNotThrow(()=>validateCreationV2Commands(batch(refID)));
  for(const id of ['../path','a/b','a b','<script>'])assert.throws(()=>validateCreationV2Commands(batch(id)));
 });
+
+test('independent position and size references and single-axis size persist through target changes',async()=>{
+ const {inspectorSizeControls}=await import('../src/editor-layout-model.js');
+ const page=await fixture(),reference='node:'+refID,before=worldBox(page,'mark');
+ applyInspectorLayout(page,'mark',{action:'place',reference:'page',position:'center'});
+ applyInspectorLayout(page,'mark',{action:'size',reference,axes:'width',width:.25});
+ let mark=findSceneNode(page,'mark');
+ assert.equal(mark.layoutConstraint.place.reference,'page');
+ assert.equal(mark.layoutConstraint.size.reference,reference);
+ assert.equal(mark.layoutConstraint.size.height,undefined);
+ assert.equal(inspectorSizeControls(page,'mark').reference,reference);
+ assert.equal(inspectorSizeControls(page,'mark').axes,'width');
+ near(worldBox(page,'mark').w/worldBox(page,'mark').h,before.w/before.h);
+ const size=worldBox(page,'mark'),target=findSceneNode(page,refID);
+ applySceneWorldPatch(page,refID,{width:target.width*2,height:target.height*3},{policy:USER_SCENE_POLICY});
+ near(worldBox(page,'mark').w,size.w*2);near(worldBox(page,'mark').h,size.h*2);
+ applyInspectorLayout(page,'mark',{action:'size',reference,axes:'height',height:.5});
+ assert.equal(findSceneNode(page,'mark').layoutConstraint.size.width,undefined);
+ assert.equal(inspectorSizeControls(JSON.parse(JSON.stringify(page)),'mark').axes,'height');
+ const snapshot=JSON.stringify(page);
+ for(const request of [{axes:'diagonal',width:1,height:1},{axes:'width',width:0},{axes:'height',height:NaN}]){
+  assert.throws(()=>applyInspectorLayout(page,'mark',{action:'size',reference,...request}));assert.equal(JSON.stringify(page),snapshot);
+ }
+});
+
+test('reopening text size controls retains authored minimum instead of enlarged reflow height',async()=>{
+ const {inspectorSizeControls}=await import('../src/editor-layout-model.js');
+ const page=await fixture(),node=findSceneNode(page,'mark');
+ Object.assign(node,{type:'text',content:'这是会自动换行的书写内容，不能因为重新打开面板就改变已设定的最小高度。',fontSize:20,fontName:'sans-serif'});
+ delete node.kind;delete node.fill;delete node.stroke;
+ applyInspectorLayout(page,'mark',{action:'size',reference:'node:'+refID,axes:'both',width:.3,height:.01});
+ const initial=inspectorSizeControls(page,'mark');
+ assert.equal(initial.ratios.height,.01);assert.ok(inspectorSizeRatios(page,'mark','node:'+refID).height>.01);
+ applyInspectorLayout(page,'mark',{action:'size',reference:initial.reference,axes:initial.axes,...initial.ratios});
+ assert.equal(findSceneNode(page,'mark').layoutConstraint.size.height,.01);
+ applyInspectorLayout(page,'mark',{action:'detach',scope:'size'});
+ assert.equal(inspectorSizeControls(page,'mark').reference,'page');
+});

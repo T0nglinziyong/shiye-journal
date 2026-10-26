@@ -22,7 +22,7 @@ export function inspectorLayoutModel(page,id,describe=()=>null){
    `${ordinal}. ${(describe(node)||node.name||node.content||labels[node.type]||'对象').slice(0,32)}`]);
   if(node.children)walk(node.children);
  }};walk(page.layers);
- return {references:refs,constraint:path.node.layoutConstraint||{},canResize:['text','shape','ink'].includes(path.node.type),parentID:parent?.id};
+ return {references:refs,constraint:path.node.layoutConstraint||{},type:path.node.type,canResize:['text','shape','ink'].includes(path.node.type),parentID:parent?.id};
 }
 function boxes(page,id,reference){
  const model=inspectorLayoutModel(page,id);
@@ -32,15 +32,24 @@ function boxes(page,id,reference){
 export function inspectorSizeRatios(page,id,reference){
  const {box,ref}=boxes(page,id,reference);return {width:box.w/ref.w,height:box.h/ref.h};
 }
+export function inspectorSizeControls(page,id){
+ const size=inspectorLayoutModel(page,id).constraint.size,reference=inspectorReference(page,size?.reference||'page');
+ const ratios=inspectorSizeRatios(page,id,reference);
+ for(const key of ['width','height'])if(size?.[key]!==undefined)ratios[key]=size[key];
+ // A persisted text minimum may be smaller than its content's actual height.
+ // Reopening the panel must retain the authored ratio, not replace it with reflow output.
+ return {reference,ratios,axes:size?.width===undefined&&size?.height!==undefined?'height':size?.height===undefined&&size?.width!==undefined?'width':'both'};
+}
 export function applyInspectorLayout(page,id,request){
  if(!request||typeof request!=='object')throw Error('跟随设置无效');
  if(request.action==='detach')return detachSceneNodeLayout(page,id,request.scope,{policy:USER_SCENE_POLICY});
  const {model,box,ref}=boxes(page,id,request.reference);
  if(request.action==='size'){
   if(!model.canResize)throw Error('实体素材和组合不能随参照改变尺寸');
-  const width=Number(request.width),height=Number(request.height);
-  if(!(width>0&&height>0&&width<=100000&&height<=100000))throw Error('宽高比例必须为正数');
-  return applySceneNodeChange(page,id,{size:{reference:request.reference,width,height,unit:'ratio',aspect:'free',behavior:'linked'}},{policy:USER_SCENE_POLICY});
+  const axes=request.axes??'both';if(!['both','width','height'].includes(axes))throw Error('请选择有效的尺寸变化方式');
+  const values=Object.fromEntries((axes==='both'?['width','height']:[axes]).map(key=>[key,Number(request[key])]));
+  if(Object.values(values).some(value=>!Number.isFinite(value)||value<=0||value>100000))throw Error('宽高比例必须为正数');
+  return applySceneNodeChange(page,id,{size:{reference:request.reference,...values,unit:'ratio',aspect:axes==='both'?'free':'preserve',behavior:'linked'}},{policy:USER_SCENE_POLICY});
  }
  if(request.action!=='place')throw Error('未知跟随操作');
  const mode=request.position||'keep',gap=Number(request.gap??0),follow=request.followRotation===true;
