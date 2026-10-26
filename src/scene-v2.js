@@ -5,8 +5,8 @@ import {validateShapeOptions} from './advanced-shape-options.js';
 // Scene v2: THE persisted editable layer tree. No parallel persisted arrays.
 // Existing editor/craft algorithms receive ephemeral leaf collection views,
 // whose supported mutations write through to the same tree.
-import {IDENTITY,assertRigidMatrix,convertNodeFrame,groupMatrix,inverseMatrix,matrixAngle,multiplyMatrix,rigidMatrix,setWorldPosition,spatialPath,transformPoint} from './scene-spatial.js';
-import {assertNoLinkedDependents,validateSceneLayout} from './scene-layout.js';
+import {IDENTITY,newSceneGroupFrame,assertRigidMatrix,convertNodeFrame,groupMatrix,inverseMatrix,matrixAngle,multiplyMatrix,rigidMatrix,setWorldPosition,spatialPath,transformPoint} from './scene-spatial.js';
+import {assertNoLinkedDependents,validateSceneLayout,captureSceneParentChange,rebindSceneParent,assertSceneParentFrame} from './scene-layout.js';
 export const SCENE_VERSION=2;
 export const SCENE_FORMAT='shiye-scene';
 export const SCENE_MAX_GROUP_DEPTH=12;
@@ -202,18 +202,16 @@ export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐�
   if(positions.some((value,index)=>value!==positions[0]+index))throw Error('非连续图层编组会改变原有遮挡顺序');
  }
  const parentWorld=parent?spatialPath(d.layers,parent.id).world:IDENTITY;
- const positions=ids.map(key=>spatialPath(d.layers,key)).filter(path=>path.node.type!=='ink').map(path=>[path.world[4],path.world[5]]);
- const origin=positions.length?{x:positions.reduce((v,p)=>v+p[0],0)/positions.length,y:positions.reduce((v,p)=>v+p[1],0)/positions.length}:{x:0,y:0};
+ const frame=spatial?newSceneGroupFrame(d,ids,parentWorld):null;
+ const targetFrame={layoutBox:spatial?(layoutBox||frame.layoutBox):undefined};
+ selected.forEach(path=>assertSceneParentFrame(path.at(-1),targetFrame));
+ const relations=new Map(ids.map(key=>[key,captureSceneParentChange(d,key)]));
  const nodes=ids.map(key=>detach(d.layers,key)).filter(Boolean);
  const group={id,type:'group',name:String(name).slice(0,80),opacity:1,blendMode:'normal',children:nodes,zIndex:Math.min(...nodes.map(z))};
- if(spatial){
-  const local=transformPoint(inverseMatrix(parentWorld),origin.x,origin.y);
-  group.localTransform=rigidMatrix(local.x,local.y);
-  nodes.forEach(node=>convertNodeFrame(node,IDENTITY,group.localTransform));
-  if(layoutBox)group.layoutBox=layoutBox;
- }
+ if(frame){group.localTransform=frame.localTransform;group.layoutBox=layoutBox||frame.layoutBox;
+  nodes.forEach(node=>convertNodeFrame(node,IDENTITY,group.localTransform));}
  insertNode(d,group,parent?.id);
- nodes.forEach(n=>n.creativeGroupID=id);
+ nodes.forEach(n=>{n.creativeGroupID=id;rebindSceneParent(d,n.id,relations.get(n.id));});
  return id;
 }
 export function ungroupSceneLayers(d,id){
@@ -224,6 +222,9 @@ export function ungroupSceneLayers(d,id){
  if((group.opacity??1)!==1||!['normal','source-over',undefined].includes(group.blendMode)||
    group.vectorMask||group.materialMask||group.clipPath||group.shadow)
   throw Error('这个组合有透明、混合、阴影或遮罩效果，直接解组会改变画面');
+ const destination=spatialPath(d.layers,id).ancestors.at(-1);
+ group.children.forEach(child=>assertSceneParentFrame(child,destination));
+ const relations=new Map(group.children.map(child=>[child.id,captureSceneParentChange(d,child.id)]));
  if(group.localTransform)for(const child of group.children)convertNodeFrame(child,group.localTransform,IDENTITY);
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
  const target=parent?parent.children:d.layers;
@@ -233,6 +234,7 @@ export function ungroupSceneLayers(d,id){
  ordered.forEach((node,position)=>{node.zIndex=position+1;});
  target.splice(0,target.length,...ordered);
  for(const child of group.children)if(child.type!=='group')child.creativeGroupID=parent?.id||undefined; // Nested groups retain their own membership.
+ for(const child of group.children)rebindSceneParent(d,child.id,relations.get(child.id));
  return true;
 }
 export function sceneGroups(d){attachSceneV2(d);return collectGroups(d.layers);}
@@ -248,7 +250,9 @@ export function moveSceneNode(d,id,{parentID=null,beforeID=null}={}){
  if(parent?.locked||parent?.isLocked)throw Error('目标组已锁定');
  const target=parent?parent.children:d.layers;
  if(beforeID&&!target.some(n=>n.id===beforeID&&n!==node))throw Error('目标位置不属于该图层组');
+ assertSceneParentFrame(node,parent);
  const oldPath=spatialPath(d.layers,id),newParentWorld=parent?spatialPath(d.layers,parent.id).world:IDENTITY;
+ const relation=(oldPath.ancestors.at(-1)||null)!==parent?captureSceneParentChange(d,id):null;
  convertNodeFrame(node,oldPath.parentWorld,newParentWorld);
  const removed=detach(d.layers,id);
  if(!removed)throw Error('无法从旧图层组取出对象');
@@ -262,6 +266,7 @@ export function moveSceneNode(d,id,{parentID=null,beforeID=null}={}){
   if(parent)node.creativeGroupID=parent.id;
   else delete node.creativeGroupID;
  }
+ if(relation)rebindSceneParent(d,id,relation);
  return true;
 }
 export function findSceneNode(d,id){

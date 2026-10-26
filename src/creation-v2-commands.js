@@ -34,11 +34,6 @@ const processMaterial=(doc,target,steps,assets,mode='append')=>runMaterialAlgori
 function placeFor(doc,place,widthMm,heightMm,rotationDeg=0,parentID=null){return resolveCreationPlace(doc.page,place,{widthMm,heightMm,rotationDeg,parentID});}
 function addToParent(doc,id,parent,assets){if(!parent)return doc;const group=requireNode(doc,parent);if(group.type!=='group')throw Error('父级必须是图层组');return editScene(doc,[{op:'move',id:requireNode(doc,id).id,parent:group.id}],assets);}
 function finishPlacement(doc,id,place){if(place)applyScenePlacement(doc.page,id,place);return doc;}
-function groupBox(doc,ids){
- const boxes=ids.map(id=>worldBox(doc.page,id)),cx=boxes.reduce((sum,b)=>sum+b.cx,0)/boxes.length,cy=boxes.reduce((sum,b)=>sum+b.cy,0)/boxes.length;
- const extent=box=>{const a=box.rotation*Math.PI/180;return [Math.abs(Math.cos(a))*box.w+Math.abs(Math.sin(a))*box.h,Math.abs(Math.sin(a))*box.w+Math.abs(Math.cos(a))*box.h];};
- return {width:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cx-cx)+extent(b)[0]/2))),height:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cy-cy)+extent(b)[1]/2)))};
-}
 function reorder(doc,target,order,assets){
  const at=locate(doc.page.layers,target);if(!at)throw Error('图层不存在：'+target);
  const peers=at.siblings.filter(node=>node!==at.node).sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));let before;
@@ -183,7 +178,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
    doc=editScene(doc,[{op:'delete',id:requireNode(doc,item.target).id}],assets);
   }else if(item.op==='group.create'){
-   const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:groupBox(doc,targets);
+   const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:undefined;
    doc=editScene(doc,[{op:'group',ids:targets,id:item.id,name:item.id,spatial:true,layoutBox:bounds}],assets);doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(item.op==='group.compose'){
    if(find(doc,item.id))throw Error('组合编号已经存在');
