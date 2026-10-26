@@ -91,7 +91,7 @@ test('direct JSON and ZIP preserve crop, organic vectors, pen, marker, text and 
 });
 test('editable prompt uses the unified gateway and real layered preview',()=>{
  const base=project('测试').drafts[0],editable=buildCreativeMessages({draft:base,assets:[],aliases:{},deliveryMode:'json'});
- assert.match(editable[0].content,/creation_apply/);assert.match(editable[0].content,/文字围绕图片侧边/);
+ assert.match(editable[0].content,/creation_apply/);assert.match(editable[1].content[0].text,/沿轮廓排字/);
  assert.doesNotMatch(editable[0].content,/compose_direct_page|finish_design|ink_strokes/);
 });
 test('GPT image delivery uses actual image edits and only accepts returned PNG bytes',async()=>{

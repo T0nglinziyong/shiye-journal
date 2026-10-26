@@ -9,8 +9,7 @@ import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from 
 import {createNativeProjectPackage} from '../src/native-project-package.js';
 import {renderOfflinePreviewSVG} from '../src/offline-preview-svg.js';
 import {materialMaskGeometry,materialMaskArea} from '../src/material-mask.js';
-import {materialCraftGuide} from '../src/material-craft-guide.js';
-import {creativeLayeringGuide} from '../src/creative-layering-guide.js';
+import {describeCreationGuidance} from '../src/creation-guidance.js';
 
 const asset={id:'craft-paper',title:'合成图案纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,supply:{quantity:1}};
 const piece=(id,operations,extra={})=>({asset:'m1',piece:id,unit:0,operations,placement:{x:.5,y:.5,rotation:0,z:10},...extra});
@@ -79,8 +78,10 @@ test('new craft survives native ZIP and approximate preview uses the actual cut 
   const svg=renderOfflinePreviewSVG(result.draft,{materials:[{assetID:asset.id,alias:'m1'}]});
   assert.match(svg,/<clipPath/);assert.match(svg,/clip-rule="evenodd"/);
 });
-test('shared guide describes actual tools and does not make process counts mandatory',()=>{
-  assert.ok(creativeLayeringGuide.includes(materialCraftGuide));
-  for(const token of ['torn','ticket_notch','postage','fringe','partial_tear','peek','underlay','bridge'])assert.ok(materialCraftGuide.includes(token));
-  assert.match(materialCraftGuide,/不要求每页/);assert.match(materialCraftGuide,/目前没有/);
+test('craft guidance routes to current commands without making process counts mandatory',()=>{
+  const guide=describeCreationGuidance(['cutwork','layering']).guides;
+  assert.ok(guide[0].operations.includes('material.edge'));
+  assert.ok(guide[0].operations.includes('material.weave'));
+  assert.match(guide[0].advice,/来源占用账本/);
+  assert.match(guide[1].advice,/无需每件材料都加工/);
 });

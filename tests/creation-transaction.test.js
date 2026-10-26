@@ -107,3 +107,17 @@ test('real Canvas renders a masked translucent child group in the same world fra
  }
  assert.ok(canvas.toBuffer('image/png').length>100);
 });
+
+test('physical splitting can precede other required materials; only final validation requires them all',async()=>{
+ const {validateWebScene}=await import('../src/web-scene-workbench.js');
+ const assets=['paper','photo'].map(id=>({id,title:id,kind:'paper',physicalWidthMM:30,physicalHeightMM:20,supply:{quantity:1}}));
+ const doc=await createCreationDocument({draft:draft(),assets,aliases:{m1:'paper',m2:'photo'},requiredAssetIDs:['paper','photo']});
+ const split=[{op:'material.add',id:'sheet',asset:'m1',place:at},{op:'material.split',target:'sheet',pieces:[{id:'half',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.5,1]}}]}];
+ const partial=applyCreationTransaction(doc,batch(doc,split),assets).document;
+ assert.throws(()=>validateWebScene(partial.page,partial.source,assets),/必用素材/);
+ assert.notEqual(partial.page.agentRun?.status,'finished');
+ const complete=applyCreationTransaction(doc,batch(doc,[...split,{op:'material.add',id:'picture',asset:'m2',place:{...at,at:[80,80]}}]),assets).document;
+ assert.doesNotThrow(()=>validateWebScene(complete.page,complete.source,assets));
+ assert.throws(()=>applyCreationTransaction(doc,batch(doc,[split[0],{op:'material.split',target:'sheet',pieces:[{id:'one',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.8,1]}},{id:'two',region:{shape:'rect',space:'source',unit:'ratio',box:[.4,0,.6,1]}}]}]),assets),/重叠|区域/);
+ assert.equal(doc.page.layers.length,0,'invalid partial crafts still roll back atomically');
+});

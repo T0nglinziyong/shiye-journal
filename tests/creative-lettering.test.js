@@ -7,10 +7,10 @@ test('lettering mode remains a creative direction, not a numerical art quota',()
  const handwritten=creativePageBrief({textPresentation:'handwritten',purposes:['日常记录']});
  const typed=creativePageBrief({textPresentation:'type'});
  const mixed=creativePageBrief({textPresentation:'mixed'});
- assert.match(handwritten,/可编辑笔画 ink_strokes/);
- assert.match(typed,/可编辑 text_blocks/);
+ assert.match(handwritten,/可编辑笔画 graphic\.add 的 stroke/);
+ assert.match(typed,/可编辑 text\.add/);
  assert.match(mixed,/默认混合编排/);
- assert.doesNotMatch(creativePageBrief({contentPolicy:'visual',textPresentation:'handwritten'}),/可编辑笔画 ink_strokes/);
+ assert.doesNotMatch(creativePageBrief({contentPolicy:'visual',textPresentation:'handwritten'}),/可编辑笔画 graphic\.add 的 stroke/);
 });
 test('single combined creative input is respected without a secondary facts field',()=>{
  const brief=creativeContentBrief({topic:'主题是秋天，请在画面里写「慢慢来」；标题在左侧'});

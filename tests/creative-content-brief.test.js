@@ -42,7 +42,7 @@ test('online and offline tasks carry the same chosen content boundary',async()=>
   const visual=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   assert.equal(visual.source.textMode,'none');
   const onlineVisual=buildCreativeMessages({draft:p.drafts[0],assets:[],aliases:{},contentPolicy:'visual'});
-  assert.match(onlineVisual[0].content,/不生成文字/);
+  assert.match(onlineVisual[1].content[0].text,/不生成新增的正文、标题、图注/);
   const imageVisual=imagePrompt({project:p,draft:p.drafts[0],assets:[],ids:[],includeImages:false});
   assert.match(imageVisual,/不生成新增的正文、标题、图注/);
 });

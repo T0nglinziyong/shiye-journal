@@ -142,3 +142,14 @@ test('public registry is unified and old native operations are rejected',()=>{
  assert.ok(Object.keys(creationCommandRegistry).every(name=>!name.startsWith('native.')));
  assert.throws(()=>validateCreationV2Commands(batch([{op:'native.material.add',id:'p',asset:'m1',placement:{xMm:40,yMm:50}}])),/未知操作/);
 });
+
+test('compact command help exposes exact typed style keys without forcing full Scene schemas',async()=>{
+ const {describeCreationCommand}=await import('../src/creation-v2-contract.js');
+ const text=describeCreationCommand('text.add'),graphic=describeCreationCommand('graphic.add');
+ assert.deepEqual(text.parameters.style.fields.textAlign.enum,['left','center','right']);
+ assert.equal(text.parameters.style.fields.fill,undefined);
+ assert.equal(text.parameters.style.fields.fontSizePt.type,'number');
+ assert.ok(graphic.parameters.style.fields.fill);assert.ok(graphic.parameters.style.fields.strokeWidthMm);
+ assert.ok(JSON.stringify(text).length<6500);assert.equal(text.schema,undefined);
+ const group=describeCreationCommand('group.compose');assert.equal(group.parameters.children.items,'Command');
+});

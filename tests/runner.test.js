@@ -16,6 +16,9 @@ const reply=(...calls)=>({choices:[{message:{tool_calls:calls}}]});
 test('unified transactions retain a committed batch after malformed call, then finish the exact revision',async()=>{
  const payloads=[];let round=0;
  const result=await runner({},p=>{payloads.push(p);const rev=currentRevision(p);return ++round===1?reply(call('creation_apply',batch(rev,[text()]),'good'),call('creation_apply','{broken','bad')):reply(call('creation_finish',{sceneRevision:rev}));});
+ assert.equal(payloads[0].messages.length,2,'one task message includes the authoritative scene once');
+ assert.equal((JSON.stringify(payloads[0].messages).match(/coordinateSystem/g)||[]).length,1);
+ assert.doesNotMatch(JSON.stringify(payloads[0].messages),/observed_region|plan\.weaves|apply_craft_plan|ink_strokes|upsert_materials/);
  assert.equal(result.finished,true);assert.equal(result.turns,2);assert.equal(result.draft.textBlocks.length,1);
  assert.equal(payloads[0].thinking.type,'disabled');assert.equal(payloads[0].tool_choice,'required');
  assert.equal(payloads[1].messages.filter(m=>m.role==='tool').length,2);

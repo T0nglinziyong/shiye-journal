@@ -22,7 +22,13 @@ export function selfContainedCreationSchema(schema){
 // are only expanded by --full, never when the agent just asks how to compose.
 function briefField(schema){
  if(schema.allOf){const ref=schema.allOf.find(part=>part.$ref);return {...(ref?briefField(ref):{}),constraints:schema.allOf.filter(part=>part!==ref).map(part=>part.properties?Object.fromEntries(Object.entries(part.properties).map(([key,value])=>[key,briefField(value)])):briefField(part))};}
- if(schema.$ref){const type=schema.$ref.split('/').at(-1),topic=Object.entries(topics).find(([,v])=>v===type)?.[0];return {type,...(topic?{help:'describe '+topic}:{detail:'当前操作的 --full 定义'})};}
+ if(schema.$ref){
+  const type=schema.$ref.split('/').at(-1),topic=Object.entries(topics).find(([,v])=>v===type)?.[0];
+  // Type-specific paint/text fields are small and needed on nearly every
+  // creation. Show their exact names without expanding recursive Commands.
+  if(type.startsWith('Style_')&&definitions[type])return {...briefField(definitions[type]),type};
+  return {type,...(topic?{help:'describe '+topic}:{detail:'当前操作的 --full 定义'})};
+ }
  if(schema.oneOf||schema.anyOf)return {variants:(schema.oneOf||schema.anyOf).map(briefField)};
  if(schema.const!==undefined)return {const:schema.const};
  if(schema.enum)return {enum:schema.enum,...(schema.default===undefined?{}:{default:schema.default})};
