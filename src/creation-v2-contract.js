@@ -21,7 +21,9 @@ export function selfContainedCreationSchema(schema){
 // Default discovery is deliberately shallow. Recursive Operation definitions
 // are only expanded by --full, never when the agent just asks how to compose.
 function briefField(schema){
- if(schema.allOf){const ref=schema.allOf.find(part=>part.$ref);return {...(ref?briefField(ref):{}),constraints:schema.allOf.filter(part=>part!==ref).map(part=>part.properties?Object.fromEntries(Object.entries(part.properties).map(([key,value])=>[key,briefField(value)])):briefField(part))};}
+ if(schema.allOf){const {allOf,...base}=schema,ref=allOf.find(part=>part.$ref);return {...(ref?briefField(ref):{}),...briefField(base),constraints:allOf.filter(part=>part!==ref).map(briefField)};}
+ if(schema.if)return {if:briefField(schema.if),...(schema.then?{then:briefField(schema.then)}:{}),...(schema.else?{else:briefField(schema.else)}:{})};
+ if(schema.not)return {not:briefField(schema.not)};
  if(schema.$ref){
   const type=schema.$ref.split('/').at(-1),topic=Object.entries(topics).find(([,v])=>v===type)?.[0];
   // Type-specific paint/text fields are small and needed on nearly every
@@ -33,7 +35,7 @@ function briefField(schema){
  if(schema.const!==undefined)return {const:schema.const};
  if(schema.enum)return {enum:schema.enum,...(schema.default===undefined?{}:{default:schema.default})};
  if(schema.type==='array')return {type:'array',items:schema.items?.$ref?.endsWith('/Operation')?'Command':briefField(schema.items||{}),minItems:schema.minItems,maxItems:schema.maxItems};
- if(schema.type==='object')return {type:'object',required:schema.required||[],fields:Object.fromEntries(Object.entries(schema.properties||{}).map(([key,value])=>[key,briefField(value)]))};
+ if(schema.type==='object'||schema.properties||schema.required)return {type:'object',required:schema.required||[],fields:Object.fromEntries(Object.entries(schema.properties||{}).map(([key,value])=>[key,briefField(value)]))};
  return Object.fromEntries(Object.entries(schema).filter(([key])=>['type','minimum','maximum','exclusiveMinimum','minLength','maxLength','default','description'].includes(key)));
 }
 export function describeCreationCommand(name,{full=false}={}){

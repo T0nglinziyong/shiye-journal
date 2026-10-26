@@ -8,7 +8,7 @@ async function main(){
  if(process.argv.includes('--help')){
   const usage={
    brief:'brief（任务摘要，不展开来源快照）',guide:'guide [专题或风格 ...]（按需创作方法；无参数列出目录）',
-   help:'help [topic]',describe:'describe <operation|topic> [...] [--full]',graphics:'graphics help',info:'info',fonts:'fonts',
+   help:'help [topic]',describe:'describe <operation|topic> [...] [--full]',graphics:'graphics help',info:'info',fonts:'fonts [--full]',
    'design-check':'design-check', 'self-test':'self-test',begin:'begin work/<name>.json',
    check:'check work/<name>.json',apply:'apply work/<name>.json',
    preview:'preview [--commands work/<name>.json] [--full]（默认只返回图像路径，详细诊断保存到文件）',

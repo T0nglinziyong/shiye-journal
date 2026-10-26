@@ -67,7 +67,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  if(command==='help'){process.stdout.write(JSON.stringify({ok:true,...creationHelp(),tools:[{name:'graphics',readOnly:true,help:'graphics help'}]})+'\n');return;}
  if(command==='describe'){const topics=Array.isArray(arg)?arg:[arg];const descriptions=(topics.length?topics:[undefined]).map(topic=>describeCreationV2Command(topic,{full}));process.stdout.write(JSON.stringify(descriptions.length===1?{ok:true,...descriptions[0]}:{ok:true,descriptions})+'\n');return;}
  if(command==='design-check'){const result={ok:true,sceneRevision:current,...auditCreationDesign(doc.page,{materials:task.materials,styles:task.styles})};save('output/design-advisory.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
- if(command==='fonts'){process.stdout.write(JSON.stringify({ok:true,...offlineFontCatalog()})+'\n');return;}
+ if(command==='fonts'){process.stdout.write(JSON.stringify({ok:true,...offlineFontCatalog({full})})+'\n');return;}
  if(command==='info'){process.stdout.write(JSON.stringify({ok:true,tools:['graphics'],protocolVersion:2,supportedProtocolVersions:[2],taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'})+'\n');return;}
  if(command==='self-test'){
   const result={ok:false,node:process.version,renderer:null,fonts:'environment-dependent',hint:null};
