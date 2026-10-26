@@ -10,7 +10,7 @@ import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
-import {parseEditableGeometry} from './editable-geometry.js';
+import {EditorVectorPanel} from './react-editor-vector.jsx';
 import {canStartCreation,creationModeDescription} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
@@ -1046,16 +1046,6 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   </div>;
 }
 
-function VectorGeometryEditor({item,onChange}){
-  const kind=item.vectorLayers?.length?'layers':'paths',value=item.vectorLayers||item.vectorPaths||[];
-  const [content,setContent]=useState(()=>JSON.stringify(value,null,2)),[error,setError]=useState('');
-  useEffect(()=>{setContent(JSON.stringify(value,null,2));setError('');},[item.id,JSON.stringify(value)]);
-  return <div className="editor-inspector-vector"><label>{kind==='layers'?'多色图形色层':'自由图形轮廓'}（0–1 坐标 JSON）
-    <textarea value={content} rows={6} onChange={event=>{setContent(event.target.value);setError('');}}/></label>
-    <button type="button" className="btn" onClick={()=>{try{onChange('inspector-vector-geometry',parseEditableGeometry(content,kind));setError('');}catch(issue){setError(issue.message);}}}>应用图形轮廓</button>
-    {error?<small role="alert">{error}</small>:null}</div>;
-}
-
 const inspectorShapeNames=new Map([...commonShapes,...advancedShapes]);
 function EditorInspector({selected,draft,asset,format,onChange,onAction,materials=[]}){
   const field=(id,label,value,type='number',props={})=>type==='range'?<label className="editor-inspector-range">
@@ -1149,6 +1139,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </>:null}
     {selected.kind==='shape'?<>
       <h3>填充与线条</h3>
+      {item.svgPaths?.some(p=>Object.hasOwn(p,'fill')||Object.hasOwn(p,'stroke'))?<small>独立路径颜色可在“编辑图形轮廓”中调整，或选择“沿用整体”。</small>:null}
       {item.vectorLayers?.length?<div className="editor-inspector-vector"><p className="muted">多色矢量 · {item.vectorLayers.length} 层，路径保持独立</p>
         {item.vectorLayers.map((layer,index)=><div className="form-grid" key={index}>
           {field(`inspector-vector-fill-${index}`,`第 ${index+1} 层颜色`,layer.fill||'#ffffff','color')}
@@ -1174,7 +1165,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
             <React.Fragment key={control.key}>{field(`inspector-shape-option-${control.key}`,control.label,value,'number',
               {min:control.min,max:control.max,step:control.type==='integer'?1:.01})}</React.Fragment>;
       })}</div></div>:null}
-      {(item.vectorPaths?.length||item.vectorLayers?.length)?<VectorGeometryEditor key={item.id} item={item} onChange={onChange}/>:null}
+      {(item.vectorPaths?.length||item.vectorLayers?.length||item.svgPaths?.length)?<EditorVectorPanel key={item.id} node={item} onAction={onAction}/>:null}
       <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>

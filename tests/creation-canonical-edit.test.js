@@ -132,3 +132,14 @@ test('manual and Command title reflow share editable geometry and rendered pixel
  const render=async p=>(await renderSceneCanvas(p,{createCanvas:()=>createCanvas(1,1),waitForFonts:false})).canvas.toBuffer('image/png');
  assert.deepEqual(await render(ai.page),await render(manual.page));
 });
+
+test('visual vector edit and Command geometry update render the same current Scene',async()=>{
+ const {vectorEditorState,moveVectorHandle,applyInspectorVectorGeometry}=await import('../src/editor-vector-geometry.js');
+ const {run}=await fixture([]),geometry={kind:'path',viewBox:[0,0,100,100],paths:[{d:'M10 50 C25 5 75 95 90 50',style:{stroke:'#884422',fill:null}}]};
+ const initial=run([{op:'graphic.add',id:'curve',geometry,size:{width:50,height:30,unit:'mm'},place:at()}]);
+ const state=moveVectorHandle(vectorEditorState(node(initial,'curve')),0,1,[30,8]);
+ const ai=run([{op:'layer.update',target:'curve',geometry:{...geometry,paths:[{...geometry.paths[0],d:state.value[0].d}]}}],initial),manual=structuredClone(initial);
+ applyInspectorVectorGeometry(manual.page,'curve',state);assert.deepEqual(node(manual,'curve').svgPaths,node(ai,'curve').svgPaths);
+ const render=async p=>(await renderSceneCanvas(p,{createCanvas:()=>createCanvas(1,1),loadShapeImage:async(url,f)=>loadImage(Buffer.from(decodeURIComponent(url.split(',').slice(1).join(',')).replace('<svg ',`<svg width="${f.width}" height="${f.height}" `))),waitForFonts:false})).canvas.toBuffer('image/png');
+ assert.deepEqual(await render(manual.page),await render(ai.page));
+});

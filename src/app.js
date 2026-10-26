@@ -19,7 +19,7 @@ import {importDefaultTitle} from './import-default-names.js';
 import {materialKindName} from './material-taxonomy.js';
 import {withCreativePresetAssets,isCreativePreset} from './creative-presets.js';
 import {advancedShapeControls,shapeRepeatCountPatch,validateShapeOptions} from './advanced-shape-options.js';
-import {parseEditableGeometry} from './editable-geometry.js';
+import {applyInspectorVectorGeometry,applyInspectorVectorStyle} from './editor-vector-geometry.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
@@ -1069,10 +1069,6 @@ function updateEditorInspector(id,value){
       if(['rows','columns','count'].includes(option))Object.assign(values,shapeRepeatCountPatch(entry.value,option,next));
       else values.shapeOptions={...entry.value.shapeOptions,[option]:next};
       validateShapeOptions(entry.value.kind,values.shapeOptions);changed=true;
-    }else if(id==='inspector-vector-geometry'&&entry.kind==='shape'){
-      if(!Array.isArray(value)||!(entry.value.vectorLayers?.length||entry.value.vectorPaths?.length))return;
-      const geometryKind=entry.value.vectorLayers?.length?'layers':'paths';
-      values[geometryKind==='layers'?'vectorLayers':'vectorPaths']=parseEditableGeometry(JSON.stringify(value),geometryKind);changed=true;
     }else if(id==='inspector-fill'&&entry.kind==='shape'&&(value===null||color.test(value))){values.fill=value;changed=true;}
     else if(id==='inspector-stroke'&&entry.kind==='shape'&&(value===null||color.test(value))){values.stroke=value;changed=true;}
     else if(id==='inspector-stroke-dash'&&entry.kind==='shape'&&['solid','dash','dot'].includes(value)){
@@ -1620,6 +1616,14 @@ async function runAppAction(action,id,value){try{
   case 'fabric-inspector-mask':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;
     checkpoint();applyInspectorMask(page,state.selected,id,state.assets);saveProject();break;
+  }
+  case 'fabric-inspector-vector-style':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorVectorStyle(page,state.selected,id);saveProject();break;
+  }
+  case 'fabric-inspector-vector':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorVectorGeometry(page,state.selected,id);saveProject();break;
   }
   case 'fabric-inspector-lettering':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;
