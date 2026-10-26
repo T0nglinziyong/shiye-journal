@@ -61,7 +61,16 @@ export function setWorldPosition(page,id,{x,y,rotation}){
  }
  return node;
 }
-export function convertNodeFrame(node,oldParentWorld,newParentWorld){
+export function convertNodeFrame(node,oldParentWorld,newParentWorld,canvasSize){
+ // A current Scene group without a local frame masks in page coordinates.
+ // When an edit gives it a frame, move that entire mask frame with the group,
+ // rather than interpreting its normalized mask against the child bounds.
+ if(node.type==='group'&&!node.localTransform&&node.vectorMask){
+  if(!canvasSize||![canvasSize.width,canvasSize.height].every(v=>Number.isFinite(v)&&v>0))throw Error('转换组合遮罩需要有效画布尺寸');
+  node.localTransform=rigidMatrix(canvasSize.width/2,canvasSize.height/2);
+  node.layoutBox={width:canvasSize.width,height:canvasSize.height};
+  for(const child of node.children||[])convertNodeFrame(child,IDENTITY,node.localTransform,canvasSize);
+ }
  const change=multiplyMatrix(inverseMatrix(newParentWorld),oldParentWorld);
  if(node.type==='group')node.localTransform=multiplyMatrix(change,groupMatrix(node));
  else if(node.type==='ink'){node.points=node.points.map(p=>({...p,...transformPoint(change,p.x,p.y)}));node.layoutRotation=(node.layoutRotation||0)+matrixAngle(oldParentWorld)-matrixAngle(newParentWorld);}

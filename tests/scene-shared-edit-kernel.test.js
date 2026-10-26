@@ -155,7 +155,7 @@ test('structural deletion is atomic across locked nodes and linked dependencies'
  editSceneStructure(d,{kind:'delete',targets:['a','b']},user);assert.equal(d.layers.length,0);
 });
 test('visual copy grants preserve physical stock, independent IDs, nested transforms and source pins',()=>{
- const item=material(),d=page([item,shape()]);groupEditableScene(d,['paper','shape'],{id:'group',spatial:true,layoutBox:{width:300,height:200}},user);
+ const item=material(),d=page([item,shape()]);groupEditableScene(d,['paper','shape'],{id:'group',layoutBox:{width:300,height:200}},user);
  const before=JSON.stringify(d);let seq=0;
  assert.throws(()=>copyEditableScene(d,['group'],()=>`copy-${++seq}`,user),{code:'EDIT_CONFIRMATION_REQUIRED'});assert.equal(JSON.stringify(d),before);
  const confirmation=confirmSceneCapability([findSceneNode(d,'paper')],'material.visualCopy');

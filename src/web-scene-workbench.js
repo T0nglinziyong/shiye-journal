@@ -173,7 +173,7 @@ export function applyWebSceneCommands(document,commands,assets){
         if(parent&&parent.type!=='group')throw Error('插入目标必须是组合');
         insertSceneLayer(draft,edit.node,{parent:parent?.id,policy:AI_SCENE_POLICY});
       }else if(edit.op==='delete')editSceneStructure(draft,{kind:'delete',target:edit.id},{policy:AI_SCENE_POLICY});
-      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合',...(edit.spatial?{spatial:true,layoutBox:edit.layoutBox}:{})}},{policy:AI_SCENE_POLICY});
+      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合',layoutBox:edit.layoutBox}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='ungroup'){if(!editSceneStructure(draft,{kind:'ungroup',target:edit.id},{policy:AI_SCENE_POLICY}))throw Error('没有找到组合');}
       else if(edit.op==='move')editSceneStructure(draft,{kind:'move',target:edit.id,options:{parentID:edit.parent??null,beforeID:edit.before??null}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='transform-group')transformSceneGroup(draft,edit.id,edit.transform);

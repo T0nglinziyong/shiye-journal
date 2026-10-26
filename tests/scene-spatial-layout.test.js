@@ -13,10 +13,10 @@ const world=(d,id)=>spatialPath(d.layers,id).world;
 
 test('local group transform and reparent preserve world geometry through save and ungroup',()=>{
  const d=page(),before={a:world(d,'a'),b:world(d,'b'),c:world(d,'c')};
- groupSceneLayers(d,['a','b'],{id:'group-one',spatial:true,layoutBox:{width:180,height:160}});
+ groupSceneLayers(d,['a','b'],{id:'group-one',layoutBox:{width:180,height:160}});
  assert.notEqual(d.layers.find(n=>n.id==='group-one').children[0].x,before.a[4]);
  near(world(d,'a')[4],before.a[4]);near(world(d,'b')[5],before.b[5]);
- groupSceneLayers(d,['c', 'group-one'],{id:'group-two',spatial:true,layoutBox:{width:400,height:400}});
+ groupSceneLayers(d,['c', 'group-one'],{id:'group-two',layoutBox:{width:400,height:400}});
  near(world(d,'a')[4],before.a[4]);near(world(d,'c')[5],before.c[5]);
  const reopened=attachSceneV2(structuredClone(d));validateSceneExtensions(reopened);
  applyScenePlacement(reopened,'group-one',{reference:'page',at:[.5,.5],unit:'ratio',rotationDeg:23});
@@ -53,7 +53,7 @@ test('layout reference cycles including descendant to ancestor are rejected',()=
 });
 
 test('editor leaf projection reads and writes page coordinates while storage stays local',()=>{
- const d=page();groupSceneLayers(d,['a','b'],{id:'g',spatial:true,layoutBox:{width:140,height:140}});
+ const d=page();groupSceneLayers(d,['a','b'],{id:'g',layoutBox:{width:140,height:140}});
  const raw=d.layers.find(n=>n.id==='g').children.find(n=>n.id==='a');
  const view=sceneLayerEntries(d).find(e=>e.value.id==='a').value;
  near(view.x,120);near(view.y,140);
@@ -69,7 +69,7 @@ test('real Canvas preview preserves grouped image pixels and follows the group t
  const image=await loadImage(source.toBuffer('image/png'));
  const render=()=>renderSceneCanvas(d,{createCanvas,loadMaterialImage:()=>image,waitForFonts:false,loadShapeImage:()=>image});
  const first=await render();
- groupSceneLayers(d,['photo','b'],{id:'g',spatial:true,layoutBox:{width:160,height:160}});
+ groupSceneLayers(d,['photo','b'],{id:'g',layoutBox:{width:160,height:160}});
  const second=await render();
  assert.deepEqual([...first.canvas.getContext('2d').getImageData(120,140,1,1).data],[...second.canvas.getContext('2d').getImageData(120,140,1,1).data]);
  applyScenePlacement(d,'g',{reference:'page',at:[.65,.6],unit:'ratio'});

@@ -37,7 +37,7 @@ function insertWorldLeaf(d,node,type){
  node.id||=generatedID();node.type=type;
  const parent=node.creativeGroupID&&spatialPath(d.layers,node.creativeGroupID);
  if(parent?.node.type==='group'&&parent.ancestors.concat(parent.node).some(group=>group.localTransform))
-  convertNodeFrame(node,IDENTITY,parent.world);
+  convertNodeFrame(node,IDENTITY,parent.world,d.canvas);
  insertNode(d,node,node.creativeGroupID);
 }
 function leafList(d,type){return allLeaves(d.layers).filter(e=>e.kind===type).map(e=>e.value);}
@@ -188,7 +188,7 @@ export function assertSceneEditable(d,id){
  return node;
 }
 export function sceneGroupMembers(d,id){return sceneLayerEntries(d,{hidden:true}).filter(e=>e.parents.some(g=>g.id===id));}
-export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合',spatial=false,layoutBox}={}){
+export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合',layoutBox,allowReorder=false}={}){
  attachSceneV2(d);
  if(!Array.isArray(ids)||ids.length<2||ids.length>80||new Set(ids).size!==ids.length)throw Error('请选择 2–80 个不同图层进行编组');
  if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||findSceneNode(d,id))throw Error('图层组编号无效或重复');
@@ -197,19 +197,19 @@ export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐�
  ids.forEach(key=>assertSceneEditable(d,key));
  const parent=selected[0].at(-2)||null;
  if(selected.some(path=>(path.at(-2)||null)!==parent))throw Error('请在同一图层组中选择素材');
- if(spatial){
+ if(!allowReorder){
   const siblings=[...(parent?.children||d.layers)].sort((a,b)=>z(a)-z(b)),positions=ids.map(key=>siblings.findIndex(node=>node.id===key)).sort((a,b)=>a-b);
-  if(positions.some((value,index)=>value!==positions[0]+index))throw Error('非连续图层编组会改变原有遮挡顺序');
+  if(positions.some((value,index)=>value!==positions[0]+index))throw Error('所选图层之间还有其他图层，请先在图层面板调整顺序，或使用套索合并到前面');
  }
  const parentWorld=parent?spatialPath(d.layers,parent.id).world:IDENTITY;
- const frame=spatial?newSceneGroupFrame(d,ids,parentWorld):null;
- const targetFrame={layoutBox:spatial?(layoutBox||frame.layoutBox):undefined};
+ const frame=newSceneGroupFrame(d,ids,parentWorld);
+ const targetFrame={layoutBox:layoutBox||frame.layoutBox};
  selected.forEach(path=>assertSceneParentFrame(path.at(-1),targetFrame));
  const relations=new Map(ids.map(key=>[key,captureSceneParentChange(d,key)]));
  const nodes=ids.map(key=>detach(d.layers,key)).filter(Boolean);
- const group={id,type:'group',name:String(name).slice(0,80),opacity:1,blendMode:'normal',children:nodes,zIndex:Math.min(...nodes.map(z))};
- if(frame){group.localTransform=frame.localTransform;group.layoutBox=layoutBox||frame.layoutBox;
-  nodes.forEach(node=>convertNodeFrame(node,IDENTITY,group.localTransform));}
+ const group={id,type:'group',name:String(name).slice(0,80),opacity:1,blendMode:'normal',children:nodes,zIndex:(allowReorder?Math.max:Math.min)(...nodes.map(z))};
+ group.localTransform=frame.localTransform;group.layoutBox=layoutBox||frame.layoutBox;
+ nodes.forEach(node=>convertNodeFrame(node,IDENTITY,group.localTransform,d.canvas));
  insertNode(d,group,parent?.id);
  nodes.forEach(n=>{n.creativeGroupID=id;rebindSceneParent(d,n.id,relations.get(n.id));});
  return id;
@@ -225,7 +225,7 @@ export function ungroupSceneLayers(d,id){
  const destination=spatialPath(d.layers,id).ancestors.at(-1);
  group.children.forEach(child=>assertSceneParentFrame(child,destination));
  const relations=new Map(group.children.map(child=>[child.id,captureSceneParentChange(d,child.id)]));
- if(group.localTransform)for(const child of group.children)convertNodeFrame(child,group.localTransform,IDENTITY);
+ if(group.localTransform)for(const child of group.children)convertNodeFrame(child,group.localTransform,IDENTITY,d.canvas);
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
  const target=parent?parent.children:d.layers;
  const ordered=[...target].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
@@ -253,7 +253,7 @@ export function moveSceneNode(d,id,{parentID=null,beforeID=null}={}){
  assertSceneParentFrame(node,parent);
  const oldPath=spatialPath(d.layers,id),newParentWorld=parent?spatialPath(d.layers,parent.id).world:IDENTITY;
  const relation=(oldPath.ancestors.at(-1)||null)!==parent?captureSceneParentChange(d,id):null;
- convertNodeFrame(node,oldPath.parentWorld,newParentWorld);
+ convertNodeFrame(node,oldPath.parentWorld,newParentWorld,d.canvas);
  const removed=detach(d.layers,id);
  if(!removed)throw Error('无法从旧图层组取出对象');
  let index=beforeID?target.findIndex(n=>n.id===beforeID):target.length;
@@ -289,7 +289,7 @@ export function removeSceneNode(d,id){
 export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)throw Error('图层组不存在');
- assertUnlockedPath(d,id);
+ assertSceneEditable(d,id);
  if(![dx,dy,rotation].every(Number.isFinite)||Math.abs(dx)>20000||Math.abs(dy)>20000||Math.abs(rotation)>180)throw Error('图层组变换超出纸面范围');
  if(group.localTransform){
   const path=spatialPath(d.layers,id),cx=path.world[4],cy=path.world[5];

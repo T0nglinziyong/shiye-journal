@@ -133,17 +133,27 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const group=new fabric.Group(children,{opacity:finite(node.opacity,1),
         globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
       if(node.shadow)group.set({shadow:new fabric.Shadow({color:node.shadow.color,blur:node.shadow.blur,offsetX:node.shadow.offsetX,offsetY:node.shadow.offsetY})});
+      const localCenter=group.getCenterPoint();
       if(node.localTransform){
-        const original=group.getCenterPoint(),next=transformPoint(node.localTransform,original.x,original.y);
+        const next=transformPoint(node.localTransform,localCenter.x,localCenter.y);
         group.set({angle:(group.angle||0)+matrixAngle(node.localTransform)});
         group.setPositionByOrigin(new fabric.Point(next.x,next.y),'center','center');
         group.setCoords();
       }
       group.sceneID=node.id;group.sceneRenderKey=node.renderKey||node.id;group.sceneType='group';
       if(node.vectorMask){
-        const size=typeof canvasSize==='function'?canvasSize():canvasSize;
-        if(!(size?.width>0&&size?.height>0))throw Error('图层组蒙版缺少画布尺寸：'+node.id);
-        group.clipPath=clipPath(maskGeometry(node.vectorMask),size.width,size.height,{page:true});
+        if(node.localTransform){
+          const size=node.layoutBox;
+          if(!(size?.width>0&&size?.height>0))throw Error('局部组合蒙版需要稳定 layoutBox：'+node.id);
+          // Fabric centers a Group on its children's bounds; Scene masks are
+          // centered on the stable local origin, which need not coincide.
+          group.clipPath=clipPath(maskGeometry(node.vectorMask),size.width,size.height,
+            {leftOffset:-localCenter.x,topOffset:-localCenter.y});
+        }else{
+          const size=typeof canvasSize==='function'?canvasSize():canvasSize;
+          if(!(size?.width>0&&size?.height>0))throw Error('图层组蒙版缺少画布尺寸：'+node.id);
+          group.clipPath=clipPath(maskGeometry(node.vectorMask),size.width,size.height,{page:true});
+        }
       }
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
       // Group resizing preserves the dimensions of physical material children.

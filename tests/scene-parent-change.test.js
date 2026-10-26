@@ -35,7 +35,7 @@ test('spatial grouping and ungrouping retain parent links and explicit node foll
  const d=page();link(d,'a');
  applyScenePlacement(d,'b',{reference:'node:a',referenceAnchor:'bottom-center',anchor:'top-center',behavior:'linked'});
  const before=['a','b'].map(id=>worldBox(d,id));
- groupEditableScene(d,['a','b'],{id:'inner',spatial:true},user);
+ groupEditableScene(d,['a','b'],{id:'inner'},user);
  ['a','b'].forEach((id,i)=>sameBox(worldBox(d,id),before[i]));
  const group=findSceneNode(d,'inner');assert.ok(group.layoutBox.width>0&&group.localTransform);
  ungroupEditableScene(d,'inner',user);
@@ -64,14 +64,14 @@ test('invalid parent destination rolls back geometry, links and array identities
 test('rotated local grouping preserves actual Canvas PNG through save and reopen',async()=>{
  const d=page();link(d,'a');
  const render=async page=>(await renderSceneCanvas(page,{createCanvas,loadShapeImage:(uri,frame)=>loadImage(Buffer.from(decodeURIComponent(uri.split(',').slice(1).join(',')).replace('<svg ',`<svg width="${Math.ceil(frame.width-1e-9)}" height="${Math.ceil(frame.height-1e-9)}" `))),waitForFonts:false})).canvas.toBuffer('image/png');
- const original=await render(d);groupEditableScene(d,['a','b'],{id:'inner',spatial:true},user);
+ const original=await render(d);groupEditableScene(d,['a','b'],{id:'inner'},user);
  assert.deepEqual(await render(d),original);
  const reopened=JSON.parse(JSON.stringify(d));solveSceneLayout(reopened);assert.deepEqual(await render(reopened),original);
  ungroupEditableScene(reopened,'inner',user);assert.deepEqual(await render(reopened),original);
 });
 
 test('changing paper preserves nested local physical geometry and stable layout boxes',()=>{
- const d=page();groupEditableScene(d,['a','b'],{id:'inner',spatial:true},user);
+ const d=page();groupEditableScene(d,['a','b'],{id:'inner'},user);
  const ids=['a','b','c','old','new','inner'],scale=d.physicalPageHeightMM/d.canvas.height;
  const before=ids.map(id=>{const b=worldBox(d,id);return {cx:(b.cx-d.canvas.width/2)*scale,cy:(b.cy-d.canvas.height/2)*scale,w:b.w*scale,h:b.h*scale,rotation:b.rotation};});
  setDraftPaperSize(d,'weeks');const newScale=d.physicalPageHeightMM/d.canvas.height;
