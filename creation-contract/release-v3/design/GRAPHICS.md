@@ -9,7 +9,7 @@
 - place：唯一定位入口。页面毫米、比例、相对对象或父组的锚点/偏移均沿用原定义，不另设 target/placement。
 - size：统一宽高与 mm/ratio；ratio 明确 reference。预设和 path 必须给 size；stroke 可省略使用毫米点集本身的尺寸。单维通常保留比例，横/竖直笔迹的零跨度轴保留笔宽，不能从一条线拉出曲线。
 - style：填充用 fill，线条和笔迹都用 stroke，线宽 strokeWidthMm。opacity/blendMode/shadow 共用；penStyle 用于笔迹，填充和虚线等用于图形。不适用字段会报错，不默默忽略。
-- parent、order：组合归属与同级先后。相对定位并不自动改变父组；order.before/after 必须指向同级对象。
+- parent、order：组合归属与同级先后。新增节点按命令顺序放到同级最前方，素材、文字、图形规则相同；修改已有节点保留层序。需要在已有文字后补荧光笔时，明确用 order.before。相对定位并不自动改变父组；order.before/after 必须指向同级对象。
 
 `describe graphic.add` 是短帮助；`describe geometry` 查看几何形式，`--full` 才获取完整 Schema。以下都是操作片段，引用名称须换成本次实际存在的节点。
 

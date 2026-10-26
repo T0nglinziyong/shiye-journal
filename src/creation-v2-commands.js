@@ -41,7 +41,7 @@ function groupBox(doc,ids){
 }
 function reorder(doc,target,order,assets){
  const at=locate(doc.page.layers,target);if(!at)throw Error('图层不存在：'+target);
- const peers=at.siblings.filter(node=>node!==at.node);let before;
+ const peers=at.siblings.filter(node=>node!==at.node).sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));let before;
  if(order.before){before=requireNode(doc,order.before).id;if(!peers.some(node=>node.id===before))throw Error('排序目标必须是同级图层');}
  else if(order.after){const index=peers.findIndex(node=>node.id===requireNode(doc,order.after).id);if(index<0)throw Error('排序目标必须是同级图层');before=peers[index+1]?.id;}
  else if(order.edge==='back')before=peers[0]?.id;
@@ -50,6 +50,14 @@ function reorder(doc,target,order,assets){
 function finishNode(doc,id,change,assets,{created=false}={}){
  doc=updateCreationNode(doc,id,created&&change.place?{...change,place:{...change.place,rotationDeg:change.place.rotationDeg??0}}:change,assets);
  if(change.order)doc=reorder(doc,id,change.order,assets);
+ else if(created){
+  // Command order is paint order across all node types. The underlying
+  // material/text algorithms have different historical default z values.
+  // Change only the new node so locked/user-owned siblings stay untouched.
+  const at=locate(doc.page.layers,id);
+  const zIndex=Math.max(-1,...at.siblings.filter(n=>n!==at.node).map(n=>n.zIndex??0))+1;
+  doc=patch(doc,id,{zIndex},assets);
+ }
  solveSceneLayout(doc.page);return doc;
 }
 function displayMaskGeometry(node,asset,region,page){

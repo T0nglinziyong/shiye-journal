@@ -50,6 +50,18 @@ test('published schema exposes current capabilities and rejects deferred geometr
  assert.throws(()=>validateCreationV2Commands(batch([{op:'graphic.add',id:'a',geometry:{kind:'rect'},place:{...at,referenceBounds:'visible'},size:{width:10,height:10,unit:'mm'}}])),/commands/);
  validateCreationV2Commands(batch([{op:'layout.arrange',targets:['a','b'],rule:{direction:'horizontal',gapMm:4},container:'page'}]));
 });
+test('new nodes paint in command order across material and graphic types without changing locked peers',async()=>{
+ const {run}=await setup();
+ const made=run([{op:'graphic.add',id:'color-block',geometry:{kind:'rect'},place:at,size:{width:100,height:80,unit:'mm'},style:{fill:'#f3d77a'}},
+  {op:'layer.update',target:'color-block',locked:true},add('photo'),
+  {op:'text.add',id:'caption',content:'贴纸前面的字',place:at,size:{width:50,unit:'mm'}},
+  {op:'graphic.add',id:'highlight',geometry:{kind:'ellipse'},place:at,size:{width:10,height:4,unit:'mm'},style:{fill:'#ddaa88'}}]);
+ const sorted=[...made.page.layers].sort((a,b)=>a.zIndex-b.zIndex);
+ assert.deepEqual(sorted.map(n=>n.creativePieceID||n.id),['color-block','photo','caption','highlight']);
+ assert.equal(sorted[0].zIndex,0);
+ const updated=run([{op:'layer.update',target:'photo',place:{...at,at:[.4,.4]}}],made);
+ assert.equal(updated.page.layers.find(n=>n.creativePieceID==='photo').zIndex,sorted[1].zIndex,'moving must not lift a node');
+});
 test('page and relative commands create editable native Scene nodes',async()=>{
  const {run}=await setup(paper('photo-1',30,20));
  const result=run([add('photo',{...at,at:[.5,.4]}),{op:'text.add',id:'caption',content:'今天看见的一角',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
