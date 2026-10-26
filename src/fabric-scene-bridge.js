@@ -368,7 +368,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
   }
 
 
-  function applyObject(page,object,{policy,confirm}={}){
+  function applyObject(page,object,{policy,confirm,updatePose=true}={}){
     requireScenePolicy(policy);
     const node=findSceneNode(page,object?.sceneID);
     if(!node)throw Error('画布图层不存在');
@@ -398,6 +398,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       confirmation=confirmSceneCapability(resized,'material.visualResize');
     }
     applyScenePatchBatch(page,changes,{policy,confirmation,linked:'offset'});
+    if(!updatePose)return node; // Scratch-scene preview must not advance the real gesture baseline.
     if(node.type==='group')object.sceneGroupPose={center:object.getCenterPoint(),angle:finite(object.angle)};
     if(node.type==='ink')object.sceneInkMatrix=object.calcTransformMatrix();
     if(node.type==='text'){

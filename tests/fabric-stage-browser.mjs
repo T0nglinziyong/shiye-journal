@@ -508,10 +508,25 @@ try{
     f.select([]);f.refresh();
   })()`);
   await sleep(250);
-  await evaluate(`(()=>{
-    const c=window.__fabricCanvas,object=c.getObjects().find(o=>o.sceneID==='12345678-1111-4111-8111-123456789abc');
-    object.set({left:object.left+35,top:object.top+50});object.setCoords();c.fire('object:modified',{target:object});
+  const linkedDrag=await evaluate(`(()=>{
+    const c=window.__fabricCanvas,r=c.upperCanvasEl.getBoundingClientRect();
+    return {from:{x:r.left+180*r.width/c.width,y:r.top+220*r.height/c.height},
+      to:{x:r.left+215*r.width/c.width,y:r.top+270*r.height/c.height}};
   })()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...linkedDrag.from});
+  await sleep(40);
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...linkedDrag.to});
+  await sleep(100);
+  const linkedLive=await evaluate(`(()=>{
+    const c=window.__fabricCanvas,ctx=c.lowerCanvasEl.getContext('2d'),r=c.getRetinaScaling();
+    const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round(x*r),Math.round(y*r),1,1).data);
+    const node=window.__fabricFixture.draft.layers.find(n=>n.id==='linked-mark');
+    return {scene:[node.x,node.y],old:pixel(280,220),next:pixel(315,270)};
+  })()`);
+  assert.deepEqual(linkedLive.scene,[280,220],'A drag preview must not commit Scene before release');
+  assert.deepEqual(linkedLive.next,[204,85,51,255],'The follower must already paint at its linked location before release');
+  assert.notDeepEqual(linkedLive.old,[204,85,51,255],'The old follower must not remain as a duplicate');
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...linkedDrag.to});
   let following;
   for(let attempt=0;attempt<40;attempt++){
     following=await evaluate(`(()=>{const o=window.__fabricCanvas.getObjects().find(o=>o.sceneID==='linked-mark');

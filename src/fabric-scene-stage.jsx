@@ -16,6 +16,7 @@ import {prepareSceneFonts} from './scene-renderer.js';
 import {appendInkStroke,editableInkLayer} from './ink-groups.js';
 import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
 import {createFabricSelectionPreview} from './fabric-selection-preview.js';
+import {createFabricLayoutPreview} from './fabric-layout-preview.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
 import {selectableFabricObjectAt,installSelectionFramePriority} from './fabric-hit-test.js';
 import {createTapeStrip,paintTapeStrip,tapeDimensions} from './tape-strip.js';
@@ -282,6 +283,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           }),
           canvasSize:()=>callbacks.current.draft.canvas
         });
+        const layoutPreview=createFabricLayoutPreview({canvas,bridge});
         const sceneVersions=new Map();
         const projected=()=>sceneDisplaySiblings(callbacks.current.draft.layers||[]);
         const renderKey=node=>node.renderKey||node.id;
@@ -334,10 +336,12 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             // A newly selected shape or material must paint at its final
             // location before the old frame can linger through another rAF.
             if(keepSelected)canvas.renderAll();else canvas.requestRenderAll();
+            layoutPreview.refresh();
             if(object)onAdded?.(object);
           }).catch(error=>{if(!disposed){signatures.delete(key);callbacks.current.onIssue?.(error);}});
         };
         reconcileRef.current=()=>{
+          layoutPreview.reset();
           const current=callbacks.current.draft;
           if(!current||current.id!==draft.id)return;
           paintPaper(current);
@@ -423,6 +427,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           try{for(const id of lassoSelection.ids)assertSceneEditable(current,id);}
           catch(error){callbacks.current.onIssue?.(error);return false;}
           callbacks.current.onBeforeChange?.('lasso:'+tool);
+          layoutPreview.begin(current);
           gesture={id:event.pointerId,tool:'lasso-'+tool,moved:false,draft:current,
             beforeFrame:structuredClone(lassoSelection),
             scenePreview:createFabricSelectionPreview(fabric,canvas,lassoSelection.ids),
@@ -431,7 +436,19 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           event.preventDefault();event.stopImmediatePropagation();
           return true;
         };
+        const previewLassoLayout=()=>{
+          if(!layoutPreview.active||!gesture?.beforeFrame)return;
+          const before=structuredClone(gesture.beforeFrame),next=structuredClone(lassoSelection);
+          layoutPreview.update(scratch=>{
+            const materials=next.ids.map(id=>byID(scratch.layers,id)).filter(node=>node?.type==='material');
+            const confirmation=materials.length?confirmSceneCapability(materials,'material.visualResize'):undefined;
+            if(!transformSceneLasso(scratch,next.ids,before.center,next.width/before.width,
+              next.angle-before.angle,{to:next.center,policy:USER_SCENE_POLICY,confirmation}))
+              throw Error('所选图层不能修改');
+          });
+        };
         const rollbackLasso=(finished,notify=true)=>{
+          layoutPreview.reset();
           if(!finished?.beforeFrame)return;
           finished.scenePreview?.restore();
           lassoSelection=finished.beforeFrame;
@@ -441,6 +458,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           }
         };
         canvas.sceneCancelGesture=(notify=true)=>{
+          layoutPreview.reset();
           const unfinished=gesture;gesture=null;
           if(unfinished?.tool==='lasso-move'||unfinished?.tool==='lasso-transform')
             rollbackLasso(unfinished,notify);
@@ -670,7 +688,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             const next=pointer(event),dx=next.x-gesture.last.x,dy=next.y-gesture.last.y;
             if(dx||dy){
               lassoSelection.center.x+=dx;lassoSelection.center.y+=dy;
-              gesture.last=next;gesture.moved=true;gesture.scenePreview.apply(gesture.beforeFrame.center,lassoSelection.center,0);queuePreview();
+              gesture.last=next;gesture.moved=true;gesture.scenePreview.apply(gesture.beforeFrame.center,lassoSelection.center,0);previewLassoLayout();queuePreview();
               canvas.upperCanvasEl.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',
                 {detail:{bounds:frameBounds(lassoSelection)}}));
             }
@@ -687,7 +705,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             if(Math.abs(degrees)>.01||Math.abs(ratio-1)>.001){
               lassoSelection.angle+=degrees;lassoSelection.width*=ratio;lassoSelection.height*=ratio;
               gesture.lastAngle=angle;gesture.lastDistance=distance;gesture.moved=true;
-              gesture.scenePreview.apply(gesture.beforeFrame.center,lassoSelection.center,lassoSelection.angle-gesture.beforeFrame.angle,lassoSelection.width/gesture.beforeFrame.width);queuePreview();
+              gesture.scenePreview.apply(gesture.beforeFrame.center,lassoSelection.center,lassoSelection.angle-gesture.beforeFrame.angle,lassoSelection.width/gesture.beforeFrame.width);previewLassoLayout();queuePreview();
               canvas.upperCanvasEl.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',
                 {detail:{bounds:frameBounds(lassoSelection)}}));
             }
@@ -719,6 +737,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           event.preventDefault();event.stopImmediatePropagation();
           const finished=gesture;gesture=null;
           if(finished.tool==='lasso-move'||finished.tool==='lasso-transform'){
+            layoutPreview.reset();
             if(event.type==='pointercancel'){
               rollbackLasso(finished);
               return;
@@ -856,6 +875,18 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             object.scenePreview.apply(object.sceneMultiPose.center,object.getCenterPoint(),
               (object.angle||0)-object.sceneMultiPose.angle);
           }
+          if(layoutPreview.active){
+            if(object.sceneMultiIDs){
+              const ids=object.sceneTransformIDs||[],before=object.sceneMultiPose;
+              const center=object.getCenterPoint(),angle=(object.angle||0)-before.angle;
+              layoutPreview.update(scratch=>{
+                if(Math.abs(object.scaleX-1)>1e-5||Math.abs(object.scaleY-1)>1e-5||
+                  !transformSceneLasso(scratch,ids,before.center,1,angle,{to:center,policy:USER_SCENE_POLICY}))
+                  throw Error('所选图层不能修改');
+              });
+            }else layoutPreview.update(scratch=>bridge.applyObject(scratch,object,
+              {policy:USER_SCENE_POLICY,confirm:()=>true,updatePose:false}));
+          }
           const bounds=object.getBoundingRect();
           upper.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',{detail:{
             id:object.sceneID||'multiple',bounds:{x:bounds.left,y:bounds.top,
@@ -871,10 +902,15 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             callbacks.current.onBeforeChange?.(target.sceneID||'multiple');
         });
         canvas.on('before:transform',event=>{
-          if(event.target?.sceneID||event.target?.sceneMultiIDs)
-            callbacks.current.onBeforeChange?.(event.target.sceneID||'multiple');
+          const target=event.transform?.target||event.target;
+          if(target?.sceneID||target?.sceneMultiIDs){
+            callbacks.current.onBeforeChange?.(target.sceneID||'multiple');
+            layoutPreview.begin(callbacks.current.draft);
+          }
         });
+        canvas.on('mouse:up',()=>layoutPreview.reset());
         canvas.on('object:modified',event=>{
+          layoutPreview.reset();
           if(event.target?.sceneMultiIDs){
             const object=event.target,current=callbacks.current.draft;
             const ids=object.sceneTransformIDs||[];
