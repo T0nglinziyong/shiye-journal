@@ -1,3 +1,4 @@
+import {EditorWeavePanel} from './react-editor-weave.jsx';
 import {EditorMaskPanel} from './react-editor-mask.jsx';
 import {EditorLetteringPanel} from './react-editor-lettering.jsx';
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
@@ -1194,6 +1195,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         </div>
       </div>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
+      <EditorWeavePanel key={item.id+'-weave'} node={item} page={draft} asset={asset} onAction={onAction}/>
     </>:null}
     <EditorMaskPanel key={item.id+'-mask'} node={item} page={draft} onAction={onAction}/>
     <h3>图层外观</h3>

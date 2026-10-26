@@ -60,6 +60,13 @@ export function sceneRenderEntries(draft){
     :[{kind:entry.kind,value:entry.value}]);
 }
 
+export function weaveOpeningPosition(strip,target,index){
+ const holes=materialMaskGeometry(target.materialMask)?.holes||[];
+ craftAssert(holes[index],'WEAVE_NEEDS_OPENINGS','穿插引用的真实开孔不存在');
+ const hole=transformGeometry(normalizeGeometry([[holes[index]]]),p=>fromPage(strip,toPage(target,p))),b=geometryBounds(hole);
+ return strip.width>=strip.height?b.x+b.width/2:b.y+b.height/2;
+}
+
 // Each crossing must pass through a real aperture wide enough for the full
 // physical strip. The saved slices are display projections of one source piece.
 export function compileTwoHoleWeaves(draft,weaves=[]){
@@ -82,8 +89,8 @@ export function compileTwoHoleWeaves(draft,weaves=[]){
    const target=targets[i],holes=materialMaskGeometry(target.materialMask)?.holes||[],index=entry.hole;
    craftAssert(Number.isInteger(index)&&index>=0&&index<holes.length&&!used.has(target.id+':'+index),
     'WEAVE_NEEDS_OPENINGS','穿插引用的真实开孔不存在或重复');used.add(target.id+':'+index);
-   const hole=transformGeometry(normalizeGeometry([[holes[index]]]),p=>fromPage(strip,toPage(target,p))),b=geometryBounds(hole);
-   const center=horizontal?b.x+b.width/2:b.y+b.height/2;
+   const hole=transformGeometry(normalizeGeometry([[holes[index]]]),p=>fromPage(strip,toPage(target,p)));
+   const center=weaveOpeningPosition(strip,target,index);
    craftAssert(center>.01&&center<.99,'WEAVE_OUTSIDE_STRIP','开孔必须落在纸条的有效长度内');
    // A narrow band on each opening's midpoint must contain the complete width.
    const band=horizontal?rectangleGeometry(center-.00005,0,.0001,1):rectangleGeometry(0,center-.00005,1,.0001);

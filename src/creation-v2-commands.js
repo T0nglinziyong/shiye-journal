@@ -13,7 +13,7 @@ import {creationRegionGeometry} from './creation-region.js';
 import {attachSceneV2,assertSceneEditable,groupSceneLayers,moveSceneNode} from './scene-v2.js';
 import {applyScenePlacement,assertNoLinkedDependents,detachLinkedDependents,detachSceneLayout,solveSceneLayout} from './scene-layout.js';
 import {spatialPath,worldBox,setWorldPosition,transformPoint,inverseMatrix,matrixAngle} from './scene-spatial.js';
-import {compileTwoHoleWeaves} from './craft-display.js';
+import {applySceneWeave} from './scene-weave-edit.js';
 import {validateWebScene} from './web-scene-workbench.js';
 import {assetSourceRevision} from './material-anatomy.js';
 import {craftDigest,craftSceneHash,recordManagedChanges,layerFingerprint,isManagedUnchanged} from './craft-fingerprint.js';
@@ -242,7 +242,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   }else if(item.op==='material.weave'){
    if(requireNode(doc,item.strip).type!=='material')throw Error('穿插纸条必须是实体素材');
    const through=item.through.map(entry=>{const target=requireNode(doc,entry.target);if(target.type!=='material')throw Error('穿插目标必须是实体素材');const hole=target.craftWindowIDs?.indexOf(entry.window)??-1;if(hole<0)throw Error('穿插引用的开窗不存在');return {target:target.creativePieceID||target.id,hole,sideAfter:entry.sideAfter};});
-   attachSceneV2(doc.page);compileTwoHoleWeaves(doc.page,[{piece:item.strip,through}]);
+   applySceneWeave(doc.page,requireNode(doc,item.strip).id,through.map(entry=>({...entry,target:requireNode(doc,entry.target).id})),{policy:AI_SCENE_POLICY});
   }else if(item.op==='material.decision'){
    assetFor(doc,assets,item.asset);doc.materialDecisions=(doc.materialDecisions||[]).filter(row=>row.asset!==item.asset);doc.materialDecisions.push({asset:item.asset,choice:item.choice,reason:item.reason});
   }else if(item.op==='page.update'){

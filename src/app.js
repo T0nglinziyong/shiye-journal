@@ -1,3 +1,4 @@
+import {applySceneWeave} from './scene-weave-edit.js';
 import {applyInspectorMask} from './scene-mask-edit.js';
 import {createEditorLettering,reflowEditorLettering} from './editor-lettering.js';
 import {applyInspectorLayout} from './editor-layout-model.js';
@@ -1612,6 +1613,10 @@ async function runAppAction(action,id,value){try{
   case 'fabric-inspector-select':{
     if(!state.inspectorSession||!findSceneNode(current(),id))break;
     flushInspectorSnapshot();state.selected=id;state.multiSelected=[id];render();break;
+  }
+  case 'fabric-inspector-weave':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applySceneWeave(page,state.selected,id,{policy:USER_SCENE_POLICY});saveProject();break;
   }
   case 'fabric-inspector-mask':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;
