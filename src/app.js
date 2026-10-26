@@ -1,4 +1,5 @@
 import {creativeSourceIDs,assertCreativeSources} from './creation-sources.js';
+import {inspectorSelection,applyInkInspectorChange} from './editor-inspector-model.js';
 import {canStartCreation} from './creation-methods.js';
 import {configureJournalFontLoader} from './journal-fonts.js';
 import {styleFor} from './scene-node-properties.js';
@@ -988,8 +989,13 @@ function bindPage({partial=false}={}){
 
 }
 function updateEditorInspector(id,value){
-  const d=current(),entry=d&&editorEntry(d).find(item=>item.value.id===state.selected);
+  const d=current(),entry=inspectorSelection(d,state.selected);
   if(!d)return;
+  if(entry?.kind==='ink'){
+    checkpoint();
+    if(applyInkInspectorChange(d,entry.value.id,id,value)){saveProject();if(!state.inspectorSession)render();}
+    return;
+  }
   if(id.startsWith('inspector-tape-')){
     if(entry?.kind!=='material'||!entry.value.tapeStrip)throw Error('请先选择胶带段');
     const record=asset(entry.value.assetID),node=entry.value,strip=node.tapeStrip;
@@ -1640,7 +1646,7 @@ async function runAppAction(action,id,value){try{
     render();break;
   }
   case 'fabric-paint-effects':{
-    const d=current(),entry=editorEntry(d).find(item=>item.value.id===state.selected),style=id;
+    const d=current(),entry=inspectorSelection(d,state.selected),style=id;
     if(!style||typeof style!=='object'||Object.keys(style).some(key=>!['outline','gradient','shadow'].includes(key)))throw Error('绘制效果参数无效');
     const type=['text','shape','ink'].includes(entry?.kind)?entry.kind:'text',values=styleFor(type,style,d,entry?.value||state.textDefaults||{});
     if(entry&&['text','shape','ink'].includes(entry.kind)){assertSceneEditable(d,entry.value.id);checkpoint();applySceneNodePatch(d,entry.value.id,values,{policy:USER_SCENE_POLICY});saveProject();}

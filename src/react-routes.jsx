@@ -1,4 +1,5 @@
 import {creativeSourceIDs} from './creation-sources.js';
+import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js';
 import {CreationModePicker} from './react-creation-mode.jsx';
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
@@ -1056,7 +1057,8 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     <span>{label} · {Number(props.max)===1?`${Math.round(Number(value)*100)}%`:value}</span><div>
       <input id={id} type="range" value={value} onChange={event=>onChange(id,event.target.value)} {...props}/>
     </div></label>:<label>{label}<input id={id} type={type}
-    defaultValue={value} onChange={event=>onChange(id,event.target.value)} {...props}/></label>;
+    defaultValue={value} onInput={type==='color'?event=>onChange(id,event.target.value):undefined}
+    onChange={type==='color'?undefined:event=>onChange(id,event.target.value)} {...props}/></label>;
   const choice=(id,label,value,options)=><label>{label}<select id={id} value={value}
     onChange={event=>onChange(id,event.target.value)}>{options.map(([key,title])=><option key={key} value={key}>{title}</option>)}</select></label>;
   const check=(id,label,value)=><label className="editor-inspector-check"><input id={id} type="checkbox" checked={!!value}
@@ -1085,6 +1087,12 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
   const shapeFillable=selected.kind==='shape'&&!['paperclip','wave','zigzag','bracket','line'].includes(item.kind);
   if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
     <h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
+    <div className="form-grid">
+      {field('inspector-ink-color','笔迹颜色',item.color||'#2b5245','color')}
+      {field('inspector-ink-width-mm','笔迹粗细（mm）',Number(((item.width||1)*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:.1,max:30,step:.1})}
+      {choice('inspector-ink-style','笔迹样式',item.penStyle||'fountain',inspectorPenStyles)}
+      {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[['normal','正常'],['multiply','正片叠底']])}
+    </div>
     <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
   </div>;
@@ -1287,9 +1295,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   onFabricViewportChange,loadFabricAsset,retainFabricAssets,materials=[]}){
   const project=state.activeProject;
   if(!project||!draft)return null;
-  const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected)||
-    (findSceneNode(draft,state.selected)?.type==='ink'
-      ?{kind:'ink',value:findSceneNode(draft,state.selected)}:null);
+  const selected=inspectorSelection(draft,state.selected);
   const selectedGroup=findSceneNode(draft,state.selected)?.type==='group';
   const selectedIDs=state.multiSelected||[];
   const canUngroup=!!selectionGroupID(draft,selectedIDs);
