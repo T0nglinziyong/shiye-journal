@@ -44,10 +44,10 @@ export function detectTapeFlatCrop(data,width,height,axis='x'){
     bounds:{left:0,top:0,right:1,bottom:1};
 }
 
-export function tapeFlatCanvas(image,axis='x',manualCrop=null,{maxSize=2048}={}){
+export function tapeFlatCanvas(image,axis='x',manualCrop=null,{maxSize=2048,createCanvas=()=>document.createElement('canvas')}={}){
   const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
   if(!(width>0&&height>0))return null;
-  const scale=Math.min(1,maxSize/Math.max(width,height)),raw=document.createElement('canvas');
+  const scale=Math.min(1,maxSize/Math.max(width,height)),raw=createCanvas();
   raw.width=Math.max(1,Math.round(width*scale));raw.height=Math.max(1,Math.round(height*scale));
   const ctx=raw.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(image,0,0,raw.width,raw.height);
@@ -58,7 +58,7 @@ export function tapeFlatCanvas(image,axis='x',manualCrop=null,{maxSize=2048}={})
     top=clamp(Math.floor(crop.top*raw.height),0,raw.height-1),
     right=clamp(Math.ceil(crop.right*raw.width),left+1,raw.width),
     bottom=clamp(Math.ceil(crop.bottom*raw.height),top+1,raw.height),
-    canvas=document.createElement('canvas');
+    canvas=createCanvas();
   canvas.width=right-left;canvas.height=bottom-top;
   const output=canvas.getContext('2d',{willReadFrequently:true});
   output.drawImage(raw,left,top,canvas.width,canvas.height,

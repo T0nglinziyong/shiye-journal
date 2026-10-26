@@ -66,6 +66,15 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   const scene=await read('scene.json');scene.page.paperColor='#eeeeee';await write('scene.json',scene);assert.match(run('pack').stderr,/PREVIEW_STALE/);
  });
 });
+test('tape commands render and pack in Node without a browser document',async()=>{
+ const tape={...paper('tape',60,12),kind:'tape',tapeAxis:'x',tapeRepeatMode:'repeatablePattern',tapeRepeatStartMM:0,tapeRepeatEndMM:20};
+ await withPackage([tape],async({ok,read,apply})=>{
+  await apply([{op:'material.tape',id:'tape-join',asset:'m1',lengthMm:22,widthMm:12,place:mm(40,50),texture:{mode:'repeat'},caps:{start:'torn',end:'angled',depthMm:.7}},decision('m1','crafted')]);
+  assert.equal(ok('preview').ok,true);ok('pack');
+  const output=await read('output/project.shiyeproject.json');
+  assert.equal(output.page.layers[0].tapeStrip.textureMode,'repeat');
+ });
+});
 test('one public protocol exposes executable help and delivers mask vector ink text',async()=>{
  await withPackage([paper('photo',30,20)],async({files,dir,ok,read,apply})=>{
   const help=ok('help');assert.equal(help.protocolVersion,2);assert.equal(help.operations.length,Object.keys(creationCommandRegistry).length);

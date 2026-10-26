@@ -57,6 +57,18 @@ function displayMaskGeometry(node,asset,region,page){
  return geometryIntersection(creationRegionGeometry(region,{sourceSize:[asset.physicalWidthMM,asset.physicalHeightMM],localSize:[node.width/s,node.height/s],crop,output:'localRatio'}),rectangleGeometry(0,0,1,1));
 }
 
+function preserveReplacementStack(original,target,next,pieceIDs){
+ const location=locate(original.page.layers,target);
+ const ordered=[...location.siblings].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
+ const following=ordered.slice(ordered.indexOf(location.node)+1).find(node=>find(next,node.id));
+ for(const id of pieceIDs)moveSceneNode(next.page,requireNode(next,id).id,{parentID:location.parent?.id||null,beforeID:following?.id||null});
+ // Reparenting normalizes sibling z values. Restore unaffected peers (some
+ // may be locked or user-edited); replacement pieces occupy the original slot.
+ for(const peer of location.siblings){const surviving=find(next,peer.id);if(surviving)surviving.zIndex=peer.zIndex;}
+ for(const id of pieceIDs)requireNode(next,id).zIndex=location.node.zIndex??0;
+ return next;
+}
+
 function splitPhysicalPiece(doc,item,assets,transactionId,index){
  const parent=requireNode(doc,item.target);
  if(parent.type!=='material'||parent.tapeStrip)throw Error('material.split 需要普通实体素材');
@@ -72,11 +84,11 @@ function splitPhysicalPiece(doc,item,assets,transactionId,index){
   const u=(crop.x-parentCrop.x)/parentCrop.width,v=(crop.y-parentCrop.y)/parentCrop.height,w=crop.width/parentCrop.width,h=crop.height/parentCrop.height,dx=(u+w/2-.5)*parent.width,dy=(v+h/2-.5)*parent.height;
   const defaultCenter={x:parentWorld.cx+dx*Math.cos(angle)-dy*Math.sin(angle),y:parentWorld.cy+dx*Math.sin(angle)+dy*Math.cos(angle),rotation:parentWorld.rotation};
   const position=part.place?placeFor(doc,part.place,crop.width*asset.physicalWidthMM,crop.height*asset.physicalHeightMM,defaultCenter.rotation-creationRotationFrame(doc.page,part.place,group?.id),group?.id):defaultCenter;
-  return {id:part.id,asset:doc.source.materials.find(row=>row.assetID===asset.id)?.alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:part.region.shape==='rect'?{type:'rect_crop',boxMM:[bounds.x,bounds.y,bounds.width,bounds.height]}:{type:'geometry',geometryMM:geometry},centerMM:[position.x/factor,position.y/factor],rotationDeg:position.rotation};
+  return {id:part.id,asset:doc.source.materials.find(row=>row.assetID===asset.id)?.alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:part.region.shape==='rect'?{type:'rect_crop',boxMM:[bounds.x,bounds.y,bounds.width,bounds.height]}:{type:'geometry',geometryMM:geometry},centerMM:[position.x/factor,position.y/factor],rotationDeg:position.rotation,z:parent.zIndex??10};
  });
  const commandId='v2-'+craftDigest([transactionId,index]).slice(7,31);
  const next=runMaterialAlgorithm(doc,'apply_craft_plan',{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders:item.keepRemainder!==false},assets);
- if(group)for(const piece of pieces)moveSceneNode(next.page,requireNode(next,piece.id).id,{parentID:group.id});
+ preserveReplacementStack(doc,item.target,next,pieces.map(piece=>piece.id));
  for(const piece of item.pieces)if(piece.place)finishPlacement(next,piece.id,piece.place);
  return next;
 }
@@ -84,7 +96,7 @@ function physicalCut(doc,{target,regions,keepRemainders=true},assets,transaction
  const parent=requireNode(doc,target);
  if(parent.type!=='material'||parent.tapeStrip)throw Error('实体裁切需要普通素材');
  assertNoLinkedDependents(doc.page,parent.id);
- const group=locate(doc.page.layers,target)?.parent,asset=assets.find(row=>row.id===parent.assetID);if(!asset)throw Error('素材来源不存在');
+ const asset=assets.find(row=>row.id===parent.assetID);if(!asset)throw Error('素材来源不存在');
  const source=itemSourceGeometry(parent,asset),crop=parent.cropRect||{x:0,y:0,width:1,height:1},factor=scale(doc.page),world=worldBox(doc.page,target),angle=world.rotation*Math.PI/180,alias=doc.source.materials.find(row=>row.assetID===asset.id)?.alias;
  if(!alias)throw Error('素材别名不存在');
  const pieces=regions.map(({id,geometry,treatments})=>{
@@ -92,17 +104,30 @@ function physicalCut(doc,{target,regions,keepRemainders=true},assets,transaction
   const inside=geometryIntersection(source,geometry);
   if(geometryArea(inside)<=0||Math.abs(geometryArea(inside)-geometryArea(geometry))>1e-5)throw Error('裁片区域超出当前素材');
   const b=geometryBounds(inside),u=(b.x/asset.physicalWidthMM-crop.x)/crop.width,v=(b.y/asset.physicalHeightMM-crop.y)/crop.height,w=b.width/(crop.width*asset.physicalWidthMM),h=b.height/(crop.height*asset.physicalHeightMM),dx=(u+w/2-.5)*parent.width,dy=(v+h/2-.5)*parent.height;
-  return {id,asset:alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:{type:'geometry',geometryMM:inside},centerMM:[(world.cx+dx*Math.cos(angle)-dy*Math.sin(angle))/factor,(world.cy+dx*Math.sin(angle)+dy*Math.cos(angle))/factor],rotationDeg:world.rotation,z:parent.zIndex||10,...(treatments?.length?{treatments}:{})};
+  return {id,asset:alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:{type:'geometry',geometryMM:inside},centerMM:[(world.cx+dx*Math.cos(angle)-dy*Math.sin(angle))/factor,(world.cy+dx*Math.sin(angle)+dy*Math.cos(angle))/factor],rotationDeg:world.rotation,z:parent.zIndex??10,...(treatments?.length?{treatments}:{})};
  });
  const commandId='v2-'+craftDigest([transactionId,index,'physical-cut']).slice(7,31);
  const next=runMaterialAlgorithm(doc,'apply_craft_plan',{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders},assets);
- if(group)for(const piece of pieces)moveSceneNode(next.page,requireNode(next,piece.id).id,{parentID:group.id});return next;
+ preserveReplacementStack(doc,target,next,pieces.map(piece=>piece.id));return next;
 }
 function tornEdgeStep(node,asset,edge){
  const crop=node.cropRect||{width:1,height:1},side=Math.min(crop.width*asset.physicalWidthMM,crop.height*asset.physicalHeightMM);
  return {op:'edge',style:'torn',edges:['top','right','bottom','left'],depth_mm:Math.max(.1,Math.min(side*.08,(edge.roughness??.2)*3)),period_mm:Math.max(.5,side*.16),seed:edge.seed};
 }
 const operationValidators=new Map();
+// AJV emits failures for every union alternative. Its first error may belong
+// to an unrelated geometry (e.g. saying a path's valid viewBox is forbidden).
+// Prefer a concrete, deeper field failure over a union's summary or a missing
+// field from another alternative. Keep the schema strict; only diagnostics change.
+function actionableSchemaError(errors){
+ const score=error=>{
+  const field=error.params.missingProperty||error.params.additionalProperty;
+  const depth=error.instancePath.split('/').filter(Boolean).length+(field?1:0);
+  const priority=['oneOf','anyOf','if'].includes(error.keyword)?-100:error.keyword==='required'?0:1;
+  return depth*10+priority;
+ };
+ return [...errors].sort((a,b)=>score(b)-score(a))[0];
+}
 export function validateCreationV2Commands(input){
  if(schema(input))return input;
  let error=schema.errors[0],prefix='';
@@ -111,7 +136,7 @@ export function validateCreationV2Commands(input){
   const entry=creationCommandRegistry[item?.op];
   if(!entry)throw Object.assign(Error('未知操作：'+item?.op),{code:'COMMAND_SCHEMA_INVALID',operationIndex:index,path:'/operations/'+index+'/op'});
   if(!operationValidators.has(item.op))operationValidators.set(item.op,new Ajv2020({strict:false,allErrors:true}).compile(selfContainedCreationSchema(entry.schema)));
-  const check=operationValidators.get(item.op);if(!check(item)){error=check.errors[0];prefix='/operations/'+index;break;}
+  const check=operationValidators.get(item.op);if(!check(item)){error=actionableSchemaError(check.errors);prefix='/operations/'+index;break;}
  }
  const field=error.params.missingProperty||error.params.additionalProperty||'',path=prefix+error.instancePath+(field?'/'+field:'');
  throw Object.assign(Error('commands'+path+' '+error.message+'；使用 describe 查询参数。'),{code:'COMMAND_SCHEMA_INVALID',path,...(prefix?{operationIndex:Number(prefix.split('/')[2])}:{})});

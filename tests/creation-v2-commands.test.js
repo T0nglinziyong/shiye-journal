@@ -16,12 +16,34 @@ const paper=(id='paper',w=100,h=80)=>({id,title:id,kind:'paper',physicalWidthMM:
 const add=(id='paper',place=at)=>({op:'material.add',id,asset:'m1',place});
 const rect=box=>({shape:'rect',space:'source',unit:'ratio',box});
 const batch=operations=>({protocolVersion:2,transactionId:'test',baseSceneRevision:'sha256:'+'0'.repeat(64),operations});
+test('path diagnostics identify the bad nested style, not a valid field from another geometry variant',()=>{
+ const operation={op:'graphic.add',id:'envelope',geometry:{kind:'path',viewBox:[0,0,36,22],paths:[{d:'M0 0 L36 0 L36 22 Z',style:{stroke:'#112233',strokeWidth:.4}}]},place:at,size:{width:36,height:22,unit:'mm'}};
+ assert.throws(()=>validateCreationV2Commands(batch([operation])),error=>error.code==='COMMAND_SCHEMA_INVALID'&&error.path==='/operations/0/geometry/paths/0/style/strokeWidth');
+ delete operation.geometry.paths[0].style.strokeWidth;operation.style={strokeWidthMm:.4};assert.doesNotThrow(()=>validateCreationV2Commands(batch([operation])));
+});
 async function setup(asset=paper(),p=project('统一命令')){
  const task=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
  const assets=task.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true}));
  const doc=webSceneDocument(task.source,task.source.baseDraft,'测试');
  return {doc,assets,run:(operations,input=doc)=>applyCreationV2Batch(input,batch(operations),assets)};
 }
+test('splitting a background keeps both cut pieces below its text, including inside a group',async()=>{
+ const {run}=await setup();
+ const initial=run([add(),{op:'text.add',id:'note',content:'底纸上已有的字',place:at,size:{width:55,unit:'mm'},style:{fontSizePt:12}},
+   {op:'graphic.add',id:'mark',geometry:{kind:'ellipse'},place:at,size:{width:6,height:6,unit:'mm'},style:{fill:'#aabbcc'}},
+   {op:'layer.update',target:'paper',order:{edge:'back'}}]);
+ for(const grouped of [false,true]){
+  const base=grouped?run([{op:'group.create',id:'paper-group',targets:['paper','note','mark']}],initial):initial;
+  const result=run([{op:'material.split',target:'paper',pieces:[{id:'left-piece',region:rect([0,0,.5,1])},{id:'right-piece',region:rect([.5,0,.5,1])}]}],base);
+  const peers=grouped?result.page.layers.find(n=>n.id==='paper-group').children:result.page.layers;
+  const visible=peers.filter(n=>!n.isParked).sort((a,b)=>a.zIndex-b.zIndex);
+  assert.deepEqual(visible.map(n=>n.creativePieceID||n.id),['left-piece','right-piece','note','mark']);
+  const oldNote=worldBox(base.page,'note'),newNote=worldBox(result.page,'note');
+  assert.deepEqual(newNote,oldNote,'splitting must not move existing writing');
+ }
+ const locked=run([{op:'layer.update',target:'note',locked:true}],initial);
+ assert.doesNotThrow(()=>run([{op:'material.split',target:'paper',pieces:[{id:'left-piece',region:rect([0,0,.5,1])},{id:'right-piece',region:rect([.5,0,.5,1])}]}],locked));
+});
 test('published schema exposes current capabilities and rejects deferred geometry',()=>{
  assert.throws(()=>validateCreationV2Commands(batch([{op:'layout.arrange',targets:['a'],rule:{type:'grid'},container:'page'}])),/commands|操作/);
  assert.throws(()=>validateCreationV2Commands(batch([{op:'page.update',physicalSizeMm:[100,200]}])),/commands/);

@@ -12,7 +12,9 @@ export const creationMethods={
   marks:{title:'圈注高亮',operations:['graphic.add','layer.update'],advice:'先选一句转折、一个日期或一处视线，再画局部高亮、圈线、箭头或记号。高亮放在文字下，按实际行宽和底色调笔宽、颜色与透明度。圆形可做色标、视觉停顿或主体，不必所有细节都用小星星。'},
   planner:{title:'计划清单',operations:['graphic.add','text.add','layer.update'],advice:'先分日期、任务与备注，再用少量线、可调行列的表格和标签建立扫描顺序。待办空栏是功能空间，不按日记的充实程度填满。完成、取消、延期标记只依据用户事实；没有任务时提供明确空白计划区域，不虚构完成记录。'},
   editorial:{title:'编辑分区',operations:['text.add','text.lettering','graphic.add','material.cut','layer.update'],advice:'报刊或杂志感来自标题层级、不等宽分栏、框线、图注与信息顺序，不是统一加复古滤镜。允许一个大字块或图片打断栏线，让次级文字与主块有关系；避免每一块都变成等大矩形卡。'},
-  transparency:{title:'透明叠贴',operations:['material.add','layer.update','layer.mask'],advice:'先核对真实透明通道和材质，再让透光层连接两块内容。opacity 与混合模式按真实预览调整；白纸不能因名称像 PET 就被当成透明膜。显示蒙版只改变可见范围，不创造实体余料。'},
+  transparency:{title:'透明叠贴',operations:['material.add','layer.update','layer.mask'],advice:'先核对真实透明通道和材质，再让透光层连接两块内容、承载日期条或隔开区域。底纸与上层书写分别调透明度，避免整组变淡后正文难读。opacity 与混合模式按真实预览调整；白纸不能因名称像 PET 就被当成透明膜。显示蒙版不创造实体余料，静态层叠不等于可交互翻页。'},
+  color:{title:'色块配色',operations:['graphic.add','text.add','layer.update'],advice:'从本次素材选主色、陪衬色和小面积强调色，不平均分配颜色。异形色块可承载书写，也可衬托角色；深底浅字、浅底深字按预览判断。完成内容后再加回应词意的点线、描边或小图案，不把圆点、动物或同一套配色变成每页公式。'},
+  portrait:{title:'人物层级',operations:['material.add','material.cut','layer.update','text.add'],advice:'仅在人物主题适合时，比较完整照片与裁剪轮廓的职责。让大小、朝向、遮挡和文字条共同建立重点；不要遮住脸、动作或重要印刷字。普通实体不能复制或放大来制造多个人像，只有合法的多份或数字来源才能重复。没有人物时改用当前素材的轮廓与可写面，不强造人像模板。'},
   cutwork:{title:'裁片取用',operations:['material.cut','material.split','material.window','material.weave','material.edge'],advice:'只为明确的轮廓、接缝或图文关系加工。保留人物动作和重要印刷字，真正裁片共用来源占用账本；余料不重叠才再用。需要穿插先造窗口再穿条，几何失败就换可实现构图，不用伪预览掩饰。'}
 };
 
@@ -22,7 +24,7 @@ const styleMethods={
   '美式拼贴':['layering','lettering','cutwork'],
   '复古旧物':['editorial','layering','stamps'],
   '日系文具':['tape','stamps','marks'],
-  '童趣可爱':['relationships','lettering','marks'],
+  '童趣可爱':['relationships','color','lettering','marks'],
   '杂志排版':['editorial','lettering'],
 };
 const unique=items=>[...new Set(items)];

@@ -40,7 +40,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
    const sourceKey=item.sourceBlobId||item.sourceStaticPath||item.assetID;
    if(!decoded.has(sourceKey))decoded.set(sourceKey,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
    const image=await decoded.get(sourceKey);if(!image)throw Error('缺少素材图像：'+item.assetID);
-   paintMaterialImage(target,item,image);
+   paintMaterialImage(target,item,image,{createCanvas});
  };
  const drawLeaf=async(kind,item,target)=>{
    target.save();
