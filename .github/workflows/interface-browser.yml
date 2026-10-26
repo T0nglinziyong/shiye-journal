@@ -59,6 +59,7 @@ jobs:
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/fabric-stage-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/shared-editor-kernel-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/ink-inspector-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/group-inspector-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/material-polish-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/import-browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:editor-layout-browser

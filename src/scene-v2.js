@@ -222,8 +222,8 @@ export function ungroupSceneLayers(d,id){
  assertSceneEditable(d,id);
  assertNoLinkedDependents(d,id);
  if((group.opacity??1)!==1||!['normal','source-over',undefined].includes(group.blendMode)||
-   group.vectorMask||group.materialMask||group.clipPath)
-  throw Error('这个组合有透明、混合或遮罩效果，直接解组会改变画面');
+   group.vectorMask||group.materialMask||group.clipPath||group.shadow)
+  throw Error('这个组合有透明、混合、阴影或遮罩效果，直接解组会改变画面');
  if(group.localTransform)for(const child of group.children)convertNodeFrame(child,group.localTransform,IDENTITY);
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
  const target=parent?parent.children:d.layers;

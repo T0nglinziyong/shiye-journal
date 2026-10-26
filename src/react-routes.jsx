@@ -1,3 +1,4 @@
+import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {EditorLayoutPanel} from './react-editor-layout.jsx';
 import {creativeSourceIDs} from './creation-sources.js';
 import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js';
@@ -1053,6 +1054,7 @@ function VectorGeometryEditor({item,onChange}){
     {error?<small role="alert">{error}</small>:null}</div>;
 }
 
+const inspectorShapeNames=new Map([...commonShapes,...advancedShapes]);
 function EditorInspector({selected,draft,asset,format,onChange,onAction,materials=[]}){
   const field=(id,label,value,type='number',props={})=>type==='range'?<label className="editor-inspector-range">
     <span>{label} · {Number(props.max)===1?`${Math.round(Number(value)*100)}%`:value}</span><div>
@@ -1085,9 +1087,27 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </select></label>
   </div>;
   const item=selected.value;
+  const parent=selected.parents?.at(-1);
+  const parentLink=parent?<button type="button" className="btn mini" onClick={()=>onAction('fabric-inspector-select',parent.id)}>返回组合 · {parent.name||'手帐组合'}</button>:null;
+  if(selected.kind==='group')return <div className="stack editor-inspector-fields">
+    {parentLink}<h3>组合属性</h3>
+    {field('inspector-group-name','组合名称',item.name||'','text',{maxLength:100})}
+    {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
+    {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[['normal','正常'],['multiply','正片叠底']])}
+    {check('inspector-group-shadow-enabled','组合阴影',!!item.shadow)}
+    {item.shadow?<div className="form-grid">
+      {field('inspector-group-shadow-color','阴影颜色',item.shadow.color,'color')}
+      {field('inspector-group-shadow-blur','阴影模糊（mm）',Number((item.shadow.blur*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:0,max:30,step:.1})}
+      {['x','y'].map(axis=><React.Fragment key={axis}>{field('inspector-group-shadow-'+axis,'阴影偏移 '+axis.toUpperCase()+'（mm）',Number((item.shadow[axis==='x'?'offsetX':'offsetY']*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:-30,max:30,step:.1})}</React.Fragment>)}
+    </div>:null}
+    {item.localTransform&&item.layoutBox?<EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>:null}
+    <h3>组合内对象 · {item.children.length}</h3>
+    <small className="muted">整体修改保留各对象的独立属性；进入对象可继续编辑，完成后一起保存。</small>
+    {item.children.map((child,index)=><button type="button" className="btn" key={child.id} onClick={()=>onAction('fabric-inspector-select',child.id)}>{index+1}. {child.name||child.content?.slice(0,32)||(child.type==='material'?asset(child.assetID)?.title:child.type==='shape'?inspectorShapeNames.get(child.kind):null)||({material:'素材',shape:'图形',text:'文字',ink:'笔迹',group:'组合'}[child.type])}</button>)}
+  </div>;
   const shapeFillable=selected.kind==='shape'&&!['paperclip','wave','zigzag','bracket','line'].includes(item.kind);
   if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
-    <h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
+    {parentLink}<h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
     <div className="form-grid">
       {field('inspector-ink-color','笔迹颜色',item.color||'#2b5245','color')}
       {field('inspector-ink-width-mm','笔迹粗细（mm）',Number(((item.width||1)*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:.1,max:30,step:.1})}
@@ -1099,6 +1119,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     <EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>
   </div>;
   return <div className="stack editor-inspector-fields">
+    {parentLink}
     {selected.kind==='text'?<>
       <h3>文字内容与样式</h3>
       <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
@@ -1186,11 +1207,12 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
 }
 
 function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,onAction}){
-  const floating=useFloatingPanel(210);
+  const floating=useFloatingPanel(210),body=useRef(null);
+  useLayoutEffect(()=>{body.current?.scrollTo({top:0});},[selected?.value?.id]);
   return createPortal(<section ref={floating.panel} className="editor-inspector floating-editor-inspector floating-scene-panel" role="dialog"
     aria-label="对象编辑" style={floating.style}>
     <header className="fabric-inspector-head" {...floating.moveProps}>
-      <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
+      <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹',group:'组合'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
       <div className="floating-scene-panel-actions">
         <button type="button" onPointerDown={event=>event.stopPropagation()}
           onClick={()=>onAction('fabric-inspector-discard')}>放弃</button>
@@ -1198,7 +1220,7 @@ function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,
           onClick={()=>onAction('fabric-inspector-save')}>完成</button>
       </div>
     </header>
-    <div className="floating-editor-inspector-body">{selected?<EditorInspector selected={selected}
+    <div ref={body} className="floating-editor-inspector-body">{selected?<EditorInspector key={selected.value.id} selected={selected}
       draft={draft} asset={asset} format={format} materials={materials} onChange={onChange}
       onAction={onAction}/>:<p>对象已从本次编辑中移除。</p>}</div>
     <div className="floating-panel-resize" role="separator" tabIndex={0}
@@ -1250,7 +1272,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
         y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
       const center=rect.left+anchor.x*rect.width/draft.canvas.width;
       const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
-      setPosition({left:Math.max(88,Math.min(innerWidth-88,center)),
+      setPosition({left:Math.max(mode==='group'?108:88,Math.min(innerWidth-(mode==='group'?108:88),center)),
         top:Math.max(58,Math.min(innerHeight-50,edge-30))});
     };
     const move=event=>{
@@ -1275,6 +1297,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
     <button type="button" aria-label={collective?'复制套选对象':group?'复制组合':'复制对象'}
       onClick={()=>onAction(collective?'fabric-lasso-copy':group?'fabric-group-copy':'duplicate')}
       dangerouslySetInnerHTML={{__html:iconMarkup('copy')}}/>
+    {group?<button type="button" aria-label="编辑组合" onClick={()=>onAction('fabric-inspector-open')} dangerouslySetInnerHTML={{__html:iconMarkup('pen')}}/>:null}
     <button type="button" aria-label={collective||group?
       canUngroup?'解开组合':'组合所选对象':'编辑对象'}
       disabled={collective&&!canUngroup&&count<2}
@@ -1345,7 +1368,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       draft={draft} onAction={onAction}/>:null}
     {selectedGroup&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions mode="group"
       canUngroup bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
-    {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
+    {selected&&!selectedGroup&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
     <div className="editor-shell swift-editor-workspace"
       data-react-page="editor"><section className="editor-stage"><div className="object-toolbar">

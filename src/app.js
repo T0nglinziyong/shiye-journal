@@ -1,6 +1,6 @@
 import {applyInspectorLayout} from './editor-layout-model.js';
 import {creativeSourceIDs,assertCreativeSources} from './creation-sources.js';
-import {inspectorSelection,applyInkInspectorChange} from './editor-inspector-model.js';
+import {inspectorSelection,applyInkInspectorChange,applyGroupInspectorChange} from './editor-inspector-model.js';
 import {canStartCreation} from './creation-methods.js';
 import {configureJournalFontLoader} from './journal-fonts.js';
 import {styleFor} from './scene-node-properties.js';
@@ -992,6 +992,10 @@ function bindPage({partial=false}={}){
 function updateEditorInspector(id,value){
   const d=current(),entry=inspectorSelection(d,state.selected);
   if(!d)return;
+  if(entry?.kind==='group'){
+    checkpoint();if(applyGroupInspectorChange(d,entry.value.id,id,value)){saveProject();if(!state.inspectorSession)render();}
+    return;
+  }
   if(entry?.kind==='ink'){
     checkpoint();
     if(applyInkInspectorChange(d,entry.value.id,id,value)){saveProject();if(!state.inspectorSession)render();}
@@ -1611,6 +1615,10 @@ async function runAppAction(action,id,value){try{
       saveRevision:saveVersions.get(state.activeProject.id)||0,
       selectedID:state.selected});
     state.fabricInspectorOpen=true;render();break;
+  }
+  case 'fabric-inspector-select':{
+    if(!state.inspectorSession||!findSceneNode(current(),id))break;
+    flushInspectorSnapshot();state.selected=id;state.multiSelected=[id];render();break;
   }
   case 'fabric-inspector-layout':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;
