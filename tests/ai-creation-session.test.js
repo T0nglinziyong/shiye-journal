@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {project as createProject} from '../src/domain.js';
+import {project as createProject,itemFromAsset} from '../src/domain.js';
 import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,createCreativeCheckpoint,hasCreativeSceneChange} from '../src/ai-creation-session.js';
 
 test('matching and editor derive one set of AI inputs from the same project',async()=>{
@@ -30,4 +30,24 @@ test('every AI checkpoint persists the frozen target and continues in its own ca
   const third=structuredClone(second);third.title='AI 第三轮';
   await checkpoint.commit(third);
   assert.equal(p.drafts.length,2);assert.equal(p.drafts[1].title,'AI 第三轮');assert.equal(writes,3);
+});
+
+
+test('continued creation keeps nested, hidden and parked sources after cloning, without leaking excluded candidates',async()=>{
+ const {creativeSourceIDs,assertCreativeSources}=await import('../src/creation-sources.js');
+ const {freezeCraftTask}=await import('../src/craft-task.js');
+ const p=createProject('已有纸页'),d=p.drafts[0];
+ const assets=['a','b','c','private'].map(id=>({id,title:id,kind:'paper',physicalWidthMM:20,physicalHeightMM:30}));
+ const leaf=itemFromAsset(assets[0],d,.5,.5);leaf.type='material';leaf.isParked=true;
+ d.layers.push({id:'outer',type:'group',hidden:true,children:[{id:'inner',type:'group',children:[leaf]}]});
+ p.candidateAssetIDs=['b','c'];p.materialPriority={excluded:['a','c']};
+ const copy=structuredClone(d);assert.equal(copy.items,undefined);
+ const ids=creativeSourceIDs({project:p,draft:copy,basket:['private']});
+ assert.deepEqual(ids,['b','a']);assert.doesNotThrow(()=>assertCreativeSources(ids,assets));
+ assert.throws(()=>assertCreativeSources(ids,assets.filter(a=>a.id!=='a')),/来源/);
+ assert.throws(()=>freezeCraftTask({materials:[{alias:'m1',assetID:'b'}]},structuredClone(d),assets),e=>e.code==='MISSING_BASE_SOURCE');
+ const source=freezeCraftTask({materials:ids.map((assetID,i)=>({alias:'m'+(i+1),assetID}))},structuredClone(d),assets);
+ assert.equal(source.sourceSnapshots.length,2);assert.equal(source.baseDraft.layers[0].children[0].children[0].assetID,'a');
+ const params=creativeRunParameters({project:p,draft:copy,assets,ids,settings:{},prompt:''});
+ assert.equal(params.title,'已有纸页');
 });

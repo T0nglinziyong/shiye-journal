@@ -6,6 +6,7 @@ export const CREATION_METHODS=Object.freeze([
 ]);
 export const WEB_RESULT_METHODS=Object.freeze([['file','作品文件'],['text','复制文本']]);
 export function creationMethod(mode){return CREATION_METHODS.some(([id])=>id===mode)?mode:'edit';}
+export function canStartCreation(mode,materialCount){return materialCount>0||creationMethod(mode)==='edit';}
 export function generationProfile(mode){
  const id=creationMethod(mode);return {creationMode:id,deliveryMode:id==='draw'?'image':'tools',generationMode:'agent',snapshot:id==='draw'?'image/png':false};
 }

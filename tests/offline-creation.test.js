@@ -56,3 +56,18 @@ test('image-only task remains separate and no private keys reach either package'
  const combined=Object.values(await entries(editable)).map(bytes=>strFromU8(bytes)).join(' ');
  assert.ok(!combined.includes('sk-test-not-for-GPT-task'));
 });
+
+
+test('a zero-material editable task registers, verifies and imports with empty source inventory',async()=>{
+ const {canStartCreation}=await import('../src/creation-methods.js');
+ assert.equal(canStartCreation('edit',0),true);assert.equal(canStartCreation('draw',0),false);assert.equal(canStartCreation('hybrid',0),false);
+ const task=await createOfflineHandoff({project:project('只用笔写一页'),assets:[],aliases:{}});
+ const bytes=new Uint8Array(await task.blob.arrayBuffer()),files=unzipSync(bytes);
+ assert.deepEqual(inspectOfflinePackage(bytes).source.materials,[]);
+ await verifyOfflineTaskPackage(bytes,task.source);
+ assert.match(strFromU8(files['design/GUIDE.md']),/本次没有实体素材/);
+ assert.deepEqual(importEditableWork(strFromU8(files['scene.json']),[],{trustedSource:task.source}).drafts[0].layers,[]);
+ const malformed=read(files,'TASK.json');delete malformed.sourceContext.materials;
+ assert.throws(()=>inspectOfflinePackage(zipSync({...files,'TASK.json':strToU8(JSON.stringify(malformed))})),/不是可登记/);
+ for(const mode of ['draw','hybrid'])await assert.rejects(createOfflineHandoff({project:{...project('图片'),creationMode:mode},assets:[],aliases:{}}),/请先选择素材/);
+});

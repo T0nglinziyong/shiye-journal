@@ -34,7 +34,9 @@ const validAlias=validMaterialAlias;
 const projectMode=(p,settings)=>p.creationMode||settings.creationMode||'edit';
 
 export function createEditablePackageGuide(source,selected,settings={}){
- const materialDirection=creationMaterialContext(selected).mainCount<=3
+ const materialDirection=!selected.length
+  ?'本次没有实体素材：直接用文字、手绘、图形、表格或图案完成整页。先确定想表达的内容与视觉主块，再形成有节奏的大小和疏密关系；无需查看空素材总览，不虚构照片或素材引用，不把图形堆成模板占位。'
+  :creationMaterialContext(selected).mainCount<=3
   ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
   :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。画布空白本身也能直接书写，不必把全部正文塞进唯一一张卡片。可让人物或小贴纸压住纸边、让正文沿实物边缘展开；露出有用轮廓，避免多件同心堆叠。';
  // START_HERE and REVIEW own the reusable composition workflow. Keep this
@@ -60,7 +62,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const hints=value=>Array.isArray(value)?value.filter(item=>typeof item==='string'&&item.trim()).slice(0,8).map(item=>item.trim().slice(0,40)):[];
   return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,...(asset.isCreativePreset?{usageStatus:'preset'}:{}),continuousTape:asset.kind==='tape',tape:asset.kind==='tape'?{axis:tapeDimensions(asset).axis,widthMM:tapeDimensions(asset).widthMM,sourceLengthMM:tapeDimensions(asset).lengthMM,repeatRangeMM:tapeRepeatRange(asset),flatCrop:asset.tapeFlatCrop??null,textureModes:['sample',...(tapeRepeatRange(asset)?['repeat']:[]),'stretch'],capStyles:['square','angled','torn']}:null,tags:hints(asset.tags),contentTags:hints(asset.contentTags),styleTags:hints(asset.styleTags),semanticColorNames:hints(asset.semanticColorNames),placementHints:hints(asset.placementHints)};
  });
- if(!selected.length)throw Error('请先选择素材');
+ if(!selected.length&&creationMode!=='edit')throw Error('请先选择素材');
  const showImages=settings.includeThumbnails!==false,chosen=showImages?previews:[];
  if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
  if(creationMode!=='edit'&&!showImages)throw Error('真实素材生图需要素材图片；没有跳过引用图。');
@@ -105,7 +107,7 @@ export function inspectOfflinePackage(bytes){
  const {kind,files}=readProjectPackageEntries(bytes,{allowTask:true});
  if(kind==='editable')return {kind,source:inspectEditableSource(strFromU8(files[EDITABLE_PACKAGE_ENTRY])).source};if(kind==='native')return {kind,source:null};
  let context;try{context=JSON.parse(strFromU8(files['TASK.json']));}catch{throw Error('原始任务包的 TASK.json 无效');}validatePackageValue(context);
- if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==3||context.sourceContext?.taskBinding!=='local'||context.sourceContext?.packageLayout!=='v3'||!Array.isArray(context.materials)||!context.sourceContext?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
+ if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==3||context.sourceContext?.taskBinding!=='local'||context.sourceContext?.packageLayout!=='v3'||!Array.isArray(context.materials)||!Array.isArray(context.sourceContext?.materials))throw Error('不是可登记的网页 AI 原始任务包');
  if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.sourceContext.materials))throw Error('原始任务包素材映射不一致');return {kind,source:context.sourceContext};
 }
 export async function verifyOfflineTaskPackage(bytes,source){

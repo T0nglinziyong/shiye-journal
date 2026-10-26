@@ -1,3 +1,4 @@
+import {creativeSourceIDs} from './creation-sources.js';
 import {CreationModePicker} from './react-creation-mode.jsx';
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
@@ -5,7 +6,7 @@ import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
 import {parseEditableGeometry} from './editable-geometry.js';
-import {creationModeDescription} from './creation-methods.js';
+import {canStartCreation,creationModeDescription} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -1014,7 +1015,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
-      {scope.candidateAssetIDs.length>0?<p className="muted" data-creation-guidance>{guidance.summary}</p>:null}
+      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:!canStartCreation(state.matchCreationMode,0)?'当前模式需要真实素材作为图像参考；先选择素材，或切换到纯编辑进行文字与图形创作。':'没有选素材也可以创作：用文字、手绘和图形完成这一页；胶带、贴纸和印章可按需从素材库加入。'}</p>
 
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
@@ -1022,7 +1023,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong>{asset.kind||asset.role?<small className="match-type">{[asset.kind?kindName(asset.kind):null,asset.role?materialRoleName(asset.role):null].filter(Boolean).join(' · ')}</small>:null}
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
-        </div></div>):<p>先从右侧建议或素材库选择。点星号可设为每版必用。</p>}
+        </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
       </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
       <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
         <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
@@ -1034,7 +1035,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
     <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
-      <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!scope.candidateAssetIDs.length}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!scope.candidateAssetIDs.length}>导出给网页版 AI</button>
+      <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
     <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>
   </div>;
@@ -1201,13 +1202,12 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
     window.addEventListener('shiye-ai-status',update);
     return ()=>window.removeEventListener('shiye-ai-status',update);
   },[]);
-  const ids=[...new Set([...(state.activeProject?.candidateAssetIDs||[]),
-    ...state.basket,...(draft.items||[]).map(item=>item.assetID)])].filter(id=>asset(id));
+  const ids=creativeSourceIDs({project:state.activeProject||{},draft,basket:state.basket});
   return <section className="inline-ai-panel" aria-label="AI 创作">
     <div className="inline-ai-head"><h2>AI 创作</h2><button type="button" data-ai-close
       aria-label="收起 AI 创作" onClick={()=>onAction('close')}>×</button></div>
     <p>边创作边在上方画布查看。使用设置中的 {state.aiSettings.model}，按模型能力发送素材描述与可选缩略图。</p>
-    <div className="inline-ai-assets">{ids.length?ids.map((id,index)=><span key={id}>m{index+1} · {asset(id).title}</span>):'请先从素材搭配选择素材'}</div>
+    <div className="inline-ai-assets">{ids.length?ids.map((id,index)=><span key={id}>m{index+1} · {asset(id)?.title||'来源待恢复'}</span>):'可直接用文字与图形创作，也可先到素材搭配中添加材料。'}</div>
     <label>这页想记录什么？<textarea id="ai-prompt" placeholder="写下主题、故事与喜欢的氛围"
       defaultValue={state.aiPrompt} onInput={event=>onPromptChange(event.currentTarget.value)}/></label>
     <div className="inline-ai-actions">

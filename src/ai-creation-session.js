@@ -4,7 +4,7 @@ import {prepareMaterialPreviews} from './creative-previews.js';
 import {commitAIDraft} from './ai-run-target.js';
 
 export function creativeRunParameters({project,draft,assets,ids,settings,prompt}){
-  return {...settings,draft,assets,aliases:materialAliases(ids),
+  return {...settings,title:project.title,draft,assets,aliases:materialAliases(ids),
     styles:project.styles||[draft.style],
     pagePurposes:project.purposes||[project.purpose||'自由创作'],
     contentPolicy:project.contentPolicy||'original',
