@@ -427,12 +427,12 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           value={selectedNode.stroke||'#547da4'} onChange={event=>shapeProperty('stroke',event.target.value)}/></label>
         <select className="shape-quick-select" aria-label="描边粗细" value={selectedNode.lineWidth??2}
           onChange={event=>shapeProperty('lineWidth',Number(event.target.value))}>
-          {[0,1,2,3,4,6,8,12,16,24,30].map(value=><option key={value} value={value}>线 {value}</option>)}
+          {[...new Set([0,1,2,3,4,6,8,12,16,24,30,selectedNode.lineWidth??2])].sort((a,b)=>a-b).map(value=><option key={value} value={value}>线 {value}</option>)}
         </select></>:null}
         <select className="shape-quick-select" aria-label="图形整体不透明度"
           value={Math.round((selectedNode.opacity??1)*100)}
           onChange={event=>shapeProperty('opacity',Number(event.target.value)/100)}>
-          {[0,25,50,75,100].map(value=><option key={value} value={value}>{value}%</option>)}
+          {[...new Set([0,25,50,75,100,Math.round((selectedNode.opacity??1)*100)])].sort((a,b)=>a-b).map(value=><option key={value} value={value}>{value}%</option>)}
         </select>
         <button type="button" className="shape-detail-quick" onClick={()=>onAction('fabric-inspector-open')}>更多设置</button>
       </>:selectedNode?selectedKind==='material'?<>

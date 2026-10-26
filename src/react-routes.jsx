@@ -11,7 +11,7 @@ import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
-import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
+import {EditorShapeOptions} from './react-editor-shape-options.jsx';
 import {EditorVectorPanel} from './react-editor-vector.jsx';
 import {canStartCreation,creationModeDescription} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
@@ -1122,7 +1122,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         onChange={event=>onChange('inspector-text',event.target.value)}/></label>
       <div className="form-grid">
         {choice('inspector-font','字体',item.style||'hand',journalFontPresets)}
-        {field('inspector-font-size','字号',item.fontSize,'number',{min:5,max:400,step:1})}
+        {field('inspector-font-size','字号',item.fontSize,'range',{min:5,max:400,step:1})}
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
       </div>
@@ -1160,13 +1160,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
           <button type="button" className="btn mini" onClick={()=>onChange('inspector-stroke',item.stroke===null?'#547da4':null)}>{item.stroke===null?'启用线条':'无线条'}</button>
         </div>
       </div>}
-      {advancedShapeControls(item.kind).length?<div className="editor-inspector-advanced">
-        <h4>图形内容</h4><p className="muted">拉伸只缩放内部图案；修改重复数量会调整图形外框。</p><div className="form-grid">{advancedShapeControls(item.kind).map(control=>{
-          const value=resolvedShapeOptions(item.kind,item.shapeOptions||{})[control.key];
-          return control.type==='boolean'?<React.Fragment key={control.key}>{check(`inspector-shape-option-${control.key}`,control.label,value)}</React.Fragment>:
-            <React.Fragment key={control.key}>{field(`inspector-shape-option-${control.key}`,control.label,value,'number',
-              {min:control.min,max:control.max,step:control.type==='integer'?1:.01})}</React.Fragment>;
-      })}</div></div>:null}
+      <EditorShapeOptions node={item} onChange={onChange}/>
       {(item.vectorPaths?.length||item.vectorLayers?.length||item.svgPaths?.length)?<EditorVectorPanel key={item.id} node={item} onAction={onAction}/>:null}
       <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     </>:null}
@@ -1184,7 +1178,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
       {item.tapeStrip?<div className="stack"><h3>胶带段</h3>
         <p className="muted">完成此窗口后，可在画布工具栏重画中心线。</p>
-        {field('inspector-tape-width','宽度 mm',item.tapeStrip.physicalWidthMM,'number',{min:.5,max:200,step:.5})}
+        {field('inspector-tape-width','宽度 mm',item.tapeStrip.physicalWidthMM,'range',{min:.5,max:200,step:.5})}
         {choice('inspector-tape-mode','纹样方式',item.tapeStrip.textureMode||'repeat',
           [['sample','原图长度'],['repeat','重复纹样'],['stretch','沿路径拉伸']])}
         <div className="form-grid">
