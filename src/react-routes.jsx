@@ -1,3 +1,4 @@
+import {EditorMaskPanel} from './react-editor-mask.jsx';
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {EditorLayoutPanel} from './react-editor-layout.jsx';
 import {creativeSourceIDs} from './creation-sources.js';
@@ -1101,6 +1102,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       {['x','y'].map(axis=><React.Fragment key={axis}>{field('inspector-group-shadow-'+axis,'阴影偏移 '+axis.toUpperCase()+'（mm）',Number((item.shadow[axis==='x'?'offsetX':'offsetY']*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:-30,max:30,step:.1})}</React.Fragment>)}
     </div>:null}
     {item.localTransform&&item.layoutBox?<EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>:null}
+    <EditorMaskPanel key={item.id+'-mask'} node={item} page={draft} onAction={onAction}/>
     <h3>组合内对象 · {item.children.length}</h3>
     <small className="muted">整体修改保留各对象的独立属性；进入对象可继续编辑，完成后一起保存。</small>
     {item.children.map((child,index)=><button type="button" className="btn" key={child.id} onClick={()=>onAction('fabric-inspector-select',child.id)}>{index+1}. {child.name||child.content?.slice(0,32)||(child.type==='material'?asset(child.assetID)?.title:child.type==='shape'?inspectorShapeNames.get(child.kind):null)||({material:'素材',shape:'图形',text:'文字',ink:'笔迹',group:'组合'}[child.type])}</button>)}
@@ -1199,6 +1201,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       </div>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
     </>:null}
+    <EditorMaskPanel key={item.id+'-mask'} node={item} page={draft} onAction={onAction}/>
     <h3>图层外观</h3>
     <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
       {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>

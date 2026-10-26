@@ -1,3 +1,4 @@
+import {applyInspectorMask} from './scene-mask-edit.js';
 import {applyInspectorLayout} from './editor-layout-model.js';
 import {creativeSourceIDs,assertCreativeSources} from './creation-sources.js';
 import {inspectorSelection,applyInkInspectorChange,applyGroupInspectorChange} from './editor-inspector-model.js';
@@ -33,7 +34,7 @@ import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
-import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
+import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable} from './scene-model.js';
 import {reconcileManualSceneMove,solveSceneLayout} from './scene-layout.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
@@ -1015,14 +1016,9 @@ function updateEditorInspector(id,value){
     checkpoint();reshapeEditableTape(d,node.id,record,points,options,state.assets,{policy:USER_SCENE_POLICY});saveProject();
     if(!state.inspectorSession)render();return;
   }
-  if(['inspector-material-geometry','inspector-vector-mask'].includes(id)){
+  if(id==='inspector-material-geometry'){
     if(!entry)throw Error('请先选择一个图层');
     let parsed;try{parsed=JSON.parse(value);}catch{throw Error('请输入合法的 JSON 几何数据');}
-    if(id==='inspector-vector-mask'){
-      if(parsed!==null)validateVectorMask(parsed);
-      checkpoint();applySceneNodePatch(d,entry.value.id,parsed===null?{vectorMask:undefined,vectorMaskHistory:undefined}:{vectorMask:parsed},{policy:USER_SCENE_POLICY});
-      saveProject();if(!state.inspectorSession)render();toast('蒙版已应用');return;
-    }
     if(entry.kind!=='material')throw Error('请选择实体素材');
     if(!confirm('确认修改这件素材的实体裁片几何？操作仍会检查来源范围和材料用量。'))return;
     const confirmation=confirmSceneCapability([findSceneNode(d,entry.value.id)],'material.geometry');
@@ -1619,6 +1615,10 @@ async function runAppAction(action,id,value){try{
   case 'fabric-inspector-select':{
     if(!state.inspectorSession||!findSceneNode(current(),id))break;
     flushInspectorSnapshot();state.selected=id;state.multiSelected=[id];render();break;
+  }
+  case 'fabric-inspector-mask':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorMask(page,state.selected,id,state.assets);saveProject();break;
   }
   case 'fabric-inspector-layout':{
     const page=current();if(!page||!state.inspectorSession||!state.selected)break;

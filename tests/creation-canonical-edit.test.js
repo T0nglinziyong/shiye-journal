@@ -106,3 +106,18 @@ test('separate tape segments allocate independent units, paper ruling is actual 
  assert.equal(buildMaterialLedger(attachSceneV2(d.page),assets).rolls[0].pieces.length,2);
  approx(d.page.paperRuling.rowPositions[0]*d.page.physicalPageHeightMM,6);
 });
+
+test('inspector and AI display masks share geometry without changing material occupancy',async()=>{
+ const {applyInspectorMask,maskRequest,fullDisplayMask,maskRingPreset}=await import('../src/scene-mask-edit.js');
+ const {run,assets}=await fixture();const initial=run([add(),{op:'graphic.add',id:'veil',geometry:{kind:'rect'},size:{width:40,height:30,unit:'mm'},place:at()}]);
+ for(const target of ['paper','veil']){
+  const request=maskRequest({...fullDisplayMask(),holes:[maskRingPreset('rect',true)]});
+  const ai=run([{op:'layer.mask',target,...request}],initial),manual=structuredClone(initial);
+  const before=buildMaterialLedger(attachSceneV2(structuredClone(initial.page)),assets);
+  applyInspectorMask(manual.page,node(manual,target).id,request,assets);
+  assert.deepEqual(node(ai,target).vectorMask,node(manual,target).vectorMask);
+  assert.deepEqual(buildMaterialLedger(attachSceneV2(manual.page),assets),before);
+  assert.equal(node(manual,'paper').assetID,node(initial,'paper').assetID);
+  assert.deepEqual(node(manual,'paper').cropRect,node(initial,'paper').cropRect);
+ }
+});
