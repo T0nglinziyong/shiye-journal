@@ -5,7 +5,7 @@
 ## 开始
 
 1. `node runtime/shiye.cjs self-test` 检查渲染环境；通过即开始，不重复安装。缺少依赖才按 package-lock 安装。
-2. 读 TASK.json 的任务字段和 design/GUIDE.md；看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览用于辨认内容，尺寸图与毫米数据用于判断真实大小。sourceContext 是运行时来源快照，无须逐字段读。
+2. 运行 `node runtime/shiye.cjs brief` 读取 TASK.json 的任务摘要和本次方法选择，再读 design/GUIDE.md；看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览用于辨认内容，尺寸图与毫米数据用于判断真实大小。sourceContext 是运行时来源快照，无须逐字段读。
 3. 可一次查询 `describe material.add text.add graphic.add`，之后只查本次需要的命令。普通帮助已有最小例子；只有需要某项高级功能时才查 `--full`、api/commands.schema.json 或专题文档。
 
 ## 创作与迭代
@@ -27,7 +27,7 @@
 ## 按需能力
 
 - 普通位置、内容和样式：layer.update；组合：group.create / group.compose。
-- 高级工艺按需查 design/SKILL.md；问题与方法查 design/PLAYBOOK.md。
+- 共用方法见 design/SKILL.md；风格和材料用法按需 `guide` 查目录、`guide tape stamps` 或 `guide 美式拼贴`。用法说明给出可执行的命令名，精确参数再 `describe`。不必把所有专题读完；问题与方法补充见 design/PLAYBOOK.md。
 - 真实裁切/余料：material.cut / split / window；显示遮罩：layer.mask。不要混淆显示隐藏与实体取料。
 - 图形、笔迹：graphic.add，支持预设、自由路径、stroke、sketch。手绘化和布尔几何按需 `graphics help`、design/GRAPHICS_TOOL.md。
 - 预设胶带、贴纸和印章各有 9 款，与普通素材一起列在本次 TASK 的 materials 中，状态为“预设”；仅当用户选入本次创作时才进入 ZIP。数字预设可以重复使用，同一实物素材仍受单份来源和裁片占用约束。表格、月历等空白矢量图形直接用 `graphic.add`，行列、边框及其他高级图形细节可在 `geometry.options` 中调整，见 design/GRAPHICS.md。

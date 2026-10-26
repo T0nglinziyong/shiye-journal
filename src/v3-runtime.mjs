@@ -1,4 +1,5 @@
 import {verifyImageReference} from './image-reference-runtime.mjs';
+import {creationTaskBrief,describeCreationGuidance} from './creation-guidance.js';
 import {runGraphics} from './graphics-runtime.mjs';
 import {auditCreationDesign} from './creation-design-audit.js';
 import {auditRenderedPixels} from './creation-pixel-audit.js';
@@ -59,6 +60,8 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  const doc=validateV3SceneDocument(load('scene.json'));
  if(canonicalTaskSource(doc.source)!==canonicalTaskSource(source))throw fail('SOURCE_CHANGED','scene.json 的只读来源与 TASK.json 不一致');
  const current=revision(doc);
+ if(command==='brief'){process.stdout.write(JSON.stringify({ok:true,...creationTaskBrief(task)})+'\n');return;}
+ if(command==='guide'){process.stdout.write(JSON.stringify({ok:true,...describeCreationGuidance(Array.isArray(arg)?arg:arg?[arg]:[])})+'\n');return;}
  if(command==='graphics'){runGraphics(arg,current);return;}
  if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:2,tools:[{name:'graphics',readOnly:true,help:'graphics help'}],topics:creationHelpTopics,operations:Object.values(creationCommandRegistry).map(({name,available,advanced,summary})=>({name,available,advanced,summary}))})+'\n');return;}
  if(command==='describe'){const topics=Array.isArray(arg)?arg:[arg];const descriptions=(topics.length?topics:[undefined]).map(topic=>describeCreationV2Command(topic,{full}));process.stdout.write(JSON.stringify(descriptions.length===1?{ok:true,...descriptions[0]}:{ok:true,descriptions})+'\n');return;}
@@ -100,7 +103,7 @@ export async function runV3(task,command,arg,{protocolVersion=2,full=false}={}){
  }
  const info=inspectWebScene(doc,assets);
  if(command==='inspect'){const result={...info,sceneRevision:current,ledger:buildMaterialLedger(doc.page,assets)};save('output/scene-summary.json',result);process.stdout.write(JSON.stringify(result)+'\n');return;}
- if(!['preview','pack','review'].includes(command))throw fail('UNKNOWN_COMMAND','支持 graphics/info/fonts/design-check/self-test/help/describe/begin/check/apply/preview/inspect/review/pack');
+ if(!['preview','pack','review'].includes(command))throw fail('UNKNOWN_COMMAND','支持 brief/guide/graphics/info/fonts/design-check/self-test/help/describe/begin/check/apply/preview/inspect/review/pack');
  const draft=validateWebScene(doc.page,source,assets),sceneHash=craftSceneHash(draft);
  if(command==='preview'){
   if(arg){

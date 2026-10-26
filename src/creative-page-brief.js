@@ -1,4 +1,5 @@
 // One composition brief shared by editable API, image creation and web packages.
+import {creationGuidanceText} from './creation-guidance.js';
 import {journalCaseStudyGuide} from './journal-case-study.js';
 export function creativePageBrief({purposes=[],styles=[],materials=[],textMode='automatic',contentPolicy='original',textPresentation='mixed',userText='',theme='',delivery='editable',pageMode='single'}={}){
   const visual=contentPolicy==='visual'||textMode==='none';
@@ -13,6 +14,7 @@ export function creativePageBrief({purposes=[],styles=[],materials=[],textMode='
   const handmade=visual||requested||!styles.includes('手作便签')?'':`手作便签要保留“有人在这页想过、写过、改过”的痕迹：先在真实可写纸面安排一处能读下去的记录，再在不同位置用较短的随手插话、圈注或荧光笔回应看得见的细节。${textPresentation==='type'?'若明确选择印刷排版，用字号、字重、行距与位置区别正文和插话，不强加手写字体。':'不要把全部新增文字排成同一种整齐的无衬线段落。'}不要用一串关于未来、好奇、出发的同义口号替代观察。可写卡片若只写一角，决定剩余空白是停顿、继续书写，还是应调整卡片露出面积；这些取舍以预览画面为准，不设字数或笔迹配额。`;
   return `构图与内容（审美引导，不是填充率或元素数量指标）：
 文字、图形与素材共同构图，任何一种都可以成为主角。先稳定大视觉块（不仅是大素材，也包括艺术标题、文字段落和数字主图形），再完善内容，接着主动进行点缀审视。素材少时用文字和图形组织版式；除非任务明确要求极简/大留白，默认画面充实、疏密有序，不留大片无作用空区。先观察素材的轮廓、方向、真实尺寸、印刷字、可写空白和视觉重量。区分主视觉、书写面、印刷标题、底纸、连接物与点缀；同一素材可以承担不同职责，元数据只是线索，以实际图片为准。没有图片时不猜细节。
+${creationGuidanceText({styles,purposes,materials,contentPolicy,textMode,userText,theme})}
 ${density}
 素材如何使用与编辑：照片优先保留有表达的主体或动作；异形贴纸可与边注、纸片搭接，避免统一套白色矩形。真实便签、卡片、底纸上有可写区时优先利用，不再叠一张通用圆角底色卡；印刷文字可承担标题、反问或回应，不必再造同义标题。包装、纹样纸可有目的地裁成字块、背景片或窄条，余料只有来源不重叠才再用。用 crop 取区域、mask 修轮廓、diagonal 斜裁、window 开窗、矢量蒙版镂空时先说明它解决什么图文关系；没有必要就完整使用。胶带用直线段连接或固定图文组，保持校准宽度和图案。透明材质按需要使用 multiply；group 仅组织相关图层，不缩放实物。不按工艺种类或数量评分。
 素材职责必须拉开：一组素材都被标成 focal/贴纸只是库中元数据，不能因此全部完整铺开充当主角。大矩形可以成为承载正文的书写面、局部背景或经过真实裁切的连接片；印刷标题的面积也要与人物、正文协调。取局部、错层、遮住无关空边、沿轮廓排字、手绘回应，都可以创造关系。若决定全件完整使用，应靠主次、叠压、书写和视线连接组织成整体，而不是散放陈列。

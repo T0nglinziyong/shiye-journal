@@ -43,6 +43,13 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
   assert.equal(task.creativeBriefRef,'design/GUIDE.md');assert.equal(task.materials[0].selection,'preferred');
   assert.equal(task.creativeBrief,undefined);
   assert.ok(files[task.creativeBriefRef]);
+  const sceneBeforeGuide=await readFile(join(dir,'scene.json'));
+  const brief=ok('brief');assert.equal(brief.materials[0].alias,'m1');assert.equal(brief.sourceContext,undefined);assert.equal(brief.route.context.mainCount,1);
+  assert.ok(ok('guide').topics.some(topic=>topic.id==='tape'));
+  assert.deepEqual(ok('guide','tape','stamps').guides.map(g=>g.id),['tape','stamps']);
+  assert.equal(ok('guide','美式拼贴').guides[0].title,'美式拼贴');
+  assert.match(run('guide','not-a-method').stderr,/GUIDE_TOPIC_UNKNOWN/);
+  assert.deepEqual(await readFile(join(dir,'scene.json')),sceneBeforeGuide);
   assert.equal(JSON.parse(run('pack','--help').stdout).readOnly,true);
   assert.equal(JSON.parse(run('review','--help').stdout).readOnly,true);
   assert.equal((await read('scene.json')).page.layers.length,0);

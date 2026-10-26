@@ -993,7 +993,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   },[]);
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
-  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);
+  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes,guidance}=matchingViewModel(state);
   return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
@@ -1014,6 +1014,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
+      {scope.candidateAssetIDs.length>0?<p className="muted" data-creation-guidance>{guidance.summary}</p>:null}
 
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">

@@ -3,6 +3,7 @@ import {imageWorkflowRequest,imageWorkflowGuide} from './image-workflow.js';
 import {webSceneContract,webSceneDocument,importWebScene} from './web-scene-workbench.js';
 import {createV3PackageFiles} from './v3-package.js';
 import {webArtDirection} from './web-creation-guide.js';
+import {creationMaterialContext} from './creation-guidance.js';
 import {previewImageFormat} from './offline-preview.js';
 import {webResultPrompt} from './creation-methods.js';
 import {freezeCraftTask} from './craft-task.js';
@@ -35,14 +36,14 @@ function sourceFor(p,aliases){
  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 export function createEditablePackageGuide(source,selected,settings={}){
- const materialDirection=selected.length<=3
+ const materialDirection=creationMaterialContext(selected).mainCount<=3
   ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
   :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。画布空白本身也能直接书写，不必把全部正文塞进唯一一张卡片。可让人物或小贴纸压住纸边、让正文沿实物边缘展开；露出有用轮廓，避免多件同心堆叠。';
  // START_HERE and REVIEW own the reusable composition workflow. Keep this
  // per-task guide short so the model can reach the actual materials sooner.
  const textDirection=source.contentPolicy==='visual'||source.textMode==='none'?'本次不新增文字。':source.textMode==='requested'&&!source.userText?'没有明确文字要求时不主动配文。':source.textMode==='rich'?'本次可以写展开的随想：在真实书写空间内推进一个具体念头，再用短注回应素材细节；不靠口号或重复句子凑满。':source.textMode==='minimal'?'本次文字精炼，但图文关系仍须完成。':'新增文字长短随真实书写空间和内容而定。';
  const pageDirection=source.mode==='spread'?'双页分别检查：每页都有主块、可读内容或明确的视觉回应；两页可一重图一重字，但不要把某页的空洞算作另一页的留白。':'缩看整页，再放大检查图文交界和细节。';
- return ['materials.selection 标出取材优先级：required 必须可见，preferred 优先考虑，available 按需取用；后两者可以不选，记录 material.decision 即可。素材篮不是必须全件完整铺开的清单。',selected.some(item=>item.usageStatus==='preset')?'本次含预设素材：它们在素材库中与其他材料并列，TASK 中标记 usageStatus=preset；可重复使用，但仍按设计尺寸摆放。根据实际图文关系选择胶带、贴纸或印章，不要为填满画面机械地全部加入。':null,creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),webArtDirection(source),materialDirection,textDirection,pageDirection,'先看实物轮廓、印刷字和可写处，再让主块、文字与图形共同决定排版。只有结构难以取舍时才比较候选，不为比较而重写整份 Scene。只写 work/commands.json，局部修订继续用下一批 Command；对当前 Scene 真实预览。技术通过与视觉完成分开判断，具体诊断见 design/REVIEW.md；高级工艺按需 describe，不预读完整 Schema。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].filter(Boolean).join('\n\n');
+ return ['materials.selection 标出取材优先级：required 必须可见，preferred 优先考虑，available 按需取用；后两者可以不选，记录 material.decision 即可。素材篮不是必须全件完整铺开的清单。',selected.some(item=>item.usageStatus==='preset')?'本次含预设素材：它们在素材库中与其他材料并列，TASK 中标记 usageStatus=preset；可重复使用，但仍按设计尺寸摆放。根据实际图文关系选择胶带、贴纸或印章，不要为填满画面机械地全部加入。':null,creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),webArtDirection(source,selected),materialDirection,textDirection,pageDirection,'先看实物轮廓、印刷字和可写处，再让主块、文字与图形共同决定排版。只有结构难以取舍时才比较候选，不为比较而重写整份 Scene。只写 work/commands.json，局部修订继续用下一批 Command；对当前 Scene 真实预览。技术通过与视觉完成分开判断，具体诊断见 design/REVIEW.md；高级工艺按需 describe，不预读完整 Schema。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].filter(Boolean).join('\n\n');
 }
 // Alias shortening happens before freezing/hashing the task. Persistent asset
 // IDs never change, and images and source references share the same mapping.

@@ -47,7 +47,7 @@ export function buildCreativeMessages(o){
  const effectiveTextMode=contentPolicy==='visual'?'none':textMode;
  const contentBrief=creativeContentBrief({policy:contentPolicy,userText,providedFacts,topic:prompt,purposes:pagePurposes});
  const priority=id=>requiredAssetIDs.includes(id)||materialPriority.required?.includes(id)?'必须使用':materialPriority.available?.includes(id)?'可以使用（仅备选）':'优先使用';
- const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，优先级 ${priority(id)}，${a.kind}，${a.role}，图文职责 ${classifyJournalMaterial(a).join('、')}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，取用规则 ${a.kind==='tape'?'可取多个独立段，不得拉伸宽度或伪造无缝图案':'单方案一份源素材，可裁成非重叠片段'}，标签 ${(a.tags||[]).join('、')}`]:[];});
+ const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，优先级 ${priority(id)}，${a.kind}，${a.role}，图文职责 ${classifyJournalMaterial(a).join('、')}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，取用规则 ${a.isCreativePreset?'数字预设可重复取用，按设计尺寸摆放':a.kind==='tape'?'可取多个独立段，不得拉伸宽度或伪造无缝图案':'单方案一份源素材，可裁成非重叠片段'}，标签 ${(a.tags||[]).join('、')}`]:[];});
  const policy=effectiveTextMode==='none'?'不生成文字。':effectiveTextMode==='requested'?'仅用户明确要求文字时配文。':'按内容策略与用途创作有表达的图文手帐。';
  const pageBrief=creativePageBrief({styles,purposes:pagePurposes,textMode:effectiveTextMode,contentPolicy,textPresentation,userText,theme:prompt,pageMode:draft.pageMode,materials:assets.filter(a=>Object.values(aliases).includes(a.id))});
  const spreadPreference=draft.pageMode==='spread'?'双页是一张加宽画布，中心 x=0.5 为装订中缝。优先把每件实体素材完整安排在左半页或右半页，尽量不要横跨中缝；这是视觉建议而非强制规则，合理的跨页设计允许保留。':'';
