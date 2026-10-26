@@ -1333,7 +1333,7 @@ async function runAppAction(action,id,value){try{
     break;
   }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets});break;
-  case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';render();}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
+  case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';await switchImportRecord(state.importIndex,true);}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-continue':if(state.importStep==='done'){resetImportBatch();render();}break;
   case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;discardPaperPreview();render();break;case 'apply-paper-preview':await applyPaperPreview();break;
@@ -2335,7 +2335,7 @@ async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
     };
     openOverlay(createElement(OfflineHandoffReady,{result,project:p,diagnostics,
       onClose:closeOverlay,onCopy:copyPrompt,onShare:sharePackage,
-      onDownload:()=>{download(result.blob,result.filename);prefetchForImport();},
+      onDownload:prefetchForImport,
       onImportFile:()=>{offlineSnapshotProject=p;creationResultInput.click();},
       onImportText:importOfflineText,onPaste:()=>readClipboardText(navigator.clipboard)}));
   }catch(error){if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);closeOverlay();}}finally{if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
