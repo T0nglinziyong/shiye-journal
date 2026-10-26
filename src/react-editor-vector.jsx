@@ -1,6 +1,7 @@
 import React,{useRef,useState} from 'react';
-import {vectorEditorState,vectorContours,moveVectorHandle,changeVectorPointCount,vectorGeometryPatch} from './editor-vector-geometry.js';
+import {vectorEditorState,vectorContours,moveVectorHandle,changeVectorPointCount,vectorGeometryPatch,editVectorSegment} from './editor-vector-geometry.js';
 import {graphicPaintFrame,hasGraphicEffects} from './graphic-effects.js';
+import {svgPathSegments} from './svg-path-edit.js';
 import {shapeSVG} from './editor-tools-model.js';
 import './editor-vector.css';
 
@@ -16,6 +17,13 @@ function VectorDraft({node,initial,onAction,selection,onSelect}){
  const [draft,setDraft]=useState(initial),[error,setError]=useState('');
  const svg=useRef(null),drawing=useRef(null),drag=useRef(null),contours=vectorContours(draft),selected=Math.min(selection[0],contours.length-1),contour=contours[selected],point=Math.min(selection[1],(contour?.handles.length||1)-1),handle=contour?.handles[point];
  const setPoint=index=>onSelect([selected,index]);
+ const segments=contour?.commands?svgPathSegments(contour.commands):[],segment=segments.find(s=>s.index===(selection[2]??handle?.command))||segments[0];
+ const chooseSegment=(index,source=contour)=>{const hp=source.handles.findIndex(h=>h.command===index&&h.role==='anchor');onSelect([selected,Math.max(0,hp),index]);};
+ const modifySegment=request=>{try{
+  const next=editVectorSegment(draft,selected,segment.index,request),nextContour=vectorContours(next)[selected],choices=svgPathSegments(nextContour.commands),nextIndex=choices.find(s=>s.index===segment.index)?.index??choices.at(-1)?.index;
+  setDraft(next);chooseSegment(nextIndex,nextContour);setError('');
+ }catch(issue){setError(issue.message);}};
+
  const [x,y,w,h]=draft.frame,pad=w*.06,r=w*.018,sy=node.height/node.width*w/h;
  const initialPoints=vectorContours(initial).flatMap(c=>c.handles.map(h=>h.point));
  const bounds=initialPoints.reduce((b,[px,py])=>[Math.min(b[0],px),Math.min(b[1],py),Math.max(b[2],px),Math.max(b[3],py)],[x,y,x+w,y+h]),[left,top,right,bottom]=bounds.map((v,i)=>v+(i<2?-pad:pad));
@@ -54,6 +62,22 @@ function VectorDraft({node,initial,onAction,selection,onSelect}){
   </div>
   {polygon?<div className="form-grid"><button type="button" className="btn mini" disabled={contour.handles.length>=512} onClick={()=>{change(state=>changeVectorPointCount(state,selected,point));setPoint(point+1);}}>在此点后加点</button>
    <button type="button" className="btn mini" disabled={contour.handles.length<=3} onClick={()=>{change(state=>changeVectorPointCount(state,selected,point,true));setPoint(0);}}>删除当前点</button></div>:null}
+  {segment?<details><summary>线段与圆弧</summary><div className="stack editor-vector-segments">
+   <small>在线段中间加点保持原曲线；切换类型或删段会改变这一段的形状。</small>
+   <label>选择线段<select value={segment.index} onChange={e=>chooseSegment(Number(e.target.value))}>{segments.map((s,i)=><option key={s.index} value={s.index}>第 {i+1} 段 · {{L:'直线',Q:'曲线',C:'曲线',A:'圆弧',Z:'闭合边'}[s.kind]}</option>)}</select></label>
+   <label>线段形状<select value={segment.kind==='Z'?'L':segment.kind} onChange={e=>modifySegment({action:'convert',kind:e.target.value})}>
+    <option value="L">直线</option><option value="Q">曲线（1 个控制点）</option><option value="C">曲线（2 个控制点）</option><option value="A">圆弧</option>
+   </select></label>
+   {segment.kind==='A'?<>
+    <small>圆弧保持连接两端；过小的尺寸会自动适配。</small>
+    {[['圆弧横向大小','radiusX',1,w],['圆弧纵向大小','radiusY',2,h]].map(([label,key,index,span])=><label key={key}>{label}<input type="range" min="0" max={Math.max(span*2,segment.command[index])} step={span/200} value={segment.command[index]} onChange={e=>modifySegment({action:'arc',values:{[key]:Number(e.target.value)}})}/></label>)}
+    <label>圆弧倾斜<input type="range" min={-Math.max(180,Math.abs(segment.command[3]))} max={Math.max(180,Math.abs(segment.command[3]))} step="1" value={segment.command[3]} onChange={e=>modifySegment({action:'arc',values:{rotation:Number(e.target.value)}})}/></label>
+    <div className="editor-vector-choices" role="group" aria-label="圆弧长度">{[[0,'短弧'],[1,'长弧']].map(([value,label])=><button key={value} type="button" className="btn mini" aria-pressed={segment.command[4]===value} onClick={()=>modifySegment({action:'arc',values:{large:value}})}>{label}</button>)}</div>
+    <div className="editor-vector-choices" role="group" aria-label="圆弧方向">{[[0,'逆时针'],[1,'顺时针']].map(([value,label])=><button key={value} type="button" className="btn mini" aria-pressed={segment.command[5]===value} onClick={()=>modifySegment({action:'arc',values:{sweep:value}})}>{label}</button>)}</div>
+   </>:null}
+   <div className="form-grid"><button type="button" className="btn mini" onClick={()=>modifySegment({action:'split'})}>在线段中间加点</button><button type="button" className="btn mini" disabled={segment.kind==='Z'||segments.filter(s=>s.subpath===segment.subpath&&s.kind!=='Z').length<=1} onClick={()=>modifySegment({action:'remove'})}>删除这段</button></div>
+   {(()=>{const last=segments.filter(s=>s.subpath===segment.subpath).at(-1),closed=last?.kind==='Z';return <button type="button" className="btn mini" onClick={()=>modifySegment({action:'close',closed:!closed})}>{closed?'打开轮廓':'闭合轮廓'}</button>;})()}
+  </div></details>:null}
   {draft.key==='svgPaths'?<details><summary>路径颜色</summary><div className="stack">
    {['fill','stroke'].map(field=>{
     const path=node.svgPaths[selected],own=Object.hasOwn(path,field),mode=!own?'inherit':path[field]===null?'none':'color',title=field==='fill'?'路径填充':'路径线条';

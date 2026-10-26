@@ -1,3 +1,4 @@
+import {svgArcCenter,svgArcPoint,svgArcDerivative} from './svg-arc.js';
 // Pure SVG path conversion for physical-width paint. The editable definition
 // remains untouched; only the derived render geometry is transformed. Arcs
 // use cubic segments spanning at most 90 degrees (no polygonal flattening).
@@ -7,15 +8,9 @@ const tokens=/[AaCcHhLlMmQqSsTtVvZz]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)
 const isOp=v=>/^[AaCcHhLlMmQqSsTtVvZz]$/.test(v);
 const fmt=v=>{if(!Number.isFinite(v)||Math.abs(v)>1e9)throw Error('绘制坐标无效');return String(Math.round(v*1e8)/1e8);};
 function arcCubics(a,b,rx,ry,angle,large,sweep){
- rx=Math.abs(rx);ry=Math.abs(ry);if(Math.hypot(a[0]-b[0],a[1]-b[1])<1e-12)return [];
- if(rx<1e-12||ry<1e-12)return [['L',...b]];
- const phi=angle*Math.PI/180,c=Math.cos(phi),s=Math.sin(phi),dx=(a[0]-b[0])/2,dy=(a[1]-b[1])/2,x=c*dx+s*dy,y=-s*dx+c*dy;
- const expand=Math.sqrt(Math.max(1,x*x/(rx*rx)+y*y/(ry*ry)));rx*=expand;ry*=expand;
- const denom=rx*rx*y*y+ry*ry*x*x,k=(large===sweep?-1:1)*Math.sqrt(Math.max(0,(rx*rx*ry*ry-denom)/denom));
- const xp=k*rx*y/ry,yp=-k*ry*x/rx,cx=c*xp-s*yp+(a[0]+b[0])/2,cy=s*xp+c*yp+(a[1]+b[1])/2;
- const u=[(x-xp)/rx,(y-yp)/ry],v=[(-x-xp)/rx,(-y-yp)/ry],start=Math.atan2(u[1],u[0]);let delta=Math.atan2(u[0]*v[1]-u[1]*v[0],u[0]*v[0]+u[1]*v[1]);
- if(!sweep&&delta>0)delta-=2*Math.PI;if(sweep&&delta<0)delta+=2*Math.PI;
- const n=Math.max(1,Math.ceil(Math.abs(delta)/(Math.PI/2))),point=t=>[cx+c*rx*Math.cos(t)-s*ry*Math.sin(t),cy+s*rx*Math.cos(t)+c*ry*Math.sin(t)],derivative=t=>[-c*rx*Math.sin(t)-s*ry*Math.cos(t),-s*rx*Math.sin(t)+c*ry*Math.cos(t)],out=[];
+ const arc=svgArcCenter(a,b,rx,ry,angle,large,sweep);
+ if(arc.kind==='point')return [];if(arc.kind==='line')return [['L',...b]];
+ const {start,delta}=arc,n=Math.max(1,Math.ceil(Math.abs(delta)/(Math.PI/2))),point=t=>svgArcPoint(arc,t),derivative=t=>svgArcDerivative(arc,t),out=[];
  for(let i=0;i<n;i++){
   const t0=start+delta*i/n,t1=start+delta*(i+1)/n,q=4/3*Math.tan((t1-t0)/4),p0=point(t0),p1=point(t1),d0=derivative(t0),d1=derivative(t1);
   out.push(['C',p0[0]+q*d0[0],p0[1]+q*d0[1],p1[0]-q*d1[0],p1[1]-q*d1[1],...((i===n-1)?b:p1)]);

@@ -1,3 +1,4 @@
+import {editSVGSegment} from './svg-path-edit.js';
 // UI geometry drafts retain the existing Scene representation. Only an edited
 // SVG path is rewritten; arcs stay arcs, smooth handles are expanded exactly.
 import {applySceneNodePatch} from './scene-edit-kernel.js';
@@ -42,6 +43,7 @@ export function editableSVGCommands(d){
   previous=kind;result.push(next);
   if(result.length>2048)throw Error('图形路径节点过多');
  }
+ if(!result.length)throw Error('图形路径为空');
  return result;
 }
 const serialize=commands=>commands.map(c=>c.join(' ')).join(' ');
@@ -155,4 +157,11 @@ export function applyInspectorVectorStyle(page,id,{index,field,value}){
  const svgPaths=structuredClone(node.svgPaths);
  if(value==='inherit')delete svgPaths[index][field];else svgPaths[index][field]=value;
  return applySceneNodePatch(page,id,{svgPaths},{policy:USER_SCENE_POLICY});
+}
+
+export function editVectorSegment(state,pathIndex,segmentIndex,request){
+ if(state.key!=='svgPaths'||!state.value[pathIndex])throw Error('请选择曲线路径');
+ const commands=editableSVGCommands(state.value[pathIndex].d),next=structuredClone(state);
+ next.value[pathIndex].d=serialize(editSVGSegment(commands,segmentIndex,request));
+ return validateVectorDraft(next);
 }
