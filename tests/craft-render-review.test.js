@@ -16,6 +16,8 @@ const material={id:'paper',kind:'paper',title:'合成纸',physicalWidthMM:100,ph
 const whole=d=>({format:'shiye-craft-plan',version:2,commandId:'original',baseSceneHash:craftSceneHash(d),pieces:[{id:'piece',asset:'m1',sourceRevision:assetSourceRevision(material),extraction:{type:'whole'},centerMM:[60,70]}]});
 const execute=(p,d)=>applyToolCalls(p,d,[material],{m1:material.id},{processing:'自由拆解',allowNoText:true});
 const finished=()=>{const d=project().drafts[0];return execute(whole(d),d).draft;};
+const repair=(init,operations)=>({protocolVersion:2,transactionId:'review-fix',baseSceneRevision:JSON.parse(init.body).messages[1].content[0].text.match(/sha256:[a-f0-9]{64}/)[0],operations});
+const move={op:'layer.update',target:'piece',place:{reference:'page',at:[.5,.4],unit:'ratio'}};
 const response=content=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(content)}}]}),{headers:{'Content-Type':'application/json'}});
 
 test('same exported recipe compiles to stable scene identities on repeated independent imports',()=>{
@@ -51,7 +53,7 @@ test('final visual review receives the actual image and charges the shared budge
 });
 test('a local visual repair is persisted, rerendered, then reviewed again within the same run',async()=>{
  const d=finished(),budget=createCreativeBudget(4);budget.begin();let calls=0,renders=0,saves=0;
- const output=await reviewFinalCreativeScene({draft:d,options:{model:'gpt-4.1',endpoint:'https://example.invalid/chat',key:'test',finalVisualReview:true,visualAssetIDs:['paper'],processing:'自由拆解'},assets:[material],aliases:{m1:'paper'},budget,render:async()=>{renders++;return 'data:image/png;base64,AAAA';},onTurn:async()=>{saves++;},request:async()=>++calls===1?response({approved:false,issues:['偏移'],tools:[{name:'move_elements',arguments:{items:[{key:'piece',x:.5,y:.4}]}}]}):response({approved:true,issues:[]})});
+ const output=await reviewFinalCreativeScene({draft:d,options:{model:'gpt-4.1',endpoint:'https://example.invalid/chat',key:'test',finalVisualReview:true,visualAssetIDs:['paper'],processing:'自由拆解'},assets:[material],aliases:{m1:'paper'},budget,render:async()=>{renders++;return 'data:image/png;base64,AAAA';},onTurn:async()=>{saves++;},request:async(_,init)=>++calls===1?response({approved:false,issues:['偏移'],commands:repair(init,[move])}):response({approved:true,issues:[]})});
  assert.equal(calls,2);assert.equal(renders,2);assert.equal(saves,1);assert.equal(output.agentRun.reviewedSceneHash,craftSceneHash(output));assert.notEqual(output.items[0].y,d.items[0].y);
 });
 test('visual checks do not exceed budget and a failed repair cannot damage the completed scene',async()=>{
@@ -72,7 +74,7 @@ test('canonical renderer decodes each material once and refuses missing images i
 });
 test('failed local persistence during a visual repair is not swallowed as an optional review error',async()=>{
  const failure=Error('disk full');
- await assert.rejects(reviewFinalCreativeScene({draft:finished(),options:{model:'gpt-4.1',endpoint:'https://example.invalid/chat',key:'test',finalVisualReview:true,visualAssetIDs:['paper'],processing:'自由拆解'},assets:[material],aliases:{m1:'paper'},budget:createCreativeBudget(3),render:async()=> 'data:image/png;base64,AAAA',onTurn:async()=>{throw failure;},request:async()=>response({approved:false,issues:['offset'],tools:[{name:'move_elements',arguments:{items:[{key:'piece',x:.5,y:.4}]}}]})}),error=>error===failure);
+ await assert.rejects(reviewFinalCreativeScene({draft:finished(),options:{model:'gpt-4.1',endpoint:'https://example.invalid/chat',key:'test',finalVisualReview:true,visualAssetIDs:['paper'],processing:'自由拆解'},assets:[material],aliases:{m1:'paper'},budget:createCreativeBudget(3),render:async()=> 'data:image/png;base64,AAAA',onTurn:async()=>{throw failure;},request:async(_,init)=>response({approved:false,issues:['offset'],commands:repair(init,[move])})}),error=>error===failure);
 });
 test('explicitly discarded remainder is reserved as waste, not free inventory',()=>{
  const initial=finished(),p={...whole(initial),commandId:'discard',consume:['piece'],keepRemainders:false,pieces:[{...whole(initial).pieces[0],id:'child',parentId:'piece',extraction:{type:'rect_crop',boxMM:[0,0,50,80]}}]};

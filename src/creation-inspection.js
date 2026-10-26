@@ -19,7 +19,7 @@ export function inspectCreationDocument(document,{ids=[],full=false}={}){
    id:n.id,alias:n.creativePieceID||n.agentKey||n.key,type:n.type,parent,world,zIndex:n.zIndex??0,
    hidden:Boolean(n.hidden||n.isHidden||n.isParked),locked:Boolean(n.isLocked||n.locked),
    opacity:n.opacity??1,blendMode:n.blendMode||'normal',asset:n.assetID?document.source.materials.find(m=>m.assetID===n.assetID)?.alias||'未授权素材':undefined,
-   content:n.content,kind:n.kind,color:n.color,fill:n.fill,stroke:n.stroke,lineWidth:n.lineWidth,
+   cropRect:n.cropRect,materialMask:n.materialMask,vectorMask:n.vectorMask,content:n.content,kind:n.kind,color:n.color,fill:n.fill,stroke:n.stroke,lineWidth:n.lineWidth,
    fillOpacity:n.fillOpacity,strokeOpacity:n.strokeOpacity,shapeOptions:n.shapeOptions,
    fontSize:n.fontSize,fontName:n.fontName,style:n.style,
    layoutConstraint:n.layoutConstraint,layoutBox:n.layoutBox,localTransform:n.localTransform,

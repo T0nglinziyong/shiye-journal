@@ -331,7 +331,7 @@ function visibleBounds(i,assets,options){
   if(right<=x||bottom<=y)throw Error('素材可见边界为空');return {rect:{x:(x-crop.x)/crop.width,y:(y-crop.y)/crop.height,width:(right-x)/crop.width,height:(bottom-y)/crop.height},known:true,source:'scanned'};
 }
 function fitText(d,assets,a,options){
-  const t=find(d,a.key),target=find(d,a.target);if(!d.textBlocks.includes(t))throw Error('fit_text_to 的 key 必须是文字');locked(t);
+  const t=find(d,a.key),target=find(d,a.target);if(t.type!=='text')throw Error('fit_text_to 的 key 必须是文字');locked(t);
   const visible=a.visible_bounds===false?{rect:{x:0,y:0,width:1,height:1},known:true}:visibleBounds(target,assets,options);
   if(a.visible_bounds!==false&&target.assetID&&!visible.known)throw Error('尚无透明图可见边界；先检查素材，或明确 visible_bounds:false');
   const [l,top,r,b]=a.padding_mm||[2,2,2,2],s=scale(d),rect=visible.rect,width=target.width*rect.width-(l+r)*s,height=target.height*rect.height-(top+b)*s;
@@ -346,15 +346,16 @@ function inspect(d,assets,aliases,a,options){return {materials:a.keys.map(key=>{
   return {key,piece:item?keyOf(item):null,assetID:asset.id,cropRect:crop,widthMM:crop.width*asset.physicalWidthMM,heightMM:crop.height*asset.physicalHeightMM,sourceWidthMM:asset.physicalWidthMM,sourceHeightMM:asset.physicalHeightMM,visibleBounds:visible.rect,boundsKnown:visible.known,visibleWidthMM:crop.width*asset.physicalWidthMM*visible.rect.width,visibleHeightMM:crop.height*asset.physicalHeightMM*visible.rect.height,sourceDescription:[asset.title,asset.kind,asset.role,asset.texture,...(asset.tags||[])].filter(Boolean).join(' · '),sourceRef:{blobId:asset.blobId||null,staticPath:asset.staticPath||null},operations:structuredClone(item?.materialSteps||[])};
 })};}
 function finish(d,assets,a,options){
+  const visibleEntries=sceneLayerEntries(d).filter(e=>(e.value.opacity??1)>0&&e.parents.every(p=>(p.opacity??1)>0));
   for(const id of new Set(options.requiredAssetIDs||[])){
-    const items=d.items.filter(i=>i.assetID===id&&!i.manualVisualCopy&&!i.isParked&&!i.isHidden&&!i.hidden);if(!items.length)throw Error('必用素材尚未放入页面：'+(assets.find(a=>a.id===id)?.title||id));
+    const items=visibleEntries.filter(e=>e.kind==='material'&&e.value.assetID===id&&!e.value.manualVisualCopy).map(e=>e.value);if(!items.length)throw Error('必用素材尚未放入页面或不可见：'+(assets.find(a=>a.id===id)?.title||id));
     if(!items.some(i=>{
       const bounds=dimensions(i),left=Math.max(0,i.x-bounds.width/2),top=Math.max(0,i.y-bounds.height/2),right=Math.min(d.canvas.width,i.x+bounds.width/2),bottom=Math.min(d.canvas.height,i.y+bounds.height/2);
       if((i.opacity??1)<=0||right<=left||bottom<=top)return false;
       // Only a provably solid, axis-aligned rectangle can establish complete
       // occlusion here. Other overlapping layers, masks and half-hidden pieces
       // remain legal and are not judged by a page-fill quota.
-      return !d.primitives.some(p=>p.kind==='rectangle'&&!p.hidden&&(p.opacity??1)===1&&(p.rotation??0)===0&&(p.zIndex??0)>(i.zIndex??0)&&/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(p.fill||'')&&p.x-p.width/2<=left+EPS&&p.y-p.height/2<=top+EPS&&p.x+p.width/2>=right-EPS&&p.y+p.height/2>=bottom-EPS);
+      return !visibleEntries.filter(e=>e.kind==='shape'&&e.parents.every(p=>(p.opacity??1)===1&&!p.vectorMask)&&e.index>visibleEntries.find(v=>v.value.id===i.id).index).map(e=>e.value).some(p=>p.kind==='rectangle'&&!p.vectorMask&&(p.fillOpacity??1)===1&&(p.opacity??1)===1&&Math.abs(p.rotation??0)<EPS&&/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(p.fill||'')&&p.x-p.width/2<=left+EPS&&p.y-p.height/2<=top+EPS&&p.x+p.width/2>=right-EPS&&p.y+p.height/2>=bottom-EPS);
     }))throw Error('必用素材在页面中完全不可见：'+(assets.find(a=>a.id===id)?.title||id));
   }checkDraft(d,assets);const review=reviewCreativeDraft(d,{measureText:options.measureText});d.agentRun={...d.agentRun,status:'finished',note:a.summary||'',qualityNotes:review.warnings,visualReview:'最后修改后的画面需由代理另行审阅'};
 }
@@ -370,7 +371,7 @@ function execute(d,assets,aliases,name,a,options){
     case 'compose_direct_page':composeDirectSceneV2(d,assets,aliases,a,options);return {detail:'Scene v2 直接排版已完成真实素材与图层校验',mutation:true};
     case 'place_materials':addMaterials(d,assets,aliases,a.items);break;
     case 'draw_tape_strips':drawTapeStrips(d,assets,aliases,a.items);break;
-    case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(!d.items.includes(item))throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
+    case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(item.type!=='material')throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
     case 'move_elements':for(const e of a.items)setPosition(d,find(d,e.key),e);break;
     case 'arrange_elements':arrange(d,a);break;

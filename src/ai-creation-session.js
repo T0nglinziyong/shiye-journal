@@ -40,7 +40,7 @@ export const creativeProgressText=progress=>'请求 '+progress.budget.totalReque
   '（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+
   progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';
 
-export const hasCreativeSceneChange=results=>results.some(r=>r.ok&&r.name!=='inspect_materials');
+export const hasCreativeSceneChange=results=>results.some(r=>r.ok&&r.changed===true);
 
 export function createCreativeCheckpoint({getProject,targetDraftID,expectedDraft,newDraftID,persist}){
   let currentID=targetDraftID,expected=structuredClone(expectedDraft),candidateCreated=false;
