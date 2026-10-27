@@ -1,4 +1,4 @@
-import React,{useRef,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {Dialog} from './react-utility-dialogs.jsx';
 
 export function OfflineHandoffLoading({progress,onClose}){
@@ -10,6 +10,11 @@ export function OfflineHandoffLoading({progress,onClose}){
 const size=n=>n<1048576?`${Math.ceil(n/1024)} KB`:`${(n/1048576).toFixed(1)} MB`;
 export function OfflineHandoffReady({result,project,diagnostics,onClose,onCopy,onShare,onDownload,onImportFile,onImportText,onPaste}){
   const imageDelivery=result.deliveryMode==='image';
+  const [downloadURL,setDownloadURL]=useState('');
+  useEffect(()=>{
+    const url=URL.createObjectURL(result.blob);setDownloadURL(url);
+    return ()=>URL.revokeObjectURL(url);
+  },[result.blob]);
   const [delivery,setDelivery]=useState('file'),[status,setStatus]=useState(`准备就绪 · ${result.filename}`),[showPaste,setShowPaste]=useState(false),[input,setInput]=useState(''),[busy,setBusy]=useState(false);
   const promptRef=useRef(null),inputRef=useRef(null),prompt=delivery==='file'?result.prompt:(result.prompts?.text||result.prompt);
   const copy=async()=>{try{await onCopy(prompt,promptRef.current);setStatus('提示词已复制 · 任务包已打开；在文件页分享给 ChatGPT。');}catch{promptRef.current?.focus();setStatus('复制失败，请长按提示词手动复制');}};
@@ -22,7 +27,7 @@ export function OfflineHandoffReady({result,project,diagnostics,onClose,onCopy,o
     <div className="offline-handoff-step"><span className="offline-handoff-number">1</span><div><strong>{imageDelivery?'复制要求并发送素材包':'复制创作要求并打开任务包'}</strong><small>{imageDelivery?'这个 ZIP 是输入素材包，不是要求 AI 生成的文件。请让 AI 在回复中展示画面并提供可下载的 PNG。':'复制成功后自动下载；在系统文件页分享给 ChatGPT，或在 ChatGPT 手动附加。'}</small></div></div>
     <textarea id="offline-gpt-prompt" ref={promptRef} readOnly rows="3" aria-label="发送给 ChatGPT 的短提示词" value={prompt}/>
     <button type="button" className="btn primary offline-handoff-main" id="offline-copy-prompt" onClick={()=>void copy()}>复制并打开{imageDelivery?'素材包':'任务包'}</button><p id="offline-handoff-status" role="status">{status}</p>
-    <div className="offline-handoff-alternatives"><button type="button" className="btn" id="offline-share-package" onClick={()=>void onShare()}>分享{imageDelivery?'素材包':'文件'}</button><button type="button" className="btn" id="offline-download-package" onClick={onDownload}>重新下载</button></div>
+    <div className="offline-handoff-alternatives"><button type="button" className="btn" id="offline-share-package" onClick={()=>void onShare()}>分享{imageDelivery?'素材包':'文件'}</button><a className="btn" id="offline-download-package" href={downloadURL||undefined} download={result.filename} onClick={onDownload}>重新下载</a></div>
     <div className="offline-handoff-step offline-handoff-return"><span className="offline-handoff-number">2</span><div><strong>{imageDelivery?'将完成的画面导回拾页':'将 GPT 的结果导回拾页'}</strong><small>{imageDelivery?'下载 AI 返回的 PNG、JPEG 或 WebP 图片，导入后保存为画面快照，并出现在版本方案中。':'GPT 通过 Command 创作并看图修订，返回可编辑 JSON 和 PNG。混合模式另保留原始成图，不是无损拆图；选择 JSON 后继续编辑。'}</small></div></div>
     <div className="offline-handoff-alternatives"><button type="button" className="btn" id="offline-import-file" onClick={onImportFile}>{imageDelivery?'导入作品文件':'选择结果文件'}</button>{!imageDelivery?<button type="button" className="btn" id="offline-show-paste" onClick={()=>{setShowPaste(!showPaste);if(!showPaste)setTimeout(()=>inputRef.current?.focus(),0);}}>粘贴 JSON</button>:null}</div>
     {!imageDelivery?<div className="offline-handoff-paste" hidden={!showPaste}><textarea id="offline-gpt-result" ref={inputRef} rows="4" placeholder="粘贴完整 JSON 或单个代码块" value={input} onChange={event=>setInput(event.target.value)}/><div className="offline-handoff-alternatives"><button type="button" className="btn" id="offline-paste-result" onClick={()=>void paste()}>粘贴剪贴板</button><button type="button" className="btn primary" id="offline-import-text" disabled={busy} onClick={()=>void importText()}>验证并导入</button></div></div>:null}

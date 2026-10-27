@@ -27,6 +27,9 @@ export function patchSceneNode(document,id,values,assets){
 // Reuse the production material/craft algorithms, not a second command parser.
 export function runMaterialAlgorithm(document,name,parameters,assets){
  if(!['place_materials','edit_materials','draw_tape_strips','apply_craft_plan'].includes(name))throw Error('未登记的内部素材算法');
- return applyWebSceneCommands(document,{baseSceneHash:craftSceneHash(document.page),tools:[{name,arguments:parameters}]},assets);
+ // An internal split/cut is one step of a larger Command transaction. It
+ // must enforce geometry and inventory now, but never finalize the artwork.
+ const args=name==='apply_craft_plan'?{...parameters,finish:false}:parameters;
+ return applyWebSceneCommands(document,{baseSceneHash:craftSceneHash(document.page),tools:[{name,arguments:args}]},assets);
 }
 export function validateCreationResult(document,assets){validateWebScene(document.page,document.source,assets,{final:false});return document;}

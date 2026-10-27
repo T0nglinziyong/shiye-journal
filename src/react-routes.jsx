@@ -1,11 +1,19 @@
+import {EditorWeavePanel} from './react-editor-weave.jsx';
+import {EditorMaskPanel} from './react-editor-mask.jsx';
+import {EditorLetteringPanel} from './react-editor-lettering.jsx';
+import {commonShapes,advancedShapes} from './editor-tools-model.js';
+import {EditorLayoutPanel} from './react-editor-layout.jsx';
+import {editorActionPosition} from './editor-action-position.js';
+import {creativeSourceIDs} from './creation-sources.js';
+import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js';
 import {CreationModePicker} from './react-creation-mode.jsx';
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
-import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
-import {parseEditableGeometry} from './editable-geometry.js';
-import {creationModeDescription} from './creation-methods.js';
+import {EditorShapeOptions} from './react-editor-shape-options.jsx';
+import {EditorVectorPanel} from './react-editor-vector.jsx';
+import {canStartCreation,creationModeDescription} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -993,7 +1001,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   },[]);
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
-  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);
+  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes,guidance}=matchingViewModel(state);
   return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
@@ -1014,6 +1022,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
+      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:!canStartCreation(state.matchCreationMode,0)?'当前模式需要真实素材作为图像参考；先选择素材，或切换到纯编辑进行文字与图形创作。':'没有选素材也可以创作：用文字、手绘和图形完成这一页；胶带、贴纸和印章可按需从素材库加入。'}</p>
 
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
@@ -1021,7 +1030,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong>{asset.kind||asset.role?<small className="match-type">{[asset.kind?kindName(asset.kind):null,asset.role?materialRoleName(asset.role):null].filter(Boolean).join(' · ')}</small>:null}
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
-        </div></div>):<p>先从右侧建议或素材库选择。点星号可设为每版必用。</p>}
+        </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
       </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
       <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
         <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
@@ -1033,28 +1042,20 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
     <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
-      <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!scope.candidateAssetIDs.length}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!scope.candidateAssetIDs.length}>导出给网页版 AI</button>
+      <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
     <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>
   </div>;
 }
 
-function VectorGeometryEditor({item,onChange}){
-  const kind=item.vectorLayers?.length?'layers':'paths',value=item.vectorLayers||item.vectorPaths||[];
-  const [content,setContent]=useState(()=>JSON.stringify(value,null,2)),[error,setError]=useState('');
-  useEffect(()=>{setContent(JSON.stringify(value,null,2));setError('');},[item.id,JSON.stringify(value)]);
-  return <div className="editor-inspector-vector"><label>{kind==='layers'?'多色图形色层':'自由图形轮廓'}（0–1 坐标 JSON）
-    <textarea value={content} rows={6} onChange={event=>{setContent(event.target.value);setError('');}}/></label>
-    <button type="button" className="btn" onClick={()=>{try{onChange('inspector-vector-geometry',parseEditableGeometry(content,kind));setError('');}catch(issue){setError(issue.message);}}}>应用图形轮廓</button>
-    {error?<small role="alert">{error}</small>:null}</div>;
-}
-
+const inspectorShapeNames=new Map([...commonShapes,...advancedShapes]);
 function EditorInspector({selected,draft,asset,format,onChange,onAction,materials=[]}){
   const field=(id,label,value,type='number',props={})=>type==='range'?<label className="editor-inspector-range">
     <span>{label} · {Number(props.max)===1?`${Math.round(Number(value)*100)}%`:value}</span><div>
       <input id={id} type="range" value={value} onChange={event=>onChange(id,event.target.value)} {...props}/>
     </div></label>:<label>{label}<input id={id} type={type}
-    defaultValue={value} onChange={event=>onChange(id,event.target.value)} {...props}/></label>;
+    defaultValue={value} onInput={type==='color'?event=>onChange(id,event.target.value):undefined}
+    onChange={type==='color'?undefined:event=>onChange(id,event.target.value)} {...props}/></label>;
   const choice=(id,label,value,options)=><label>{label}<select id={id} value={value}
     onChange={event=>onChange(id,event.target.value)}>{options.map(([key,title])=><option key={key} value={key}>{title}</option>)}</select></label>;
   const check=(id,label,value)=><label className="editor-inspector-check"><input id={id} type="checkbox" checked={!!value}
@@ -1080,20 +1081,48 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </select></label>
   </div>;
   const item=selected.value;
+  const parent=selected.parents?.at(-1);
+  const parentLink=parent?<button type="button" className="btn mini" onClick={()=>onAction('fabric-inspector-select',parent.id)}>返回组合 · {parent.name||'手帐组合'}</button>:null;
+  if(selected.kind==='group')return <div className="stack editor-inspector-fields">
+    {parentLink}<h3>组合属性</h3>
+    {item.lettering?<EditorLetteringPanel page={draft} nodeID={item.id} onAction={onAction}/>:null}
+    <label>组合名称<input id="inspector-group-name" value={item.name||''} maxLength={100} onChange={event=>onChange('inspector-group-name',event.target.value)}/></label>
+    {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
+    {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[['normal','正常'],['multiply','正片叠底']])}
+    {check('inspector-group-shadow-enabled','组合阴影',!!item.shadow)}
+    {item.shadow?<div className="form-grid">
+      {field('inspector-group-shadow-color','阴影颜色',item.shadow.color,'color')}
+      {field('inspector-group-shadow-blur','阴影模糊（mm）',Number((item.shadow.blur*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:0,max:30,step:.1})}
+      {['x','y'].map(axis=><React.Fragment key={axis}>{field('inspector-group-shadow-'+axis,'阴影偏移 '+axis.toUpperCase()+'（mm）',Number((item.shadow[axis==='x'?'offsetX':'offsetY']*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:-30,max:30,step:.1})}</React.Fragment>)}
+    </div>:null}
+    {item.localTransform&&item.layoutBox?<EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>:null}
+    <EditorMaskPanel key={item.id+'-mask'} node={item} page={draft} onAction={onAction}/>
+    <h3>组合内对象 · {item.children.length}</h3>
+    <small className="muted">整体修改保留各对象的独立属性；进入对象可继续编辑，完成后一起保存。</small>
+    {item.children.map((child,index)=><button type="button" className="btn" key={child.id} onClick={()=>onAction('fabric-inspector-select',child.id)}>{index+1}. {child.name||child.content?.slice(0,32)||(child.type==='material'?asset(child.assetID)?.title:child.type==='shape'?inspectorShapeNames.get(child.kind):null)||({material:'素材',shape:'图形',text:'文字',ink:'笔迹',group:'组合'}[child.type])}</button>)}
+  </div>;
   const shapeFillable=selected.kind==='shape'&&!['paperclip','wave','zigzag','bracket','line'].includes(item.kind);
   if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
-    <h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
+    {parentLink}<h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
+    <div className="form-grid">
+      {field('inspector-ink-color','笔迹颜色',item.color||'#2b5245','color')}
+      {field('inspector-ink-width-mm','笔迹粗细（mm）',Number(((item.width||1)*draft.physicalPageHeightMM/draft.canvas.height).toFixed(3)),'number',{min:.1,max:30,step:.1})}
+      {choice('inspector-ink-style','笔迹样式',item.penStyle||'fountain',inspectorPenStyles)}
+      {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[['normal','正常'],['multiply','正片叠底']])}
+    </div>
     <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
+    <EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>
   </div>;
   return <div className="stack editor-inspector-fields">
+    {parentLink}
     {selected.kind==='text'?<>
       <h3>文字内容与样式</h3>
       <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
         onChange={event=>onChange('inspector-text',event.target.value)}/></label>
       <div className="form-grid">
         {choice('inspector-font','字体',item.style||'hand',journalFontPresets)}
-        {field('inspector-font-size','字号',item.fontSize,'number',{min:5,max:400,step:1})}
+        {field('inspector-font-size','字号',item.fontSize,'range',{min:5,max:400,step:1})}
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
       </div>
@@ -1112,6 +1141,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </>:null}
     {selected.kind==='shape'?<>
       <h3>填充与线条</h3>
+      {item.svgPaths?.some(p=>Object.hasOwn(p,'fill')||Object.hasOwn(p,'stroke'))?<small>独立路径颜色可在“编辑图形轮廓”中调整，或选择“沿用整体”。</small>:null}
       {item.vectorLayers?.length?<div className="editor-inspector-vector"><p className="muted">多色矢量 · {item.vectorLayers.length} 层，路径保持独立</p>
         {item.vectorLayers.map((layer,index)=><div className="form-grid" key={index}>
           {field(`inspector-vector-fill-${index}`,`第 ${index+1} 层颜色`,layer.fill||'#ffffff','color')}
@@ -1130,14 +1160,8 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
           <button type="button" className="btn mini" onClick={()=>onChange('inspector-stroke',item.stroke===null?'#547da4':null)}>{item.stroke===null?'启用线条':'无线条'}</button>
         </div>
       </div>}
-      {advancedShapeControls(item.kind).length?<div className="editor-inspector-advanced">
-        <h4>图形内容</h4><p className="muted">拉伸只缩放内部图案；修改重复数量会调整图形外框。</p><div className="form-grid">{advancedShapeControls(item.kind).map(control=>{
-          const value=resolvedShapeOptions(item.kind,item.shapeOptions||{})[control.key];
-          return control.type==='boolean'?<React.Fragment key={control.key}>{check(`inspector-shape-option-${control.key}`,control.label,value)}</React.Fragment>:
-            <React.Fragment key={control.key}>{field(`inspector-shape-option-${control.key}`,control.label,value,'number',
-              {min:control.min,max:control.max,step:control.type==='integer'?1:.01})}</React.Fragment>;
-      })}</div></div>:null}
-      {(item.vectorPaths?.length||item.vectorLayers?.length)?<VectorGeometryEditor key={item.id} item={item} onChange={onChange}/>:null}
+      <EditorShapeOptions node={item} onChange={onChange}/>
+      {(item.vectorPaths?.length||item.vectorLayers?.length||item.svgPaths?.length)?<EditorVectorPanel key={item.id} node={item} onAction={onAction}/>:null}
       <PaintEffectsPanel node={item} page={draft} onChange={style=>onAction('fabric-paint-effects',style)}/>
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>
@@ -1154,7 +1178,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
       {item.tapeStrip?<div className="stack"><h3>胶带段</h3>
         <p className="muted">完成此窗口后，可在画布工具栏重画中心线。</p>
-        {field('inspector-tape-width','宽度 mm',item.tapeStrip.physicalWidthMM,'number',{min:.5,max:200,step:.5})}
+        {field('inspector-tape-width','宽度 mm',item.tapeStrip.physicalWidthMM,'range',{min:.5,max:200,step:.5})}
         {choice('inspector-tape-mode','纹样方式',item.tapeStrip.textureMode||'repeat',
           [['sample','原图长度'],['repeat','重复纹样'],['stretch','沿路径拉伸']])}
         <div className="form-grid">
@@ -1165,19 +1189,23 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         </div>
       </div>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
+      <EditorWeavePanel key={item.id+'-weave'} node={item} page={draft} asset={asset} onAction={onAction}/>
     </>:null}
+    <EditorMaskPanel key={item.id+'-mask'} node={item} page={draft} onAction={onAction}/>
     <h3>图层外观</h3>
     <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
       {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>
+    <EditorLayoutPanel key={item.id} page={draft} nodeID={item.id} onAction={onAction} asset={asset}/>
   </div>;
 }
 
 function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,onAction}){
-  const floating=useFloatingPanel(210);
+  const floating=useFloatingPanel(210),body=useRef(null);
+  useLayoutEffect(()=>{body.current?.scrollTo({top:0});},[selected?.value?.id]);
   return createPortal(<section ref={floating.panel} className="editor-inspector floating-editor-inspector floating-scene-panel" role="dialog"
     aria-label="对象编辑" style={floating.style}>
     <header className="fabric-inspector-head" {...floating.moveProps}>
-      <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
+      <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹',group:'组合'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
       <div className="floating-scene-panel-actions">
         <button type="button" onPointerDown={event=>event.stopPropagation()}
           onClick={()=>onAction('fabric-inspector-discard')}>放弃</button>
@@ -1185,7 +1213,7 @@ function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,
           onClick={()=>onAction('fabric-inspector-save')}>完成</button>
       </div>
     </header>
-    <div className="floating-editor-inspector-body">{selected?<EditorInspector selected={selected}
+    <div ref={body} className="floating-editor-inspector-body">{selected?<EditorInspector key={selected.value.id} selected={selected}
       draft={draft} asset={asset} format={format} materials={materials} onChange={onChange}
       onAction={onAction}/>:<p>对象已从本次编辑中移除。</p>}</div>
     <div className="floating-panel-resize" role="separator" tabIndex={0}
@@ -1200,13 +1228,12 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
     window.addEventListener('shiye-ai-status',update);
     return ()=>window.removeEventListener('shiye-ai-status',update);
   },[]);
-  const ids=[...new Set([...(state.activeProject?.candidateAssetIDs||[]),
-    ...state.basket,...(draft.items||[]).map(item=>item.assetID)])].filter(id=>asset(id));
+  const ids=creativeSourceIDs({project:state.activeProject||{},draft,basket:state.basket});
   return <section className="inline-ai-panel" aria-label="AI 创作">
     <div className="inline-ai-head"><h2>AI 创作</h2><button type="button" data-ai-close
       aria-label="收起 AI 创作" onClick={()=>onAction('close')}>×</button></div>
     <p>边创作边在上方画布查看。使用设置中的 {state.aiSettings.model}，按模型能力发送素材描述与可选缩略图。</p>
-    <div className="inline-ai-assets">{ids.length?ids.map((id,index)=><span key={id}>m{index+1} · {asset(id).title}</span>):'请先从素材搭配选择素材'}</div>
+    <div className="inline-ai-assets">{ids.length?ids.map((id,index)=><span key={id}>m{index+1} · {asset(id)?.title||'来源待恢复'}</span>):'可直接用文字与图形创作，也可先到素材搭配中添加材料。'}</div>
     <label>这页想记录什么？<textarea id="ai-prompt" placeholder="写下主题、故事与喜欢的氛围"
       defaultValue={state.aiPrompt} onInput={event=>onPromptChange(event.currentTarget.value)}/></label>
     <div className="inline-ai-actions">
@@ -1238,8 +1265,8 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
         y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
       const center=rect.left+anchor.x*rect.width/draft.canvas.width;
       const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
-      setPosition({left:Math.max(88,Math.min(innerWidth-88,center)),
-        top:Math.max(58,Math.min(innerHeight-50,edge-30))});
+      const toolbarBottom=Math.max(0,...['.swift-editor-head','.swift-editor-toolbar'].map(selector=>document.querySelector(selector)?.getBoundingClientRect().bottom||0));
+      setPosition(editorActionPosition({x:center,y:edge,width:innerWidth,height:innerHeight,toolbarBottom,group:mode==='group'}));
     };
     const move=event=>{
       currentBounds=event.detail.bounds;
@@ -1249,6 +1276,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
     place();
     const observer=new MutationObserver(place);observer.observe(page,{attributes:true,attributeFilter:['style']});
     const resize=new ResizeObserver(place);resize.observe(canvas);
+    const toolbar=document.querySelector('.swift-editor-toolbar');if(toolbar)resize.observe(toolbar);
     addEventListener('resize',place);addEventListener('scroll',place,true);
     canvas.addEventListener('shiye:fabric-object-transform',move);
     page.addEventListener('panzoomchange',place);
@@ -1263,6 +1291,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
     <button type="button" aria-label={collective?'复制套选对象':group?'复制组合':'复制对象'}
       onClick={()=>onAction(collective?'fabric-lasso-copy':group?'fabric-group-copy':'duplicate')}
       dangerouslySetInnerHTML={{__html:iconMarkup('copy')}}/>
+    {group?<button type="button" aria-label="编辑组合" onClick={()=>onAction('fabric-inspector-open')} dangerouslySetInnerHTML={{__html:iconMarkup('pen')}}/>:null}
     <button type="button" aria-label={collective||group?
       canUngroup?'解开组合':'组合所选对象':'编辑对象'}
       disabled={collective&&!canUngroup&&count<2}
@@ -1286,9 +1315,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   onFabricViewportChange,loadFabricAsset,retainFabricAssets,materials=[]}){
   const project=state.activeProject;
   if(!project||!draft)return null;
-  const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected)||
-    (findSceneNode(draft,state.selected)?.type==='ink'
-      ?{kind:'ink',value:findSceneNode(draft,state.selected)}:null);
+  const selected=inspectorSelection(draft,state.selected);
   const selectedGroup=findSceneNode(draft,state.selected)?.type==='group';
   const selectedIDs=state.multiSelected||[];
   const canUngroup=!!selectionGroupID(draft,selectedIDs);
@@ -1335,7 +1362,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       draft={draft} onAction={onAction}/>:null}
     {selectedGroup&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions mode="group"
       canUngroup bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
-    {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
+    {selected&&!selectedGroup&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
     <div className="editor-shell swift-editor-workspace"
       data-react-page="editor"><section className="editor-stage"><div className="object-toolbar">

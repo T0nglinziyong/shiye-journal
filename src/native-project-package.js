@@ -5,6 +5,7 @@ import {uid} from './domain.js';
 import {materialMaskPoints} from './material-mask.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
 import {readArchivePayload,archivePayload} from './scene-archive.js';
+import {validateSceneLayout} from './scene-layout.js';
 
 export const NATIVE_ENTRY='native.shiyeproject.json';
 const paint=value=>value==null||typeof value==='string'&&value.length<=64&&(
@@ -60,20 +61,33 @@ export function importNativeProjectDocument(envelope,assets){
   }
   // Undo stacks are session-local. Retain the actual current scene and all
   // immutable archives, but do not resurrect a foreign session's undo state.
-  const project=structuredClone(source),draftMap=new Map(),objectMap=new Map(),groupMap=new Map();
+  const project=structuredClone(source),draftMap=new Map(),objectMap=new Map(),groupMap=new Map(),draftNodes=new WeakMap();
   const mapped=(map,id)=>{if(typeof id!=='string'||!id)throw Error('工程包对象 ID 无效');if(!map.has(id))map.set(id,uid());return map.get(id);};
   const remapDraft=d=>{
     attachSceneV2(d);
+    const original=[];const collect=nodes=>{for(const node of nodes){original.push([node.id,node]);if(node.children)collect(node.children);}};collect(d.layers);
     d.id=mapped(draftMap,d.id);delete d.craftReceipts;
     for(const field of ['items','primitives','textBlocks','strokes'])for(const item of d[field]||[])delete item.aiManaged;
     for(const list of ['items','primitives','textBlocks'])for(const item of d[list]||[]){item.id=mapped(objectMap,item.id);if(item.creativeGroupID)item.creativeGroupID=mapped(groupMap,item.creativeGroupID);}
     for(const stroke of d.strokes||[])stroke.id=stroke.id?mapped(objectMap,stroke.id):uid();
     const walk=nodes=>{for(const node of nodes||[])if(node.type==='group'){node.id=mapped(groupMap,node.id);walk(node.children);}};walk(d.layers);
+    draftNodes.set(d,new Map(original.map(([id,node])=>[id,node.id])));
   };
   project.drafts.forEach(remapDraft);
   if(project.initialEditorSnapshot){project.initialEditorSnapshot.drafts?.forEach(remapDraft);project.initialEditorSnapshot.activeDraftID=mapped(draftMap,project.initialEditorSnapshot.activeDraftID);}
   if(project.draftHistorySnapshots){const histories={};for(const [oldID,draft] of Object.entries(project.draftHistorySnapshots)){remapDraft(draft);histories[mapped(draftMap,oldID)]=draft;}project.draftHistorySnapshots=histories;}
-  const reviseReferences=d=>{for(const item of d.items||[])for(const slice of item.craftDisplaySlices||[])if(objectMap.has(slice.targetId))slice.targetId=objectMap.get(slice.targetId);for(const item of d.items||[])for(const key of ['target','target2'])if(item.materialRelation?.[key]&&objectMap.has(item.materialRelation[key]))item.materialRelation[key]=objectMap.get(item.materialRelation[key]);};
+  const reviseReferences=d=>{
+    const mappedNode=id=>draftNodes.get(d)?.get(id)||id;
+    const walk=nodes=>{for(const node of nodes){
+      for(const channel of ['place','size']){const spec=node.layoutConstraint?.[channel];if(spec?.reference?.startsWith('node:'))spec.reference='node:'+mappedNode(spec.reference.slice(5));}
+      if(node.lettering?.slots)node.lettering.slots=node.lettering.slots.map(mappedNode);
+      if(node.creativeGroupID)node.creativeGroupID=mappedNode(node.creativeGroupID);
+      for(const slice of node.craftDisplaySlices||[])slice.targetId=mappedNode(slice.targetId);
+      for(const key of ['target','target2'])if(node.materialRelation?.[key])node.materialRelation[key]=mappedNode(node.materialRelation[key]);
+      if(node.children)walk(node.children);
+    }};walk(d.layers);
+    validateNativeDraft(d,known);
+  };
   // Archive snapshots are compressed and deduplicated by SHA-256. On import,
   // rewrite all IDs before re-hashing, including references inside each draft.
   const archiveStore={};
@@ -116,7 +130,7 @@ export function validatePackageValue(root){
 }
 
 export function validateNativeDraft(draft,known){
-  attachSceneV2(draft);validateSceneExtensions(draft);
+  attachSceneV2(draft);validateSceneExtensions(draft);validateSceneLayout(draft);
   const canvas=draft?.canvas;
   if(!canvas||![canvas.width,canvas.height].every(n=>Number.isFinite(n)&&n>0&&n<=10000)||!['items','primitives','textBlocks','strokes'].every(key=>Array.isArray(draft[key])&&draft[key].length<=5000))throw Error('工程包图层数据无效');
   if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','grid','dots','columns'].includes(draft.paperPattern)||draft.paperColumns!==undefined&&typeof draft.paperColumns!=='boolean')throw Error('工程包纸张样式无效');

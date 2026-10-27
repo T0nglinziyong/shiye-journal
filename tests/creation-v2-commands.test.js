@@ -16,17 +16,51 @@ const paper=(id='paper',w=100,h=80)=>({id,title:id,kind:'paper',physicalWidthMM:
 const add=(id='paper',place=at)=>({op:'material.add',id,asset:'m1',place});
 const rect=box=>({shape:'rect',space:'source',unit:'ratio',box});
 const batch=operations=>({protocolVersion:2,transactionId:'test',baseSceneRevision:'sha256:'+'0'.repeat(64),operations});
+test('path diagnostics identify the bad nested style, not a valid field from another geometry variant',()=>{
+ const operation={op:'graphic.add',id:'envelope',geometry:{kind:'path',viewBox:[0,0,36,22],paths:[{d:'M0 0 L36 0 L36 22 Z',style:{stroke:'#112233',strokeWidth:.4}}]},place:at,size:{width:36,height:22,unit:'mm'}};
+ assert.throws(()=>validateCreationV2Commands(batch([operation])),error=>error.code==='COMMAND_SCHEMA_INVALID'&&error.path==='/operations/0/geometry/paths/0/style/strokeWidth');
+ delete operation.geometry.paths[0].style.strokeWidth;operation.style={strokeWidthMm:.4};assert.doesNotThrow(()=>validateCreationV2Commands(batch([operation])));
+});
 async function setup(asset=paper(),p=project('统一命令')){
  const task=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
  const assets=task.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true}));
  const doc=webSceneDocument(task.source,task.source.baseDraft,'测试');
  return {doc,assets,run:(operations,input=doc)=>applyCreationV2Batch(input,batch(operations),assets)};
 }
+test('splitting a background keeps both cut pieces below its text, including inside a group',async()=>{
+ const {run}=await setup();
+ const initial=run([add(),{op:'text.add',id:'note',content:'底纸上已有的字',place:at,size:{width:55,unit:'mm'},style:{fontSizePt:12}},
+   {op:'graphic.add',id:'mark',geometry:{kind:'ellipse'},place:at,size:{width:6,height:6,unit:'mm'},style:{fill:'#aabbcc'}},
+   {op:'layer.update',target:'paper',order:{edge:'back'}}]);
+ for(const grouped of [false,true]){
+  const base=grouped?run([{op:'group.create',id:'paper-group',targets:['paper','note','mark']}],initial):initial;
+  const result=run([{op:'material.split',target:'paper',pieces:[{id:'left-piece',region:rect([0,0,.5,1])},{id:'right-piece',region:rect([.5,0,.5,1])}]}],base);
+  const peers=grouped?result.page.layers.find(n=>n.id==='paper-group').children:result.page.layers;
+  const visible=peers.filter(n=>!n.isParked).sort((a,b)=>a.zIndex-b.zIndex);
+  assert.deepEqual(visible.map(n=>n.creativePieceID||n.id),['left-piece','right-piece','note','mark']);
+  const oldNote=worldBox(base.page,'note'),newNote=worldBox(result.page,'note');
+  assert.deepEqual(newNote,oldNote,'splitting must not move existing writing');
+ }
+ const locked=run([{op:'layer.update',target:'note',locked:true}],initial);
+ assert.doesNotThrow(()=>run([{op:'material.split',target:'paper',pieces:[{id:'left-piece',region:rect([0,0,.5,1])},{id:'right-piece',region:rect([.5,0,.5,1])}]}],locked));
+});
 test('published schema exposes current capabilities and rejects deferred geometry',()=>{
  assert.throws(()=>validateCreationV2Commands(batch([{op:'layout.arrange',targets:['a'],rule:{type:'grid'},container:'page'}])),/commands|操作/);
  assert.throws(()=>validateCreationV2Commands(batch([{op:'page.update',physicalSizeMm:[100,200]}])),/commands/);
  assert.throws(()=>validateCreationV2Commands(batch([{op:'graphic.add',id:'a',geometry:{kind:'rect'},place:{...at,referenceBounds:'visible'},size:{width:10,height:10,unit:'mm'}}])),/commands/);
  validateCreationV2Commands(batch([{op:'layout.arrange',targets:['a','b'],rule:{direction:'horizontal',gapMm:4},container:'page'}]));
+});
+test('new nodes paint in command order across material and graphic types without changing locked peers',async()=>{
+ const {run}=await setup();
+ const made=run([{op:'graphic.add',id:'color-block',geometry:{kind:'rect'},place:at,size:{width:100,height:80,unit:'mm'},style:{fill:'#f3d77a'}},
+  {op:'layer.update',target:'color-block',locked:true},add('photo'),
+  {op:'text.add',id:'caption',content:'贴纸前面的字',place:at,size:{width:50,unit:'mm'}},
+  {op:'graphic.add',id:'highlight',geometry:{kind:'ellipse'},place:at,size:{width:10,height:4,unit:'mm'},style:{fill:'#ddaa88'}}]);
+ const sorted=[...made.page.layers].sort((a,b)=>a.zIndex-b.zIndex);
+ assert.deepEqual(sorted.map(n=>n.creativePieceID||n.id),['color-block','photo','caption','highlight']);
+ assert.equal(sorted[0].zIndex,0);
+ const updated=run([{op:'layer.update',target:'photo',place:{...at,at:[.4,.4]}}],made);
+ assert.equal(updated.page.layers.find(n=>n.creativePieceID==='photo').zIndex,sorted[1].zIndex,'moving must not lift a node');
 });
 test('page and relative commands create editable native Scene nodes',async()=>{
  const {run}=await setup(paper('photo-1',30,20));
@@ -107,4 +141,15 @@ test('public registry is unified and old native operations are rejected',()=>{
  assert.equal(creationV2RuntimeSchema.$defs.Operation.oneOf.length,Object.keys(creationCommandRegistry).length);
  assert.ok(Object.keys(creationCommandRegistry).every(name=>!name.startsWith('native.')));
  assert.throws(()=>validateCreationV2Commands(batch([{op:'native.material.add',id:'p',asset:'m1',placement:{xMm:40,yMm:50}}])),/未知操作/);
+});
+
+test('compact command help exposes exact typed style keys without forcing full Scene schemas',async()=>{
+ const {describeCreationCommand}=await import('../src/creation-v2-contract.js');
+ const text=describeCreationCommand('text.add'),graphic=describeCreationCommand('graphic.add');
+ assert.deepEqual(text.parameters.style.fields.textAlign.enum,['left','center','right']);
+ assert.equal(text.parameters.style.fields.fill,undefined);
+ assert.equal(text.parameters.style.fields.fontSizePt.type,'number');
+ assert.ok(graphic.parameters.style.fields.fill);assert.ok(graphic.parameters.style.fields.strokeWidthMm);
+ assert.ok(JSON.stringify(text).length<6500);assert.equal(text.schema,undefined);
+ const group=describeCreationCommand('group.compose');assert.equal(group.parameters.children.items,'Command');
 });

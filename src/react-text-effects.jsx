@@ -4,7 +4,7 @@ import {prepareJournalFont} from './journal-fonts.js';
 import {textEffectPresets,textEffectStyle} from './text-effect-presets.js';
 import {scaleTextEffects} from './text-effects.js';
 import {renderSceneCanvas} from './scene-renderer.js';
-import {inkLocalFrame} from './graphic-geometry.js';
+import {graphicEffectPreviewNode} from './graphic-effect-preview.js';
 function TextEffectPreview({node}){
  const canvas=useRef(null);
  useEffect(()=>{let cancelled=false;
@@ -18,13 +18,7 @@ function TextEffectPreview({node}){
 }
 function GraphicEffectPreview({node}){
  const canvas=useRef(null);
- useEffect(()=>{let cancelled=false;const copy=structuredClone(node),box=copy.type==='ink'?inkLocalFrame(copy):copy;
-  const factor=Math.min(220/box.width,58/box.height),effect=copy.graphicOutline;
-  if(effect)copy.graphicOutline={...effect,width:effect.width*factor,offsetX:effect.offsetX*factor,offsetY:effect.offsetY*factor};
-  if(copy.shadow)copy.shadow={...copy.shadow,offsetX:copy.shadow.offsetX*factor,offsetY:copy.shadow.offsetY*factor,blur:copy.shadow.blur*factor};
-  if(copy.type==='ink'){const xs=copy.points.map(p=>p.x),ys=copy.points.map(p=>p.y),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;copy.points=copy.points.map(p=>({...p,x:140+(p.x-cx)*factor,y:41+(p.y-cy)*factor}));copy.width*=factor;}
-  else{copy.x=140;copy.y=41;copy.width*=factor;copy.height*=factor;copy.rotation=0;if(copy.lineWidth)copy.lineWidth*=factor;}
-  delete copy.layoutConstraint;
+ useEffect(()=>{let cancelled=false;const copy=graphicEffectPreviewNode(node);
   void renderSceneCanvas({sceneVersion:2,canvas:{width:280,height:82},physicalPageHeightMM:100,paperColor:'#F8F5EF',paperPattern:'plain',layers:[copy]},{waitForFonts:false}).then(result=>{
    if(cancelled||!canvas.current)return;const c=canvas.current;c.width=560;c.height=164;c.getContext('2d')?.drawImage(result.canvas,0,0,560,164);
   }).catch(()=>{});return()=>{cancelled=true;};

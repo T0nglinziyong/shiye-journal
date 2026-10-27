@@ -12,7 +12,9 @@ const bool={type:'boolean'},id=ref('Id');
 export const creationCommonDefinitions=structuredClone(base.$defs);
 const d=creationCommonDefinitions;
 d.ShapeOptions=shapeOptionsJSONSchema;
-d.Reference.pattern='^(page|page\\.left|page\\.right|parent|node:[A-Za-z][A-Za-z0-9._-]*)$';
+// Native editor UUIDs may start with a digit; commands must target them too.
+d.Id.pattern='^[A-Za-z0-9][A-Za-z0-9._-]*$';
+d.Reference.pattern='^(page|page\\.left|page\\.right|parent|node:[A-Za-z0-9][A-Za-z0-9._-]*)$';
 d.Place.properties.referenceBounds.enum=['layout'];d.Place.properties.targetBounds.enum=['layout'];
 d.LayoutRule.properties.behavior={const:'once',default:'once'};d.Size.properties.aspect.default='free';
 d.Size.properties.behavior={enum:['once','linked'],default:'once'};

@@ -1,5 +1,6 @@
 import {recommendForDirection,buildMaterialScope} from './matching-materials.js';
 import {styleGroups,purposeGroups,selectedDirections} from './matching-directions.js';
+import {creationGuidanceRoute} from './creation-guidance.js';
 
 const matched=(item,filter,selected)=>{
   if(filter==='全部')return true;
@@ -17,5 +18,7 @@ export function matchingViewModel(state){
   const ranked=matchingRecommendations(state),recommendations=ranked.slice(0,18),excluded=new Set(state.excludedAssetIDs||[]);
   const scope=buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations,excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});
   const filtered=state.recommendFilter==='不使用'?[...excluded].map(id=>state.assets.find(a=>a.id===id)).filter(Boolean).map(asset=>({asset,reasons:['已排除']})):ranked.filter(r=>matched(r,state.recommendFilter,selected)).slice(0,18);
-  return {selected,recommendations,excluded,scope,filtered,styles:selectedDirections(styleGroups,state.matchStyles||[]),chosenPurposes:selectedDirections(purposeGroups,state.matchPurposes||[])};
+  const styles=selectedDirections(styleGroups,state.matchStyles||[]),chosenPurposes=selectedDirections(purposeGroups,state.matchPurposes||[]);
+  const guidance=creationGuidanceRoute({styles,purposes:chosenPurposes,contentPolicy:state.matchContentPolicy,intent:state.matchIntent,materials:state.assets.filter(asset=>scope.candidateAssetIDs.includes(asset.id))});
+  return {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes,guidance};
 }

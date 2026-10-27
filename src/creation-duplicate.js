@@ -47,7 +47,7 @@ export function duplicateCreationNode(doc,item,assets,{finishNode,assetFor}){
  // keep remapped internal relationships and their local coordinate frames.
  delete source.layoutConstraint;
  const destination=parent?spatialPath(doc.page.layers,creationNode(doc,parent).id).world:IDENTITY;
- convertNodeFrame(source,sourcePath.parentWorld,destination);
+ convertNodeFrame(source,sourcePath.parentWorld,destination,doc.page.canvas);
  doc=insertSceneNode(doc,source,assets,parent?creationNode(doc,parent).id:null);
  return finishNode(doc,source.id,{place:item.place,order:item.order},assets,{created:true});
 }

@@ -9,13 +9,18 @@ import {sceneStructureTransaction} from './scene-structure-edit.js';
 const scale=page=>page.canvas.height/page.physicalPageHeightMM;
 const mergeStyle=(base,change={})=>{const next={...base,...change};if(Object.hasOwn(change,'fontPreset')&&!Object.hasOwn(change,'fontFamily'))delete next.fontFamily;return next;};
 const baseStyle={fontSizePt:22,fontPreset:'hand',textAlign:'center',color:'#30463d'};
-const charsOf=content=>{
+export const letteringCharacters=content=>{
  if(typeof content!=='string')throw Error('标题正文必须是字符串');
  const chars=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(content)].map(s=>s.segment);
  if(chars.length<1||chars.length>32||chars.some(ch=>/[\r\n]/.test(ch))||!content.trim())throw Error('艺术字适用于 1–32 个字素的单行短标题');return chars;
 };
 const variantsOf=(variants,length)=>{
- const result=new Map();for(const v of variants||[]){if(!Number.isInteger(v.index)||v.index<0||v.index>=length||result.has(v.index))throw Error('letters.index 越界或重复');result.set(v.index,v);}return result;
+ const result=new Map();for(const v of variants||[]){
+  if(!Number.isInteger(v.index)||v.index<0||v.index>=length||result.has(v.index))throw Error('letters.index 越界或重复');
+  if(v.rotationDeg!==undefined&&(!Number.isFinite(v.rotationDeg)||Math.abs(v.rotationDeg)>100000))throw Error('字位旋转需为有效角度');
+  if(v.offsetMm!==undefined&&(!Array.isArray(v.offsetMm)||v.offsetMm.length!==2||v.offsetMm.some(n=>!Number.isFinite(n)||Math.abs(n)>100000)))throw Error('字位偏移需为有限的毫米坐标');
+  result.set(v.index,v);
+ }return result;
 };
 function newLetter(page,id,content,style,index){
  const font=(style.fontSizePt||22)*25.4/72*scale(page);
@@ -36,11 +41,11 @@ function layoutLetters(page,group,nodes,offsets,gapMm){
  group.lettering={...group.lettering,gapMm,slots:nodes.map(n=>n.id),offsets:structuredClone(offsets),positions:nodes.map(n=>[n.x,n.y])};return group;
 }
 export function createLetteringGroup(page,item){
- const chars=charsOf(item.content),variants=variantsOf(item.letters,chars.length),style=mergeStyle(baseStyle,item.style),offsets=[];
+ const chars=letteringCharacters(item.content),variants=variantsOf(item.letters,chars.length),style=mergeStyle(baseStyle,item.style),offsets=[];
  const nodes=chars.map((ch,i)=>{const variant=variants.get(i)||{},node=newLetter(page,item.id+'-g'+(i+1),ch,mergeStyle(style,variant.style),i);node.rotation=variant.rotationDeg||0;offsets.push(variant.offsetMm||[0,0]);return node;});
  if(nodes.some(n=>n.id.length>128))throw Error('标题子节点 id 过长');
  const group={id:item.id,type:'group',name:'艺术字 · '+item.content,children:nodes,localTransform:[1,0,0,1,0,0],opacity:1,blendMode:'normal',zIndex:500,lettering:{version:1,style,nextIndex:chars.length+1}};
- return layoutLetters(page,group,nodes,offsets,item.gapMm??.8);
+ layoutLetters(page,group,nodes,offsets,item.gapMm??.8);validateLettering(group);return group;
 }
 export function validateLettering(group){
  const l=group.lettering;if(l===undefined)return true;
@@ -60,7 +65,7 @@ export function reflowLettering(page,id,change,{policy=AI_SCENE_POLICY}={}){
  const meta=group.lettering,existing=meta.slots.map(id=>group.children.find(n=>n.id===id));
  if(existing.some(n=>!n||n.type!=='text')||existing.length!==group.children.length)throw Error('艺术标题子树已改动，不能自动重排');
  for(const node of existing){assertSceneEditable(page,node.id);assertPolicyOwnership(node,policy);if(node.layoutConstraint)throw Error('字位有独立 linked 约束，请先解除再整体重排');}
- const content=change.content??existing.map(n=>n.content).join(''),chars=charsOf(content),variants=variantsOf(change.letters,chars.length);
+ const content=change.content??existing.map(n=>n.content).join(''),chars=letteringCharacters(content),variants=variantsOf(change.letters,chars.length);
  const removed=existing.slice(chars.length);for(const node of removed)assertNoLinkedDependents(page,node.id);
  return sceneStructureTransaction(page,()=>{
   const style=mergeStyle(meta.style,change.style),s=scale(page),offsets=[];let nextIndex=meta.nextIndex;
@@ -72,6 +77,7 @@ export function reflowLettering(page,id,change,{policy=AI_SCENE_POLICY}={}){
    offsets.push(v.offsetMm||(!old?[0,0]:[meta.offsets[i][0]+(old.x-meta.positions[i][0])/s,meta.offsets[i][1]+(old.y-meta.positions[i][1])/s]));return node;
   });
   group.lettering={...meta,style,nextIndex};layoutLetters(page,group,nodes,offsets,change.gapMm??meta.gapMm);
+  validateLettering(group);
   if(group.name?.startsWith('艺术字 · '))group.name='艺术字 · '+content;
   return group;
  },{policy});

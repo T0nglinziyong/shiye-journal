@@ -61,10 +61,37 @@ export function setWorldPosition(page,id,{x,y,rotation}){
  }
  return node;
 }
-export function convertNodeFrame(node,oldParentWorld,newParentWorld){
+export function convertNodeFrame(node,oldParentWorld,newParentWorld,canvasSize){
+ // A current Scene group without a local frame masks in page coordinates.
+ // When an edit gives it a frame, move that entire mask frame with the group,
+ // rather than interpreting its normalized mask against the child bounds.
+ if(node.type==='group'&&!node.localTransform&&node.vectorMask){
+  if(!canvasSize||![canvasSize.width,canvasSize.height].every(v=>Number.isFinite(v)&&v>0))throw Error('转换组合遮罩需要有效画布尺寸');
+  node.localTransform=rigidMatrix(canvasSize.width/2,canvasSize.height/2);
+  node.layoutBox={width:canvasSize.width,height:canvasSize.height};
+  for(const child of node.children||[])convertNodeFrame(child,IDENTITY,node.localTransform,canvasSize);
+ }
  const change=multiplyMatrix(inverseMatrix(newParentWorld),oldParentWorld);
  if(node.type==='group')node.localTransform=multiplyMatrix(change,groupMatrix(node));
  else if(node.type==='ink'){node.points=node.points.map(p=>({...p,...transformPoint(change,p.x,p.y)}));node.layoutRotation=(node.layoutRotation||0)+matrixAngle(oldParentWorld)-matrixAngle(newParentWorld);}
  else{const matrix=multiplyMatrix(change,rigidMatrix(node.x,node.y,node.rotation||0));node.x=matrix[4];node.y=matrix[5];node.rotation=matrixAngle(matrix);}
  return node;
+}
+
+// Stable layout frame for a newly formed group, measured in its parent's
+// coordinates. This uses layout boxes, not raster/visible-bound inference.
+export function newSceneGroupFrame(page,ids,parentWorld=IDENTITY){
+ const inverse=inverseMatrix(parentWorld),points=[];
+ const collect=id=>{
+  const path=spatialPath(page.layers,id);if(!path)throw Error('编组图层不存在：'+id);
+  if(path.node.type==='group'&&!path.node.layoutBox){for(const child of path.node.children||[])collect(child.id);return;}
+  const b=worldBox(page,id),frame=rigidMatrix(b.cx,b.cy,b.rotation);
+  for(const x of [-b.w/2,b.w/2])for(const y of [-b.h/2,b.h/2]){
+   const world=transformPoint(frame,x,y);points.push(transformPoint(inverse,world.x,world.y));
+  }
+ };
+ ids.forEach(collect);
+ if(!points.length||points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))throw Error('无法为组合确定有效定位框');
+ const xs=points.map(p=>p.x),ys=points.map(p=>p.y),left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+ return {localTransform:rigidMatrix((left+right)/2,(top+bottom)/2),layoutBox:{width:Math.max(1,right-left),height:Math.max(1,bottom-top)}};
 }

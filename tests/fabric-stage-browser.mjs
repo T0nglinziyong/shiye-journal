@@ -496,6 +496,47 @@ try{
     'Moving a local group must persist the group transform');
   assert.deepEqual(persistedLocalGroupMove.child,[0,0],
     'Moving a local group must not rewrite child-local coordinates');
+  // Regression: a drag commit updates Scene followers AND their displayed
+  // Fabric objects without an unrelated React/inspector refresh.
+  await evaluate(`(async()=>{
+    const {applyInspectorLayout}=await import('/src/editor-layout-model.js');
+    const f=window.__fabricFixture;
+    f.draft.layers=[
+      {id:'12345678-1111-4111-8111-123456789abc',type:'shape',kind:'rectangle',x:180,y:220,width:100,height:60,rotation:0,fill:'#99aabb',zIndex:1},
+      {id:'linked-mark',type:'shape',kind:'ellipse',x:280,y:220,width:40,height:20,rotation:0,fill:'#cc5533',zIndex:2}];
+    applyInspectorLayout(f.draft,'linked-mark',{action:'place',reference:'node:12345678-1111-4111-8111-123456789abc'});
+    f.select([]);f.refresh();
+  })()`);
+  await sleep(250);
+  const linkedDrag=await evaluate(`(()=>{
+    const c=window.__fabricCanvas,r=c.upperCanvasEl.getBoundingClientRect();
+    return {from:{x:r.left+180*r.width/c.width,y:r.top+220*r.height/c.height},
+      to:{x:r.left+215*r.width/c.width,y:r.top+270*r.height/c.height}};
+  })()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...linkedDrag.from});
+  await sleep(40);
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...linkedDrag.to});
+  await sleep(100);
+  const linkedLive=await evaluate(`(()=>{
+    const c=window.__fabricCanvas,ctx=c.lowerCanvasEl.getContext('2d'),r=c.getRetinaScaling();
+    const pixel=(x,y)=>Array.from(ctx.getImageData(Math.round(x*r),Math.round(y*r),1,1).data);
+    const node=window.__fabricFixture.draft.layers.find(n=>n.id==='linked-mark');
+    return {scene:[node.x,node.y],old:pixel(280,220),next:pixel(315,270)};
+  })()`);
+  assert.deepEqual(linkedLive.scene,[280,220],'A drag preview must not commit Scene before release');
+  assert.deepEqual(linkedLive.next,[204,85,51,255],'The follower must already paint at its linked location before release');
+  assert.notDeepEqual(linkedLive.old,[204,85,51,255],'The old follower must not remain as a duplicate');
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...linkedDrag.to});
+  let following;
+  for(let attempt=0;attempt<40;attempt++){
+    following=await evaluate(`(()=>{const o=window.__fabricCanvas.getObjects().find(o=>o.sceneID==='linked-mark');
+      const n=window.__fabricFixture.draft.layers.find(n=>n.id==='linked-mark');return {scene:[n.x,n.y],canvas:[o.left,o.top]};})()`);
+    if(Math.abs(following.canvas[0]-315)<.01&&Math.abs(following.canvas[1]-270)<.01)break;
+    await sleep(25);
+  }
+  assert.deepEqual(following.scene,[315,270]);
+  assert.ok(Math.abs(following.canvas[0]-315)<.01&&Math.abs(following.canvas[1]-270)<.01,
+    'Dragging must repaint linked followers immediately: '+JSON.stringify(following));
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
 }finally{await browser.close();}

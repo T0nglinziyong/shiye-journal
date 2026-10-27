@@ -1,11 +1,11 @@
 import {scaleTextEffects} from './text-effects.js';
-import {copyEditableScene,editSceneStructure,sceneStructureTransaction} from './scene-structure-edit.js';
+import {copyEditableScene,editSceneStructure,sceneStructureTransaction,assertStructureOwnership} from './scene-structure-edit.js';
 import {applyScenePatchBatch,sceneWorldValues} from './scene-edit-kernel.js';
 import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import {objectCorners,polygonContains,selectionBounds} from './canvas-selection.js';
-import {sceneLayerEntries,findSceneNode,moveSceneNode,removeSceneNode,assertSceneEditable} from './scene-v2.js';
+import {sceneLayerEntries,findSceneNode,moveSceneNode,groupSceneLayers,assertSceneEditable} from './scene-v2.js';
 import {pressureInkOutline} from './pressure-ink.js';
-import {convertNodeFrame,IDENTITY,spatialPath,worldBox} from './scene-spatial.js';
+import {spatialPath,worldBox} from './scene-spatial.js';
 
 const edges=points=>points.map((point,index)=>[point,points[(index+1)%points.length]]);
 const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
@@ -110,24 +110,35 @@ export function deleteSceneLasso(draft,ids,context){
  return sceneStructureTransaction(draft,()=>{editSceneStructure(draft,{kind:'delete',targets:ids},context);pruneEmptyGroups(draft.layers);},context);
 }
 
+// Lasso merge brings the selected fragments together at the front of their
+// common parent. Whole selected subtrees stay intact, including group effects.
+// A partial selection may cross neutral containers, never discard effects.
 export function mergeSceneLasso(draft,ids,{id,name='套索组合'}={},context){
  return sceneStructureTransaction(draft,()=>{
- if(!id||findSceneNode(draft,id))throw Error('组合编号重复或无效');
-  const selected=new Set(ids);
-  const entries=sceneLayerEntries(draft,{hidden:true}).filter(entry=>selected.has(entry.value.id));
-  if(entries.length<2||entries.length!==selected.size)throw Error('请选择至少两个可编辑图层');
-  if(entries.some(entry=>entry.value.locked||entry.value.isLocked||
-    entry.parents.some(parent=>parent.locked||parent.isLocked)))throw Error('锁定图层不能合并');
-  // First move leaves to root. The new group may contain objects that used to
-  // belong to different subtrees; their scene coordinates stay unchanged.
-  for(const entry of entries)moveSceneNode(draft,entry.value.id);
-  const members=entries.map(entry=>findSceneNode(draft,entry.value.id));
-  for(const member of members)removeSceneNode(draft,member.id);
-  pruneEmptyGroups(draft.layers);
-  const group={id,type:'group',name,opacity:1,blendMode:'normal',children:members};
-  members.forEach((member,index)=>{member.creativeGroupID=id;member.zIndex=index+1;});
-  group.zIndex=Math.max(0,...draft.layers.map(node=>node.zIndex||0))+1;
-  draft.layers.push(group);
-  return id;
+  if(!id||findSceneNode(draft,id))throw Error('组合编号重复或无效');
+  const selected=new Set(ids),entries=sceneLayerEntries(draft,{hidden:true});
+  const chosen=entries.filter(entry=>selected.has(entry.value.id));
+  if(chosen.length<2||chosen.length!==selected.size)throw Error('请选择至少两个可编辑图层');
+  chosen.forEach(entry=>assertSceneEditable(draft,entry.value.id));
+  const ancestors=chosen[0].parents.filter((parent,index)=>chosen.every(entry=>entry.parents[index]===parent));
+  const parent=ancestors.at(-1),targets=[];
+  const walk=nodes=>{for(const node of [...nodes].sort((a,b)=>(a.zIndex??(a.type==='ink'?2000:0))-(b.zIndex??(b.type==='ink'?2000:0)))){
+   if(node.type!=='group'){if(selected.has(node.id))targets.push(node.id);continue;}
+   const leaves=entries.filter(entry=>entry.parents.includes(node));
+   const count=leaves.filter(entry=>selected.has(entry.value.id)).length;
+   if(!count)continue;
+   if(count===leaves.length){targets.push(node.id);continue;}
+   if((node.opacity??1)!==1||!['normal','source-over',undefined].includes(node.blendMode)||node.shadow||
+      node.vectorMask||node.materialMask||node.clipPath||node.hidden||node.isHidden)
+    throw Error('所选图层跨过带外观效果的组合，请选中完整组合后再合并，以保留透明度、阴影或遮罩');
+   walk(node.children||[]);
+  }};
+  walk(parent?.children||draft.layers);
+  // Moving only when necessary also retains the sibling slot for ordinary
+  // same-parent grouping. No intermediate delete can break linked references.
+  assertStructureOwnership(draft,targets,context?.policy||AI_SCENE_POLICY);
+  const crossing=targets.some(target=>(spatialPath(draft.layers,target).ancestors.at(-1)||null)!==(parent||null));
+  if(crossing)for(const target of targets)moveSceneNode(draft,target,{parentID:parent?.id||null});
+  return groupSceneLayers(draft,targets,{id,name,allowReorder:true});
  },context);
 }

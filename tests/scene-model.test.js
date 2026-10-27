@@ -23,7 +23,8 @@ test('nested groups survive JSON serialization; rotating groups never scales phy
  assert.equal(d.layers.some(n=>n.type==='group'),true);
  transformSceneGroup(d,g,{rotation:45,dx:10});
  assert.equal(d.items[0].width,initial.width);assert.equal(d.items[0].height,initial.height);
- assert.equal(d.textBlocks[0].rotation,45);
+ assert.ok(Math.abs(sceneLayerEntries(d).find(e=>e.value.id==='t').value.rotation-45)<1e-8);
+ assert.equal(d.textBlocks[0].rotation,0,'persisted child rotation is local');
  assert.equal(sceneGroups(d).length,1);
  const saved=JSON.parse(JSON.stringify(d)),loaded=attachSceneV2(saved);
  assert.equal(sceneGroups(loaded)[0].children.length,2);
@@ -44,6 +45,9 @@ test('Scene v2 can nest/reparent groups without changing physical dimensions',()
  const d=draft();d.items.push({id:'m1',assetID:'a1',x:100,y:100,width:25,height:35,zIndex:3});
  d.textBlocks.push({id:'t1',content:'字',x:100,y:200,width:90,height:40,zIndex:5});
  d.primitives.push({id:'shape1',kind:'ellipse',x:80,y:160,width:40,height:40,zIndex:4});
+ const snapshot=JSON.stringify(d);
+ assert.throws(()=>groupSceneLayers(d,['m1','t1'],{id:'top'}),/顺序/);assert.equal(JSON.stringify(d),snapshot);
+ moveSceneNode(d,'t1',{beforeID:'shape1'});
  const top=groupSceneLayers(d,['m1','t1'],{id:'top'});
  const physical={width:d.items[0].width,height:d.items[0].height,assetID:d.items[0].assetID};
  moveSceneNode(d,'shape1',{parentID:top});

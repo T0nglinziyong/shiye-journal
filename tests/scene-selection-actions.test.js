@@ -1,3 +1,4 @@
+import {worldBox} from '../src/scene-spatial.js';
 import {USER_SCENE_POLICY,confirmSceneCapability} from '../src/scene-edit-policy.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +28,8 @@ test('duplicate and delete act on the whole nested Scene subtree',()=>{
   let sequence=0;
   const copyID=duplicateSceneGroup(draft,'group',()=>`copy-${++sequence}`);
   const original=findSceneNode(draft,'group'),copy=findSceneNode(draft,copyID);
-  assert.deepEqual(copy.children.map(child=>child.x),original.children.map(child=>child.x+12));
+  assert.deepEqual(copy.children.map(child=>child.x),original.children.map(child=>child.x));
+  copy.children.forEach((child,i)=>{const a=worldBox(draft,child.id),b=worldBox(draft,original.children[i].id);assert.equal(a.cx,b.cx+12);assert.equal(a.cy,b.cy+12);});
   assert.ok(copy.children.every(child=>child.creativeGroupID===copyID));
   assert.equal(new Set([copyID,...copy.children.map(child=>child.id)]).size,3);
   assert.equal(validateSceneExtensions(draft),true);

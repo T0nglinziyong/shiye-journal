@@ -42,11 +42,11 @@ test('both creation modes receive role sizes converted to the actual paper, not 
  assert.match(small,/主标题建议18–26pt（本页font_size约31–43/);
  assert.match(large,/主标题建议18–26pt（本页font_size约22–30/);
  for(const mode of ['agent','direct']){
-   const text=buildCreativeMessages({draft:a5,assets:[],aliases:{},generationMode:mode})[0].content;
-   assert.match(text,/次标题／小节标题/);assert.match(text,/正文建议9–12pt/);assert.match(text,/图片说明／日期／注释建议7–9pt/);
-   assert.match(text,/同一作品不因换设备改写字号/);assert.doesNotMatch(text,/文字标题46–90/);
-   assert.match(text,/不必让每段文字独占整行/);
-   assert.match(text,/荧光笔色带/);
+   const messages=buildCreativeMessages({draft:a5,assets:[],aliases:{},generationMode:mode}),text=messages[0].content,composition=messages[1].content[0].text;
+   assert.match(text,/fontSizePt/);assert.match(text,/size.width 用 mm/);assert.doesNotMatch(text,/font_size填画布单位/);
+   assert.match(text,/正文优先可读/);assert.doesNotMatch(text,/文字标题46–90/);
+   assert.match(composition,/文字贴近相关素材/);
+   assert.match(composition,/手写、线条和荧光笔/);
  }
 });
 test('API does not send visual case references',()=>{
@@ -67,7 +67,7 @@ test('API labels material priorities and has a meaningful-content rule for spars
  const text=messages[1].content[0].text;
  assert.match(text,/优先级 必须使用/);assert.match(text,/优先级 优先使用/);assert.match(text,/优先级 可以使用（仅备选）/);
  assert.doesNotMatch(text,/excluded/);
- assert.match(messages[0].content,/留白是否服务于主题/);
+ assert.match(messages[1].content[0].text,/区分有意留白和无意空洞/);
  assert.match(messages[1].content[0].text,/完整使用可以是最佳选择，不按工艺或素材数量评分/);
  assert.doesNotMatch(messages[1].content[0].text,/至少\d+字|覆盖约 \d+%/);
 });

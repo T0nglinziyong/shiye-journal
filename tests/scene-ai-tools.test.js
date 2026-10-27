@@ -1,3 +1,4 @@
+import {sceneLayerEntries} from '../src/scene-v2.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {draft} from '../src/domain.js';
@@ -58,7 +59,7 @@ test('AI tools group, move and delete editable ink through the canonical Scene t
  ];
  const result=applyToolCalls({tools:commands},base,[],{});
  assert.deepEqual(result.results.map(item=>item.ok),[true,true,true],JSON.stringify(result.results));
- const ink=result.draft.strokes[0],center=ink.points.reduce((p,q)=>({x:p.x+q.x/ink.points.length,y:p.y+q.y/ink.points.length}),{x:0,y:0});
+ const ink=sceneLayerEntries(result.draft).find(e=>e.value.id==='pen-mark').value,center=ink.points.reduce((p,q)=>({x:p.x+q.x/ink.points.length,y:p.y+q.y/ink.points.length}),{x:0,y:0});
  assert.ok(Math.abs(center.x-result.draft.canvas.width*.6)<1e-6);
  assert.ok(Math.abs(center.y-result.draft.canvas.height*.35)<1e-6);
  assert.equal(ink.opacity,.55);assert.equal(ink.rotation,90);

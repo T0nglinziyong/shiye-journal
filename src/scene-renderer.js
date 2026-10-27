@@ -7,7 +7,7 @@ import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textFontFamily,drawSceneText} from './editor-tools-model.js';
 import {craftSceneHash} from './craft-fingerprint.js';
 import {SCENE_MAX_GROUP_DEPTH} from './scene-v2.js';
-import {groupMatrix,inverseMatrix} from './scene-spatial.js';
+import {groupMatrix,inverseMatrix,multiplyMatrix,IDENTITY} from './scene-spatial.js';
 
 export const SCENE_RENDERER_VERSION='shiye-scene-v2';
 export async function decodeSceneImage(source){
@@ -40,7 +40,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
    const sourceKey=item.sourceBlobId||item.sourceStaticPath||item.assetID;
    if(!decoded.has(sourceKey))decoded.set(sourceKey,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
    const image=await decoded.get(sourceKey);if(!image)throw Error('缺少素材图像：'+item.assetID);
-   paintMaterialImage(target,item,image);
+   paintMaterialImage(target,item,image,{createCanvas});
  };
  const drawLeaf=async(kind,item,target)=>{
    target.save();
@@ -69,7 +69,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
    if(now-lastYield<12&&!globalThis.navigator?.scheduling?.isInputPending?.({includeContinuous:true}))return;
    await backgroundYield();lastYield=globalThis.performance?.now?.()??Date.now();
  };
- const drawTree=async(nodes,target,depth=0)=>{
+ const drawTree=async(nodes,target,depth=0,parentWorld=IDENTITY)=>{
    if(depth>SCENE_MAX_GROUP_DEPTH)throw Error('图层组嵌套超过渲染预算');
    // Physical weave display fragments are projections of one source piece.
    const expanded=sceneDisplaySiblings(nodes).map(node=>({type:node.type,value:node}));
@@ -80,12 +80,14 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      if(entry.type!=='group'){await drawLeaf(entry.type,node,target);continue;}
      const style=sceneLayerStyle(node);
      const isolate=(node.opacity??1)!==1||style.blendMode!=='normal'||!!style.mask||!!node.shadow;
-     const matrix=groupMatrix(node);
-     if(!isolate){target.save();try{target.transform(...matrix);await drawTree(node.children||[],target,depth+1);}finally{target.restore();}continue;}
+     const matrix=groupMatrix(node),world=multiplyMatrix(parentWorld,matrix);
+     if(!isolate){target.save();try{target.transform(...matrix);await drawTree(node.children||[],target,depth+1,world);}finally{target.restore();}continue;}
      if(++isolatedGroups>8||width*height*(isolatedGroups+1)>64_000_000)throw Error('复杂图层组合超出内存预算；请降低导出分辨率或减少隔离组');
      const surface=createCanvas();surface.width=width;surface.height=height;
      const inner=surface.getContext('2d');if(!inner)throw Error('无法创建图层组合缓冲');
-     inner.scale(scale,scale);inner.transform(...matrix);await drawTree(node.children||[],inner,depth+1);
+     // Isolated surfaces are page-sized. Paint in world coordinates so a
+     // nested group's negative local coordinates are not clipped at (0,0).
+     inner.scale(scale,scale);inner.transform(...world);await drawTree(node.children||[],inner,depth+1,world);
      target.save();
      try{
        target.globalAlpha=node.opacity??1;
@@ -103,6 +105,9 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
            target.translate(-draft.canvas.width/2,-draft.canvas.height/2);
          }
        }
+       // The surface is already in page coordinates. Preserve the parent's
+       // current clip, but do not apply its transform a second time.
+       target.transform(...inverseMatrix(parentWorld));
        target.drawImage(surface,0,0,draft.canvas.width,draft.canvas.height);
      }finally{target.restore();}
    }

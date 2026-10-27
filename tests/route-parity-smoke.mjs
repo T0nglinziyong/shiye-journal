@@ -46,6 +46,8 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
 
   assert.equal(win.document.querySelectorAll('[data-act="detail"]').length,27);
   click('[data-route="matching"]');assert.ok($('.matching-page'));
+  assert.equal($('[data-act="match-export-gpt"]').disabled,false,'empty editable task can export');
+  assert.equal($('[data-act="match-generate"]').disabled,false,'empty editable task can create');
   click('[data-route="works"]');assert.ok($('.works-grid'));
   assert.equal($('#work-kind').options.length,3);
   assert.equal($('#work-status').options.length,4);

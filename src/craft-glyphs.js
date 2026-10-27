@@ -1,4 +1,4 @@
-import opentype from 'opentype.js';
+import {parse as parseFont} from 'opentype.js/dist/opentype.mjs';
 import {craftAssert} from './craft-errors.js';
 import {normalizeGeometry,geometryUnion,geometryDifference,geometryBounds,transformGeometry,bridgeGeometry} from './craft-topology.js';
 
@@ -8,7 +8,7 @@ export function glyphCutGeometry(bytes,text,{fontSizeMM=12,toleranceMM=.025,brid
  craftAssert(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16_000_000,'INVALID_FONT','字体文件需小于 16 MB');
  craftAssert(typeof text==='string'&&Array.from(text).length>0&&Array.from(text).length<=32,'GLYPH_BUDGET','镂空文字需为 1–32 个字符');
  craftAssert(Number.isFinite(fontSizeMM)&&fontSizeMM>=2&&fontSizeMM<=100&&Number.isFinite(toleranceMM)&&toleranceMM>=.005&&toleranceMM<=.1,'INVALID_GLYPH_SIZE','字体毫米尺寸或轮廓精度无效');
- const font=opentype.parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+ const font=parseFont(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
  for(const character of text)if(!/\s/u.test(character))craftAssert(font.charToGlyphIndex(character)!==0,'GLYPH_MISSING','所选字体缺少字符：'+character);
  const commands=font.getPath(text,0,0,fontSizeMM,{kerning:true}).commands;
  craftAssert(commands.length<=4096,'GLYPH_BUDGET','文字路径过于复杂');

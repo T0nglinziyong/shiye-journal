@@ -1,3 +1,4 @@
+import {svgArcCenter,svgArcPoint} from './svg-arc.js';
 import {normalizeGeometry,rectangleGeometry,geometryArea,geometryDifference,geometryIntersection,geometryUnion,ringArea,transformGeometry,AREA_EPSILON} from './craft-topology.js';
 
 const token=/[AaCcHhLlMmQqSsTtVvZz]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g;
@@ -8,22 +9,10 @@ const sample=(length)=>Math.max(8,Math.min(96,Math.ceil(length/2)));
 const pointOnCubic=(a,b,c,d,t)=>{const u=1-t;return [u*u*u*a[0]+3*u*u*t*b[0]+3*u*t*t*c[0]+t*t*t*d[0],u*u*u*a[1]+3*u*u*t*b[1]+3*u*t*t*c[1]+t*t*t*d[1]];};
 const pointOnQuad=(a,b,c,t)=>{const u=1-t;return [u*u*a[0]+2*u*t*b[0]+t*t*c[0],u*u*a[1]+2*u*t*b[1]+t*t*c[1]];};
 function arcPoints(start,end,rx,ry,phi,large,sweep){
- rx=Math.abs(rx);ry=Math.abs(ry);if(rx<1e-8||ry<1e-8)return [end];
- const angle=phi*Math.PI/180,co=Math.cos(angle),si=Math.sin(angle),
-  midX=(start[0]-end[0])/2,midY=(start[1]-end[1])/2,
-  x=co*midX+si*midY,y=-si*midX+co*midY;
- const expand=Math.sqrt(Math.max(1,x*x/(rx*rx)+y*y/(ry*ry)));rx*=expand;ry*=expand;
- const numerator=Math.max(0,rx*rx*ry*ry-rx*rx*y*y-ry*ry*x*x),
-  denominator=rx*rx*y*y+ry*ry*x*x;
- const factor=(large===sweep?-1:1)*Math.sqrt(denominator<1e-12?0:numerator/denominator);
- const cxp=factor*rx*y/ry,cyp=-factor*ry*x/rx,
-  cx=co*cxp-si*cyp+(start[0]+end[0])/2,
-  cy=si*cxp+co*cyp+(start[1]+end[1])/2;
- const u=[(x-cxp)/rx,(y-cyp)/ry],v=[(-x-cxp)/rx,(-y-cyp)/ry];
- let begin=Math.atan2(u[1],u[0]),delta=Math.atan2(u[0]*v[1]-u[1]*v[0],u[0]*v[0]+u[1]*v[1]);
- if(!sweep&&delta>0)delta-=2*Math.PI;if(sweep&&delta<0)delta+=2*Math.PI;
- const n=Math.max(8,Math.min(128,Math.ceil(Math.abs(delta)*Math.max(rx,ry)/2)));
- return Array.from({length:n},(_,i)=>{const a=begin+delta*(i+1)/n;return [cx+co*rx*Math.cos(a)-si*ry*Math.sin(a),cy+si*rx*Math.cos(a)+co*ry*Math.sin(a)];});
+ const arc=svgArcCenter(start,end,rx,ry,phi,large,sweep);
+ if(arc.kind==='point')return [];if(arc.kind==='line')return [end];
+ const n=Math.max(8,Math.min(128,Math.ceil(Math.abs(arc.delta)*Math.max(arc.rx,arc.ry)/2)));
+ return Array.from({length:n},(_,i)=>svgArcPoint(arc,arc.start+arc.delta*(i+1)/n));
 }
 export function flattenCreationPath(d){
  if(typeof d!=='string'||d.length>8192||!/^[AaCcHhLlMmQqSsTtVvZz0-9+eE.,\s-]+$/.test(d))throw Error('路径字符无效');

@@ -89,8 +89,8 @@ test('merge moves selected leaves from different parent subtrees into one group'
   const draft=fixture();
   const id=mergeSceneLasso(draft,['shape','ink'],{id:'merged'});
   assert.equal(id,'merged');
-  assert.deepEqual(draft.layers.at(-1).children.map(node=>node.id),['shape','ink']);
-  assert.deepEqual(draft.layers.at(-1).children[1].points,[{x:80,y:110},{x:110,y:110}]);
+  assert.deepEqual(draft.layers.at(-1).children.map(node=>node.id),['left','ink-group']);
+  assert.deepEqual(sceneLayerEntries(draft).find(e=>e.value.id==='ink').value.points,[{x:80,y:110},{x:110,y:110}]);
   assert.equal(draft.layers.some(node=>node.id==='left'),false);
   assert.deepEqual(sceneLayerEntries(draft).map(entry=>entry.value.id),['text','shape','ink']);
 });

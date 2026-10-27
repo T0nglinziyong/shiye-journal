@@ -1,3 +1,4 @@
+import {spatialPath,transformPoint} from './scene-spatial.js';
 import {reflowLettering} from './scene-lettering.js';
 import {replaceEditableMaterial} from './scene-material-edit.js';
 import {editSceneStructure} from './scene-structure-edit.js';
@@ -26,13 +27,13 @@ import {validateMaterialDecisions} from './creation-material-decisions.js';
 export {webSceneContract} from './web-scene-contract.js';
 import {webSceneContract} from './web-scene-contract.js';
 
-export const webSceneCapabilities={version:2,sourcePixelCoordinates:false,cropPx:false,coordinateSystem:'native Scene units; x/y are centers; ink points are absolute; vector masks are normalized; group children retain page coordinates',
+export const webSceneCapabilities={version:2,sourcePixelCoordinates:false,cropPx:false,coordinateSystem:'native Scene units; x/y are centers; ink points use the parent local frame; vector masks are normalized; spatial groups own rigid local transforms and children use that local frame',
   nodes:['material','text','shape','ink','group'],
   operations:['inspect','compile','apply','validate','preview','pack','self-test'],
   editing:['all native static Scene fields','atomic tool batches','direct scene editing','nested groups','group transforms','alignment','layer reorder','crop and compound masks','source splits and scraps','physical weave slices','pressure ink','multi-color vectors','curved editable text','repeatable digital stamps','editable tape ribbon: original image, repeat range, physical width, centerline, caps, sample/repeat/stretch','physical material replacement preserving center and stacking','editable layout reuse','local-font glyph knockout','paper styles'],
   excluded:['interactive pockets/flaps/page actions','arbitrary JavaScript','external image URLs','AI resizing/duplicating ordinary physical sources; dedicated tape width and texture modes are supported'],
   budgets:{documentBytes:8000000,groupDepth:12,sceneNodes:10000,pointsPerStroke:20000,toolCallsPerBatch:12,canvasPixels:32000000,isolatedGroups:8},
-  fields:{common:'id,type,x,y,width,height,rotation,zIndex,opacity,blendMode,vectorMask,hidden,isLocked',material:'assetID,sourceBlobId,sourceStaticPath,cropRect,materialMask,materialSteps,materialUnitIndex,creativePieceID,generationBaseline,isFlippedHorizontally,craftDisplaySlices,materialRelation,tapeStrip(version:2,axis,points,physicalWidthMM,bandWidthScene,baseWidth,baseHeight,pathLengthMM,sourceLengthMM,textureMode,sourceOffsetMM,sourceWindowMM,repeatRangeMM,reverseTexture,startCap,endCap,capDepthMM)',text:'content,fontSize,fontName,style,color,alignment,bold,italic,underline,strikethrough,lineSpacing,fixedLineHeight,paragraphSpacing,letterSpacing,curveHeight,textOutline,textGradient,shadow',shape:'kind,fill,stroke,lineWidth,fillOpacity,strokeOpacity,strokeDash,cornerRadius,shapeOptions,vectorPaths,vectorLayers',ink:'points:[{x,y,p}],width,color,penStyle,opacity; use pressure for pressure outline',group:'children,name,opacity,blendMode,vectorMask; group mask uses whole page normalized coordinates'},
+  fields:{common:'id,type,x,y,width,height,rotation,zIndex,opacity,blendMode,vectorMask,hidden,isLocked',material:'assetID,sourceBlobId,sourceStaticPath,cropRect,materialMask,materialSteps,materialUnitIndex,creativePieceID,generationBaseline,isFlippedHorizontally,craftDisplaySlices,materialRelation,tapeStrip(version:2,axis,points,physicalWidthMM,bandWidthScene,baseWidth,baseHeight,pathLengthMM,sourceLengthMM,textureMode,sourceOffsetMM,sourceWindowMM,repeatRangeMM,reverseTexture,startCap,endCap,capDepthMM)',text:'content,fontSize,fontName,style,color,alignment,bold,italic,underline,strikethrough,lineSpacing,fixedLineHeight,paragraphSpacing,letterSpacing,curveHeight,textOutline,textGradient,shadow',shape:'kind,fill,stroke,lineWidth,fillOpacity,strokeOpacity,strokeDash,cornerRadius,shapeOptions,vectorPaths,vectorLayers',ink:'points:[{x,y,p}],width,color,penStyle,opacity; use pressure for pressure outline',group:'children,name,opacity,blendMode,vectorMask,localTransform,layoutBox; spatial group masks use the centered local layoutBox; groups without localTransform use page-normalized masks in their parent frame'},
   provenance:'Create physical pieces with tools first; source geometry and manual provenance are checked even when editing JSON directly.'};
 const same=(a,b)=>canonicalTaskSource(a)===canonicalTaskSource(b);
 const pageFields=new Set(['sceneVersion','canvas','pageMode','pageRatio','physicalPageHeightMM','style','paperColor','paperPattern','paperColumns','paperRuling','drawCenterGutter','layers','craftScraps']);
@@ -42,13 +43,19 @@ function retainedMaterialArea(item,parents,draft){
   const polygon=m=>normalizeGeometry([[m.outer,...(m.holes||[])]]);
   let geometry=polygon(materialMaskGeometry(item.materialMask)||rectangle);
   if(item.vectorMask)geometry=geometryIntersection(geometry,polygon(item.vectorMask));
-  const a=(item.rotation||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
+  const itemWorld=spatialPath(draft.layers,item.id).world;
   geometry=geometry.map(poly=>poly.map(ring=>ring.map(([u,v])=>{
     const x=(u-.5)*item.width*(item.isFlippedHorizontally?-1:1),y=(v-.5)*item.height;
-    return [item.x+x*c-y*s,item.y+x*s+y*c];
+    const p=transformPoint(itemWorld,x,y);return [p.x,p.y];
   })));
   for(const parent of parents)if(parent.vectorMask){
-    const mask=polygon(parent.vectorMask).map(poly=>poly.map(ring=>ring.map(([x,y])=>[x*draft.canvas.width,y*draft.canvas.height])));
+    const frame=spatialPath(draft.layers,parent.id),local=Boolean(parent.localTransform);
+    if(local&&!parent.layoutBox)throw Error('局部组合蒙版需要稳定 layoutBox');
+    const box=local?parent.layoutBox:draft.canvas;
+    const matrix=local?frame.world:frame.parentWorld;
+    const mask=polygon(parent.vectorMask).map(poly=>poly.map(ring=>ring.map(([u,v])=>{
+      const p=transformPoint(matrix,(u-(local ? .5 : 0))*box.width,(v-(local ? .5 : 0))*box.height);return [p.x,p.y];
+    })));
     geometry=geometryIntersection(geometry,mask);
   }
   const crop=item.cropRect||{width:1,height:1};
@@ -79,7 +86,7 @@ export function validateWebScene(page,source,assets,{final=true,requireCurrentSc
     const protectedNode=node.locked||node.isLocked||parents.some(p=>p.locked||p.isLocked)||node.aiManaged&&!isManagedUnchanged(node);
     if(!protectedNode)continue;
     const next=current.get(id);
-    if(!next||layerFingerprint(node)!==layerFingerprint(next.node)||!same(parents.map(p=>[p.id,p.opacity,p.blendMode,p.vectorMask,p.hidden,p.isHidden,p.zIndex]),next.parents.map(p=>[p.id,p.opacity,p.blendMode,p.vectorMask,p.hidden,p.isHidden,p.zIndex])))throw Error('不能覆盖锁定或用户接管的图层：'+id);
+    if(!next||layerFingerprint(node)!==layerFingerprint(next.node)||!same(parents.map(p=>[p.id,p.opacity,p.blendMode,p.vectorMask,p.hidden,p.isHidden,p.zIndex,p.localTransform,p.layoutBox]),next.parents.map(p=>[p.id,p.opacity,p.blendMode,p.vectorMask,p.hidden,p.isHidden,p.zIndex,p.localTransform,p.layoutBox])))throw Error('不能覆盖锁定或用户接管的图层：'+id);
   }
   for(const item of d.items){
     const old=original.get(item.id)?.node,asset=frozen.find(a=>a.id===item.assetID);
@@ -92,7 +99,7 @@ export function validateWebScene(page,source,assets,{final=true,requireCurrentSc
       throw Error('素材图片必须使用任务固定版本：'+item.id);
     const parents=current.get(item.id).parents;
     const masks=parents.map(p=>p.vectorMask);
-    const geometryUnchanged=old&&same([old.cropRect,old.materialMask,old.vectorMask],[item.cropRect,item.materialMask,item.vectorMask])&&same(original.get(item.id).parents.map(p=>p.vectorMask),masks)&&(!masks.some(Boolean)||same([old.x,old.y,old.rotation,old.isFlippedHorizontally],[item.x,item.y,item.rotation,item.isFlippedHorizontally]));
+    const geometryUnchanged=old&&same([old.cropRect,old.materialMask,old.vectorMask],[item.cropRect,item.materialMask,item.vectorMask])&&same(original.get(item.id).parents.map(p=>[p.vectorMask,p.localTransform,p.layoutBox]),parents.map(p=>[p.vectorMask,p.localTransform,p.layoutBox]))&&(!masks.some(Boolean)||same([old.x,old.y,old.rotation,old.isFlippedHorizontally],[item.x,item.y,item.rotation,item.isFlippedHorizontally]));
     if(!geometryUnchanged&&!item.tapeStrip){
       const retained=retainedMaterialArea(item,parents,d);
       if(source.processing==='保留完整'&&retained<1-1e-6)throw Error('任务要求保留完整素材：'+item.id);
@@ -166,7 +173,7 @@ export function applyWebSceneCommands(document,commands,assets){
         if(parent&&parent.type!=='group')throw Error('插入目标必须是组合');
         insertSceneLayer(draft,edit.node,{parent:parent?.id,policy:AI_SCENE_POLICY});
       }else if(edit.op==='delete')editSceneStructure(draft,{kind:'delete',target:edit.id},{policy:AI_SCENE_POLICY});
-      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合',...(edit.spatial?{spatial:true,layoutBox:edit.layoutBox}:{})}},{policy:AI_SCENE_POLICY});
+      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合',layoutBox:edit.layoutBox}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='ungroup'){if(!editSceneStructure(draft,{kind:'ungroup',target:edit.id},{policy:AI_SCENE_POLICY}))throw Error('没有找到组合');}
       else if(edit.op==='move')editSceneStructure(draft,{kind:'move',target:edit.id,options:{parentID:edit.parent??null,beforeID:edit.before??null}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='transform-group')transformSceneGroup(draft,edit.id,edit.transform);

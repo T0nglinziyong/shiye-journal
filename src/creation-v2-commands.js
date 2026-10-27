@@ -13,7 +13,7 @@ import {creationRegionGeometry} from './creation-region.js';
 import {attachSceneV2,assertSceneEditable,groupSceneLayers,moveSceneNode} from './scene-v2.js';
 import {applyScenePlacement,assertNoLinkedDependents,detachLinkedDependents,detachSceneLayout,solveSceneLayout} from './scene-layout.js';
 import {spatialPath,worldBox,setWorldPosition,transformPoint,inverseMatrix,matrixAngle} from './scene-spatial.js';
-import {compileTwoHoleWeaves} from './craft-display.js';
+import {applySceneWeave} from './scene-weave-edit.js';
 import {validateWebScene} from './web-scene-workbench.js';
 import {assetSourceRevision} from './material-anatomy.js';
 import {craftDigest,craftSceneHash,recordManagedChanges,layerFingerprint,isManagedUnchanged} from './craft-fingerprint.js';
@@ -34,14 +34,9 @@ const processMaterial=(doc,target,steps,assets,mode='append')=>runMaterialAlgori
 function placeFor(doc,place,widthMm,heightMm,rotationDeg=0,parentID=null){return resolveCreationPlace(doc.page,place,{widthMm,heightMm,rotationDeg,parentID});}
 function addToParent(doc,id,parent,assets){if(!parent)return doc;const group=requireNode(doc,parent);if(group.type!=='group')throw Error('父级必须是图层组');return editScene(doc,[{op:'move',id:requireNode(doc,id).id,parent:group.id}],assets);}
 function finishPlacement(doc,id,place){if(place)applyScenePlacement(doc.page,id,place);return doc;}
-function groupBox(doc,ids){
- const boxes=ids.map(id=>worldBox(doc.page,id)),cx=boxes.reduce((sum,b)=>sum+b.cx,0)/boxes.length,cy=boxes.reduce((sum,b)=>sum+b.cy,0)/boxes.length;
- const extent=box=>{const a=box.rotation*Math.PI/180;return [Math.abs(Math.cos(a))*box.w+Math.abs(Math.sin(a))*box.h,Math.abs(Math.sin(a))*box.w+Math.abs(Math.cos(a))*box.h];};
- return {width:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cx-cx)+extent(b)[0]/2))),height:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cy-cy)+extent(b)[1]/2)))};
-}
 function reorder(doc,target,order,assets){
  const at=locate(doc.page.layers,target);if(!at)throw Error('图层不存在：'+target);
- const peers=at.siblings.filter(node=>node!==at.node);let before;
+ const peers=at.siblings.filter(node=>node!==at.node).sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));let before;
  if(order.before){before=requireNode(doc,order.before).id;if(!peers.some(node=>node.id===before))throw Error('排序目标必须是同级图层');}
  else if(order.after){const index=peers.findIndex(node=>node.id===requireNode(doc,order.after).id);if(index<0)throw Error('排序目标必须是同级图层');before=peers[index+1]?.id;}
  else if(order.edge==='back')before=peers[0]?.id;
@@ -50,11 +45,31 @@ function reorder(doc,target,order,assets){
 function finishNode(doc,id,change,assets,{created=false}={}){
  doc=updateCreationNode(doc,id,created&&change.place?{...change,place:{...change.place,rotationDeg:change.place.rotationDeg??0}}:change,assets);
  if(change.order)doc=reorder(doc,id,change.order,assets);
+ else if(created){
+  // Command order is paint order across all node types. The underlying
+  // material/text algorithms have different historical default z values.
+  // Change only the new node so locked/user-owned siblings stay untouched.
+  const at=locate(doc.page.layers,id);
+  const zIndex=Math.max(-1,...at.siblings.filter(n=>n!==at.node).map(n=>n.zIndex??0))+1;
+  doc=patch(doc,id,{zIndex},assets);
+ }
  solveSceneLayout(doc.page);return doc;
 }
 function displayMaskGeometry(node,asset,region,page){
  const s=scale(page),crop=node.cropRect||{x:0,y:0,width:1,height:1};
  return geometryIntersection(creationRegionGeometry(region,{sourceSize:[asset.physicalWidthMM,asset.physicalHeightMM],localSize:[node.width/s,node.height/s],crop,output:'localRatio'}),rectangleGeometry(0,0,1,1));
+}
+
+function preserveReplacementStack(original,target,next,pieceIDs){
+ const location=locate(original.page.layers,target);
+ const ordered=[...location.siblings].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
+ const following=ordered.slice(ordered.indexOf(location.node)+1).find(node=>find(next,node.id));
+ for(const id of pieceIDs)moveSceneNode(next.page,requireNode(next,id).id,{parentID:location.parent?.id||null,beforeID:following?.id||null});
+ // Reparenting normalizes sibling z values. Restore unaffected peers (some
+ // may be locked or user-edited); replacement pieces occupy the original slot.
+ for(const peer of location.siblings){const surviving=find(next,peer.id);if(surviving)surviving.zIndex=peer.zIndex;}
+ for(const id of pieceIDs)requireNode(next,id).zIndex=location.node.zIndex??0;
+ return next;
 }
 
 function splitPhysicalPiece(doc,item,assets,transactionId,index){
@@ -72,11 +87,11 @@ function splitPhysicalPiece(doc,item,assets,transactionId,index){
   const u=(crop.x-parentCrop.x)/parentCrop.width,v=(crop.y-parentCrop.y)/parentCrop.height,w=crop.width/parentCrop.width,h=crop.height/parentCrop.height,dx=(u+w/2-.5)*parent.width,dy=(v+h/2-.5)*parent.height;
   const defaultCenter={x:parentWorld.cx+dx*Math.cos(angle)-dy*Math.sin(angle),y:parentWorld.cy+dx*Math.sin(angle)+dy*Math.cos(angle),rotation:parentWorld.rotation};
   const position=part.place?placeFor(doc,part.place,crop.width*asset.physicalWidthMM,crop.height*asset.physicalHeightMM,defaultCenter.rotation-creationRotationFrame(doc.page,part.place,group?.id),group?.id):defaultCenter;
-  return {id:part.id,asset:doc.source.materials.find(row=>row.assetID===asset.id)?.alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:part.region.shape==='rect'?{type:'rect_crop',boxMM:[bounds.x,bounds.y,bounds.width,bounds.height]}:{type:'geometry',geometryMM:geometry},centerMM:[position.x/factor,position.y/factor],rotationDeg:position.rotation};
+  return {id:part.id,asset:doc.source.materials.find(row=>row.assetID===asset.id)?.alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:part.region.shape==='rect'?{type:'rect_crop',boxMM:[bounds.x,bounds.y,bounds.width,bounds.height]}:{type:'geometry',geometryMM:geometry},centerMM:[position.x/factor,position.y/factor],rotationDeg:position.rotation,z:parent.zIndex??10};
  });
  const commandId='v2-'+craftDigest([transactionId,index]).slice(7,31);
  const next=runMaterialAlgorithm(doc,'apply_craft_plan',{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders:item.keepRemainder!==false},assets);
- if(group)for(const piece of pieces)moveSceneNode(next.page,requireNode(next,piece.id).id,{parentID:group.id});
+ preserveReplacementStack(doc,item.target,next,pieces.map(piece=>piece.id));
  for(const piece of item.pieces)if(piece.place)finishPlacement(next,piece.id,piece.place);
  return next;
 }
@@ -84,7 +99,7 @@ function physicalCut(doc,{target,regions,keepRemainders=true},assets,transaction
  const parent=requireNode(doc,target);
  if(parent.type!=='material'||parent.tapeStrip)throw Error('实体裁切需要普通素材');
  assertNoLinkedDependents(doc.page,parent.id);
- const group=locate(doc.page.layers,target)?.parent,asset=assets.find(row=>row.id===parent.assetID);if(!asset)throw Error('素材来源不存在');
+ const asset=assets.find(row=>row.id===parent.assetID);if(!asset)throw Error('素材来源不存在');
  const source=itemSourceGeometry(parent,asset),crop=parent.cropRect||{x:0,y:0,width:1,height:1},factor=scale(doc.page),world=worldBox(doc.page,target),angle=world.rotation*Math.PI/180,alias=doc.source.materials.find(row=>row.assetID===asset.id)?.alias;
  if(!alias)throw Error('素材别名不存在');
  const pieces=regions.map(({id,geometry,treatments})=>{
@@ -92,17 +107,30 @@ function physicalCut(doc,{target,regions,keepRemainders=true},assets,transaction
   const inside=geometryIntersection(source,geometry);
   if(geometryArea(inside)<=0||Math.abs(geometryArea(inside)-geometryArea(geometry))>1e-5)throw Error('裁片区域超出当前素材');
   const b=geometryBounds(inside),u=(b.x/asset.physicalWidthMM-crop.x)/crop.width,v=(b.y/asset.physicalHeightMM-crop.y)/crop.height,w=b.width/(crop.width*asset.physicalWidthMM),h=b.height/(crop.height*asset.physicalHeightMM),dx=(u+w/2-.5)*parent.width,dy=(v+h/2-.5)*parent.height;
-  return {id,asset:alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:{type:'geometry',geometryMM:inside},centerMM:[(world.cx+dx*Math.cos(angle)-dy*Math.sin(angle))/factor,(world.cy+dx*Math.sin(angle)+dy*Math.cos(angle))/factor],rotationDeg:world.rotation,z:parent.zIndex||10,...(treatments?.length?{treatments}:{})};
+  return {id,asset:alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:{type:'geometry',geometryMM:inside},centerMM:[(world.cx+dx*Math.cos(angle)-dy*Math.sin(angle))/factor,(world.cy+dx*Math.sin(angle)+dy*Math.cos(angle))/factor],rotationDeg:world.rotation,z:parent.zIndex??10,...(treatments?.length?{treatments}:{})};
  });
  const commandId='v2-'+craftDigest([transactionId,index,'physical-cut']).slice(7,31);
  const next=runMaterialAlgorithm(doc,'apply_craft_plan',{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders},assets);
- if(group)for(const piece of pieces)moveSceneNode(next.page,requireNode(next,piece.id).id,{parentID:group.id});return next;
+ preserveReplacementStack(doc,target,next,pieces.map(piece=>piece.id));return next;
 }
 function tornEdgeStep(node,asset,edge){
  const crop=node.cropRect||{width:1,height:1},side=Math.min(crop.width*asset.physicalWidthMM,crop.height*asset.physicalHeightMM);
  return {op:'edge',style:'torn',edges:['top','right','bottom','left'],depth_mm:Math.max(.1,Math.min(side*.08,(edge.roughness??.2)*3)),period_mm:Math.max(.5,side*.16),seed:edge.seed};
 }
 const operationValidators=new Map();
+// AJV emits failures for every union alternative. Its first error may belong
+// to an unrelated geometry (e.g. saying a path's valid viewBox is forbidden).
+// Prefer a concrete, deeper field failure over a union's summary or a missing
+// field from another alternative. Keep the schema strict; only diagnostics change.
+function actionableSchemaError(errors){
+ const score=error=>{
+  const field=error.params.missingProperty||error.params.additionalProperty;
+  const depth=error.instancePath.split('/').filter(Boolean).length+(field?1:0);
+  const priority=['oneOf','anyOf','if'].includes(error.keyword)?-100:error.keyword==='required'?0:1;
+  return depth*10+priority;
+ };
+ return [...errors].sort((a,b)=>score(b)-score(a))[0];
+}
 export function validateCreationV2Commands(input){
  if(schema(input))return input;
  let error=schema.errors[0],prefix='';
@@ -111,7 +139,7 @@ export function validateCreationV2Commands(input){
   const entry=creationCommandRegistry[item?.op];
   if(!entry)throw Object.assign(Error('未知操作：'+item?.op),{code:'COMMAND_SCHEMA_INVALID',operationIndex:index,path:'/operations/'+index+'/op'});
   if(!operationValidators.has(item.op))operationValidators.set(item.op,new Ajv2020({strict:false,allErrors:true}).compile(selfContainedCreationSchema(entry.schema)));
-  const check=operationValidators.get(item.op);if(!check(item)){error=check.errors[0];prefix='/operations/'+index;break;}
+  const check=operationValidators.get(item.op);if(!check(item)){error=actionableSchemaError(check.errors);prefix='/operations/'+index;break;}
  }
  const field=error.params.missingProperty||error.params.additionalProperty||'',path=prefix+error.instancePath+(field?'/'+field:'');
  throw Object.assign(Error('commands'+path+' '+error.message+'；使用 describe 查询参数。'),{code:'COMMAND_SCHEMA_INVALID',path,...(prefix?{operationIndex:Number(prefix.split('/')[2])}:{})});
@@ -150,8 +178,8 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
    doc=editScene(doc,[{op:'delete',id:requireNode(doc,item.target).id}],assets);
   }else if(item.op==='group.create'){
-   const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:groupBox(doc,targets);
-   doc=editScene(doc,[{op:'group',ids:targets,id:item.id,name:item.id,spatial:true,layoutBox:bounds}],assets);doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
+   const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:undefined;
+   doc=editScene(doc,[{op:'group',ids:targets,id:item.id,name:item.id,layoutBox:bounds}],assets);doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(item.op==='group.compose'){
    if(find(doc,item.id))throw Error('组合编号已经存在');
    const group={id:item.id,type:'group',name:item.id,children:[],localTransform:[1,0,0,1,0,0],layoutBox:item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:item.parent&&requireNode(doc,item.parent).layoutBox?{...requireNode(doc,item.parent).layoutBox}:{width:doc.page.canvas.width,height:doc.page.canvas.height},opacity:1,blendMode:'normal',zIndex:500};
@@ -214,7 +242,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   }else if(item.op==='material.weave'){
    if(requireNode(doc,item.strip).type!=='material')throw Error('穿插纸条必须是实体素材');
    const through=item.through.map(entry=>{const target=requireNode(doc,entry.target);if(target.type!=='material')throw Error('穿插目标必须是实体素材');const hole=target.craftWindowIDs?.indexOf(entry.window)??-1;if(hole<0)throw Error('穿插引用的开窗不存在');return {target:target.creativePieceID||target.id,hole,sideAfter:entry.sideAfter};});
-   attachSceneV2(doc.page);compileTwoHoleWeaves(doc.page,[{piece:item.strip,through}]);
+   applySceneWeave(doc.page,requireNode(doc,item.strip).id,through.map(entry=>({...entry,target:requireNode(doc,entry.target).id})),{policy:AI_SCENE_POLICY});
   }else if(item.op==='material.decision'){
    assetFor(doc,assets,item.asset);doc.materialDecisions=(doc.materialDecisions||[]).filter(row=>row.asset!==item.asset);doc.materialDecisions.push({asset:item.asset,choice:item.choice,reason:item.reason});
   }else if(item.op==='page.update'){

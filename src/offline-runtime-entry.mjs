@@ -7,11 +7,12 @@ async function main(){
  const command=process.argv[2];
  if(process.argv.includes('--help')){
   const usage={
-   help:'help [topic]',describe:'describe <operation|topic> [...] [--full]',graphics:'graphics help',info:'info',fonts:'fonts',
+   brief:'brief（任务摘要，不展开来源快照）',guide:'guide [专题或风格 ...]（按需创作方法；无参数列出目录）',
+   help:'help [topic]',describe:'describe <operation|topic> [...] [--full]',graphics:'graphics help',info:'info',fonts:'fonts [--full]',
    'design-check':'design-check', 'self-test':'self-test',begin:'begin work/<name>.json',
    check:'check work/<name>.json',apply:'apply work/<name>.json',
    preview:'preview [--commands work/<name>.json] [--full]（默认只返回图像路径，详细诊断保存到文件）',
-   inspect:'inspect',review:'review pass|fail',pack:'pack'
+   inspect:'inspect [--full]（默认返回毫米位置和必要样式；--full 返回完整 Scene）',review:'review pass|fail',pack:'pack'
   };
   if(!usage[command])throw Object.assign(Error('未知工作台命令'),{code:'UNKNOWN_COMMAND'});
   process.stdout.write(JSON.stringify({ok:true,command,usage:usage[command],readOnly:true})+'\n');
@@ -20,7 +21,7 @@ async function main(){
  const args=process.argv.slice(3).filter(value=>value!=='--full');
  if(command==='preview'&&args[0]==='--commands'&&(!args[1]||args[1].startsWith('--')))
   throw Object.assign(Error('preview --commands 需要 work 目录中的命令文件路径'),{code:'COMMAND_PATH_INVALID'});
- const arg=command==='describe'?args:command==='preview'&&args[0]==='--commands'?args[1]:command==='review'&&args[0]==='--result'?args[1]:args[0];
+ const arg=['describe','guide'].includes(command)?args:command==='preview'&&args[0]==='--commands'?args[1]:command==='review'&&args[0]==='--result'?args[1]:args[0];
  if(command==='begin'&&process.argv.slice(4).some(value=>value.startsWith('--protocol=')&&value!=='--protocol=2'))throw Object.assign(Error('只接受统一协议 2'),{code:'COMMAND_PROTOCOL_INVALID'});
  await runV3(task,command,arg,{full:process.argv.includes('--full')});
 }

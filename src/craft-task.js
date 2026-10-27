@@ -2,10 +2,11 @@ import {materialSourceSnapshot,assetFromSourceSnapshot,assetSourceRevision,sameM
 import {craftSceneHash,craftSceneState,craftDigest} from './craft-fingerprint.js';
 import {craftAssert} from './craft-errors.js';
 import {attachSceneV2,validateSceneExtensions,sceneLayerEntries} from './scene-v2.js';
+import {sceneMaterialIDs} from './creation-sources.js';
 
 export function freezeCraftTask(source,draft,assets){
  const ids=new Set(source.materials.map(m=>m.assetID));
- craftAssert((draft.items||[]).every(item=>ids.has(item.assetID)),'MISSING_BASE_SOURCE','当前草稿有未加入本次素材表的实体；请先补齐来源');
+ craftAssert(sceneMaterialIDs(draft).every(id=>ids.has(id)),'MISSING_BASE_SOURCE','当前草稿有未加入本次素材表的实体；请先补齐来源');
  source.sourceSnapshots=source.materials.map(({assetID})=>{
   const asset=assets.find(a=>a.id===assetID);craftAssert(asset,'MISSING_SOURCE','任务素材缺失');return materialSourceSnapshot(asset);
  });

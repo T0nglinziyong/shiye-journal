@@ -4,7 +4,7 @@ import {prepareMaterialPreviews} from './creative-previews.js';
 import {commitAIDraft} from './ai-run-target.js';
 
 export function creativeRunParameters({project,draft,assets,ids,settings,prompt}){
-  return {...settings,draft,assets,aliases:materialAliases(ids),
+  return {...settings,title:project.title,draft,assets,aliases:materialAliases(ids),
     styles:project.styles||[draft.style],
     pagePurposes:project.purposes||[project.purpose||'自由创作'],
     contentPolicy:project.contentPolicy||'original',
@@ -40,7 +40,7 @@ export const creativeProgressText=progress=>'请求 '+progress.budget.totalReque
   '（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+
   progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';
 
-export const hasCreativeSceneChange=results=>results.some(r=>r.ok&&r.name!=='inspect_materials');
+export const hasCreativeSceneChange=results=>results.some(r=>r.ok&&r.changed===true);
 
 export function createCreativeCheckpoint({getProject,targetDraftID,expectedDraft,newDraftID,persist}){
   let currentID=targetDraftID,expected=structuredClone(expectedDraft),candidateCreated=false;

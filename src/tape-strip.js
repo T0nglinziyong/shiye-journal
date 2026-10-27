@@ -154,26 +154,26 @@ function renderPath(points,band){
   };
   return points.length>2?simplify(0,points.length-1):points;
 }
-function orientedImage(image,axis,flatCrop=null){
-  const key=JSON.stringify(flatCrop);
+function orientedImage(image,axis,flatCrop=null,createCanvas=()=>document.createElement('canvas')){
+  const key=JSON.stringify([axis,flatCrop]);
   let variants=preparedImages.get(image);if(!variants){variants=new Map();preparedImages.set(image,variants);}
   let prepared=variants.get(key);if(!prepared){
-    prepared={x:tapeFlatCanvas(image,axis,flatCrop)?.canvas};
+    prepared={x:tapeFlatCanvas(image,axis,flatCrop,{createCanvas})?.canvas};
     if(!prepared.x)return image;
     variants.set(key,prepared);
   }
   if(axis==='x')return prepared.x;
-  if(!prepared.y){const source=prepared.x,rotated=document.createElement('canvas');
+  if(!prepared.y){const source=prepared.x,rotated=createCanvas();
     rotated.width=source.height;rotated.height=source.width;
     const ctx=rotated.getContext('2d');ctx.translate(0,source.width);
     ctx.rotate(-Math.PI/2);ctx.drawImage(source,0,0);
     prepared.y=rotated;}
   return prepared.y;
 }
-export function paintTapeStrip(ctx,node,image){
+export function paintTapeStrip(ctx,node,image,{createCanvas}={}){
   const strip=node.tapeStrip;if(!strip)return false;
-  if(strip.version===2)return paintRibbon(ctx,node,image);
-  const texture=orientedImage(image,strip.axis,strip.flatCrop),w=texture.width,h=texture.height;
+  if(strip.version===2)return paintRibbon(ctx,node,image,{createCanvas});
+  const texture=orientedImage(image,strip.axis,strip.flatCrop,createCanvas),w=texture.width,h=texture.height;
   const sx=node.width/strip.baseWidth,sy=node.height/strip.baseHeight,
     band=strip.bandWidthScene*Math.sqrt(sx*sy),points=renderPath(strip.points.map(([u,v])=>
       [(u-.5)*node.width,(v-.5)*node.height]),band);
@@ -268,8 +268,8 @@ function paintStraightRibbon(ctx,strip,texture,start,end){
     strip.sourceOffsetMM+(mode==='stretch'?strip.sourceWindowMM:strip.pathLengthMM));
   ctx.restore();return true;
 }
-function paintRibbon(ctx,node,image){
-  const strip=node.tapeStrip,texture=orientedImage(image,strip.axis,strip.flatCrop);
+function paintRibbon(ctx,node,image,{createCanvas}={}){
+  const strip=node.tapeStrip,texture=orientedImage(image,strip.axis,strip.flatCrop,createCanvas);
   const raw=strip.points.map(([u,v])=>[(u-.5)*node.width,(v-.5)*node.height]);
   if(raw.length<2||!texture.width||!texture.height)return false;
   if(raw.length===2)return paintStraightRibbon(ctx,strip,texture,raw[0],raw[1]);

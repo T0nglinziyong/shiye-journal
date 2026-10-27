@@ -12,32 +12,41 @@ export function setDraftPaperSize(d,ratio){
   if(!size)throw Error('纸张规格无效');
   const before=d.canvas,after=canvasSize(d.pageMode,ratio),oldHeightMM=d.physicalPageHeightMM||297;
   const oldScale=oldHeightMM/before.height,newScale=size.height/after.height;
-  const move=(item)=>{
-    if(Number.isFinite(item.x))item.x=after.width/2+(item.x-before.width/2)*oldScale/newScale;
-    if(Number.isFinite(item.y))item.y=after.height/2+(item.y-before.height/2)*oldScale/newScale;
+  const move=(item,local=false)=>{
+    if(Number.isFinite(item.x))item.x=local?item.x*oldScale/newScale:after.width/2+(item.x-before.width/2)*oldScale/newScale;
+    if(Number.isFinite(item.y))item.y=local?item.y*oldScale/newScale:after.height/2+(item.y-before.height/2)*oldScale/newScale;
     if(Number.isFinite(item.width))item.width*=oldScale/newScale;
     if(Number.isFinite(item.height))item.height*=oldScale/newScale;
   };
   // One Scene v2 tree owns all visible geometry. Resizing the page must
   // preserve physical coordinates for ink, typography and shapes as well as
   // real inventory items; otherwise those layers drift away from their paper.
-  const transform=(nodes)=>{
+  const transform=(nodes,local=false)=>{
     for(const node of nodes){
-      if(node.type==='group'){transform(node.children||[]);continue;}
+      if(node.type==='group'){
+        if(node.layoutBox){node.layoutBox.width*=oldScale/newScale;node.layoutBox.height*=oldScale/newScale;}
+        if(node.localTransform){
+          const origin={x:node.localTransform[4],y:node.localTransform[5]};move(origin,local);
+          node.localTransform[4]=origin.x;node.localTransform[5]=origin.y;
+          transform(node.children||[],true);
+        }else transform(node.children||[],local);
+        continue;
+      }
       if(node.type==='ink'){
         node.points=(node.points||[]).map(point=>({
           ...point,
-          x:after.width/2+(point.x-before.width/2)*oldScale/newScale,
-          y:after.height/2+(point.y-before.height/2)*oldScale/newScale
+          x:local?point.x*oldScale/newScale:after.width/2+(point.x-before.width/2)*oldScale/newScale,
+          y:local?point.y*oldScale/newScale:after.height/2+(point.y-before.height/2)*oldScale/newScale
         }));
         if(Number.isFinite(node.width))node.width*=oldScale/newScale;
         continue;
       }
-      move(node);
+      move(node,local);
       if(node.type==='material'&&node.generationBaseline)move(node.generationBaseline);
       if(node.type==='text'){
         scaleTextEffects(node,oldScale/newScale);
-        for(const key of ['fontSize','letterSpacing','lineSpacing','fixedLineHeight','paragraphSpacing'])
+        if(Number.isFinite(node.textLayout?.minimumHeight))node.textLayout.minimumHeight*=oldScale/newScale;
+        for(const key of ['fontSize','letterSpacing','lineSpacing','fixedLineHeight','paragraphSpacing','additionalLineSpacing','curveHeight'])
           if(Number.isFinite(node[key]))node[key]*=oldScale/newScale;
       }
       if(node.type==='shape'&&Number.isFinite(node.lineWidth))node.lineWidth*=oldScale/newScale;

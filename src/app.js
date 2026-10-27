@@ -1,3 +1,10 @@
+import {applySceneWeave} from './scene-weave-edit.js';
+import {applyInspectorMask} from './scene-mask-edit.js';
+import {createEditorLettering,reflowEditorLettering} from './editor-lettering.js';
+import {applyInspectorLayout} from './editor-layout-model.js';
+import {creativeSourceIDs,assertCreativeSources} from './creation-sources.js';
+import {inspectorSelection,applyInkInspectorChange,applyGroupInspectorChange} from './editor-inspector-model.js';
+import {canStartCreation} from './creation-methods.js';
 import {configureJournalFontLoader} from './journal-fonts.js';
 import {styleFor} from './scene-node-properties.js';
 configureJournalFontLoader(()=>import('@fontsource/ma-shan-zheng/chinese-simplified-400.css'));
@@ -13,7 +20,7 @@ import {importDefaultTitle} from './import-default-names.js';
 import {materialKindName} from './material-taxonomy.js';
 import {withCreativePresetAssets,isCreativePreset} from './creative-presets.js';
 import {advancedShapeControls,shapeRepeatCountPatch,validateShapeOptions} from './advanced-shape-options.js';
-import {parseEditableGeometry} from './editable-geometry.js';
+import {applyInspectorVectorGeometry,applyInspectorVectorStyle} from './editor-vector-geometry.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
@@ -29,7 +36,7 @@ import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
-import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
+import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable} from './scene-model.js';
 import {reconcileManualSceneMove,solveSceneLayout} from './scene-layout.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
@@ -986,8 +993,17 @@ function bindPage({partial=false}={}){
 
 }
 function updateEditorInspector(id,value){
-  const d=current(),entry=d&&editorEntry(d).find(item=>item.value.id===state.selected);
+  const d=current(),entry=inspectorSelection(d,state.selected);
   if(!d)return;
+  if(entry?.kind==='group'){
+    checkpoint();if(applyGroupInspectorChange(d,entry.value.id,id,value)){saveProject();if(!state.inspectorSession)render();}
+    return;
+  }
+  if(entry?.kind==='ink'){
+    checkpoint();
+    if(applyInkInspectorChange(d,entry.value.id,id,value)){saveProject();if(!state.inspectorSession)render();}
+    return;
+  }
   if(id.startsWith('inspector-tape-')){
     if(entry?.kind!=='material'||!entry.value.tapeStrip)throw Error('请先选择胶带段');
     const record=asset(entry.value.assetID),node=entry.value,strip=node.tapeStrip;
@@ -1002,14 +1018,9 @@ function updateEditorInspector(id,value){
     checkpoint();reshapeEditableTape(d,node.id,record,points,options,state.assets,{policy:USER_SCENE_POLICY});saveProject();
     if(!state.inspectorSession)render();return;
   }
-  if(['inspector-material-geometry','inspector-vector-mask'].includes(id)){
+  if(id==='inspector-material-geometry'){
     if(!entry)throw Error('请先选择一个图层');
     let parsed;try{parsed=JSON.parse(value);}catch{throw Error('请输入合法的 JSON 几何数据');}
-    if(id==='inspector-vector-mask'){
-      if(parsed!==null)validateVectorMask(parsed);
-      checkpoint();applySceneNodePatch(d,entry.value.id,parsed===null?{vectorMask:undefined,vectorMaskHistory:undefined}:{vectorMask:parsed},{policy:USER_SCENE_POLICY});
-      saveProject();if(!state.inspectorSession)render();toast('蒙版已应用');return;
-    }
     if(entry.kind!=='material')throw Error('请选择实体素材');
     if(!confirm('确认修改这件素材的实体裁片几何？操作仍会检查来源范围和材料用量。'))return;
     const confirmation=confirmSceneCapability([findSceneNode(d,entry.value.id)],'material.geometry');
@@ -1059,10 +1070,6 @@ function updateEditorInspector(id,value){
       if(['rows','columns','count'].includes(option))Object.assign(values,shapeRepeatCountPatch(entry.value,option,next));
       else values.shapeOptions={...entry.value.shapeOptions,[option]:next};
       validateShapeOptions(entry.value.kind,values.shapeOptions);changed=true;
-    }else if(id==='inspector-vector-geometry'&&entry.kind==='shape'){
-      if(!Array.isArray(value)||!(entry.value.vectorLayers?.length||entry.value.vectorPaths?.length))return;
-      const geometryKind=entry.value.vectorLayers?.length?'layers':'paths';
-      values[geometryKind==='layers'?'vectorLayers':'vectorPaths']=parseEditableGeometry(JSON.stringify(value),geometryKind);changed=true;
     }else if(id==='inspector-fill'&&entry.kind==='shape'&&(value===null||color.test(value))){values.fill=value;changed=true;}
     else if(id==='inspector-stroke'&&entry.kind==='shape'&&(value===null||color.test(value))){values.stroke=value;changed=true;}
     else if(id==='inspector-stroke-dash'&&entry.kind==='shape'&&['solid','dash','dot'].includes(value)){
@@ -1326,7 +1333,7 @@ async function runAppAction(action,id,value){try{
     break;
   }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets});break;
-  case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';render();}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
+  case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';await switchImportRecord(state.importIndex,true);}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-continue':if(state.importStep==='done'){resetImportBatch();render();}break;
   case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;discardPaperPreview();render();break;case 'apply-paper-preview':await applyPaperPreview();break;
@@ -1603,6 +1610,40 @@ async function runAppAction(action,id,value){try{
       selectedID:state.selected});
     state.fabricInspectorOpen=true;render();break;
   }
+  case 'fabric-inspector-select':{
+    if(!state.inspectorSession||!findSceneNode(current(),id))break;
+    flushInspectorSnapshot();state.selected=id;state.multiSelected=[id];render();break;
+  }
+  case 'fabric-inspector-weave':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applySceneWeave(page,state.selected,id,{policy:USER_SCENE_POLICY});saveProject();break;
+  }
+  case 'fabric-inspector-mask':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorMask(page,state.selected,id,state.assets);saveProject();break;
+  }
+  case 'fabric-inspector-vector-style':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorVectorStyle(page,state.selected,id);saveProject();break;
+  }
+  case 'fabric-inspector-vector':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorVectorGeometry(page,state.selected,id);saveProject();break;
+  }
+  case 'fabric-inspector-lettering':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();reflowEditorLettering(page,state.selected,id);saveProject();break;
+  }
+  case 'fabric-add-lettering':{
+    const page=current();if(!page)break;
+    checkpoint();const node=createEditorLettering(page,uid(),id);
+    state.selected=node.id;state.multiSelected=[node.id];state.tool='select';
+    saveProject();render();break;
+  }
+  case 'fabric-inspector-layout':{
+    const page=current();if(!page||!state.inspectorSession||!state.selected)break;
+    checkpoint();applyInspectorLayout(page,state.selected,id);saveProject();break;
+  }
   case 'fabric-inspector-save':{
     const session=state.inspectorSession;if(!session)break;
     flushInspectorSnapshot();
@@ -1638,7 +1679,7 @@ async function runAppAction(action,id,value){try{
     render();break;
   }
   case 'fabric-paint-effects':{
-    const d=current(),entry=editorEntry(d).find(item=>item.value.id===state.selected),style=id;
+    const d=current(),entry=inspectorSelection(d,state.selected),style=id;
     if(!style||typeof style!=='object'||Object.keys(style).some(key=>!['outline','gradient','shadow'].includes(key)))throw Error('绘制效果参数无效');
     const type=['text','shape','ink'].includes(entry?.kind)?entry.kind:'text',values=styleFor(type,style,d,entry?.value||state.textDefaults||{});
     if(entry&&['text','shape','ink'].includes(entry.kind)){assertSceneEditable(d,entry.value.id);checkpoint();applySceneNodePatch(d,entry.value.id,values,{policy:USER_SCENE_POLICY});saveProject();}
@@ -2214,9 +2255,9 @@ function captureMatchingDirection(){
   state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;
   state.matchRatio=view.querySelector('#match-ratio')?.value||'a4';normalizeMatchingDirection(state);
 }
-function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';return p;}
+function createMatchingProject(automatic=true){const scope=matchingScope();if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';return p;}
 async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
-  if(!rebuildSnapshot&&!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
+  if(!rebuildSnapshot&&!canStartCreation(state.matchCreationMode,matchingScope().candidateAssetIDs.length)){toast('请先选择素材');return;}
   captureMatchingDirection();
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
   const timing={},report={cacheHits:0,covers:0,materials:0};
@@ -2294,7 +2335,7 @@ async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
     };
     openOverlay(createElement(OfflineHandoffReady,{result,project:p,diagnostics,
       onClose:closeOverlay,onCopy:copyPrompt,onShare:sharePackage,
-      onDownload:()=>{download(result.blob,result.filename);prefetchForImport();},
+      onDownload:prefetchForImport,
       onImportFile:()=>{offlineSnapshotProject=p;creationResultInput.click();},
       onImportText:importOfflineText,onPaste:()=>readClipboardText(navigator.clipboard)}));
   }catch(error){if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);closeOverlay();}}finally{if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
@@ -2381,8 +2422,9 @@ async function startAICreation(){
  if(state.aiBusy)return;
  const targetProject=state.activeProject,targetDraft=current();if(!targetProject||!targetDraft)return;
  const accountID=state.accountId,sourceProject=structuredClone(targetProject),sourceDraft=structuredClone(targetDraft),assetsSnapshot=structuredClone(state.assets),prompt=state.aiPrompt,cfg=structuredClone(state.aiSettings),{key,model}=cfg;
- const findAsset=id=>assetsSnapshot.find(a=>a.id===id),pscope=targetProject.materialPriority;
- const ids=[...new Set([...(targetProject.candidateAssetIDs||[]),...(pscope?[]:state.basket),...(sourceDraft.items||[]).map(x=>x.assetID)])].filter(id=>findAsset(id)&&!pscope?.excluded?.includes(id));
+ const findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+ const ids=creativeSourceIDs({project:sourceProject,draft:sourceDraft,basket:state.basket});
+ try{assertCreativeSources(ids,assetsSnapshot);}catch(error){state.aiProgress=error.message;render();return;}
  if(cfg.deliveryMode==='image'){
   sourceProject.candidateAssetIDs=ids;sourceProject.creationMode='draw';sourceProject.activeDraftID=sourceDraft.id;
   if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
@@ -2392,7 +2434,7 @@ async function startAICreation(){
   finally{if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
   return;
  }
- if(!key){state.aiProgress='请先在设置 → AI 与创作保存所选服务的 API 密钥。';render();return;}if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
+ if(!key){state.aiProgress='请先在设置 → AI 与创作保存所选服务的 API 密钥。';render();return;}
  let recorder;const projectID=targetProject.id,controller=new AbortController();
  const assertRun=createCreativeRunGuard({accountID,ids,assets:assetsSnapshot,getAccount:()=>state.accountId,getAsset:id=>state.assets.find(a=>a.id===id),signal:controller.signal});
  const checkpoints=createCreativeCheckpoint({getProject:()=>state.projects.find(item=>item.id===projectID),targetDraftID:sourceDraft.id,expectedDraft:sourceDraft,newDraftID:uid,

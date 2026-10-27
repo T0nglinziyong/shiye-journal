@@ -308,3 +308,24 @@ test('group initial selection uses transformed member frames and excludes the em
   assert.equal(selectableFabricObjectAt(canvas,group,member,member),true);
   await canvas.dispose();
 });
+
+test('nested rotated spatial group masks use the stable local frame rather than page or child bounds',async()=>{
+ const {rigidMatrix,transformPoint,spatialPath}=await import('../src/scene-spatial.js');
+ const mask={outer:[[0,0],[.75,0],[.75,1],[0,1]],holes:[[[.3,.3],[.5,.3],[.5,.5],[.3,.5]]]};
+ const inner={id:'inner',type:'group',localTransform:rigidMatrix(40,30,-25),layoutBox:{width:160,height:120},vectorMask:mask,children:[
+  {id:'rectangle',type:'shape',kind:'rectangle',x:25,y:5,width:220,height:180,fill:'#336699',stroke:null,lineWidth:0}]};
+ const outer={id:'outer',type:'group',localTransform:rigidMatrix(200,200,40),layoutBox:{width:300,height:280},children:[inner]};
+ const page={sceneVersion:2,canvas:{width:450,height:450},paperColor:'#ffffff',paperPattern:'plain',layers:[outer]};
+ const display=new fabric.StaticCanvas(null,{width:450,height:450,backgroundColor:'#ffffff'}),projection=createFabricSceneBridge(fabric,{canvasSize:page.canvas});
+ try{
+  display.add(await projection.fromNode(outer));display.renderAll();
+  const expected=(await renderSceneCanvas(page,{createCanvas,waitForFonts:false,loadShapeImage:uri=>loadImage(Buffer.from(decodeURIComponent(uri.split(',')[1]).replace('<svg ','<svg width="1000" height="1000" ')))})).canvas;
+  const matrix=spatialPath(page.layers,'inner').world;
+  for(const [x,y,painted] of [[-60,0,true],[10,25,true],[65,0,false],[-16,-12,false],[0,-75,false]]){
+   const p=transformPoint(matrix,x,y),px=Math.round(p.x),py=Math.round(p.y);
+   const actual=[...display.getContext().getImageData(px,py,1,1).data],target=[...expected.getContext('2d').getImageData(px,py,1,1).data];
+   assert.deepEqual(target,painted?[51,102,153,255]:[255,255,255,255]);assert.deepEqual(actual,target,`local mask at ${x},${y}`);
+  }
+  delete inner.layoutBox;await assert.rejects(projection.fromNode(outer),/layoutBox/);
+ }finally{await display.dispose();}
+});

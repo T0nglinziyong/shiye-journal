@@ -45,13 +45,14 @@ test('current default uses GPT vision and current provider settings only',()=>{
  assert.equal(normalizeAISettings({provider:'custom',endpoint:'https://example.invalid/chat',model:'mine',key:'value'}).endpoint,'https://example.invalid/chat');
  assert.equal(normalizeAISettings({finalVisualReview:false}).finalVisualReview,false);
 });
-test('direct JSON mode rejects a craft plan; agent mode runs the physical plan without weakening v2',()=>{
- const a=asset(),d=project().drafts[0],p=plan(d,a),direct=creativeProtocol({...normalizeAISettings(),generationMode:'direct'});
- assert.throws(()=>direct.calls({content:JSON.stringify(p)},1),/缺少字段|合同不合法/);
- const agent=creativeProtocol({...normalizeAISettings(),generationMode:'agent',transport:'json'});
- const calls=agent.calls({content:JSON.stringify({tools:[{name:'apply_craft_plan',arguments:p}]})},1);
- assert.equal(calls.length,1);assert.equal(calls[0].function.name,'apply_craft_plan');
- ok(run({tools:calls},d,a));
+test('provider JSON uses only unified commands; material plans remain internal algorithms',()=>{
+ const a=asset(),d=project().drafts[0],p=plan(d,a),protocol=creativeProtocol({...normalizeAISettings(),transport:'json'});
+ assert.throws(()=>protocol.calls({content:JSON.stringify(p)},1),/仅接受/);
+ const command={protocolVersion:2,transactionId:'first',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[{op:'page.update',paperColor:'#ffffff'}]};
+ const calls=protocol.calls({content:JSON.stringify({tools:[{name:'creation_apply',arguments:command}]})},1);
+ assert.equal(calls[0].function.name,'creation_apply');assert.deepEqual(JSON.parse(calls[0].function.arguments),command);
+ // Internal source-processing implementation is still exercised separately.
+ ok(run(p,d,a));
 });
 test('the one current offline plan contract accepts multimodal observations',()=>{
  const a=asset(),d=project().drafts[0],p=plan(d,a);

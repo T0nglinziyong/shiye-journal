@@ -106,3 +106,40 @@ test('separate tape segments allocate independent units, paper ruling is actual 
  assert.equal(buildMaterialLedger(attachSceneV2(d.page),assets).rolls[0].pieces.length,2);
  approx(d.page.paperRuling.rowPositions[0]*d.page.physicalPageHeightMM,6);
 });
+
+test('inspector and AI display masks share geometry without changing material occupancy',async()=>{
+ const {applyInspectorMask,maskRequest,fullDisplayMask,maskRingPreset}=await import('../src/scene-mask-edit.js');
+ const {run,assets}=await fixture();const initial=run([add(),{op:'graphic.add',id:'veil',geometry:{kind:'rect'},size:{width:40,height:30,unit:'mm'},place:at()}]);
+ for(const target of ['paper','veil']){
+  const request=maskRequest({...fullDisplayMask(),holes:[maskRingPreset('rect',true)]});
+  const ai=run([{op:'layer.mask',target,...request}],initial),manual=structuredClone(initial);
+  const before=buildMaterialLedger(attachSceneV2(structuredClone(initial.page)),assets);
+  applyInspectorMask(manual.page,node(manual,target).id,request,assets);
+  assert.deepEqual(node(ai,target).vectorMask,node(manual,target).vectorMask);
+  assert.deepEqual(buildMaterialLedger(attachSceneV2(manual.page),assets),before);
+  assert.equal(node(manual,'paper').assetID,node(initial,'paper').assetID);
+  assert.deepEqual(node(manual,'paper').cropRect,node(initial,'paper').cropRect);
+ }
+});
+
+test('manual and Command title reflow share editable geometry and rendered pixels',async()=>{
+ const {reflowEditorLettering}=await import('../src/editor-lettering.js');
+ const {run}=await fixture([]);const initial=run([{op:'text.lettering',id:'title',content:'去看看',place:at(),letters:[{index:1,rotationDeg:8,style:{color:'#aa5533'}}]}]);
+ const change={content:'去走走吧',gapMm:2,letters:[{index:1,offsetMm:[1,2],rotationDeg:12}]};
+ const ai=run([{op:'text.reflow',target:'title',...change}],initial),manual=structuredClone(initial);
+ reflowEditorLettering(manual.page,'title',change);
+ assert.deepEqual(node(ai,'title').children.map(n=>[n.id,n.content,n.x,n.y,n.fontSize,n.rotation,n.color]),node(manual,'title').children.map(n=>[n.id,n.content,n.x,n.y,n.fontSize,n.rotation,n.color]));
+ const render=async p=>(await renderSceneCanvas(p,{createCanvas:()=>createCanvas(1,1),waitForFonts:false})).canvas.toBuffer('image/png');
+ assert.deepEqual(await render(ai.page),await render(manual.page));
+});
+
+test('visual vector edit and Command geometry update render the same current Scene',async()=>{
+ const {vectorEditorState,moveVectorHandle,applyInspectorVectorGeometry}=await import('../src/editor-vector-geometry.js');
+ const {run}=await fixture([]),geometry={kind:'path',viewBox:[0,0,100,100],paths:[{d:'M10 50 C25 5 75 95 90 50',style:{stroke:'#884422',fill:null}}]};
+ const initial=run([{op:'graphic.add',id:'curve',geometry,size:{width:50,height:30,unit:'mm'},place:at()}]);
+ const state=moveVectorHandle(vectorEditorState(node(initial,'curve')),0,1,[30,8]);
+ const ai=run([{op:'layer.update',target:'curve',geometry:{...geometry,paths:[{...geometry.paths[0],d:state.value[0].d}]}}],initial),manual=structuredClone(initial);
+ applyInspectorVectorGeometry(manual.page,'curve',state);assert.deepEqual(node(manual,'curve').svgPaths,node(ai,'curve').svgPaths);
+ const render=async p=>(await renderSceneCanvas(p,{createCanvas:()=>createCanvas(1,1),loadShapeImage:async(url,f)=>loadImage(Buffer.from(decodeURIComponent(url.split(',').slice(1).join(',')).replace('<svg ',`<svg width="${f.width}" height="${f.height}" `))),waitForFonts:false})).canvas.toBuffer('image/png');
+ assert.deepEqual(await render(manual.page),await render(ai.page));
+});

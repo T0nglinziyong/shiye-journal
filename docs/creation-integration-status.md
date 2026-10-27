@@ -6,7 +6,7 @@
 
 ## 唯一执行路径
 
-创作包只接受协议 2 的 37 个当前操作。没有 `native.*`、`advanced.v1.*`、协议 1 事务或 xMm/font_size/set 的外部别名。`src/v3-commands.js` 已删除，执行器不再制造协议 1 封套。
+创作包只接受协议 2 的 30 个当前操作。没有 `native.*`、`advanced.v1.*`、协议 1 事务或 xMm/font_size/set 的外部别名。`src/v3-commands.js` 已删除，执行器不再制造协议 1 封套。
 
 `creation-command-spec.js` 是操作签名的唯一来源；公共坐标定义复用 common.schema。注册表生成验证 Schema、默认简明帮助、显式 --full 帮助与固定配方。候选 static/operations.json 是历史设计资料，不在构建或执行链中。
 
@@ -14,7 +14,7 @@
 
 `creation-scene-core.js` 复用受保护的 Scene 编辑、真实素材几何与账本，不发明第二份场景。`creation-node-update.js` 统一属性和单位换算，`scene-text-layout.js` 统一文字重排。
 
-创建、layer.update、layer.update、text.fit 共用文字测量规则。Scene 的 textLayout 保存 minimumHeight 和可选 lineHeightRatio；只改字体、内容、宽度不会遗忘高度意图。文字是完整内容，尺寸不够时增长；text.fit 不够时原子拒绝，不裁字。所有命令在更新尺寸之后计算锚点，随后求解 linked。
+创建、layer.update、text.fit 共用文字测量规则。Scene 的 textLayout 保存 minimumHeight 和可选 lineHeightRatio；只改字体、内容、宽度不会遗忘高度意图。文字是完整内容，尺寸不够时增长；text.fit 不够时原子拒绝，不裁字。所有命令在更新尺寸之后计算锚点，随后求解 linked。
 
 测量共享 Canvas 的 textLines 换行规则；编辑几何使用确定性估算字宽，最终 Canvas 按实际字体渲染。不能把几何一致性说成所有字体的逐像素一致性。人工 Fabric 的属性写回、文字保存、套索/组合/笔迹及检查器提交已逐步接入共享 Scene 内核；交互预览与输入法保持独立。原生字体/光标测量和纸张规格切换等尚未全面迁移，详见 [共享编辑内核](shared-editor-kernel.md)。
 

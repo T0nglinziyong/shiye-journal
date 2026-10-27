@@ -13,7 +13,7 @@ function cleanConstraint(node){
 }
 function checkSize(node,size){
  if(!['shape','text','ink'].includes(node.type))throw Error('持续尺寸不能缩放实体素材或组合');
- if(!size||Object.keys(size).some(k=>!['width','height','unit','reference','aspect','behavior'].includes(k))||size.unit!=='ratio'||size.behavior!=='linked'||typeof size.reference!=='string'||!/^((page(\.left|\.right)?)|parent|node:[A-Za-z][A-Za-z0-9._-]*)$/.test(size.reference))throw Error('持续尺寸须为显式 reference、ratio、linked');
+ if(!size||Object.keys(size).some(k=>!['width','height','unit','reference','aspect','behavior'].includes(k))||size.unit!=='ratio'||size.behavior!=='linked'||typeof size.reference!=='string'||!/^((page(\.left|\.right)?)|parent|node:[A-Za-z0-9][A-Za-z0-9._-]*)$/.test(size.reference))throw Error('持续尺寸须为显式 reference、ratio、linked');
  if(size.width===undefined&&size.height===undefined)throw Error('持续尺寸需要 width 或 height');
  for(const key of ['width','height'])if(size[key]!==undefined&&!(Number.isFinite(size[key])&&size[key]>0&&size[key]<=100000))throw Error('持续尺寸比例无效');
  if(size.aspect!==undefined&&!['free','preserve'].includes(size.aspect))throw Error('持续尺寸宽高比规则无效');
@@ -112,4 +112,35 @@ export function detachLinkedDependents(page,id){
   if(changed){cleanConstraint(node);result.push(node.id);}
  }
  return result;
+}
+
+// Reparenting changes the meaning of "parent". Keep the current resolved
+// geometry, then retain a live relation to the new parent instead of snapping
+// to coordinates expressed in the old frame.
+export function captureSceneParentChange(page,id){
+ const path=spatialPath(page.layers,id),size=path?.node.layoutConstraint?.size;
+ if(!path)throw Error('移动图层不存在');
+ const record={place:!!path.node.layoutConstraint?.place};
+ if(size?.reference==='parent'){
+  const ref=creationReferenceBox(page,'parent',path.ancestors.at(-1)?.id);
+  record.size={...(size.width===undefined?{}:{width:size.width*ref.w}),...(size.height===undefined?{}:{height:size.height*ref.h})};
+ }
+ return record;
+}
+export function rebindSceneParent(page,id,before){
+ const path=spatialPath(page.layers,id);if(!path)throw Error('移动图层不存在');
+ if(before.size){
+  const ref=creationReferenceBox(page,'parent',path.ancestors.at(-1)?.id);
+  for(const key of ['width','height'])if(before.size[key]!==undefined)path.node.layoutConstraint.size[key]=before.size[key]/ref[key==='width'?'w':'h'];
+ }
+ if(before.place)reconcileManualSceneMove(page,id,{deferSolve:true});
+}
+
+// Validate a destination before changing the tree, including direct primitive
+// callers outside the public structural transaction.
+export function assertSceneParentFrame(node,parent){
+ if(!parent)return;
+ if(['place','size'].some(key=>node.layoutConstraint?.[key]?.reference==='parent')&&
+  !(parent.layoutBox&&[parent.layoutBox.width,parent.layoutBox.height].every(v=>Number.isFinite(v)&&v>0)))
+  throw Error('跟随父组需要有效的 layoutBox，请先设置组合定位框');
 }

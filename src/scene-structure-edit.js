@@ -4,7 +4,7 @@
 import {attachSceneV2,assertSceneEditable,findSceneNode,groupSceneLayers,ungroupSceneLayers,moveSceneNode,removeSceneNode} from './scene-v2.js';
 import {solveSceneLayout,validateSceneLayout,LAYOUT_GEOMETRY_KEYS} from './scene-layout.js';
 import {AI_SCENE_POLICY,requireScenePolicy,assertSceneCapability,assertPolicyOwnership} from './scene-edit-policy.js';
-import {spatialPath,transformPoint,inverseMatrix} from './scene-spatial.js';
+import {spatialPath,transformPoint,inverseMatrix,convertNodeFrame} from './scene-spatial.js';
 
 export function sceneStructureTransaction(page,change,{policy=AI_SCENE_POLICY}={}){
  requireScenePolicy(policy);attachSceneV2(page);
@@ -28,11 +28,15 @@ export function sceneStructureTransaction(page,change,{policy=AI_SCENE_POLICY}={
  catch(error){page.layers=root;for(const [node,state,children] of states){for(const key of Object.keys(node))delete node[key];Object.assign(node,state);if(children)node.children=children;}
   for(const [array,values] of arrays)array.splice(0,array.length,...values);for(const [key,{exists,value}] of metadata)if(exists)page[key]=value;else delete page[key];throw error;}
 }
+export function assertStructureOwnership(page,targets,policy=AI_SCENE_POLICY){
+ requireScenePolicy(policy);
+ const inspect=node=>{assertPolicyOwnership(node,policy);node.children?.forEach(inspect);};
+ targets.filter(Boolean).forEach(id=>{const node=findSceneNode(page,id);if(!node)throw Error('图层不存在：'+id);inspect(node);});
+}
 export function editSceneStructure(page,operation,{policy=AI_SCENE_POLICY}={}){
  requireScenePolicy(policy);
  const targets=operation.targets||[operation.target];
- const inspect=node=>{assertPolicyOwnership(node,policy);node.children?.forEach(inspect);};
- targets.filter(Boolean).forEach(id=>{const node=findSceneNode(page,id);if(!node)throw Error('图层不存在：'+id);inspect(node);});
+ assertStructureOwnership(page,targets,policy);
  return sceneStructureTransaction(page,()=>{
   if(operation.kind==='group')return groupSceneLayers(page,operation.targets,operation.options);
   if(operation.kind==='ungroup')return ungroupSceneLayers(page,operation.target);
@@ -77,13 +81,15 @@ export function copyEditableScene(page,ids,makeID,{policy=AI_SCENE_POLICY,confir
    delete value.layoutConstraint;
    if(node.type==='material')value.manualVisualCopy=true;
    if(node.children){value.children=node.children.map(clone);value.children.forEach(child=>child.creativeGroupID=value.id);}
+   if(value.lettering?.slots)value.lettering.slots=value.lettering.slots.map(id=>remap.get(id)||id);
    return value;
   };
   return sources.map(source=>{
    const copy=clone(source),path=spatialPath(page.layers,source.id),parent=path.ancestors.at(-1);
    const localOffset=transformPoint(inverseMatrix(path.parentWorld),offset.x+path.parentWorld[4],offset.y+path.parentWorld[5]);
    if(copy.type==='group'){
-    const translate=nodes=>{for(const node of nodes){if(node.type==='group'&&node.localTransform){node.localTransform[4]+=localOffset.x;node.localTransform[5]+=localOffset.y;}else if(node.children)translate(node.children);else if(node.type==='ink')node.points=node.points.map(p=>({...p,x:p.x+localOffset.x,y:p.y+localOffset.y}));else{node.x+=localOffset.x;node.y+=localOffset.y;}}};
+    if(copy.vectorMask&&!copy.localTransform)convertNodeFrame(copy,path.parentWorld,path.parentWorld,page.canvas);
+    const translate=nodes=>{for(const node of nodes){if(node.type==='group'&&node.vectorMask&&!node.localTransform)convertNodeFrame(node,path.parentWorld,path.parentWorld,page.canvas);if(node.type==='group'&&node.localTransform){node.localTransform[4]+=localOffset.x;node.localTransform[5]+=localOffset.y;}else if(node.children)translate(node.children);else if(node.type==='ink')node.points=node.points.map(p=>({...p,x:p.x+localOffset.x,y:p.y+localOffset.y}));else{node.x+=localOffset.x;node.y+=localOffset.y;}}};
     if(copy.localTransform){copy.localTransform[4]+=localOffset.x;copy.localTransform[5]+=localOffset.y;}else translate(copy.children);
    }else if(copy.type==='ink')copy.points=copy.points.map(p=>({...p,x:p.x+localOffset.x,y:p.y+localOffset.y}));
    else{copy.x+=localOffset.x;copy.y+=localOffset.y;}

@@ -6,9 +6,9 @@ import {creationNode,creationNodes,creationLocation,sceneScale,editScene,insertS
 import {dimension,changedNodeProperties} from './creation-node-update.js';
 import {measureSceneText} from './scene-text-layout.js';
 import {creationReferenceBox,resolveCreationPlace} from './creation-placement.js';
-import {geometryToMask} from './craft-region-ops.js';
+import {sceneMaskPatch} from './scene-mask-edit.js';
 import {creationRegionGeometry} from './creation-region.js';
-import {normalizeGeometry,rectangleGeometry,geometryDifference,geometryIntersection,geometryBounds,transformGeometry} from './craft-topology.js';
+import {geometryBounds,transformGeometry} from './craft-topology.js';
 import {worldBox,setWorldPosition,spatialPath,inverseMatrix,transformPoint,rigidMatrix} from './scene-spatial.js';
 import {assertSceneEditable,attachSceneV2} from './scene-v2.js';
 import {solveCraftRelations} from './craft-relations.js';
@@ -49,16 +49,7 @@ export function applyCreationAdvanced(doc,item,assets,context){
   doc=editScene(doc,[{op:'replace-material',id:target.id,assetID:asset.id}],assets);
   return finishNode(doc,item.target,item,assets);
  }
- if(item.op==='layer.mask'){
-  if(target.type==='ink')throw Error('请将笔迹编组后设置组合遮罩');
-  if(item.mode==='clear')return patchSceneNode(doc,item.target,{vectorMask:undefined,vectorMaskHistory:undefined},assets);
-  if(target.type!=='material'&&item.region.space!=='local')throw Error('数字节点遮罩使用 local 坐标');
-  const box=worldBox(doc.page,target.id),asset=target.type==='material'?assets.find(a=>a.id===target.assetID):null;
-  const region=creationRegionGeometry(item.region,{sourceSize:asset?[asset.physicalWidthMM,asset.physicalHeightMM]:[box.w/s,box.h/s],localSize:[box.w/s,box.h/s],crop:asset?(target.cropRect||{x:0,y:0,width:1,height:1}):{x:0,y:0,width:1,height:1},output:'localRatio'});
-  const old=target.vectorMask?normalizeGeometry([[target.vectorMask.outer,...(target.vectorMask.holes||[])]]):rectangleGeometry(0,0,1,1);
-  const shape=item.mode==='subtract'?geometryDifference(old,region):item.mode==='intersect'?geometryIntersection(old,region):geometryIntersection(rectangleGeometry(0,0,1,1),region);
-  const {outer,holes}=geometryToMask(shape,1,1);return patchSceneNode(doc,item.target,{vectorMask:{outer,holes}},assets);
- }
+ if(item.op==='layer.mask')return patchSceneNode(doc,item.target,sceneMaskPatch(doc.page,target.id,item,assets),assets);
  if(item.op==='material.glyphKnockout'){
   if(target.type!=='material'||target.tapeStrip)throw Error('字形镂空需要普通实体素材');
   const asset=assets.find(a=>a.id===target.assetID),box=worldBox(doc.page,target.id),crop=target.cropRect||{x:0,y:0,width:1,height:1};

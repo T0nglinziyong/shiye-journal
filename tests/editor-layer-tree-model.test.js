@@ -15,6 +15,8 @@ test('same-parent drag before/after and group interior preserve explicit Scene m
  const d=draft();
  const to=layerMoveTarget(d,'A','C','after');moveSceneNode(d,'A',to);
  assert.equal(d.layers.at(-1).id,'A');
+ assert.throws(()=>groupSceneLayers(d,['A','B'],{id:'G'}),/顺序/);
+ moveSceneNode(d,'B',layerMoveTarget(d,'B','A','before'));
  groupSceneLayers(d,['A','B'],{id:'G'});
  const out=layerMoveTarget(d,'C','G','inside');moveSceneNode(d,'C',out);
  assert.equal(d.layers.find(n=>n.id==='G').children.at(-1).id,'C');

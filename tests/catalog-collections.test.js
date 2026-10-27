@@ -89,13 +89,10 @@ test('direct JSON and ZIP preserve crop, organic vectors, pen, marker, text and 
   const invalid=structuredClone(page);invalid.layers.find(n=>n.type==='ink').points[0].x=1.2;
   assert.throws(()=>applyToolCalls(invalid,source.drafts[0],[asset]),/合同不合法|缺少字段/);
 });
-test('snapshot prompt leaves composition open while editable prompt advertises layered methods',()=>{
-  const base=project('测试').drafts[0],image=buildCreativeMessages({draft:base,assets:[],aliases:{},generationMode:'direct',deliveryMode:'image'});
-  assert.match(image[0].content,/不设素材数量、留白、密度/);
-  assert.doesNotMatch(image[0].content,/每轮以实际画布/);
-  const editable=buildCreativeMessages({draft:base,assets:[],aliases:{},generationMode:'direct',deliveryMode:'json'});
-  assert.match(editable[0].content,/layers|ink/);
-  assert.match(editable[0].content,/文字围绕图片侧边/);
+test('editable prompt uses the unified gateway and real layered preview',()=>{
+ const base=project('测试').drafts[0],editable=buildCreativeMessages({draft:base,assets:[],aliases:{},deliveryMode:'json'});
+ assert.match(editable[0].content,/creation_apply/);assert.match(editable[1].content[0].text,/沿轮廓排字/);
+ assert.doesNotMatch(editable[0].content,/compose_direct_page|finish_design|ink_strokes/);
 });
 test('GPT image delivery uses actual image edits and only accepts returned PNG bytes',async()=>{
   const asset={id:'a1',title:'小纸片',kind:'paper',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
