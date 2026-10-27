@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
 import {sceneLassoBounds} from '../src/scene-lasso.js';
+import {worldBox} from '../src/scene-spatial.js';
 
 const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const viewportWidth=Number(process.env.SHIYE_TOUCH_WIDTH)||390;
@@ -134,12 +135,14 @@ try{
   await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:groupCenter.x+24,
     y:groupCenter.y+12,id:4,force:1}]});
   await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  const groupedAfter=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
-    .find(node=>node.id===selectedGroup.id)?.children?.some((node,index)=>
-      node.x>selectedGroup.children[index].x+10)))[0].drafts[0]
-    .layers.find(node=>node.id===selectedGroup.id);
-  assert.ok(groupedAfter.children.every((node,index)=>node.x>selectedGroup.children[index].x+10),
-    'Dragging an already selected group moves all its children');
+  const groupWorldBefore=worldBox(groupedBefore,selectedGroup.id);
+  const groupedAfterDraft=(await waitProjects(rows=>rows[0]?.drafts?.[0]&&
+    worldBox(rows[0].drafts[0],selectedGroup.id).cx>groupWorldBefore.cx+10))[0].drafts[0];
+  const groupedAfter=groupedAfterDraft.layers.find(node=>node.id===selectedGroup.id);
+  assert.ok(worldBox(groupedAfterDraft,selectedGroup.id).cx>groupWorldBefore.cx+10,
+    'Dragging an already selected group moves its world position');
+  assert.deepEqual(groupedAfter.children,selectedGroup.children,
+    'Dragging a group preserves its children in the group local frame');
   assert.equal(await evaluate('document.querySelector("#canvas-page").style.transform'),
     pageTransformBefore,'Dragging the selected group must not pan the paper');
   assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions[aria-label=组合操作]")'),
@@ -167,17 +170,22 @@ try{
   const beforeDrag=(await projects())[0].drafts[0],child=beforeDrag.layers
     .find(node=>node.type==='group').children.find(node=>node.id===childID);
   await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
+  const childWorldBefore=worldBox(beforeDrag,childID);
   const point=await evaluate(`(()=>{const canvas=document.querySelector('.upper-canvas');
-    const r=canvas.getBoundingClientRect();return {x:r.left+${child.x}*r.width/${beforeDrag.canvas.width},
-      y:r.top+${child.y}*r.height/${beforeDrag.canvas.height}}})()`);
+    const r=canvas.getBoundingClientRect();return {x:r.left+${childWorldBefore.cx}*r.width/${beforeDrag.canvas.width},
+      y:r.top+${childWorldBefore.cy}*r.height/${beforeDrag.canvas.height}}})()`);
   await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:3,force:1}]});
   await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x+24,y:point.y+12,id:3,force:1}]});
   await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  const movedRows=await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers.find(node=>node.type==='group')
-    ?.children.find(node=>node.id===childID)?.x>child.x+10);
-  const moved=movedRows[0].drafts[0].layers.find(node=>node.type==='group')
+  const movedRows=await waitProjects(rows=>rows[0]?.drafts?.[0]&&
+    worldBox(rows[0].drafts[0],childID).cx>childWorldBefore.cx+10);
+  const movedDraft=movedRows[0].drafts[0];
+  const moved=movedDraft.layers.find(node=>node.type==='group')
     .children.find(node=>node.id===childID);
-  assert.ok(moved.x>child.x+10,'Dragging a nested selection by touch persists its Scene position');
+  assert.ok(worldBox(movedDraft,childID).cx>childWorldBefore.cx+10,
+    'Dragging a nested selection by touch persists its world position');
+  assert.ok(Math.hypot(moved.x-child.x,moved.y-child.y)>10,
+    'Dragging a nested selection persists its local Scene position');
   await touch('[data-act="undo"]');
   const undone=await waitProjects(rows=>Math.abs(rows[0]?.drafts?.[0]?.layers
     .find(node=>node.type==='group')?.children.find(node=>node.id===childID)?.x-child.x)<1);

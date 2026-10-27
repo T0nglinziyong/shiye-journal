@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
 import {sceneLassoBounds} from '../src/scene-lasso.js';
+import {worldBox} from '../src/scene-spatial.js';
 
 const base=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const browser=await browserHarness('shiye-fabric-product',base+'/');
@@ -441,20 +442,26 @@ try{
     .children.find(child=>child.id===shapes[0].id);
   const nestedRect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
   const nestedDraft=(await projects())[0].drafts[0];
-  const nestedAt={x:nestedRect.left+nestedBefore.x*nestedRect.width/nestedDraft.canvas.width,
-    y:nestedRect.top+nestedBefore.y*nestedRect.height/nestedDraft.canvas.height};
+  const nestedGroupBefore=structuredClone(nestedDraft.layers.find(layer=>layer.type==='group').localTransform);
+  const nestedWorldBefore=worldBox(nestedDraft,shapes[0].id);
+  const nestedAt={x:nestedRect.left+nestedWorldBefore.cx*nestedRect.width/nestedDraft.canvas.width,
+    y:nestedRect.top+nestedWorldBefore.cy*nestedRect.height/nestedDraft.canvas.height};
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
     clickCount:1,...nestedAt});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
     x:nestedAt.x+24,y:nestedAt.y+8});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     clickCount:1,x:nestedAt.x+24,y:nestedAt.y+8});
-  const nestedAfter=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
-    ?.find(layer=>layer.type==='group')?.children.find(child=>child.id===shapes[0].id)
-    ?.x>nestedBefore.x+10))[0].drafts[0].layers.find(layer=>layer.type==='group')
-    .children.find(child=>child.id===shapes[0].id);
-  assert.ok(nestedAfter.x>nestedBefore.x+10,
+  const nestedAfterDraft=(await waitProjects(rows=>rows[0]?.drafts?.[0]&&
+    worldBox(rows[0].drafts[0],shapes[0].id).cx>nestedWorldBefore.cx+10))[0].drafts[0];
+  const nestedGroupAfter=nestedAfterDraft.layers.find(layer=>layer.type==='group');
+  const nestedAfter=nestedGroupAfter.children.find(child=>child.id===shapes[0].id);
+  assert.ok(worldBox(nestedAfterDraft,shapes[0].id).cx>nestedWorldBefore.cx+10,
     'Dragging a nested shape through the real editor must persist its position');
+  assert.notDeepEqual([nestedAfter.x,nestedAfter.y],[nestedBefore.x,nestedBefore.y],
+    'The nested shape must persist its changed local position');
+  assert.deepEqual(nestedGroupAfter.localTransform,nestedGroupBefore,
+    'Dragging a nested shape must not move its parent group');
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-material-picker .swift-segments button:last-child');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:2,mobile:true});
