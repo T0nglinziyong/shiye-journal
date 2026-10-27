@@ -6,8 +6,8 @@
 
 正式开发规则见 [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)。长期只维护两个发布分支：
 
-- `test`：下一版本与集成测试；合并后从现有 CloudBase App 的 Git 仓库配置触发测试站构建，并核对实站版本。
-- `main`：已经验收的正式版本；只在独立 CloudBase 正式部署配置后发布。
+- `test`：下一版本与集成测试；合并后由 GitHub Actions 发布现有 CloudBase App，并核对实站版本。该应用目前同时服务 `https://shiyejournal.vip/`。
+- `main`：已经验收的稳定代码；独立 CloudBase 正式环境尚未建立，目前不从 `main` 发布。正式域名暂与测试站共用账号和数据环境。
 
 普通开发遵循 `feature/* → test → main`；其他分支不自动部署。除紧急 hotfix 外，不直接在 `main` 开发功能；hotfix 合入 `main` 后必须回灌 `test`。
 
