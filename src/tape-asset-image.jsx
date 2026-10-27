@@ -1,6 +1,5 @@
 import React,{useLayoutEffect,useRef,useState} from 'react';
 import {tapeFlatCanvas} from './tape-flat-crop.js';
-import {scheduleForegroundIdle} from './foreground-idle.js';
 
 // Reuse the derived display view across cards and route changes. The original
 // PNG stays immutable; the raw image is never painted while a tape loads.
@@ -44,16 +43,18 @@ export function TapeAssetImage({asset,src,alt='',loading='lazy',priority=false,o
     if(cached){paint(cached);return;}
     setReady(false);
     if(!original?.complete||!original.naturalWidth)return;
-    return scheduleForegroundIdle(()=>{try{
+    // A 480 px crop is cheap; paint it on the next frame so scrolling or tapping
+    // cannot postpone a visible tape preview indefinitely.
+    const frame=requestAnimationFrame(()=>{try{
       const reused=getFlatView(key);
       if(reused){paint(reused);return;}
       const flat=tapeFlatCanvas(original,axis,asset.tapeFlatCrop,{maxSize});
       if(!flat)return;
       cacheFlatView(key,flat);paint(flat);
-    }catch{/* Keep a blank placeholder instead of showing the untrimmed PNG. */}},
-    {minIdleMs:priority?250:700});
+    }catch{/* Keep a blank placeholder instead of showing the untrimmed PNG. */}});
+    return ()=>cancelAnimationFrame(frame);
   },[src,tape,crop,axis,loaded]);
-  return <><img ref={image} data-asset-image-id={asset?.id} loading={priority?'eager':loading}
+  return <><img ref={image} data-asset-image-id={asset?.id} loading={tape?'eager':priority?'eager':loading}
     fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={alt}
     aria-hidden={tape||undefined} onLoad={()=>setLoaded(value=>value+1)}
     style={tape?{position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none'}:undefined}/>
