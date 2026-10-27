@@ -11,7 +11,7 @@ try{
  await b.click('[data-val="layers"]','[data-layer-pick]');await button('多选');await button('◇rectangle');await button('组合所选');await b.click('[data-val="layers"]');
  await b.click('[aria-label="编辑组合"]','#inspector-group-name');
  for(let i=0;i<40&&!await saved();i++)await b.sleep(100);const before=await saved();assert.ok(before?.children.length===2);assert.equal(before.localTransform?.length,6,'manual group uses a persisted local frame');assert.ok(before.layoutBox?.width>0&&before.layoutBox?.height>0,'manual group is immediately referenceable');
- await set('#inspector-group-name','标题与圈注');await set('#inspector-opacity','.65');await b.click('#inspector-group-shadow-enabled');await set('#inspector-group-shadow-color','#745539');await set('#inspector-group-shadow-blur','2');
+ await set('#inspector-group-name','标题与圈注');await set('#inspector-opacity','.65');await b.click('#inspector-group-shadow-enabled');await b.wait('#inspector-group-shadow-color');await set('#inspector-group-shadow-color','#745539');await set('#inspector-group-shadow-blur','2');
  await button('1. 圆形／椭圆');await b.wait('#inspector-fill');await set('#inspector-fill','#d2a46c');await button('返回组合 · 标题与圈注');
  assert.deepEqual(await saved(),before,'group and child edits remain staged');await b.click('.floating-scene-panel-actions .primary');
  for(let i=0;i<40&&(await saved())?.name!=='标题与圈注';i++)await b.sleep(100);const after=await saved();assert.equal(after.opacity,.65);assert.equal(after.shadow.color,'#745539');assert.equal(after.children.find(c=>c.kind==='ellipse').fill,'#d2a46c');
