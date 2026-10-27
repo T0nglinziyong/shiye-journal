@@ -5,6 +5,7 @@
 ## 测试环境
 - CloudBase envId: `shiye-pg-test-d1gg723f7fb356ccc`
 - 网页：`https://shiye-journal-test-shiye-pg-test-d1gg723f7fb356ccc.webapps.tcloudbase.com`
+- 正式访问域名：`https://shiyejournal.vip/`，目前与上述测试网址指向同一个 CloudBase 应用及数据环境；`test` 合并并通过 GitHub Actions 后自动更新。根域名 DNS 在阿里云，HTTPS 证书在腾讯云。独立的 `main` 正式环境尚未建立。
 - 静态前端：`npm ci`，`npm run build`，目录 `dist`，网站根目录 `/`，GitHub `test`。
 - 前端公开配置：`VITE_SHIYE_CLOUDBASE_ENV_ID`、`VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY`。
 - 认证：CloudBase Auth 中注册的用户自动获得普通拾页测试权限。先在测试数据库执行 `deploy/cloudbase/008-auto-test-access.sql`；它为 `auth.users` 新增创建触发器，补齐已有用户的 `shiye_accounts` 与 `shiye_revisions`，保留现有管理员权限，不给新用户管理员权限。CloudBase 控制台目前仍关闭自助注册，新增测试用户由管理员在“身份认证 → 用户管理”创建；若未来开放自助注册，同一触发器也会为新用户建独立资料库。网站支持用户名/邮箱/手机号加密码、邮箱验证码和中国大陆短信验证码；验证码请求均使用 `shouldCreateUser:false`，最终仍须通过 `shiye_accounts` 核验。用户登录后，可在“账号与登录方式”通过验证码绑定邮箱或手机号；绑定完成前不能用该方式登录。仅在控制台开通并完成回调域名配置的第三方提供商可写入前端公开变量 `VITE_SHIYE_OAUTH_PROVIDERS`（例如 `wechat,github`），未配置不显示；已有用户须在账号菜单将第三方身份绑定到当前 Auth user ID。不要用不同 Auth user ID 自动合并资料。
