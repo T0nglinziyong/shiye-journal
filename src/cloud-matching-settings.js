@@ -6,7 +6,7 @@ import {normalizeMatchingPaper,normalizeMatchingDirection,styleGroups,purposeGro
 export const CLOUD_MATCHING_SETTINGS_ID='app-matching-defaults';
 export const MATCHING_CLOUD_KEYS=Object.freeze([
   'matchCreationMode','matchMode','matchRatio','matchStyle','matchStyles','matchPurpose',
-  'matchPurposes','matchContentPolicy',
+  'matchPurposes','matchContentPolicy','matchAutoUsePresets',
   'recommendFilter'
 ]);
 const groups=new Set(['matchStyles','matchPurposes']);
@@ -15,7 +15,9 @@ export function normalizeMatchingDefaults(source){
   const output={};
   for(const key of MATCHING_CLOUD_KEYS){
     const value=source?.[key];
-    if(groups.has(key)){
+    if(key==='matchAutoUsePresets'){
+      if(typeof value==='boolean')output[key]=value;
+    }else if(groups.has(key)){
       if(Array.isArray(value))output[key]=[...new Set(value.filter(x=>typeof x==='string'&&x.length<=80))].slice(0,12);
     }else if(typeof value==='string'&&value.length<=100){output[key]=value;}
   }

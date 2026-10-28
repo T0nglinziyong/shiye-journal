@@ -8,13 +8,15 @@
 2. 运行 `node runtime/shiye.cjs brief` 读取 TASK.json 的任务摘要和本次方法选择，再读 design/GUIDE.md；看 assets/overview.jpg、assets/size-map.jpg 与必要原图。总览用于辨认内容，尺寸图与毫米数据用于判断真实大小。sourceContext 是运行时来源快照，无须逐字段读。
 3. 可一次查询 `describe material.add text.add graphic.add`，之后只查本次需要的命令。普通帮助已有最小例子；只有需要某项高级功能时才查 `--full`、api/commands.schema.json 或专题文档。
 
+位置速记：`place.at` 从参考框左上角计量，**默认定位对象中心**；习惯按左上角排版时显式写 `anchor:"top-left"`。`reference:"page.right"` 相对右页计量；TASK.page.regions 中的安全框相对整幅 page。
+
 ## 创作与迭代
 
 先从本批材料找到想表达的内容，同时决定各件材料承担什么职责。将相关的材料、书写和局部图形组织成有主次的组合，再形成整页；材料少时书写和绘画也能承担视觉重量。具体方式见任务指导，不固定模板、主路径、图形种类或装饰数量。
 
-用一批命令完成第一张可判断的整体稿：主要材料、实际文字和关键细节一起出现。不能只摆图片然后判断完成度。构图方向明确时直接创作；只有两种结构难以取舍时，才用 `preview --commands work/<候选>.json` 比较。候选应改变材料职责或图文组织，而非仅换坐标颜色。
+用一批命令完成第一张可判断的整体稿：主要材料、实际文字和关键细节一起出现。不能只摆图片然后判断完成度。初稿前检查每件材料：印刷大标题是否需要裁取局部（`describe material.cut`），便签/票面/照片的留白是否承载实际文字；不必把每件素材完整保留。构图方向明确时直接创作；只有两种结构难以取舍时，才用 `preview --commands work/<候选>.json` 比较。候选应改变材料职责或图文组织，而非仅换坐标颜色。
 
-`apply work/commands.json` 后运行 `preview`，**打开返回路径的真实 PNG**。先看整页的主次和充实程度，再看可读内容、材料交界和局部细节。几何或像素报告只是定位工具，默认保存在 diagnosticsPath；需要时读取或用 `preview --full`，不要为消除提示而加粗线、扩大色块。
+`apply work/commands.json` 后运行 `preview`，**打开返回路径的真实 PNG**。先看整页的主次和充实程度，再看可读内容、材料交界和局部细节。逐一检查可写面：实际写进去了，还是正文仍全部放在旁边？检查圈注、高亮或图案是否对应某句话或图中对象。几何或像素报告只是定位工具，默认保存在 diagnosticsPath；需要时读取或用 `preview --full`，不要为消除提示而加粗线、扩大色块。
 
 每次修改先用一句话写清“画面哪里不成立、为什么、这次改什么”。若整页仍是完整图片加独立正文框，应重分材料职责和书写空间；只挪几毫米、加一个圈不会解决这个问题。若整体成立，才修具体换行、遮挡、局部高亮等。图形、剪裁和叠压服务内容，可大胆尝试，也可删除无用尝试。连续局部修订无收益时换结构，不继续沿同一方向堆元素。
 
@@ -27,10 +29,10 @@
 ## 按需能力
 
 - 普通位置、内容和样式：layer.update；组合：group.create / group.compose。
-- 共用方法见 design/SKILL.md；风格和材料用法按需 `guide` 查目录、`guide tape stamps` 或 `guide 美式拼贴`。用法说明给出可执行的命令名，精确参数再 `describe`。不必把所有专题读完；问题与方法补充见 design/PLAYBOOK.md。
+- 共用方法见 design/SKILL.md；风格和材料用法按需 `guide` 查目录、`guide tape stamps patterns spread` 或 `guide 美式拼贴`。用法说明给出可执行的命令名，精确参数再 `describe`。不必把所有专题读完；问题与方法补充见 design/PLAYBOOK.md。
 - 真实裁切/余料：material.cut / split / window；显示遮罩：layer.mask。不要混淆显示隐藏与实体取料。
 - 图形、笔迹：graphic.add，支持预设、自由路径、stroke、sketch。手绘化和布尔几何按需 `graphics help`、design/GRAPHICS_TOOL.md。
-- 预设胶带、贴纸和印章各有 9 款，与普通素材一起列在本次 TASK 的 materials 中，状态为“预设”；仅当用户选入本次创作时才进入 ZIP。数字预设可以重复使用，同一实物素材仍受单份来源和裁片占用约束。表格、月历等空白矢量图形直接用 `graphic.add`，行列、边框及其他高级图形细节可在 `geometry.options` 中调整，见 design/GRAPHICS.md。
+- 预设胶带、贴纸和印章各有 9 款，与普通素材一起列在本次 TASK 的 materials 中，状态为“预设”；用户手动选入，或开启“AI 自选预设”后由搭配逻辑少量择优装入 ZIP；不是把整库打包。available 预设可以不使用，不为完成清单而全部贴上。数字预设可以重复使用，同一实物素材仍受单份来源和裁片占用约束。表格、月历等空白矢量图形直接用 `graphic.add`，行列、边框及其他高级图形细节可在 `geometry.options` 中调整，见 design/GRAPHICS.md。
 - 字体：fonts；艺术字：text.lettering；详见 design/LETTERING.md。
 - inspect 查询当前图层与用量；design-check 按需定位几何问题。完整命令清单用 help，精确字段用 describe。
 

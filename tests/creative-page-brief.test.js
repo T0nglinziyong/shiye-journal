@@ -49,9 +49,9 @@ test('spread direction balances both pages and keeps the gutter readable without
   const spread=creativePageBrief({pageMode:'spread',styles:['手作便签'],purposes:['日常记录']});
   assert.match(spread,/两张相互呼应的独立页面/);
   assert.match(spread,/各自有清楚焦点/);
-  assert.match(spread,/不让标题、正文、主体素材无意跨页/);
+  assert.match(spread,/标题、正文、主体素材放在单页内/);
   assert.match(spread,/允许疏密不同/);
-  assert.match(spread,/有意跨页须仍完整可读/);
+  assert.match(spread,/有意跨页才例外，重要内容仍不落缝/);
   assert.doesNotMatch(spread,/填充率.{0,4}\d|至少\d|所有对象不得跨页/);
   const single=creativePageBrief({pageMode:'single'});
   assert.doesNotMatch(single,/装订中缝/);
@@ -101,12 +101,12 @@ test('API and web task honor the same optional structure guidance',async()=>{
 
 test('both editable and image transports receive the same spread-specific page balance direction',async()=>{
   const p=project('双页茶记',{mode:'spread',ratio:'a5'});p.styles=['手作便签'];p.purposes=['日常记录'];
-  const draft=p.drafts[0],marker=/不让标题、正文、主体素材无意跨页/;
+  const draft=p.drafts[0],marker=/标题、正文、主体素材放在单页内/;
   const api=buildCreativeMessages({draft,assets:[asset],aliases:{m1:asset.id},styles:p.styles,pagePurposes:p.purposes});
   assert.match(api[1].content[0].text,marker);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['design/GUIDE.md']),/双页分别检查/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/双页先按 TASK.page.regions/);
   assert.match(strFromU8(webFiles['design/REVIEW.md']),/中缝/);
   const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
   assert.match(image,marker);

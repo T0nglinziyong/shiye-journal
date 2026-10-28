@@ -32,10 +32,10 @@ const context=(state,device,db=memoryProjects())=>({
 });
 
 test('snapshot excludes credentials and restores editable local controls',()=>{
- const record=matchingSnapshot({basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},[{id:'v',status:'running',project:work}]);
+ const record=matchingSnapshot({basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日',matchAutoUsePresets:true},[{id:'v',status:'running',project:work}]);
  assert.ok(!JSON.stringify(record).includes('never-store'));
  const restored={};const variants=restoreMatchingSession(record,restored);
- assert.deepEqual(restored.basket,['a']);assert.equal(variants[0].status,'interrupted');
+ assert.deepEqual(restored.basket,['a']);assert.equal(restored.matchAutoUsePresets,true);assert.equal(variants[0].status,'interrupted');
  assert.equal(restoreMatchingSession({variants:{}},{}).length,0);
  assert.equal(restoreMatchingSession({variants:[{id:'bad',status:'completed',project:{id:'p'}}]},{}).length,0);
 });

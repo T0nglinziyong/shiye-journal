@@ -93,6 +93,16 @@ assert.equal(window.document.querySelector('.matching-page').dataset.reactPage,'
 assert.ok(window.document.querySelector('.match-direction').compareDocumentPosition(
   window.document.querySelector('.match-recommendations'))&window.Node.DOCUMENT_POSITION_FOLLOWING);
 assert.ok(window.document.querySelector('#match-content-policy'));
+const presetToggle=window.document.querySelector('.match-preset-toggle input');
+assert.equal(presetToggle.checked,false);presetToggle.click();
+await waitFor(()=>window.document.querySelector('.match-preset-toggle input')?.checked===true);
+window.document.querySelector('.main-nav [data-route="works"]').click();
+await waitFor(()=>!!window.document.querySelector('.works-page'));
+window.document.querySelector('.main-nav [data-route="matching"]').click();
+await waitFor(()=>!!window.document.querySelector('.matching-page'));
+assert.equal(window.document.querySelector('.match-preset-toggle input').checked,true);
+window.document.querySelector('.match-preset-toggle input').click();
+await waitFor(()=>window.document.querySelector('.match-preset-toggle input')?.checked===false);
 assert.equal(window.document.querySelector('#match-text-presentation'),null);
 assert.equal(window.document.querySelector('#match-processing'),null);
 assert.equal(window.document.querySelectorAll('.match-creative-controls select').length,7);

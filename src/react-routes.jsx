@@ -1022,6 +1022,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
+      <label className="match-preset-toggle"><input type="checkbox" checked={state.matchAutoUsePresets===true} onChange={event=>change('matchAutoUsePresets',event.target.checked)}/><span>AI 自选预设<small>按本次素材与想法补充少量胶带、贴纸、印章；可选用，不必全用。</small></span></label>
       <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:!canStartCreation(state.matchCreationMode,0)?'当前模式需要真实素材作为图像参考；先选择素材，或切换到纯编辑进行文字与图形创作。':'没有选素材也可以创作：用文字、手绘和图形完成这一页；胶带、贴纸和印章可按需从素材库加入。'}</p>
 
     </section>
@@ -1031,7 +1032,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
         </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
-      </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
+      </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.matchAutoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
       <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
         <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
         <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
@@ -1041,7 +1042,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
-    <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
+    <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'手动选入与普通推荐候选为必用；如无法容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}{state.matchAutoUsePresets?'AI 自动补充的预设始终可选，不必全部使用。':''}不使用的素材不会发送给 AI。</p>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
     <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>

@@ -8,7 +8,7 @@ import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,cr
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
-const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose'];
+const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchAutoUsePresets','matchPurpose'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];

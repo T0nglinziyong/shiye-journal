@@ -120,3 +120,5 @@
 .match-creative-controls select{font-size:14px;font-weight:400;line-height:1.4;padding:9px 10px;color:#354b40}
 .match-creative-controls select option{font-size:14px;font-weight:400}
 @media(max-width:680px){.match-creative-controls>label{font-size:12px}.match-creative-controls select{font-size:14px;padding:9px 4px}}
+
+.match-preset-toggle{display:flex;align-items:flex-start;gap:10px;margin:12px 0;font-weight:600;cursor:pointer}.match-preset-toggle input{flex:0 0 20px;width:20px;height:20px;margin:3px 0;accent-color:var(--forest,#52634b)}.match-preset-toggle small{display:block;font-weight:400;color:var(--muted,#737d73);font-size:.82rem;margin-top:4px;line-height:1.5}

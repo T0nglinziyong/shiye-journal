@@ -1,3 +1,4 @@
+import {creationPageRegions} from './creation-page-regions.js';
 // Advisory geometry diagnostics. A frame-covered cell is NOT proof of visible
 // ink or aesthetic completeness (transparent cutouts, paper interiors, masks).
 import {worldBox} from './scene-spatial.js';
@@ -21,6 +22,10 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
  }
  for(const p of pages)for(const k of Object.keys(p.largestUncoveredRectangleMm))p.largestUncoveredRectangleMm[k]=Number(p.largestUncoveredRectangleMm[k].toFixed(2));
  const observations=[];
+ const regions=creationPageRegions(page),gutter=regions.gutter;
+ const gutterIntersections=gutter?boxes.filter(b=>['material','text'].includes(b.type)&&b.y<page.canvas.height&&b.y+b.height>0&&b.x<(gutter.x+gutter.width)*s&&b.x+b.width>gutter.x*s).map(b=>({id:b.id,type:b.type,crossesSeam:b.x<gutter.center*s&&b.x+b.width>gutter.center*s})):[];
+ if(gutterIntersections.length)observations.push(`中缝安全带内有素材或文字（${gutterIntersections.map(b=>b.id+(b.crossesSeam?'：跨缝':'：靠缝')).join('、')}）：默认移回左右单页，连同关联文字/图案一起调整。若是透明空边、裁片遮罩或明确有意跨页，须看真实 PNG 确认；不得缩放实体来避让。`);
+
  if(types.material<=2)observations.push('素材少：文字块、艺术标题、几何底色与矢量可以担当主体，不要把它们限为点缀。');
  if(types.text>1&&Math.max(...fontSizes)-Math.min(...fontSizes)<2)observations.push('文字字号接近：看真实 PNG 是否仍有标题、正文与插话的视觉层级。');
  if(fontSizes.length&&Math.max(...fontSizes)<11)observations.push('所有新增文字都偏小：核对整页正常显示时的可读性，优先重排而不是继续缩字。');
@@ -76,5 +81,5 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
  const lightlyUsed=materialFrames.filter(frame=>frame.estimatedPageFrameFraction>=.25&&frame.estimatedAnnotationFrameFraction<.12);
  if(lightlyUsed.length)observations.push(`大素材占据约四分之一页以上，新增图文只触及少量区域（${lightlyUsed.map(frame=>frame.assetAlias||frame.title||'未命名素材').join('、')}）：缩看真实 PNG，检查印刷字、截图界面或底纸是否盖过亲手写下的内容；若是，合法裁取或改变露出方式，把可写空间交还给内容。框级估算不代表实际可见面积。`);
  if(materialFrames.some(frame=>frame.journalRoles.includes('headline')&&frame.estimatedPageFrameFraction>=.2)&&fontSizes.length&&Math.max(...fontSizes)<18)observations.push('现成印刷标题框占据较大页面面积，新增字级明显较轻：缩看 PNG 比较两者视觉重量；如果印刷字压住全部新增表达，调整露出范围、合法裁片或正文层级。');
- return {kind:'design-advisory',visualReviewPerformed:false,method:'24x32 rotated-frame AABB grid, approximate stroke/fill area and material-frame intersections; ignores actual alpha/masks and text glyph fill',limitations:'不是像素留白率或审美评分；笔触面积忽略真实纹理、透明材料和局部遮挡，图形尺度和类别不是质量或数量评分；背景纸框可能覆盖整页。不得据此声称已看图或强制填满。',layers:types,graphicVocabulary,graphicScale,estimatedGraphicPaintFraction,typography:{fontSizesPt:[...new Set(fontSizes.map(n=>Number(n.toFixed(2))))].sort((a,b)=>a-b),fontChoices:[...fonts],effects},pages,materialFrames,observations};
+ return {kind:'design-advisory',visualReviewPerformed:false,method:'24x32 rotated-frame AABB grid, approximate stroke/fill area and material-frame intersections; ignores actual alpha/masks and text glyph fill',limitations:'不是像素留白率或审美评分；笔触面积忽略真实纹理、透明材料和局部遮挡，图形尺度和类别不是质量或数量评分；背景纸框可能覆盖整页。不得据此声称已看图或强制填满。',regions,gutterIntersections,layers:types,graphicVocabulary,graphicScale,estimatedGraphicPaintFraction,typography:{fontSizesPt:[...new Set(fontSizes.map(n=>Number(n.toFixed(2))))].sort((a,b)=>a-b),fontChoices:[...fonts],effects},pages,materialFrames,observations};
 }
