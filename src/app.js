@@ -135,9 +135,8 @@ import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-
 import {isUntouchedLegacyExample} from './legacy-builtins.js';
 import {applyToolCalls,validateScenePhysical} from './creative.js';
 import {loadOfflineMaterialCover,loadOfflineMaterialOriginal,mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
-import {buildMaterialScope} from './matching-materials.js';
 import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
-import {matchingRecommendations} from './matching-view.js';
+import {matchingScopeForState} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 import {restoreRouteScroll} from './navigation-scroll.js';
 import {createMainNavigation,mainSection} from './main-navigation.js';
@@ -185,7 +184,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchAutoUsePresets:false,matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -908,7 +907,7 @@ function updateLibraryResults(){
   view.catalogRefresh=updateLibraryResults;
 }
 const kindName=materialKindName;
-function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
+function matchingScope(){return matchingScopeForState(state); }
 // Common actions update only affected Matching panes, preserving the entire
 // remaining page, sticky header, textarea selection and decoded thumbnails.
 function updateMatchingRegions(_regions,{persist=true}={}){
@@ -970,7 +969,7 @@ function updateMatchingFromReact(key,value,options){
     state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
     normalizeMatchingDirection(state);
   }else if(['matchContentPolicy','matchMode',
-    'matchRatio','matchIntent','matchCreationMode'].includes(key))state[key]=value;
+    'matchRatio','matchIntent','matchCreationMode','matchAutoUsePresets'].includes(key))state[key]=value;
   else return;
   void matchingSession.persist().catch(error=>{
     console.warn('本机搭配状态未保存；不影响云端作品同步',error);
@@ -3807,7 +3806,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
     render();activateNavigation();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);if(state.route==='matching')updateMatchingRegions([],{persist:false});editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(createElement('div',{className:'empty'},

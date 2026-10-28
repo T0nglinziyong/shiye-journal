@@ -62,3 +62,45 @@ test('older successfully AI-organized pending assets are still eligible for matc
  const ids=recommendForDirection({assets:[legacy,unorganized,rejected]}).map(row=>row.asset.id);
  assert.deepEqual(ids,['legacy']);
 });
+
+test('generic type and role do not count as content affinity; intent changes the shortlist',async()=>{
+ const {creativePresetAssets}=await import('../src/creative-presets.js');
+ const base={...make('base','sticker','素材1'),role:'accent',texture:'贴纸纸'};
+ const generic={...make('plain','sticker','素材2'),role:'accent',texture:'贴纸纸'};
+ const result=recommendForDirection({assets:[base,generic],basket:['base']});
+ assert.ok(!result[0].reasons.includes('呼应已选素材'));
+ const cats=recommendForDirection({assets:creativePresetAssets,intent:'想和猫待在一起'});
+ const coffee=recommendForDirection({assets:creativePresetAssets,intent:'喝一杯咖啡'});
+ assert.match(cats[0].asset.title,/猫/);assert.match(coffee[0].asset.title,/咖啡/);
+ assert.notDeepEqual(cats.slice(0,6).map(r=>r.asset.id),coffee.slice(0,6).map(r=>r.asset.id));
+});
+test('automatic supplies are bounded, optional, persistent choices win, and UI/export scope agrees',async()=>{
+ const {creativePresetAssets}=await import('../src/creative-presets.js');
+ const {matchingScopeForState}=await import('../src/matching-view.js');
+ const {normalizeMatchingDefaults}=await import('../src/cloud-matching-settings.js');
+ const state={assets:[...assets,...creativePresetAssets],basket:['photo'],coreIDs:[],excludedAssetIDs:[creativePresetAssets[0].id],matchAutoUsePresets:true,matchIntent:'咖啡',matchStyles:[],matchPurposes:[],aiSettings:{autoIncludeRecommendations:false,requireAllCandidates:true}};
+ const scope=matchingScopeForState(state);
+ assert.deepEqual(scope.required,['photo']);assert.equal(scope.available.length,6);
+ assert.ok(!scope.candidateAssetIDs.includes(creativePresetAssets[0].id));
+ const byKind=scope.available.map(id=>state.assets.find(a=>a.id===id).kind);
+ for(const kind of new Set(byKind))assert.ok(byKind.filter(k=>k===kind).length<=2);
+ assert.deepEqual(matchingViewModel(state).scope,scope);
+ assert.equal(normalizeMatchingDefaults(state).matchAutoUsePresets,true);
+ assert.equal(normalizeMatchingDefaults({matchAutoUsePresets:'true'}).matchAutoUsePresets,undefined);
+ const off=matchingScopeForState({...state,matchAutoUsePresets:false});assert.deepEqual(off.candidateAssetIDs,['photo']);
+ const pinned=matchingScopeForState({...state,basket:['photo',scope.available[0]]});assert.ok(pinned.required.includes(scope.available[0]));
+});
+test('automatic recommendations use the same finite 18 rows in view and export',async()=>{
+ const {matchingScopeForState}=await import('../src/matching-view.js');
+ const state={assets:Array.from({length:80},(_,i)=>make('a'+i,'sticker','素材'+i)),basket:[],coreIDs:[],excludedAssetIDs:[],aiSettings:{autoIncludeRecommendations:true,requireAllCandidates:false},matchStyles:[],matchPurposes:[]};
+ const scope=matchingScopeForState(state);assert.equal(scope.candidateAssetIDs.length,18);assert.deepEqual(scope,matchingViewModel(state).scope);
+});
+test('recommendation front avoids redundant roles and warns when an intact item does not fit',()=>{
+ const selected={...make('s','photo','蓝色山景',['山景']),semanticColorNames:['浅蓝']};
+ const papers=Array.from({length:8},(_,i)=>({...make('p'+i,'paper','蓝色山景纸',['山景']),role:'background',semanticColorNames:['天空蓝']}));
+ const tape={...make('t','tape','蓝色连接带',['山景']),role:'connector',semanticColorNames:['蓝色']};
+ const oversized={...make('big','photo','大照片'),physicalWidthMM:300,physicalHeightMM:100};
+ const rows=recommendForDirection({assets:[selected,...papers,tape,oversized],basket:['s'],pageSize:{width:105,height:148}});
+ assert.ok(rows.slice(0,4).some(row=>row.asset.id==='t'));
+ assert.ok(rows.find(row=>row.asset.id==='big').reasons.includes('整件偏大，需裁取'));
+});

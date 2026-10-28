@@ -148,6 +148,8 @@ test('compact command help exposes exact typed style keys without forcing full S
  const text=describeCreationCommand('text.add'),graphic=describeCreationCommand('graphic.add');
  assert.deepEqual(text.parameters.style.fields.textAlign.enum,['left','center','right']);
  assert.equal(text.parameters.style.fields.fill,undefined);
+ assert.match(text.parameters.place.positioning,/中心/);
+ assert.match(describeCreationCommand('place').summary,/anchor=top-left/);
  assert.equal(text.parameters.style.fields.fontSizePt.type,'number');
  assert.ok(graphic.parameters.style.fields.fill);assert.ok(graphic.parameters.style.fields.strokeWidthMm);
  assert.ok(JSON.stringify(text).length<6500);assert.equal(text.schema,undefined);
