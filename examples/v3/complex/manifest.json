@@ -1,0 +1,50 @@
+{
+  "format": "shiye-v3-delivery",
+  "version": 3,
+  "sceneRevision": "sha256:0fef29d9eb9c98af714257c924e6873c92d7362f60fc74a0c6510b68036b1e37",
+  "sceneHash": "sha256:b5465ca875a1bf7f81191e7d65fdf75d05bd4e90431a9a9f7fe268bb4e76fb06",
+  "sceneJsonHash": "sha256:b5e2b5b4dd04e21bf81675a4e644e81e501d57892f67e271a39e1082b1ba7f48",
+  "projectHash": "sha256:0fef29d9eb9c98af714257c924e6873c92d7362f60fc74a0c6510b68036b1e37",
+  "previewHash": "sha256:57286a4566ce6bd6ddf153acbff2195d2140fe4af7aeac87d3e17450c842f93e",
+  "renderer": "shiye-scene-v2",
+  "rendererBackend": "node-canvas@3.2.3",
+  "fonts": "environment-dependent",
+  "assets": {
+    "m1": "sha256:783d7013fae1fd4ee064f216f0136415ac917884aa0ae1b8a2c357b36efa1015",
+    "m2": "sha256:c448db5eab341561597a2d0cfa124eb65ce13b4a5b3c792e3e57114cc4323ec1",
+    "m3": "sha256:6b8815c3fc0fa046399e8f4fc6d07a3f8d0726a68fbc1ab8db9952e7ec8825e3"
+  },
+  "physical": "passed",
+  "reading": {
+    "characters": 49,
+    "excerpts": [
+      {
+        "id": "60971e98-928e-4bfe-a7f5-aaf710a6f0b2",
+        "text": "FIELD NOTES / 01"
+      },
+      {
+        "id": "f52eb193-05d0-48b0-a8f1-787c4542aef8",
+        "text": "把今天折成几片，留一点光从纸窗穿过。\n蓝色留在左页，暖橙从两道窗口间穿行。"
+      }
+    ]
+  },
+  "visualReview": null,
+  "materialDecisions": [
+    {
+      "asset": "m1",
+      "choice": "crafted",
+      "reason": "素材参与实际画面工艺组合"
+    },
+    {
+      "asset": "m2",
+      "choice": "crafted",
+      "reason": "素材参与实际画面工艺组合"
+    },
+    {
+      "asset": "m3",
+      "choice": "crafted",
+      "reason": "素材参与实际画面工艺组合"
+    }
+  ],
+  "createdAt": "2026-10-21T08:31:04.486Z"
+}

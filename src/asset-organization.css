@@ -1,5 +1,5 @@
-.asset-organization-host{position:relative}
-.asset-organization-host>.asset-organization-badge{
+.asset-organization-host,.card-image:has(> .asset-organization-badge),.detail-picture:has(> .asset-organization-badge),.match-basket-item:has(> .asset-organization-badge),.match-rec:has(> .asset-organization-badge){position:relative}
+.asset-organization-badge{
   position:absolute;inset:auto auto 8px 8px;z-index:3;display:inline-flex;align-items:center;gap:5px;
   max-width:calc(100% - 16px);padding:5px 9px;border-radius:12px;background:#fffef5ed;
   color:#52634b;box-shadow:0 1px 6px #25352220;font:500 12px/1.3 system-ui,sans-serif;

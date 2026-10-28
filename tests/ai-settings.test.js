@@ -7,11 +7,13 @@ const memoryStorage=()=>{const entries=new Map();return {getItem:key=>entries.ge
 
 test('creative delivery settings survive save and reload without changing provider parameters',()=>{
   const storage=memoryStorage();
-  const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,sendPresetReferences:true,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
+  const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
   const saved=saveAISettings(settings,storage),restored=loadAISettings(storage);
   assert.deepEqual(restored,saved);
-  for(const [key,value] of Object.entries(settings))assert.deepEqual(restored[key],value,key);
-  assert.equal(restored.generationMode,'direct');
+  for(const [key,value] of Object.entries(settings))if(!['includeThumbnails','maxTurns','deliveryMode'].includes(key))assert.deepEqual(restored[key],value,key);
+  assert.equal(restored.includeThumbnails,false,'unverified custom models do not receive image input');
+  assert.equal('maxTurns' in restored,false);
+  assert.equal(restored.generationMode,'agent');
 });
 
 test('invalid current settings normalize to bounded defaults',()=>{
@@ -21,17 +23,14 @@ test('invalid current settings normalize to bounded defaults',()=>{
   assert.equal(defaults.transport,'auto');
   assert.equal(defaults.textMode,'automatic');
   assert.equal(defaults.reasoningMode,'automatic');
-  assert.equal(defaults.sendPresetReferences,true);
-  assert.equal(defaults.maxTurns,16);
-  assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
-  assert.equal(normalizeAISettings({maxTurns:-1}).maxTurns,1);
+  assert.equal('sendPresetReferences' in defaults,false);
+  assert.equal('maxTurns' in defaults,false);
   assert.equal(normalizeAISettings({reasoningMode:'providerDefault'}).reasoningMode,'providerDefault');
   assert.equal(normalizeAISettings({reasoningMode:'toString'}).reasoningMode,'automatic');
   assert.equal(normalizeAISettings(null).provider,'openai');
   assert.equal(normalizeAISettings({textMode:'minimal'}).textMode,'minimal');
   assert.equal(normalizeAISettings({textMode:'rich'}).textMode,'rich');
-  assert.equal(AI_DEFAULTS.sendPresetReferences,true);
-  assert.equal(normalizeAISettings({sendPresetReferences:false}).sendPresetReferences,false);
+  assert.equal('sendPresetReferences' in AI_DEFAULTS,false);
   assert.equal(AI_DEFAULTS.autoIncludeRecommendations,false);
   assert.equal(AI_DEFAULTS.requireAllCandidates,true);
   assert.equal(normalizeAISettings({requireAllCandidates:false}).requireAllCandidates,false);
@@ -55,9 +54,35 @@ test('automatic organization uses current defaults and persists an explicit off 
   }
 });
 
-test('A-12: image input is scoped to the verified endpoint/model or an explicit user override',()=>{
+test('default series cover layout persists and rejects unknown values',()=>{
+  assert.equal(normalizePreferences({}).seriesCoverLayout,'auto');
+  assert.equal(normalizePreferences({seriesCoverLayout:'pile'}).seriesCoverLayout,'pile');
+  assert.equal(normalizePreferences({seriesCoverLayout:'unknown'}).seriesCoverLayout,'auto');
+});
+
+test('A-12: image input is scoped to verified endpoint/model combinations',()=>{
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',model:'deepseek-flash'})),true);
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash'})),false);
- assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),false);
  assert.equal(supportsVision(normalizeAISettings({provider:'siliconflow',model:'Qwen/Qwen2.5-VL-72B-Instruct'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'glm',model:'glm-5v-turbo'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'glm',model:'glm-4.6v'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'glm',model:'glm-5.2'})),false);
+ assert.equal(normalizeAISettings({provider:'glm',model:'glm-4.6v',includeThumbnails:false}).includeThumbnails,true);
+ assert.equal(normalizeAISettings({provider:'glm',model:'glm-5.2',includeThumbnails:true}).includeThumbnails,false);
+ assert.equal(normalizeAISettings({provider:'custom',endpoint:'https://example.test/chat/completions',model:'unknown',includeThumbnails:true}).includeThumbnails,false);
+});
+
+test('settings always use editable creation and cannot revive retired method preferences',()=>{
+  for(const mode of ['tools','json','image','zip','pdf']){
+    const actual=normalizeAISettings({creationMode:mode,deliveryMode:mode,generationMode:'direct'});
+    assert.equal(actual.creationMode,'edit');
+    assert.equal(actual.deliveryMode,'tools');
+    assert.equal(actual.generationMode,'agent');
+    assert.equal(actual.snapshot,false);
+  }
+  const storage=memoryStorage();saveAISettings({creationMode:'json'},storage);
+  const persisted=JSON.parse(storage.getItem('shiye-ai-settings-v2'));
+  for(const key of ['creationMode','deliveryMode','generationMode','snapshot'])assert.equal(key in persisted,false);
+  assert.equal(loadAISettings(storage).generationMode,'agent');
 });

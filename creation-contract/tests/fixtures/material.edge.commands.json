@@ -1,0 +1,16 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-edge",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.edge",
+      "target": "photo",
+      "edge": {
+        "style": "torn",
+        "roughness": 0.2,
+        "seed": 42
+      }
+    }
+  ]
+}

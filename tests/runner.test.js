@@ -2,84 +2,91 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runCreativeAgent} from '../src/creative-runner.js';
 import {draft} from '../src/domain.js';
+import {createCreationAgentSession} from '../src/creation-agent-session.js';
+import {worldBox} from '../src/scene-spatial.js';
+const call=(name,args,id=name)=>({id,type:'function',function:{name,arguments:typeof args==='string'?args:JSON.stringify(args)}});
+const text=(id='note',content='今天的春风落在纸上')=>({op:'text.add',id,content,size:{width:60,unit:'mm'},place:{reference:'page',at:[50,50],unit:'mm'}});
+const batch=(revision,operations,id='initial')=>({protocolVersion:2,transactionId:id,baseSceneRevision:revision,operations});
+function currentRevision(payload){
+ const all=JSON.stringify(payload.messages);return [...all.matchAll(/sha256:[a-f0-9]{64}/g)].at(-1)[0];
+}
+const runner=(options,respond)=>runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',onFinalScene:async()=> 'rendered-image',...options,request:async(_url,init)=>({ok:true,json:async()=>respond(JSON.parse(init.body))})});
+const reply=(...calls)=>({choices:[{message:{tool_calls:calls}}]});
 
-test('multi-turn tool feedback preserves valid prefix after malformed call',async()=>{
-  const replies=[
-    {choices:[{message:{role:'assistant',content:'',tool_calls:[
-      {id:'one',function:{name:'upsert_text',arguments:JSON.stringify({items:[{key:'t1',content:'今天的春风落在纸上',width:.5}]})}},
-      {id:'two',function:{name:'upsert_primitives',arguments:'{broken'}}]}}]},
-    {choices:[{message:{role:'assistant',content:'',tool_calls:[
-      {id:'three',function:{name:'finish_design',arguments:'{}'}}]}}]}
-  ];
-  const calls=[];const request=async(_url,options)=>{calls.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()};};
-  const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request});
-  assert.equal(output.turns,2);
-  assert.equal(output.draft.textBlocks.length,1);
-  assert.equal(output.finished,true);
-  assert.equal(calls[0].thinking.type,'disabled');
-  assert.equal(calls[0].tool_choice,'required');
-  assert.equal(calls[1].messages.filter(x=>x.role==='tool').length,2);
-  assert.match(calls[1].messages.find(x=>x.role==='tool'&&x.tool_call_id==='two').content,/false/);
+test('unified transactions retain a committed batch after malformed call, then finish the exact revision',async()=>{
+ const payloads=[];let round=0;
+ const result=await runner({},p=>{payloads.push(p);const rev=currentRevision(p);return ++round===1?reply(call('creation_apply',batch(rev,[text()]),'good'),call('creation_apply','{broken','bad')):reply(call('creation_finish',{sceneRevision:rev}));});
+ assert.equal(payloads[0].messages.length,2,'one task message includes the authoritative scene once');
+ assert.equal((JSON.stringify(payloads[0].messages).match(/coordinateSystem/g)||[]).length,1);
+ assert.doesNotMatch(JSON.stringify(payloads[0].messages),/observed_region|plan\.weaves|apply_craft_plan|ink_strokes|upsert_materials/);
+ assert.equal(result.finished,true);assert.equal(result.turns,2);assert.equal(result.draft.textBlocks.length,1);
+ assert.equal(payloads[0].thinking.type,'disabled');assert.equal(payloads[0].tool_choice,'required');
+ assert.equal(payloads[1].messages.filter(m=>m.role==='tool').length,2);
+ assert.match(payloads[1].messages.find(m=>m.tool_call_id==='bad').content,/false/);
+ assert.equal(result.renderedSceneHash,result.sceneHash);
 });
-
-test('empty model response cannot mark a blank page complete',async()=>{
-  const request=async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:null,tool_calls:[]}}]})});
-  await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request}),/没有返回创作操作/);
+test('an atomic batch never keeps a valid prefix when a later operation fails',async()=>{
+ const session=await createCreationAgentSession({draft:draft(),assets:[],aliases:{}}),rev=session.revision;
+ const result=await session.execute([call('creation_apply',batch(rev,[text(),{op:'layer.delete',target:'missing'}]))]);
+ assert.equal(result.results[0].ok,false);assert.equal(session.draft.layers.length,0);assert.equal(session.revision,rev);
 });
-test('A-06: cancellation during response inspection never executes the returned tools',async()=>{
+test('empty response and empty canvas cannot be marked complete',async()=>{
+ await assert.rejects(runner({},()=>reply()),/没有返回创作操作/);
+ const session=await createCreationAgentSession({draft:draft(),assets:[]});
+ const r=await session.execute([call('creation_finish',{sceneRevision:session.revision})]);assert.equal(r.finishRequested,false);assert.match(r.results[0].detail,/画布为空/);
+});
+test('cancellation while receiving a response prevents every returned operation',async()=>{
  const controller=new AbortController(),turns=[];
- const request=async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:'',tool_calls:[{id:'paper',function:{name:'set_paper',arguments:'{"color":"#cc0000"}'}}]}}]})});
- await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request,signal:controller.signal,onResponse:async()=>controller.abort(Error('用户停止')),onTurn:value=>turns.push(value)}),error=>/用户停止/.test(error.message)&&error.budget.stopReason==='cancelled'&&error.budget.totalRequests===1);
+ await assert.rejects(runner({signal:controller.signal,onResponse:()=>controller.abort(Error('用户停止')),onTurn:t=>turns.push(t)},p=>reply(call('creation_apply',batch(currentRevision(p),[text()])))),e=>/用户停止/.test(e.message)&&e.budget.stopReason==='cancelled'&&e.budget.totalRequests===1);
  assert.equal(turns.length,0);
 });
-
-test('inspection images follow ALL native tool replies, including failed calls',async()=>{
- const replies=[{choices:[{message:{tool_calls:[{id:'inspect',function:{name:'inspect_materials',arguments:'{"keys":["m1"]}'}},{id:'bad',function:{name:'set_paper',arguments:'{"color": #fff}'}},{id:'place',function:{name:'place_materials',arguments:'{"items":[{"asset":"m1","x":0.2,"y":0.2}]}' }},{id:'text',function:{name:'upsert_text',arguments:'{"items":[{"key":"t","content":"今天的春风落在纸上","width":0.6}]}'}}]}}]},{choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]}];
- const payloads=[],asset={id:'a',title:'绿色叶片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
- const result=await runCreativeAgent({draft:draft(),assets:[asset],aliases:{m1:'a'},key:'synthetic-test',onInspection:async()=>[{type:'text',text:'inspection image marker'}],request:async(_,options)=>{payloads.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()};}});
- const messages=payloads[1].messages,index=messages.findIndex(x=>x.role==='assistant');assert.deepEqual(messages.slice(index+1,index+5).map(x=>[x.role,x.tool_call_id]),[['tool','inspect'],['tool','bad'],['tool','place'],['tool','text']]);assert.equal(messages[index+5].role,'user');assert.equal(messages[index+5].content[0].text,'inspection image marker');assert.equal(result.finished,true);
+test('inspection images follow all tool replies, and successful edits are durable before image failure',async()=>{
+ const asset={id:'paper',title:'纸片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}},payloads=[],events=[];let round=0;
+ const result=await runner({assets:[asset],aliases:{m1:'paper'},onTurn:t=>events.push(t.draft.layers.length),onInspection:async()=>{assert.equal(events[0],1);throw Error('image failure');}},p=>{payloads.push(p);return ++round===1?reply(call('creation_apply',batch(currentRevision(p),[{op:'material.add',id:'paper',asset:'m1',place:{reference:'page',at:[50,50],unit:'mm'}}])),call('inspect_materials',{keys:['paper']}),call('creation_help','{bad','bad')):reply(call('creation_finish',{sceneRevision:currentRevision(p)}));});
+ assert.equal(result.draft.items.length,1);assert.equal(result.finished,true);
+ const messages=payloads[1].messages,i=messages.findIndex(m=>m.role==='assistant');assert.deepEqual(messages.slice(i+1,i+4).map(m=>m.role),['tool','tool','tool']);assert.equal(messages[i+4].role,'user');assert.match(JSON.stringify(messages),/无需重放/);
 });
-test('A-07: preview inspection failure cannot discard or replay a committed tool turn',async()=>{
- const asset={id:'a',title:'纸片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}},calls=(name,args,id)=>({id,function:{name,arguments:JSON.stringify(args)}});
- const replies=[{choices:[{message:{tool_calls:[calls('place_materials',{items:[{asset:'m1',piece:'paper',x:.5,y:.5}]},'place'),calls('inspect_materials',{keys:['paper']},'inspect')]}}]},{choices:[{message:{tool_calls:[calls('finish_design',{},'finish')]}}]}];
- const turns=[],payloads=[];let inspections=0;
- const result=await runCreativeAgent({draft:draft(),assets:[asset],aliases:{m1:'a'},key:'synthetic-test',onInspection:async()=>{inspections++;throw Error('preview decode failed');},onTurn:turn=>turns.push(turn),request:async(_url,options)=>{payloads.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()};}});
- assert.equal(result.finished,true);assert.equal(result.draft.items.length,1);assert.equal(inspections,1);assert.equal(turns.length,2);
- assert.equal(turns[0].draft.items.length,1);assert.match(JSON.stringify(payloads[1].messages),/无需重放/);
+test('renderer failure cannot report completed; successful edits have already been checkpointed',async()=>{
+ let round=0;const saved=[];
+ await assert.rejects(runner({onTurn:t=>saved.push(t.draft),onFinalScene:async()=>{throw Error('decode failed');}},p=>++round===1?reply(call('creation_apply',batch(currentRevision(p),[text()]))):reply(call('creation_finish',{sceneRevision:currentRevision(p)}))),e=>e.code==='final-render-failed');
+ assert.equal(saved[0].textBlocks.length,1);assert.notEqual(saved.at(-1).agentRun?.status,'finished');
 });
-test('A-08: the final modified scene is rendered and only that scene hash is recorded',async()=>{
- const tool=(name,args,id)=>({id,function:{name,arguments:JSON.stringify(args)}}),responses=[{choices:[{message:{tool_calls:[tool('upsert_text',{items:[{key:'title',content:'最终版本',x:.5,y:.2,width:.7}]},'write'),tool('finish_design',{},'finish')]}}]}];
- const renders=[];const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',onFinalScene:async scene=>{renders.push(scene.textBlocks.map(t=>t.content));return 'rendered-image';},request:async()=>({ok:true,json:async()=>responses.shift()})});
- assert.deepEqual(renders,[['最终版本']]);assert.equal(output.draft.agentRun.finalSceneHash,output.sceneHash);
- assert.equal(output.draft.agentRun.renderedSceneHash,output.sceneHash);assert.equal(output.draft.agentRun.visualReview,'pending');
+test('eight configured requests are honored; a three-request budget stops before a fourth',async()=>{
+ let count=0;
+ const model=p=>{count++;return count===8?reply(call('creation_finish',{sceneRevision:currentRevision(p)})):reply(call('creation_apply',batch(currentRevision(p),count===1?[text()]:[{op:'layer.update',target:'note',content:'第 '+count+' 版'}],'turn-'+count)));};
+ const result=await runner({maxTurns:8},model);assert.equal(count,8);assert.equal(result.budget.totalRequests,8);
+ count=0;await assert.rejects(runner({maxTurns:3},model),e=>e.code==='request-limit'&&e.budget.totalRequests===3);assert.equal(count,3);
 });
-test('A-08: renderer failure never claims that the final scene was visually checked',async()=>{
- const response={choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]};
- const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',onFinalScene:async()=>{throw Error('renderer failed');},request:async()=>({ok:true,json:async()=>response})});
- assert.equal(output.draft.agentRun.renderedSceneHash,null);assert.equal(output.draft.agentRun.visualReview,'render-failed');
+test('truncation consumes a request; repeated read-only calls stop without rendering unchanged frames',async()=>{
+ let round=0,renders=0;
+ const result=await runner({maxTurns:3},p=>++round===1?{choices:[{finish_reason:'length',message:{content:'incomplete'}}]}:round===2?reply(call('creation_apply',batch(currentRevision(p),[text()]))):reply(call('creation_finish',{sceneRevision:currentRevision(p)})));
+ assert.equal(result.budget.formatRepairRequests,1);assert.equal(result.budget.creationRequests,2);
+ await assert.rejects(runner({onScene:()=>{renders++;}},()=>reply(call('creation_help',{}))),e=>e.code==='no-progress');assert.equal(renders,0);
 });
-test('A-10: eight configured requests are honored; three-request budget stops before a fourth call',async()=>{
- const tool=(name,args,id)=>({id,function:{name,arguments:JSON.stringify(args)}});
- const reply=index=>({choices:[{message:{tool_calls:[tool(index===8?'finish_design':'upsert_text',index===8?{}:{items:[{key:'title',content:'第 '+index+' 版',x:.5,y:.2,width:.7}]},'call-'+index)]}}]});
- let requests=0;const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:8,request:async()=>({ok:true,json:async()=>reply(++requests)})});
- assert.equal(requests,8);assert.equal(output.budget.totalRequests,8);assert.equal(output.budget.creationRequests,8);assert.equal(output.budget.stopReason,'completed');
- requests=0;await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:3,request:async()=>({ok:true,json:async()=>reply(++requests)})}),error=>error.code==='request-limit'&&error.budget.totalRequests===3&&error.budget.stopReason==='request-limit');
- assert.equal(requests,3);
+test('local-group and advanced-graphic edits stay in the unified engine and protect source size',async()=>{
+ const asset={id:'a',title:'纸片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
+ const session=await createCreationAgentSession({draft:draft(),assets:[asset],aliases:{m1:'a'}});
+ const commands=[{op:'group.compose',id:'cluster',place:{reference:'page',at:[70,70],unit:'mm',rotationDeg:25},layoutBox:{width:80,height:60,unit:'mm'},children:[{op:'material.add',id:'paper',asset:'m1',place:{reference:'parent',at:[.5,.5],unit:'ratio'}},{op:'graphic.add',id:'table',geometry:{kind:'weeklyTable',options:{rows:4,columns:3}},size:{width:40,height:30,unit:'mm'},place:{reference:'parent',at:[.8,.8],unit:'ratio'},style:{fill:null,stroke:'#446655',strokeWidthMm:.4}}]}];
+ const input=batch(session.revision,commands),first=await session.execute([call('creation_apply',input)]);assert.equal(first.results[0].ok,true,JSON.stringify(first.results));
+ const before=worldBox(session.document.page,'paper');
+ assert.equal((await session.execute([call('creation_apply',input)])).results[0].data.replayed,true);
+ const update=await session.execute([call('creation_apply',batch(session.revision,[{op:'layer.update',target:'cluster',place:{reference:'page',at:[90,80],unit:'mm'}},{op:'layer.update',target:'table',geometry:{kind:'weeklyTable',options:{rows:6,columns:2,showOuterBorder:false}}}],'adjust'))]);
+ assert.equal(update.results[0].ok,true,JSON.stringify(update.results));assert.equal(worldBox(session.document.page,'paper').w,before.w);assert.notEqual(worldBox(session.document.page,'paper').cx,before.cx);
+ assert.equal(session.draft.primitives[0].shapeOptions.rows,6);
+ const denied=await session.execute([call('creation_apply',batch(session.revision,[{op:'layer.update',target:'paper',size:{width:50,unit:'mm'}}],'illegal'))]);assert.equal(denied.results[0].ok,false);
 });
-test('A-10/A-11: format repair consumes the same request cap and repeated no-op tools stop early',async()=>{
- const finish={choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]};
- let requests=0;const repaired=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:2,request:async()=>({ok:true,json:async()=>++requests===1?{choices:[{finish_reason:'length',message:{content:'incomplete'}}]}:finish})});
- assert.equal(repaired.budget.totalRequests,2);assert.equal(repaired.budget.creationRequests,1);assert.equal(repaired.budget.formatRepairRequests,1);
- requests=0;const noOp={choices:[{message:{tool_calls:[{id:'same',function:{name:'set_paper',arguments:'{"color":"#ffffff"}'}}]}}]};
- await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:20,request:async()=>({ok:true,json:async()=>{requests++;return noOp;}})}),error=>error.code==='no-progress'&&error.budget.stopReason==='no-progress');
- assert.ok(requests<=5);
+test('finish rejects a stale revision and the removed legacy tool protocol',async()=>{
+ const session=await createCreationAgentSession({draft:draft(),assets:[]}),stale=session.revision;
+ await session.execute([call('creation_apply',batch(stale,[text()]))]);
+ const r=await session.execute([call('upsert_text',{items:[]}),call('creation_finish',{sceneRevision:stale})]);assert.ok(r.results.every(x=>!x.ok));assert.equal(r.finishRequested,false);
 });
-test('intentional sparse composition may finish; only explicit physical requirements block it',async()=>{
- const assets=Array.from({length:4},(_,i)=>({id:'asset-'+i,title:'纸片 '+i,kind:'sticker',role:'support',physicalWidthMM:20,physicalHeightMM:25,supply:{quantity:1}}));
- const aliases=Object.fromEntries(assets.map((a,i)=>['m'+(i+1),a.id]));
- const tool=(name,args,id)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
- const batches=[[tool('place_materials',{items:[{asset:'m1',piece:'first',x:.2,y:.3}]},'place-one'),tool('upsert_text',{items:[{key:'title',content:'春日收藏',x:.5,y:.1,width:.8,font_size:34}]},'title'),tool('finish_design',{},'finish')]];
- const turns=[];let index=0;const result=await runCreativeAgent({draft:draft({ratio:'a5'}),assets,aliases,styles:['韩系清新'],pagePurposes:['日常记录'],materialPriority:{preferred:assets.map(a=>a.id)},key:'synthetic-test',request:async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:'',tool_calls:batches[index++]}}]})}),onTurn:value=>turns.push(value)});
- assert.equal(result.finished,true);assert.equal(result.turns,1);assert.equal(result.draft.items.length,1);assert.equal(result.draft.textBlocks.length,1);
- assert.equal(turns[0].results.at(-1).ok,true);
+test('required material inside a translated local group is validated at its world position',async()=>{
+ const asset={id:'a',title:'纸片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}},session=await createCreationAgentSession({draft:draft(),assets:[asset],aliases:{m1:'a'},requiredAssetIDs:['a']});
+ const made=await session.execute([call('creation_apply',batch(session.revision,[{op:'group.compose',id:'g',place:{reference:'page',at:[80,80],unit:'mm'},layoutBox:{width:60,height:60,unit:'mm'},children:[{op:'material.add',id:'paper',asset:'m1',place:{reference:'parent',at:[.2,.2],unit:'ratio'}}]}]))]);
+ assert.equal(made.results[0].ok,true);assert.ok(session.draft.items[0].x<0);
+ const completed=await session.execute([call('creation_finish',{sceneRevision:session.revision})]);assert.equal(completed.finishRequested,true,JSON.stringify(completed.results));
+});
+test('material observation cannot expand the selected source set',async()=>{
+ const assets=['allowed','private'].map(id=>({id,title:id,physicalWidthMM:20,physicalHeightMM:20})),session=await createCreationAgentSession({draft:draft(),assets,aliases:{m1:'allowed'}});
+ const r=await session.execute([call('inspect_materials',{keys:['private']})]);assert.equal(r.results[0].ok,false);assert.match(r.results[0].detail,/不在本次授权来源/);
 });

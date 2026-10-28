@@ -1,4 +1,11 @@
+import {createElement} from 'react';
+import {createRoot} from 'react-dom/client';
+import {flushSync} from 'react-dom';
+import {CutoutPanel} from './react-cutout-panel.jsx';
 import {paintMask,maskOrientation,refineMaskStroke} from './mask-model.js';
+import {decodeImageBlob} from './image-blob-decoder.js';
+import {readAlphaMask,encodeAlphaMask} from './alpha-mask-blob.js';
+import {shrinkEditorBitmap,resampleMask,scaleFramePlacement,CUTOUT_EDIT_EDGE} from './cutout-edit-resolution.js';
 import {containBox} from './preview-geometry.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 
@@ -8,11 +15,60 @@ const copyMask=value=>new Uint8ClampedArray(value);
 
 export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
+  finalMaskBlob=null,onLoadInitialMask=null,isCancelled=()=>false,onPhase=()=>{},
+  editPixels=CUTOUT_EDIT_EDGE,
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
-  const [source,initial,recognized,frame]=await Promise.all([
-    createImageBitmap(original),createImageBitmap(saved),createImageBitmap(recognition),createImageBitmap(candidateFrame||original)
-  ]);
+  // New records read only the canonical corrected candidate RGB + final
+  // alpha mask. The initial mask is a separate lazy recovery operation.
+  // Existing four-image assets continue down the original legacy path.
+  onPhase('正在解码候选框及透明蒙版…');
+  let source,initial,recognized,frame,loadedFinalMask=null;
+  if(finalMaskBlob){
+    const [candidate,fullMask]=await Promise.all([
+      decodeImageBlob(candidateFrame),readAlphaMask(finalMaskBlob)
+    ]);
+    frame=shrinkEditorBitmap(candidate,editPixels);
+    const original=processing.candidateFramePlacement,
+      originalW=original?.frameWidth||fullMask.width,
+      originalH=original?.frameHeight||fullMask.height,
+      placement=scaleFramePlacement(original,originalW,originalH,frame.width,frame.height);
+    if(placement.x<-.5||placement.y<-.5||
+       placement.x+placement.width>frame.width+1||
+       placement.y+placement.height>frame.height+1)
+      throw Error('矫正候选框与原始图片坐标不一致');
+    const targetW=Math.max(1,Math.round(placement.width)),
+      targetH=Math.max(1,Math.round(placement.height)),
+      record=resampleMask(fullMask,targetW,targetH);
+    source=document.createElement('canvas');source.width=record.width;source.height=record.height;
+    source.getContext('2d').drawImage(frame,
+      placement.x,placement.y,placement.width,placement.height,0,0,record.width,record.height);
+    const canvas=document.createElement('canvas');canvas.width=record.width;canvas.height=record.height;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(source,0,0);
+    const rgba=ctx.getImageData(0,0,record.width,record.height);
+    for(let i=0;i<record.alpha.length;i++)rgba.data[i*4+3]=record.alpha[i];
+    ctx.putImageData(rgba,0,0);
+    initial=recognized=canvas;
+    loadedFinalMask=record.alpha;
+  }else{
+    const decoded=await Promise.allSettled([
+      decodeImageBlob(original),decodeImageBlob(saved),decodeImageBlob(recognition),
+      decodeImageBlob(candidateFrame||original)
+    ]);
+    const failed=decoded.find(row=>row.status==='rejected');
+    if(failed){
+      for(const row of decoded)if(row.status==='fulfilled')row.value?.close?.();
+      throw Error('检查抠图暂无法打开：'+(failed.reason?.message||'图片未能解码')+
+        '。当前素材不会被自动覆盖；请检查同步状态。');
+    }
+    [source,initial,recognized,frame]=decoded.map(row=>shrinkEditorBitmap(row.value,editPixels));
+  }
+  if(isCancelled()){
+    for(const bitmap of new Set([source,initial,recognized,frame]))bitmap?.close?.();
+    return;
+  }
+  onPhase('正在初始化原图像素与画笔…');
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -20,8 +76,8 @@ export async function showCutoutEditor({
   const sourcePixels=ctx.getImageData(0,0,w,h),
     sourceAlpha=Uint8ClampedArray.from({length:w*h},(_,i)=>sourcePixels.data[i*4+3]),
     rawPlacement=processing.candidateFramePlacement,
-    placement=rawPlacement&&rawPlacement.frameWidth===frame.width&&rawPlacement.frameHeight===frame.height
-      ?{x:rawPlacement.x,y:rawPlacement.y,width:rawPlacement.width,height:rawPlacement.height}
+    placement=rawPlacement
+      ?scaleFramePlacement(rawPlacement,rawPlacement.frameWidth,rawPlacement.frameHeight,frame.width,frame.height)
       :{x:0,y:0,width:frame.width,height:frame.height};
 
   const alphaFrom=(bitmap,angle=0)=>{
@@ -32,50 +88,60 @@ export async function showCutoutEditor({
   };
 
   const initialRotation=processing.displayRotationDegrees||0,
-    initialMask=alphaFrom(initial,initialRotation),
-    recognitionMask=alphaFrom(recognized,processing.recognitionRotationDegrees||0),
-    steps=[['rough','粗轮廓与重新识别'],['recognition','识别结果与后处理'],['final','最终调整']],
+    initialMask=loadedFinalMask||alphaFrom(initial,initialRotation),
+    recognitionMask=loadedFinalMask||alphaFrom(recognized,processing.recognitionRotationDegrees||0),
+    steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']],
     methodList=recognitionUI.methods||[],
     pixelList=recognitionUI.pixels||[[900,'900 px'],[1200,'1200 px'],[1600,'1600 px']],
     savedRecognition=processing.rerecognition||{},
     savedPost=processing.autoPostprocess||savedRecognition.postprocess||{},
-    defaultPre={illumination:true,denoise:true,localContrast:true,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
-    defaultPost={edgePolish:true,shapeRegularization:true,curveSmooth:true,apertures:true,...recognitionUI.postprocess,...savedPost};
+    defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
+    defaultPost={shapeRegularization:true,apertures:true,...recognitionUI.postprocess,...savedPost};
 
-  let mask=copyMask(initialMask),
-    roughStageMask=copyMask(initialMask),
-    recognitionBaseMask=copyMask(recognitionMask),
-    recognitionStageMask=copyMask(recognitionMask),
-    postprocessBaseMask=copyMask(initialMask),
-    finalStageMask=copyMask(initialMask),
+  // Masks are immutable: paintMask/refineMaskStroke allocate new arrays.
+  // Stage baselines can initially share their Uint8 storage. Six eager 4K
+  // alpha copies used ~100MB before the editor even painted on iPhone.
+  let mask=initialMask,
+    roughStageMask=initialMask,
+    recognitionBaseMask=recognitionMask,
+    recognitionStageMask=recognitionMask,
+    postprocessBaseMask=initialMask,
+    finalStageMask=initialMask,
     mode='rough',restore=true,ratio=.04,
     appearance=processing.appearance||'original',intensity=processing.intensity??.5,
     rotation=initialRotation,autoStraighten=processing.autoStraighten!==false,outputPrepared=false,
     comparison=null,stroke=null,lastStroke=null,busy=false,manualTouched=false,
     recognitionState={
       method:savedRecognition.method||recognitionUI.method||methodList[0]?.id||'auto',
-      pixels:Number(savedRecognition.pixels||recognitionUI.pixelsValue||1200),
+      pixels:Math.max(900,Number(savedRecognition.pixels||recognitionUI.pixelsValue||editPixels)),
       preprocess:{...defaultPre}
     },
     postState={...defaultPost},
-    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Number(savedRecognition.pixels||1200),preprocess:{...defaultPre}}:null,
+    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Math.max(900,Number(savedRecognition.pixels||editPixels)),preprocess:{...defaultPre}}:null,
     lastPostprocess=processing.autoPostprocess?{...processing.autoPostprocess}:null;
 
   const history=[],initialAppearance=appearance,initialIntensity=intensity,initialAutoStraighten=autoStraighten;
 
-  body.innerHTML='<div class="material-editor cutout-modal">'
-    +'<header><button type="button" id="cutout-cancel">取消</button><strong>检查抠图</strong><button type="button" id="cutout-apply" disabled>应用</button></header>'
-    +'<div class="cutout-steps">'+steps.map(([id,label],i)=>'<span data-cut-step="'+id+'"><b>'+(i+1)+'</b>'+label+'</span>').join('')+'</div>'
-    +'<div class="cutout-compare"><button type="button" id="compare-original">按住看候选框原图</button><button type="button" id="compare-initial">按住看进入时抠图</button></div>'
-    +'<div class="material-editor-preview cutout-preview"><canvas id="cutout-canvas" aria-label="素材抠图预览"></canvas></div>'
-    +'<p>正常颜色是当前抠图；浅色底图是候选框中的完整原始画面。自动步骤不会在手动修补之后偷偷修改边界。</p>'
-    +'<section class="cutout-controls"><div id="cutout-mode-panel"></div><p id="cutout-note" role="status"></p>'
-    +'<div class="cutout-step-nav"><button type="button" class="btn" id="cutout-prev">上一步</button><button type="button" class="btn primary" id="cutout-next">下一步</button></div>'
-    +'<div class="stack"><button type="button" class="btn" id="cutout-reset">恢复进入时的状态</button></div></section></div>';
-
+  // A cancelled or displaced asynchronous loader must not repaint the dialog.
+  if(isCancelled()||!modal.open)return;
+  if(!modal.matches(':modal'))throw Error('检查抠图弹窗不在模态顶层，请重新打开');
+  onPhase('正在显示抠图工具…');
+  // React owns the tool panel; the native dialog stays open while the
+  // canvas engine renders into its stable canvas node.
+  modal.classList.remove('cutout-loading-dialog');
   modal.classList.add('cutout-dialog','material-editor-dialog');
-  if(!modal.open)modal.showModal();
-  const preview=body.querySelector('#cutout-canvas'),pctx=preview.getContext('2d');
+  body.replaceChildren();
+  const cutoutRoot=createRoot(body);
+  let preview=null,note='';
+  flushSync(()=>cutoutRoot.render(createElement(CutoutPanel,{
+    state:{mode:'rough',restore,ratio,history:false,lastStroke:false,busy:true,
+      recognition:recognitionState,post:postState,methods:methodList,pixels:pixelList,
+      methodDescription:'',canRerecognize:!!onRerecognize,canPostprocess:!!onPostprocess,
+      autoStraighten,rotation,appearance,intensity,note:''},
+    actions:{},canvasRef:node=>{preview=node;}
+  })));
+  if(!preview)throw Error('抠图画布未能挂载');
+  const pctx=preview.getContext('2d');
 
   const push=()=>{
     history.push(copyMask(mask));
@@ -112,174 +178,167 @@ export async function showCutoutEditor({
   };
   const resize=new ResizeObserver(fit);resize.observe(preview.parentElement);
 
+  // Draw the interactive preview at screen resolution, but keep sourcePixels
+  // and mask at their original resolution for final PNG and border refinement.
+  // The old draw() composed a 4096px full PNG on EVERY pointer movement and
+  // allocated several 60MB arrays on iPhone, often freezing before first paint.
+  const previewScale=Math.min(1,1100/Math.max(frame.width,frame.height));
+  const displayWidth=Math.max(1,Math.round(frame.width*previewScale)),
+    displayHeight=Math.max(1,Math.round(frame.height*previewScale)),
+    displayCutWidth=Math.max(1,Math.round(placement.width*previewScale)),
+    displayCutHeight=Math.max(1,Math.round(placement.height*previewScale)),
+    displayX=(placement.x+placement.width/2)*previewScale,
+    displayY=(placement.y+placement.height/2)*previewScale;
+  const previewCut=document.createElement('canvas');
+  previewCut.width=displayCutWidth;previewCut.height=displayCutHeight;
+  const previewCtx=previewCut.getContext('2d',{willReadFrequently:true});
+  const previewBuffer=previewCtx.createImageData(displayCutWidth,displayCutHeight);
+  function paintCutout(alpha){
+    const pixels=previewBuffer.data,rgba=sourcePixels.data;
+    for(let y=0;y<displayCutHeight;y++){
+      const sy=Math.min(h-1,Math.floor((y+.5)*h/displayCutHeight)),srcRow=sy*w;
+      for(let x=0;x<displayCutWidth;x++){
+        const sx=Math.min(w-1,Math.floor((x+.5)*w/displayCutWidth));
+        const si=srcRow+sx,src=si*4,out=(y*displayCutWidth+x)*4;
+        let red=rgba[src],green=rgba[src+1],blue=rgba[src+2];
+        if(appearance!=='original'){
+          const luma=.2126*red+.7152*green+.0722*blue;
+          const correction=v=>appearance==='natural'?v+intensity*14*(1-luma/255)
+            :(v-luma)*(1+.3*intensity)+luma+(luma-128)*.18*intensity;
+          red=correction(red);green=correction(green);blue=correction(blue);
+        }
+        pixels[out]=red;pixels[out+1]=green;pixels[out+2]=blue;
+        pixels[out+3]=Math.min(rgba[src+3],alpha[si]);
+      }
+    }
+    previewCtx.putImageData(previewBuffer,0,0);
+  }
   function draw(){
     if(!preview.isConnected)return;
+    if(preview.width!==displayWidth)preview.width=displayWidth;
+    if(preview.height!==displayHeight)preview.height=displayHeight;
+    pctx.clearRect(0,0,displayWidth,displayHeight);
     if(comparison==='original'){
-      preview.width=frame.width;preview.height=frame.height;pctx.clearRect(0,0,preview.width,preview.height);pctx.drawImage(frame,0,0);fit();return;
+      pctx.drawImage(frame,0,0,displayWidth,displayHeight);fit();return;
     }
-    const showRotation=mode==='final'?rotation:0,
-      cut=comparison==='initial'?initial:composed(mask,appearance,intensity,showRotation);
-    preview.width=frame.width;preview.height=frame.height;pctx.clearRect(0,0,preview.width,preview.height);
-    pctx.save();pctx.filter='saturate(.42) brightness(1.18) contrast(.62)';pctx.globalAlpha=.46;pctx.drawImage(frame,0,0);pctx.restore();
-    pctx.fillStyle='rgba(255,255,255,.34)';pctx.fillRect(0,0,preview.width,preview.height);
-    const cx=placement.x+placement.width/2,cy=placement.y+placement.height/2;
-    pctx.drawImage(cut,cx-cut.width/2,cy-cut.height/2);fit();
+    pctx.save();pctx.filter='saturate(.42) brightness(1.18) contrast(.62)';
+    pctx.globalAlpha=.46;pctx.drawImage(frame,0,0,displayWidth,displayHeight);pctx.restore();
+    pctx.fillStyle='rgba(255,255,255,.34)';pctx.fillRect(0,0,displayWidth,displayHeight);
+    paintCutout(comparison==='initial'?initialMask:mask);
+    pctx.save();pctx.translate(displayX,displayY);
+    if(mode==='final'&&comparison!=='initial')pctx.rotate(rotation*Math.PI/180);
+    pctx.drawImage(previewCut,-displayCutWidth/2,-displayCutHeight/2);
+    pctx.restore();fit();
   }
 
-  const switchRow=(id,label,checked,help)=>'<label class="toggle-row setting-toggle"><span><b>'+label+'</b><small class="setting-help">'+help+'</small></span><input id="'+id+'" type="checkbox" '+(checked?'checked':'')+'></label>';
   const methodDescription=id=>methodList.find(item=>item.id===id)?.description||'使用当前候选作为初始边界，在本机重新计算透明 mask。';
-
+  const framePhysicalWidthMM=processing.sourceWidthMM&&placement.width?processing.sourceWidthMM*frame.width/placement.width:null,
+    framePhysicalHeightMM=processing.sourceHeightMM&&placement.height?processing.sourceHeightMM*frame.height/placement.height:null;
   const requestBase=currentMask=>({
-    mask:new Uint8Array(currentMask),placement:{...placement},frameWidth:frame.width,frameHeight:frame.height,targetWidth:w,targetHeight:h
+    mask:new Uint8Array(currentMask),placement:{...placement},frameWidth:frame.width,frameHeight:frame.height,targetWidth:w,targetHeight:h,
+    paperWidthMM:framePhysicalWidthMM,paperHeightMM:framePhysicalHeightMM
   });
-
-  const readRecognition=el=>{
-    const checked=id=>el.querySelector('#'+id)?.checked!==false;
-    recognitionState={
-      method:el.querySelector('#cutout-method')?.value||recognitionState.method,
-      pixels:Number(el.querySelector('#cutout-pixels')?.value||recognitionState.pixels),
-      preprocess:{
-        illumination:checked('cutout-pre-light'),denoise:checked('cutout-pre-denoise'),
-        localContrast:checked('cutout-pre-contrast'),chromaEdges:checked('cutout-pre-chroma')
-      }
-    };
-  };
-
-  const readPost=el=>{
-    const checked=id=>el.querySelector('#'+id)?.checked!==false;
-    postState={
-      edgePolish:checked('cutout-post-edge'),
-      shapeRegularization:checked('cutout-post-shapes'),
-      curveSmooth:checked('cutout-post-curves'),
-      apertures:checked('cutout-post-apertures')
-    };
-  };
-
   function prepareOutput(){
     if(outputPrepared)return;
     outputPrepared=true;
-    if(autoStraighten){
-      const angle=maskOrientation(mask,w,h);
-      if(angle!=null)rotation=angle;
-    }
+    if(autoStraighten){const angle=maskOrientation(mask,w,h);if(angle!=null)rotation=angle;}
   }
-
-  const maskToolsHTML=(note,extra='')=>'<div class="cutout-mask-tools"><div class="cutout-tabs two"><button type="button" data-repair="restore" class="'+(restore?'selected':'')+'">补回</button><button type="button" data-repair="erase" class="'+(!restore?'selected':'')+'">擦除</button></div>'
-    +'<label>笔宽 · 短边的 <b id="brush-value">'+Math.round(ratio*100)+'%</b><input id="cutout-strength" type="range" min="0.5" max="20" step="0.5" value="'+ratio*100+'"></label>'
-    +'<div class="form-grid"><button type="button" id="cutout-undo" '+(!history.length?'disabled':'')+'>撤销修补</button><button type="button" id="cutout-refine" '+(!lastStroke?'disabled':'')+'>细化上次涂抹</button></div>'
-    +'<small class="setting-help">'+note+'</small>'+extra+'</div>';
-
-  const bindMaskTools=el=>{
-    el.querySelectorAll('[data-repair]').forEach(b=>b.onclick=()=>{restore=b.dataset.repair==='restore';panel();});
-    const strength=el.querySelector('#cutout-strength');if(strength)strength.oninput=()=>{ratio=+strength.value/100;el.querySelector('#brush-value').textContent=strength.value+'%';};
-    const action=(id,fn)=>{const b=el.querySelector('#'+id);if(b)b.onclick=()=>{if(busy)return;fn();comparison=null;panel();draw();};};
-    action('cutout-undo',()=>{if(history.length)mask=history.pop();lastStroke=null;manualTouched=true;outputPrepared=false;});
-    action('cutout-refine',()=>{
-      if(!lastStroke)return;
-      const result=refineMaskStroke(mask,sourcePixels,lastStroke);
-      if(result.changed){push();mask=result.mask;manualTouched=true;outputPrepared=false;}
-      body.querySelector('#cutout-note').textContent=result.changed?'已细化画笔附近边缘，可撤销。':'没有可靠的边缘变化，保留当前修补。';lastStroke=null;
-    });
-    return action;
-  };
-
+  const setNote=message=>{note=message;panel();};
   function panel(){
-    const stepIndex=steps.findIndex(([id])=>id===mode);
-    body.querySelectorAll('[data-cut-step]').forEach((node,i)=>{
-      node.classList.toggle('current',i===stepIndex);node.classList.toggle('passed',i<stepIndex);
-    });
-    const previous=body.querySelector('#cutout-prev'),next=body.querySelector('#cutout-next'),topApply=body.querySelector('#cutout-apply');
-    previous.disabled=stepIndex===0;next.textContent=stepIndex===steps.length-1?'应用当前结果':'下一步';topApply.disabled=stepIndex!==steps.length-1;
-    const el=body.querySelector('#cutout-mode-panel');
-
-    if(mode==='rough'){
-      const options=methodList.map(item=>'<option value="'+item.id+'" '+(recognitionState.method===item.id?'selected':'')+'>'+item.label+'</option>').join(''),
-        pixels=pixelList.map(([value,label])=>'<option value="'+value+'" '+(Number(value)===recognitionState.pixels?'selected':'')+'>'+label+'</option>').join('');
-      el.innerHTML='<div class="stack"><h3>1 · 先修 rough mask</h3>'
-        +maskToolsHTML('这里的涂抹只作为重新识别的初始范围；主算法可以继续向真实物理边缘扩张或收缩。','<div class="form-grid"><button type="button" id="cutout-rough-enter">恢复进入时 mask</button><button type="button" id="cutout-rough-original">恢复原始识别 mask</button></div>')
-        +'<h3>重新识别</h3><label>识别方法<select id="cutout-method">'+options+'</select><small id="cutout-method-help" class="setting-help">'+methodDescription(recognitionState.method)+'</small></label>'
-        +'<label>处理像素<select id="cutout-pixels">'+pixels+'</select><small class="setting-help">只影响这一次重新识别，不修改全局设置。</small></label><h3>识别预处理</h3>'
-        +switchRow('cutout-pre-light','光照场校正',recognitionState.preprocess.illumination,'补偿候选框内的渐变照明和阴影。')
-        +switchRow('cutout-pre-denoise','轻度去噪',recognitionState.preprocess.denoise,'减少噪点和 JPEG 纹理对边界的干扰。')
-        +switchRow('cutout-pre-contrast','局部对比增强',recognitionState.preprocess.localContrast,'轻量增强浅色边缘，不修改最终保存颜色。')
-        +switchRow('cutout-pre-chroma','Lab 色差边缘增强',recognitionState.preprocess.chromaEdges,'对绿白、浅色载体更有帮助，只作为边缘证据。')
-        +'<button type="button" class="btn primary" id="cutout-rerecognize" '+(!onRerecognize?'disabled':'')+'>用当前 rough mask 重新识别</button>'
-        +'<small class="setting-help">此按钮只运行主识别算法，不做规则图形、曲线平滑和孔洞后处理。</small></div>';
-      const action=bindMaskTools(el);
-      action('cutout-rough-enter',()=>{push();mask=copyMask(initialMask);roughStageMask=copyMask(mask);lastStroke=null;});
-      action('cutout-rough-original',()=>{push();mask=copyMask(recognitionMask);roughStageMask=copyMask(mask);lastStroke=null;});
-      const method=el.querySelector('#cutout-method');
-      method?.addEventListener('change',()=>{readRecognition(el);el.querySelector('#cutout-method-help').textContent=methodDescription(recognitionState.method);});
-      el.querySelector('#cutout-rerecognize')?.addEventListener('click',async()=>{
-        if(busy||!onRerecognize)return;
-        readRecognition(el);roughStageMask=copyMask(mask);busy=true;const button=el.querySelector('#cutout-rerecognize');button.disabled=true;body.querySelector('#cutout-note').textContent='正在使用当前 rough mask 重新识别…';
-        try{
-          const result=await onRerecognize({...requestBase(roughStageMask),...recognitionState});
-          if(!result?.mask||result.mask.length!==mask.length)throw Error('重新识别没有返回可用边界');
-          mask=copyMask(result.mask);recognitionBaseMask=copyMask(result.mask);recognitionStageMask=copyMask(result.mask);postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
-          history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
-          lastRecognition={...recognitionState,method:result.method||recognitionState.method};
-          mode='recognition';body.querySelector('#cutout-note').textContent='主识别完成。现在可先手修识别结果，再执行后处理。';draw();
-        }catch(error){body.querySelector('#cutout-note').textContent=error.message||'重新识别失败，保留当前 rough mask。';}
-        finally{busy=false;panel();}
-      });
-    }else if(mode==='recognition'){
-      el.innerHTML='<div class="stack"><h3>2 · 修正识别结果</h3>'
-        +maskToolsHTML('先手动修正主算法输出，再把当前 mask 送入后处理；后处理不会回到修正前的版本。','<button type="button" id="cutout-recognition-base">恢复刚识别结果</button>')
-        +'<h3>自动后处理</h3>'
-        +switchRow('cutout-post-edge','原分辨率边缘精修',postState.edgePolish,'用原分辨率 GrabCut 贴近真实物理边缘。')
-        +switchRow('cutout-post-shapes','规则图形规整',postState.shapeRegularization,'四边形、圆/椭圆和多边形并行拟合，最多只采用一个可信模型。')
-        +switchRow('cutout-post-curves','曲线平滑',postState.curveSmooth,'没有规则图形明显胜出时抑制像素锯齿。')
-        +switchRow('cutout-post-apertures','真实孔洞识别',postState.apertures,'保守恢复物理孔洞；宁可漏孔也避免误挖图案。')
-        +'<button type="button" class="btn primary" id="cutout-postprocess" '+(!onPostprocess?'disabled':'')+'>对当前 mask 应用后处理</button></div>';
-      const action=bindMaskTools(el);
-      action('cutout-recognition-base',()=>{push();mask=copyMask(recognitionBaseMask);recognitionStageMask=copyMask(mask);lastStroke=null;});
-      el.querySelector('#cutout-postprocess')?.addEventListener('click',async()=>{
-        if(busy||!onPostprocess)return;
-        readPost(el);recognitionStageMask=copyMask(mask);busy=true;const button=el.querySelector('#cutout-postprocess');button.disabled=true;body.querySelector('#cutout-note').textContent='正在对你修正后的 mask 应用后处理…';
-        try{
-          const result=await onPostprocess({...requestBase(recognitionStageMask),preprocess:recognitionState.preprocess,postprocess:{...postState}});
-          if(!result?.mask||result.mask.length!==mask.length)throw Error('自动修整没有返回可用边界');
-          mask=copyMask(result.mask);postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
-          history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
-          lastPostprocess={...postState,shapeModel:result.shapeModel||null};
-          mode='final';body.querySelector('#cutout-note').textContent=result.shapeModel?'后处理完成，并采用 '+result.shapeModel+' 规则图形。现在可做最终人工修正。':'后处理完成。现在可做最终人工修正。';draw();
-        }catch(error){body.querySelector('#cutout-note').textContent=error.message||'自动修整失败，保留当前识别结果。';}
-        finally{busy=false;panel();}
-      });
-    }else{
-      prepareOutput();
-      el.innerHTML='<div class="stack"><h3>3 · 最终 mask</h3>'
-        +maskToolsHTML('这是最终人工边界。此后颜色和角度调整都不会再改变 mask。','<button type="button" id="cutout-final-base">恢复后处理结果</button>')
-        +'<h3>方向</h3>'
-        +switchRow('cutout-auto-straighten','自动摆正',autoStraighten,'根据最终 mask 估计素材主方向；只旋转输出，不改变透明边界。')
-        +'<label>显示角度 <b id="rotation-value">'+rotation.toFixed(1)+'°</b><input id="cutout-angle" type="range" min="-180" max="180" step=".1" value="'+rotation+'"></label>'
-        +'<div class="form-grid"><button type="button" id="cutout-left">左转90°</button><button type="button" id="cutout-rotate">右转90°</button></div>'
-        +'<button type="button" id="cutout-align">重新按最终边缘摆正</button><button type="button" id="cutout-original-direction">恢复原方向</button>'
-        +'<h3>颜色与外观</h3><div class="cutout-tabs"><button type="button" data-appearance="original">原色</button><button type="button" data-appearance="natural">自然增强</button><button type="button" data-appearance="vivid">鲜明展示</button></div>'
-        +'<label>增强强度 <b id="appearance-value">'+Math.round(intensity*100)+'%</b><input id="cutout-intensity" type="range" min="0" max="100" value="'+intensity*100+'" '+(appearance==='original'?'disabled':'')+'></label>'
-        +'<small class="setting-help">最终阶段只有人工 mask、颜色和角度；不会再运行任何自动边界算法。</small></div>';
-      const action=bindMaskTools(el);
-      action('cutout-final-base',()=>{push();mask=copyMask(postprocessBaseMask);finalStageMask=copyMask(mask);lastStroke=null;outputPrepared=false;});
-      const auto=el.querySelector('#cutout-auto-straighten');
-      auto.onchange=()=>{autoStraighten=auto.checked;if(autoStraighten){const angle=maskOrientation(mask,w,h);if(angle!=null)rotation=angle;}panel();draw();};
-      const angle=el.querySelector('#cutout-angle');if(angle)angle.oninput=()=>{autoStraighten=false;auto.checked=false;rotation=+angle.value;el.querySelector('#rotation-value').textContent=rotation.toFixed(1)+'°';draw();};
-      action('cutout-left',()=>{autoStraighten=false;rotation=wrap(rotation-90);});
-      action('cutout-rotate',()=>{autoStraighten=false;rotation=wrap(rotation+90);});
-      action('cutout-original-direction',()=>{autoStraighten=false;rotation=initialRotation;});
-      action('cutout-align',()=>{const angle=maskOrientation(mask,w,h);if(angle!=null){rotation=angle;autoStraighten=true;}else body.querySelector('#cutout-note').textContent='轮廓不足，请手动调整角度。';});
-      el.querySelectorAll('[data-appearance]').forEach(b=>{b.classList.toggle('selected',b.dataset.appearance===appearance);b.onclick=()=>{appearance=b.dataset.appearance;panel();draw();};});
-      const amount=el.querySelector('#cutout-intensity');if(amount)amount.oninput=()=>{intensity=+amount.value/100;el.querySelector('#appearance-value').textContent=amount.value+'%';draw();};
-    }
+    if(mode==='final')prepareOutput();
+    flushSync(()=>cutoutRoot.render(createElement(CutoutPanel,{
+      state:{mode,restore,ratio,history:history.length>0,lastStroke:!!lastStroke,busy,
+        recognition:recognitionState,post:postState,methods:methodList,pixels:pixelList,
+        methodDescription:methodDescription(recognitionState.method),
+        canRerecognize:!!onRerecognize,canPostprocess:!!onPostprocess,
+        autoStraighten,rotation,appearance,intensity,note},
+      actions,canvasRef:node=>{if(node)preview=node;}
+    })));
   }
-
-  for(const [id,value] of [['compare-original','original'],['compare-initial','initial']]){
-    const b=body.querySelector('#'+id);
-    b.onpointerdown=e=>{if(busy)return;e.preventDefault();b.setPointerCapture(e.pointerId);comparison=value;draw();};
-    b.onpointerup=b.onpointercancel=()=>{comparison=null;draw();};
-    b.onkeydown=e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();comparison=value;draw();}};
-    b.onkeyup=()=>{comparison=null;draw();};
-  }
+  const modified=(fn,{paint=true}={})=>()=>{
+    if(busy)return;fn();comparison=null;panel();if(paint)draw();
+  };
+  const actions={
+    cancel:()=>{if(!busy)modal.close();},apply:()=>void apply(),
+    compare:value=>{comparison=value;draw();},
+    repair:value=>{restore=value;panel();},ratio:value=>{ratio=value;panel();},
+    undo:modified(()=>{if(history.length)mask=history.pop();lastStroke=null;manualTouched=true;outputPrepared=false;}),
+    refine:modified(()=>{if(!lastStroke)return;const result=refineMaskStroke(mask,sourcePixels,lastStroke);
+      if(result.changed){push();mask=result.mask;manualTouched=true;outputPrepared=false;}
+      note=result.changed?'已细化画笔附近边缘，可撤销。':'没有可靠的边缘变化，保留当前修补。';lastStroke=null;}),
+    restoreEntry:modified(()=>{push();mask=copyMask(initialMask);roughStageMask=copyMask(mask);lastStroke=null;}),
+    restoreRecognition:async()=>{
+      if(busy)return;
+      if(!onLoadInitialMask){push();mask=copyMask(recognitionMask);roughStageMask=copyMask(mask);lastStroke=null;panel();draw();return;}
+      busy=true;panel();try{const originalMask=await onLoadInitialMask();
+        if(!originalMask?.width||!originalMask?.height)throw Error('初始透明蒙版无效');
+        const initial=resampleMask(originalMask,w,h);push();mask=copyMask(initial.alpha);
+        roughStageMask=copyMask(mask);recognitionBaseMask=copyMask(mask);lastStroke=null;draw();
+      }catch(error){note='初始识别结果未能恢复：'+error.message;}
+      finally{busy=false;panel();}
+    },
+    recognition:(key,value)=>{recognitionState={...recognitionState,[key]:value};panel();},
+    preprocess:(key,value)=>{recognitionState={...recognitionState,preprocess:{...recognitionState.preprocess,[key]:value}};panel();},
+    post:(key,value)=>{postState={...postState,[key]:value};panel();},
+    rerecognize:async()=>{
+      if(busy||!onRerecognize)return;
+      roughStageMask=copyMask(mask);busy=true;setNote('正在使用当前 rough mask 重新识别…');
+      try{const result=await onRerecognize({...requestBase(roughStageMask),...recognitionState});
+        if(!result?.mask||result.mask.length!==mask.length)throw Error('重新识别没有返回可用边界');
+        mask=copyMask(result.mask);recognitionBaseMask=copyMask(result.mask);recognitionStageMask=copyMask(result.mask);
+        postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
+        history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
+        lastRecognition={...recognitionState,method:result.method||recognitionState.method};lastPostprocess=null;
+        mode='recognition';note='主识别完成。现在可先手修识别结果，再执行后处理。';draw();
+      }catch(error){note=error.message||'重新识别失败，保留当前 rough mask。';}
+      finally{busy=false;panel();}
+    },
+    restoreRecognitionBase:modified(()=>{push();mask=copyMask(recognitionBaseMask);recognitionStageMask=copyMask(mask);lastStroke=null;}),
+    postprocess:async()=>{
+      if(busy||!onPostprocess)return;
+      recognitionStageMask=copyMask(mask);busy=true;setNote('正在对你修正后的 mask 应用后处理…');
+      try{const result=await onPostprocess({...requestBase(recognitionStageMask),
+          preprocess:recognitionState.preprocess,postprocess:{...postState}});
+        if(!result?.mask||result.mask.length!==mask.length)throw Error('自动修整没有返回可用边界');
+        mask=copyMask(result.mask);postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
+        history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
+        lastPostprocess={...postState,shapeModel:result.shapeModel||null};mode='final';
+        note=result.shapeModel?'后处理完成，并采用 '+result.shapeModel+' 规则图形。现在可做最终人工修正。':'后处理完成。现在可做最终人工修正。';draw();
+      }catch(error){note=error.message||'自动修整失败，保留当前识别结果。';}
+      finally{busy=false;panel();}
+    },
+    restoreFinalBase:modified(()=>{push();mask=copyMask(postprocessBaseMask);finalStageMask=copyMask(mask);lastStroke=null;outputPrepared=false;}),
+    autoStraighten:value=>{autoStraighten=value;if(value){const angle=maskOrientation(mask,w,h);if(angle!=null)rotation=angle;}panel();draw();},
+    angle:value=>{autoStraighten=false;rotation=value;panel();draw();},
+    rotate:delta=>{autoStraighten=false;rotation=wrap(rotation+delta);panel();draw();},
+    originalDirection:()=>{autoStraighten=false;rotation=initialRotation;panel();draw();},
+    align:()=>{const angle=maskOrientation(mask,w,h);if(angle!=null){rotation=angle;autoStraighten=true;}else note='轮廓不足，请手动调整角度。';panel();draw();},
+    appearance:value=>{appearance=value;panel();draw();},
+    intensity:value=>{intensity=value;panel();draw();},
+    reset:()=>{push();mask=copyMask(initialMask);roughStageMask=copyMask(initialMask);
+      recognitionBaseMask=copyMask(recognitionMask);recognitionStageMask=copyMask(recognitionMask);
+      postprocessBaseMask=copyMask(initialMask);finalStageMask=copyMask(initialMask);
+      appearance=initialAppearance;intensity=initialIntensity;rotation=initialRotation;autoStraighten=initialAutoStraighten;
+      outputPrepared=false;manualTouched=false;lastStroke=null;lastRecognition=null;lastPostprocess=null;mode='rough';panel();draw();},
+    previous:()=>{if(busy)return;
+      if(mode==='recognition'){recognitionStageMask=copyMask(mask);mode='rough';mask=copyMask(roughStageMask);}
+      else if(mode==='final'){finalStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);}
+      comparison=null;history.length=0;lastStroke=null;outputPrepared=false;panel();draw();},
+    step:target=>{
+      if(busy||!steps.some(([id])=>id===target)||mode===target)return;
+      const current=steps.findIndex(([id])=>id===mode);
+      const selected=steps.findIndex(([id])=>id===target);
+      if(selected<current){for(let i=current;i>selected;i--)actions.previous();}
+      else for(let i=current;i<selected;i++)actions.next();
+    },
+    next:()=>{if(busy)return;
+      if(mode==='rough'){roughStageMask=copyMask(mask);recognitionBaseMask=copyMask(mask);recognitionStageMask=copyMask(mask);
+        lastRecognition=null;lastPostprocess=null;mode='recognition';mask=copyMask(recognitionStageMask);}
+      else if(mode==='recognition'){recognitionStageMask=copyMask(mask);postprocessBaseMask=copyMask(mask);finalStageMask=copyMask(mask);
+        lastPostprocess=null;mode='final';mask=copyMask(finalStageMask);outputPrepared=false;prepareOutput();}
+      else{void apply();return;}
+      comparison=null;history.length=0;lastStroke=null;panel();draw();}
+  };
 
   const point=e=>{
     const r=preview.getBoundingClientRect(),scale=Math.min(r.width/frame.width,r.height/frame.height),
@@ -304,51 +363,37 @@ export async function showCutoutEditor({
   preview.onpointerup=e=>{if(!stroke||stroke.id!==e.pointerId)return;lastStroke=stroke;stroke=null;if(mode==='final'&&autoStraighten){const angle=maskOrientation(mask,w,h);if(angle!=null)rotation=angle;}panel();};
   preview.onpointercancel=()=>{if(!stroke)return;mask=history.pop();stroke=null;draw();panel();};
 
-  body.querySelector('#cutout-reset').onclick=()=>{
-    push();mask=copyMask(initialMask);roughStageMask=copyMask(initialMask);recognitionBaseMask=copyMask(recognitionMask);recognitionStageMask=copyMask(recognitionMask);postprocessBaseMask=copyMask(initialMask);finalStageMask=copyMask(initialMask);
-    appearance=initialAppearance;intensity=initialIntensity;rotation=initialRotation;autoStraighten=initialAutoStraighten;
-    outputPrepared=false;manualTouched=false;lastStroke=null;lastRecognition=null;lastPostprocess=null;mode='rough';panel();draw();
-  };
-  body.querySelector('#cutout-cancel').onclick=()=>{if(!busy)modal.close();};
-
   const apply=async()=>{
     if(busy||stroke)return;finalStageMask=copyMask(mask);
     if(!mask.some(a=>a>0)){toast('没有可见素材，请回到手动修补恢复区域');return;}
-    busy=true;for(const b of body.querySelectorAll('button'))b.disabled=true;
+    busy=true;panel();
     try{
       const blob=await png(composed());
+      setNote('正在读取高清候选框并映射小蒙版，准备完整 PNG…');
+      await new Promise(resolve=>requestAnimationFrame(resolve));
       await onApply(blob,{
         appearance,intensity,displayRotationDegrees:rotation,autoStraighten,
         recognitionRotationDegrees:processing.recognitionRotationDegrees||0,
-        sourcePixelWidth:w,sourcePixelHeight:h,candidateFramePlacement:processing.candidateFramePlacement||null,
+        sourcePixelWidth:w,sourcePixelHeight:h,recognitionPixels:editPixels,
+        candidateFramePlacement:processing.candidateFramePlacement||null,
         rerecognition:lastRecognition,autoPostprocess:lastPostprocess,manualBoundaryEdited:manualTouched
-      },recognition);
+      },recognition,encodeAlphaMask(mask,w,h));
       modal.close();
-    }catch(e){toast(e.message);busy=false;body.querySelectorAll('button').forEach(b=>b.disabled=false);panel();}
-  };
-
-  body.querySelector('#cutout-apply').onclick=apply;
-  body.querySelector('#cutout-prev').onclick=()=>{
-    if(busy)return;
-    if(mode==='recognition'){recognitionStageMask=copyMask(mask);mode='rough';mask=copyMask(roughStageMask);}
-    else if(mode==='final'){finalStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);}
-    comparison=null;history.length=0;lastStroke=null;outputPrepared=false;panel();draw();
-  };
-  body.querySelector('#cutout-next').onclick=()=>{
-    if(busy)return;
-    if(mode==='rough'){
-      roughStageMask=copyMask(mask);recognitionBaseMask=copyMask(mask);recognitionStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);
-    }else if(mode==='recognition'){
-      recognitionStageMask=copyMask(mask);postprocessBaseMask=copyMask(mask);finalStageMask=copyMask(mask);mode='final';mask=copyMask(finalStageMask);outputPrepared=false;prepareOutput();
-    }else{void apply();return;}
-    comparison=null;history.length=0;lastStroke=null;panel();draw();
+    }catch(e){toast(e.message);busy=false;panel();}
   };
 
   const cancel=e=>{if(busy)e.preventDefault();};
   modal.addEventListener('cancel',cancel);
   onDialogClosed(modal,()=>{
-    resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog');
-    source.close();initial.close();recognized.close();frame.close();
+    resize.disconnect();cutoutRoot.unmount();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog','cutout-loading-dialog');
+    for(const image of new Set([source,initial,recognized,frame]))image?.close?.();
   });
+  // The tool layout should be presented while the native dialog remains
+  // open, before any expensive preview paint. Do not close and showModal again.
+  // Size the preview at once so the first visible frame is never stretched
+  // while the higher-cost mask composition waits for the next animation frame.
+  preview.width=displayWidth;preview.height=displayHeight;fit();
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  if(isCancelled()||!modal.open)return;
   panel();draw();
 }

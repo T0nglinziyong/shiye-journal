@@ -1,0 +1,29 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-shape-add",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "shape.add",
+      "id": "dot",
+      "kind": "ellipse",
+      "place": {
+        "reference": "page",
+        "at": [
+          20,
+          20
+        ],
+        "unit": "mm",
+        "anchor": "center"
+      },
+      "size": {
+        "width": 5,
+        "height": 5,
+        "unit": "mm"
+      },
+      "style": {
+        "fill": "#A8BCD5"
+      }
+    }
+  ]
+}

@@ -1,96 +1,558 @@
+import {mountLiveInkStroke} from './ink-live-svg.js';
+import {materialKinds} from './material-taxonomy.js';
+import {configureInkBacking} from './ink-raster-scale.js';
+import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
-import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,resizeObject,textFont,textLines} from './editor-tools-model.js';
-import {shapeTag as shapeSVG} from './shape-preview.js';
-import {get as getRecord} from './store.js';
-import {CURRENT_EXAMPLE_SHAPES_URL,isCurrentExampleProject} from './current-examples.js';
-let exampleShapesPromise;
-function loadExampleShapes(){return exampleShapesPromise||=(fetch(CURRENT_EXAMPLE_SHAPES_URL).then(r=>{if(!r.ok)throw Error('无法读取 CeCe 图形');return r.json();}).catch(error=>{exampleShapesPromise=null;throw error;}));}
+import {openEditorLayerTree} from './editor-layer-tree.js';
+import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines,textFontFamily,textLineHeight} from './editor-tools-model.js';
+import {advancedShapeControls,resolvedShapeOptions,shapeRepeatCountPatch,validateShapeOptions} from './advanced-shape-options.js';
+import {shapeThumbnailTag as shapeSVG} from './shape-preview.js';
+import {isCurrentExampleProject} from './legacy-builtins.js';
 import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
 import {showMaterialProcessing} from './material-processing-editor.js';
 import {parseEditableGeometry} from './editable-geometry.js';
 import {bundledExampleRuling} from './paper-rendering.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 import {mountCanvasViewport} from './canvas-viewport.js';
+import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
+import {mountPieceThumbnail} from './material-piece-thumbnail.js';
+import {makeAutoSceneSnapshot,restoreAutoSceneSnapshot} from './scene-persistence.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
-import {clampCanvasPosition,moveSelection} from './canvas-selection.js';
-const labels={select:'选择',marquee:'矩形框选',pen:'钢笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索对象',text:'文字',shape:'添加图形',material:'添加素材'};
-const glyphs={select:'➤',pen:'♧',highlighter:'▱',eraser:'◇',lasso:'◌',text:'Aa',shape:'▢',material:'▧'};
+import {syncInkSceneDOM} from './ink-scene-svg.js';
+import {eraserBehavior,pointerSamples,eraserPathSamples,eraseStrokesAlongPath} from './ink-gesture.js';
+import {validateScenePhysical} from './creative.js';
+import {attachSceneV2} from './scene-v2.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,moveSceneNode,validateVectorMask} from './scene-model.js';
+import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
+import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
+const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
+const glyphs={select:'➤',pen:'',eraser:'◇',highlighter:'▱',lasso:'◌',text:'Aa',shape:'▢',material:'▧',layers:'▱',paper:'▦'};
 const prefKey='shiye-canvas-tools-v1';
-const allEntries=d=>[['material',d.items],['shape',d.primitives],['text',d.textBlocks]].flatMap(([kind,list])=>(list||[]).map(value=>({kind,value})));
+// Survive editor remounts and route returns; card image nodes stay decoded.
+const pickerRows=new Map();
+const allEntries=d=>sceneLayerEntries(d,{hidden:true,ink:false});
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
-  if(captureHistory(state.activeProject))saveProject();
+  // Initialize missing history records in memory, but do not stage a write
+  // merely because the user opened an existing draft. A genuine edit will
+  // persist the current snapshot together with its Scene changes.
+  captureHistory(state.activeProject);
+  state.workspacePanel=false;
   if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem(prefKey))||{};}catch{}state.canvasTools={...defaultTools,...saved};}
+  ensureInkSlots(state.canvasTools);
   const prefs=state.canvasTools,head=view.querySelector('.view-head'),actions=head.querySelector('.actions'),tools=view.querySelector('.editor-tools'),shell=view.querySelector('.editor-shell');let entries=allEntries(d),selected=entries.find(e=>e.value.id===state.selected);
-  const button=(label,fn,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.onclick=e=>{if(state.editingTextID&&!b.closest('.canvas-context-tools,[data-object]'))view.endTextEditing?.();fn(e);};return b;};
-  const prefsChanged=()=>{try{localStorage.setItem(prefKey,JSON.stringify(prefs));}catch{}contextTools();};
+  const button=(label,fn,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.onclick=e=>{e.stopPropagation();if(state.editingTextID&&!b.closest('.canvas-context-tools,[data-object]'))view.endTextEditing?.();fn(e);};return b;};
+  const prefsChanged=()=>{try{localStorage.setItem(prefKey,JSON.stringify(prefs));}catch{}if(!document.querySelector('.swift-popover'))contextTools();};
   const change=fn=>{checkpoint();fn();saveProject();render();};
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};
-  head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.textContent='‹ 返回';
-  const ai=actions.querySelector('button.primary'),json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
-  actions.replaceChildren();const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent=document.querySelector('#save-state').textContent;actions.append(saved);
-  actions.append(button('◷',e=>historyMenu(e.currentTarget),'canvas-icon'));actions.lastChild.setAttribute('aria-label','历史记录');actions.append(topAction('undo','↶'),topAction('redo','↷'));
-  actions.append(topAction('save-work','保存'));// Archives remain separate from promoting a draft to a work.
-  actions.append(button('完成',()=>handle('editor-done'),'btn primary'));
-  const share=button('↥',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'canvas-icon');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
-  const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
-  const insertion=document.createElement('div');insertion.className='swift-insertion-tools';toolbar.append(insertion);
-  const context=document.createElement('div');context.className='canvas-context-tools';context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
-  const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=mode;state.toolHighlight=mode;if(mode!=='select')state.multiSelected=[];if(mode!=='select')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material'].includes(mode)){if(mode==='material'){state.tool='select';materialPicker(b);}else shapePicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
-  for(const mode of ['select','pen','highlighter','eraser','lasso','text','shape','material']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
-  const layer=button('▱',e=>layerPicker(e.currentTarget),'canvas-icon');layer.setAttribute('aria-label','图层');insertion.append(layer);
-  const paper=button('▦',e=>paperPicker(e.currentTarget),'canvas-icon');paper.setAttribute('aria-label','画布背景');insertion.append(paper);
-  const steps=button('☷',()=>{state.workspacePanel=!state.workspacePanel;render();},'canvas-icon');steps.setAttribute('aria-label','制作步骤与迭代记录');insertion.append(steps);
-  shell.classList.add('swift-editor-workspace');shell.classList.remove('show-inspector');shell.querySelector('.editor-inspector').hidden=true;
+  head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.textContent='返回';back.setAttribute('aria-label','返回作品');
+  const json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
+  // All devices use the same header order as the approved 28509aa9:
+  // history, undo, redo, Complete and Export. Width/overflow can adapt,
+  // but none of these actions may move into another toolbar.
+  actions.replaceChildren();
+  const saved=document.createElement('span');
+  saved.className='swift-auto-saved';
+  saved.textContent=document.querySelector('#save-state')?.textContent||'';
+  actions.append(saved);
+  const history=button('◷',e=>historyMenu(e.currentTarget),'canvas-icon');
+  history.setAttribute('aria-label','历史记录');
+  actions.append(history,topAction('undo','↶'),topAction('redo','↷'));
+  const done=button('完成',()=>handle('editor-done'),'btn primary');
+  done.dataset.editorCompletion='';
+  actions.append(done);
+  const share=button('导出',e=>{
+    const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});
+    for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],
+      ['导出 PNG',()=>handle('export-png')],
+      ['导出 PDF',()=>pdf?.click()||handle('print')],
+      ['导出可编辑 JSON',()=>handle('download-project-json')],
+      ['导出标准 Scene JSON',()=>handle('export-scene-json')],
+      ['打印',()=>handle('print')],
+      ['导入创作指令',()=>handle('creative-json')]])
+      p.content.append(button(name,()=>{p.close();fn();}));
+  },'btn');
+  share.setAttribute('aria-label','导出作品');share.dataset.editorExport='';
+  actions.append(share);
+  if(json){json.hidden=true;actions.append(json);}
+  const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';
+  shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
+  const context=document.createElement('div');context.className='canvas-context-tools';
+  context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
+  // iOS Safari blurs the inline text area as soon as a native select or
+  // format button is touched. Defer only that blur, not edits or navigation.
+  context.addEventListener('pointerdown',event=>{
+    if(state.editingTextID&&event.target.closest('select,button,input'))view.keepTextEditorUntil=performance.now()+1600;
+  },true);
+  const changeTool=(mode,b)=>{view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(!['select','lasso','layers'].includes(mode)){state.multiSelected=[];state.selectedStrokes=[];}if(!['select','lasso','layers'].includes(mode))state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
+  for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
+  // Property editing remains available through the selected object's
+  // contextual inspector, not a separate top-bar button.
+  shell.classList.add('swift-editor-workspace');
+  shell.classList.remove('show-inspector');
+  const inspectorPanel=shell.querySelector('.editor-inspector');
+  if(inspectorPanel)inspectorPanel.hidden=true;
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
-  function contextTools(){context.replaceChildren();const mode=state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
-    if(['pen','highlighter'].includes(mode)){const marker=mode==='highlighter',key=marker?'marker':'pen';for(const width of [2,4,9]){const b=button('',()=>{if(prefs[key+'Width']===width)toolSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);}for(const color of ['#2b5245','#009cff','#ff3348']){const b=button('',()=>{if(prefs[key+'Color']===color)toolSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();}},'ink-color'+(prefs[key+'Color']===color?' active':''));b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);}return;}
-    if(mode==='eraser'){for(const size of [8,20,40]){const b=button('○',()=>{prefs.eraserWidth=size;prefsChanged();},'eraser-size'+(prefs.eraserWidth===size?' active':''));b.style.fontSize=(size/2+14)+'px';b.disabled=prefs.wholeStroke;b.setAttribute('aria-label','橡皮尺寸 '+size+' pt');context.append(b);}context.append(button(prefs.wholeStroke?'整笔擦除':'局部擦除',e=>toolSettings(e.currentTarget,'eraser')));return;}
-    if(mode==='lasso'||mode==='marquee'||state.multiSelected?.length>1){context.append(button('选择范围',e=>toolSettings(e.currentTarget,'lasso')));const count=document.createElement('span');count.textContent='已选 '+(state.multiSelected?.length||0)+' 项';context.append(count,button('取消选择',()=>{state.multiSelected=[];state.selected=null;render();}));return;}
-    if(mode==='text'||kind==='text'){const t=s||state.textDefaults||{style:'serif',fontSize:40,color:'#30463d'};const patch=(key,value)=>{if(s)change(()=>{s[key]=value;if(key==='style')s.fontName=null;});else{(state.textDefaults||={...t})[key]=value;contextTools();}};const font=document.createElement('select');font.setAttribute('aria-label','字体');font.innerHTML=[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']].map(([id,name])=>'<option value="'+id+'" '+(id===t.style?'selected':'')+'>'+name+'</option>').join('');font.onchange=()=>patch('style',font.value);context.append(font);const size=document.createElement('input');size.type='number';size.min=5;size.max=400;size.value=t.fontSize;size.setAttribute('aria-label','字号');size.onchange=()=>patch('fontSize',Math.max(5,Math.min(400,+size.value||40)));context.append(size);context.append(button('☷',e=>textParagraph(e.currentTarget,t,patch)));const color=document.createElement('input');color.type='color';color.value=t.color||'#30463d';color.setAttribute('aria-label','文字颜色');color.onchange=()=>patch('color',color.value);context.append(color,button('Aa',e=>{const p=openPopover(e.currentTarget,{title:'文字样式',width:240,menu:true});for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])p.content.append(button((t[key]?'✓ ':'')+name,()=>{p.close();patch(key,!t[key]);}));if(s)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entries.find(e=>e.value.id===state.selected));}));}));return;}
-    if(mode==='shape'||kind==='shape'){context.append(button('＋ 添加图形',e=>shapePicker(e.currentTarget)));if(s&&kind==='shape'){const width=document.createElement('input');width.type='number';width.min=0;width.max=30;width.value=s.lineWidth; width.setAttribute('aria-label','线条粗细');width.onchange=()=>change(()=>s.lineWidth=Math.max(0,Math.min(30,+width.value||0)));context.append(width);for(const [key,name] of (s.vectorLayers?[]:[['stroke','线条颜色'],['fill','填充颜色']])){const color=document.createElement('input');color.type='color';color.value=s[key]||'#ffffff';color.setAttribute('aria-label',name);color.onchange=()=>change(()=>s[key]=color.value);context.append(color);}vectorColors(s);context.append(button('图形设置',()=>objectInspector(selected)));}return;}
+  let contextSignature=null;
+  function contextTools(){
+    const mode=state.toolHighlight||state.tool,
+      entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
+    // The contextual toolbar is a persistent component. Refresh its controls
+    // only when their actual dependencies change, not after every Scene/ink
+    // mutation (which used to replace all buttons and native selects).
+    const t=kind==='text'?s:state.textDefaults;
+    const signature=JSON.stringify([
+      mode,kind,s?.id,state.zoom,
+      ['pen','highlighter','eraser'].includes(mode)?prefs:null,
+      kind==='text'||mode==='text'?[t?.style,t?.fontSize,t?.color,t?.bold,t?.italic,t?.underline,t?.strikethrough]:null,
+      kind==='shape'?[s?.fill,s?.stroke,s?.lineWidth,s?.opacity,!!s?.vectorLayers]:null
+    ]);
+    if(contextSignature===signature&&context.isConnected)return;
+    contextSignature=signature;
+    context.replaceChildren();
+    if(['pen','highlighter'].includes(mode)){
+      const key=mode==='highlighter'?'marker':'pen';
+      for(let i=0;i<3;i++){
+        const width=inkSlot(prefs,mode,'width',i),active=activeInkSlot(prefs,mode,'width')===i;
+        const b=button('',()=>{if(activeInkSlot(prefs,mode,'width')===i){widthSettings(b,mode,i);return;}
+          selectInkSlot(prefs,mode,'width',i);prefsChanged();contextTools();
+        },'stroke-width'+(active?' active':''));
+        b.innerHTML='<span style="display:block;height:'+Math.max(2,Math.min(20,width))+'px"></span>';
+        b.dataset.inkWidthSlot=String(i);
+        b.setAttribute('aria-label','笔画粗细 '+width+' pt');b.title=active?'再次点击可修改粗细':'';context.append(b);
+      }
+      for(let i=0;i<3;i++){
+        const color=inkSlot(prefs,mode,'color',i),active=activeInkSlot(prefs,mode,'color')===i;
+        const b=button('',()=>{if(activeInkSlot(prefs,mode,'color')===i){colorSettings(b,mode,i);return;}
+          selectInkSlot(prefs,mode,'color',i);prefsChanged();contextTools();
+        },'ink-color'+(active?' active':''));
+        b.style.backgroundColor=color;b.dataset.inkColorSlot=String(i);
+        b.setAttribute('aria-label','笔画颜色 '+color);b.title=active?'再次点击可修改颜色':'';context.append(b);
+      }
+      return;
+    }
+    if(mode==='eraser'){
+      for(let i=0;i<3;i++){
+        const size=inkSlot(prefs,'eraser','width',i),active=activeInkSlot(prefs,'eraser','width')===i;
+        const b=button('○',()=>{if(activeInkSlot(prefs,'eraser','width')===i){widthSettings(b,'eraser',i);return;}
+          selectInkSlot(prefs,'eraser','width',i);prefsChanged();contextTools();
+        },'eraser-size'+(active?' active':''));
+        b.style.fontSize=Math.round(Math.max(17,Math.min(42,size*.48+11)))+'px';
+        b.dataset.inkWidthSlot=String(i);
+        b.setAttribute('aria-label','橡皮大小 '+size+' pt');b.title=active?'再次点击可修改橡皮大小':'';context.append(b);
+      }
+      return;
+    }
+    if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
+    if(['material','layers','paper'].includes(mode))return;
+    if(mode==='text'||kind==='text'){
+      const t=kind==='text'?s:(state.textDefaults||={style:'serif',fontSize:40,color:'#30463d'});
+      const patch=(key,value)=>{
+        if(kind!=='text'){state.textDefaults={...t,[key]:value,...(key==='style'?{fontName:null}:{})};contextTools();return;}
+        // Never tear down a brand-new empty textarea to change font/size:
+        // a full render would blur it, delete it and discard the change.
+        const active=state.editingTextID===s.id&&!!page.querySelector('.canvas-inline-text');
+        if(active){
+          checkpoint();s[key]=value;if(key==='style')s.fontName=null;
+          const node=page.querySelector('[data-object="'+s.id+'"]');
+          if(node){
+            const scale=page.clientWidth/d.canvas.width;
+            node.style.fontFamily=textFontFamily(s);
+            node.style.fontSize=s.fontSize*scale+'px';
+            node.style.lineHeight=textLineHeight(s)*scale+'px';
+            node.style.fontWeight=s.bold?'700':'400';
+          }
+          saveProject();contextTools();
+        }else change(()=>{s[key]=value;if(key==='style')s.fontName=null;});
+      };
+      const group=document.createElement('div');group.className='canvas-text-format';
+      const font=document.createElement('select');font.setAttribute('aria-label','字体');
+      font.innerHTML=[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']]
+        .map(([id,name])=>'<option value="'+id+'" '+(id===t.style?'selected':'')+'>'+name+'</option>').join('');
+      font.onchange=()=>patch('style',font.value);group.append(font);
+      const size=document.createElement('div');size.className='canvas-font-size-stepper';size.setAttribute('aria-label','调整字号');
+      const smaller=button('‹',()=>patch('fontSize',adjacentFontSize(t.fontSize,-1)),'font-step');
+      smaller.setAttribute('aria-label','减小字号');smaller.title='减小到上一个预设字号';
+      const value=document.createElement('output');value.textContent=Math.round(t.fontSize||40);value.setAttribute('aria-label','当前字号');
+      const bigger=button('›',()=>patch('fontSize',adjacentFontSize(t.fontSize,1)),'font-step');
+      bigger.setAttribute('aria-label','增大字号');bigger.title='增大到下一个预设字号';
+      size.append(smaller,value,bigger);group.append(size);
+      context.append(group);
+      const para=button('☷',e=>textParagraph(e.currentTarget,t,patch));para.setAttribute('aria-label','段落设置');context.append(para);
+      const color=document.createElement('input');color.type='color';color.value=t.color||'#30463d';
+      color.setAttribute('aria-label','文字颜色');color.onchange=()=>patch('color',color.value);
+      context.append(color,button('Aa',e=>{
+        const p=openPopover(e.currentTarget,{title:'文字样式',width:240,menu:true});
+        for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])
+          p.content.append(button((t[key]?'✓ ':'')+name,()=>{p.close();patch(key,!t[key]);}));
+        if(s)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entries.find(e=>e.value.id===state.selected));}));
+      }));
+      return;
+    }
+    if(kind==='shape'||mode==='shape'){
+      context.append(button('＋ 图形',e=>shapePicker(e.currentTarget),'shape-add-quick'));
+      if(kind==='shape'&&s){
+        if(!s.vectorLayers){
+          for(const [key,label] of [['fill','填充'],['stroke','描边']]){
+            const swatch=document.createElement('label');swatch.className='shape-quick-color';swatch.title=label;
+            swatch.append(document.createTextNode(label));
+            const input=document.createElement('input');input.type='color';input.value=s[key]||'#ffffff';
+            input.setAttribute('aria-label',label+'颜色');input.onchange=()=>change(()=>s[key]=input.value);
+            swatch.append(input);context.append(swatch);
+          }
+          const width=document.createElement('select');width.className='shape-quick-select';width.setAttribute('aria-label','描边粗细');
+          for(const n of [0,1,2,3,4,6,8,12,16,24,30])width.append(new Option('线 '+n,n));
+          if(![...width.options].some(o=>Number(o.value)===s.lineWidth))width.add(new Option('线 '+s.lineWidth,s.lineWidth));
+          width.value=String(s.lineWidth??2);width.onchange=()=>change(()=>s.lineWidth=Number(width.value));context.append(width);
+        }
+        const opacity=document.createElement('select');opacity.className='shape-quick-select';opacity.setAttribute('aria-label','图形整体不透明度');
+        for(const n of [0,25,50,75,100])opacity.append(new Option(n+'%',n));
+        const currentOpacity=Math.round((s.opacity??1)*100);
+        if(![...opacity.options].some(o=>Number(o.value)===currentOpacity))opacity.add(new Option(currentOpacity+'%',currentOpacity));
+        opacity.value=String(currentOpacity);opacity.onchange=()=>change(()=>s.opacity=Number(opacity.value)/100);context.append(opacity);
+        context.append(button('更多设置',()=>objectInspector(entries.find(e=>e.value.id===state.selected)),'shape-detail-quick'));
+      }
+      return;
+    }
     if(kind==='material')context.append(button('☷ 素材操作',()=>objectInspector(selected)));
-    const fit=button('↖ 适合页面 '+Math.round(state.zoom*100)+'%',()=>view.editorViewport?.fit());fit.dataset.canvasFit='';context.append(fit,button('选择范围',e=>toolSettings(e.currentTarget,'lasso')));const hint=document.createElement('span');hint.className='swift-editor-hint';hint.textContent='双指缩放 · 空白处拖动画布 · 点选后拖动对象 · Ctrl+滚轮缩放';context.append(hint);
+    if(mode==='select'){const fit=button('↖ '+Math.round(state.zoom*100)+'%',()=>view.editorViewport?.fit());fit.dataset.canvasFit='';context.append(fit);}
   }
   const toggle=(parent,label,value,fn)=>{const row=document.createElement('label');row.className='canvas-toggle';row.append(document.createTextNode(label));const input=document.createElement('input');input.type='checkbox';input.checked=value;input.onchange=()=>fn(input.checked);row.append(input);parent.append(row);return input;};
   const range=(parent,label,value,min,max,step,fn,disabled=false,suffix=" pt")=>{const row=document.createElement('label');row.className='canvas-setting';const line=document.createElement('span'),display=document.createElement('output');line.append(document.createTextNode(label),display);display.textContent=Number(value).toFixed(step<1?1:0)+suffix;const input=document.createElement('input');Object.assign(input,{type:'range',min,max,step,value,disabled});input.oninput=()=>{display.textContent=Number(input.value).toFixed(step<1?1:0)+suffix;fn(+input.value);};row.append(line,input);parent.append(row);};
-  function toolSettings(anchor,mode){const p=openPopover(anchor,{title:mode==='pen'?'笔工具':mode==='lasso'?'套索工具':labels[mode]});const el=p.content;
-    if(mode==='pen'||mode==='highlighter'){const key=mode==='pen'?'pen':'marker',sample=document.createElement('div');sample.className='ink-sample';const drawSample=()=>{sample.innerHTML='<svg viewBox="0 0 300 80"><path d="M10 60 C100 75 150 -15 290 38" fill="none" stroke="'+prefs[key+'Color']+'" stroke-width="'+prefs[key+'Width']+'" opacity="'+(mode==='highlighter'?'.4':'1')+'" stroke-linecap="round"/></svg>';};drawSample();el.append(sample);if(mode==='pen'){const choices=document.createElement('div');choices.className='pen-style-picker';for(const [id,name,glyph] of [['fountain','钢笔','♧'],['ballpoint','圆珠笔','╱'],['brush','画笔','♢']]){const b=button(glyph+'\n'+name,()=>{prefs.penStyle=id;choices.querySelectorAll('button').forEach(n=>n.classList.toggle('selected',n===b));prefsChanged();});b.classList.toggle('selected',prefs.penStyle===id);choices.append(b);}el.append(choices);}else toggle(el,'直线绘制',prefs.markerStraight,value=>{prefs.markerStraight=value;prefsChanged();});range(el,'粗细',prefs[key+'Width'],1,20,.1,value=>{prefs[key+'Width']=value;prefsChanged();drawSample();});const row=document.createElement('label');row.className='canvas-toggle';row.textContent='颜色';const color=document.createElement('input');color.type='color';color.value=prefs[key+'Color'];color.oninput=()=>{prefs[key+'Color']=color.value;prefsChanged();drawSample();};row.append(color);el.append(row);}
-    else if(mode==='eraser'){const modes=document.createElement('div');modes.className='swift-segments';for(const [value,name] of [[true,'整笔擦除'],[false,'局部擦除']]){const b=button(name,()=>{prefs.wholeStroke=value;prefsChanged();toolSettings(anchor,mode);});b.classList.toggle('selected',prefs.wholeStroke===value);modes.append(b);}el.append(modes);range(el,'橡皮尺寸',prefs.eraserWidth,6,80,1,value=>{prefs.eraserWidth=value;prefsChanged();},prefs.wholeStroke);toggle(el,'擦除后返回上一支笔',prefs.returnToPen,value=>{prefs.returnToPen=value;prefsChanged();});el.append(button('清除本页笔迹',()=>{if(confirm('清除本页笔迹？此操作可以撤销。')){p.close();change(()=>d.strokes=[]);}}));}
-    else{state.selectionFilter||={material:true,text:true,shape:true};for(const [key,name] of [['material','素材'],['text','文字框'],['shape','图形']])toggle(el,name,state.selectionFilter[key],v=>state.selectionFilter[key]=v);const note=document.createElement('small');note.textContent='锁定或隐藏的对象不会被选中；圈选后可整体移动。';el.append(note);}
+  function widthSettings(anchor,mode,index=activeInkSlot(prefs,mode,'width')){
+    const p=openPopover(anchor,{title:mode==='eraser'?'修改橡皮大小':'修改笔粗细',width:270});
+    const apply=value=>{
+      const n=editInkSlot(prefs,mode,'width',index,value);
+      const stroke=anchor.querySelector('span');
+      if(stroke)stroke.style.height=Math.max(2,Math.min(20,n))+'px';
+      if(mode==='eraser')anchor.style.fontSize=Math.round(Math.max(17,Math.min(42,n*.48+11)))+'px';
+      anchor.setAttribute('aria-label',(mode==='eraser'?'橡皮大小 ':'笔画粗细 ')+n+' pt');
+      prefsChanged();
+    };
+    range(p.content,'粗细',inkSlot(prefs,mode,'width',index),
+      mode==='eraser'?6:1,mode==='eraser'?80:20,.1,apply);
   }
-  function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:360}),tabs=document.createElement('div'),grid=document.createElement('div');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();if(tab==='cece')grid.textContent='正在载入 CeCe 图形…';let choices=tab==='cece'?((state.projects||[]).some(isCurrentExampleProject)?(await Promise.all(state.projects.filter(isCurrentExampleProject).map(p=>p.projectDocumentPath?getRecord('projects',p.id):p))).flatMap(p=>(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0]).primitives||[]):await loadExampleShapes().catch(e=>{toast(e.message);return [];})).map(s=>[s.id,s.title||'CeCe 图形',s]):tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','常见图形'],['advanced','高级图形'],['cece','CeCe 图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
-  function materialPicker(anchor){const p=openPopover(anchor,{title:'添加到当前页',width:360}),tabs=document.createElement('div'),grid=document.createElement('div');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);const show=tab=>{grid.replaceChildren();const list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item})):tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item})):state.assets.filter(a=>!a.isProjectInternal).map(a=>({a}));for(const {a,item} of list){if(!a)continue;const b=button('',()=>{p.close();if(item){change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}const used=d.items.filter(i=>i.assetID===a.id),occupied=new Set(used.map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));if(unit===undefined){toast('此页已使用全部实物数量；可从已使用素材中定位');return;}if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}change(()=>{const item=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1);item.materialUnitIndex=unit;d.items.push(item);state.selected=item.id;state.multiSelected=[];});});b.dataset.assetId=a.id;b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show(d.items.some(i=>!i.isParked)?'used':'all');}
-  function layerPicker(anchor){const p=openPopover(anchor,{title:'图层 · 上方显示在前',width:350}),list=document.createElement('div');list.className='canvas-layer-list';p.content.append(list);const ordered=entries.sort((a,b)=>(b.value.zIndex||0)-(a.value.zIndex||0));let dragged=null;const reorder=(from,to)=>{const target=ordered[to];if(!target||from===to||ordered[from].value.isLocked||ordered[from].value.locked)return;p.close();change(()=>{const [entry]=ordered.splice(from,1);ordered.splice(to,0,entry);ordered.forEach((e,i)=>e.value.zIndex=ordered.length-i);});};ordered.forEach((e,index)=>{const o=e.value,row=document.createElement('div');row.className='canvas-layer-row';const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;p.close();state.selected=o.id;state.multiSelected=[];render();});pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):'<span>Aa</span>')+'<span>'+esc(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):o.kind==='vector'?'自定义图形':o.kind)+'</span>';row.append(pick);const locked=o.isLocked||o.locked;const lock=button(locked?'▣':'♧',()=>{p.close();change(()=>{o.isLocked=o.locked=!locked;state.selected=null;});});lock.setAttribute('aria-label',locked?'解锁图层':'锁定图层');const hidden=o.isHidden||o.hidden||o.isParked,eye=button(hidden?'◌':'◉',()=>{p.close();change(()=>{if(e.kind==='material')o.isParked=!hidden;else if(e.kind==='text')o.isHidden=!hidden;else o.hidden=!hidden;state.selected=null;});});eye.disabled=!!locked;eye.setAttribute('aria-label',hidden?'显示图层':'隐藏图层');const move=button('≡',()=>{const menu=openPopover(move,{title:'调整图层',width:180,menu:true});menu.content.append(button('上移一层',()=>{menu.close();reorder(index,index-1);}),button('下移一层',()=>{menu.close();reorder(index,index+1);}));});move.draggable=!locked;move.setAttribute('aria-label','调整图层顺序');move.ondragstart=()=>dragged=index;row.ondragover=e=>e.preventDefault();row.ondrop=e=>{e.preventDefault();if(dragged!==null)reorder(dragged,index);};row.append(lock,eye,move);list.append(row);});}
+  function colorSettings(anchor,mode,index=activeInkSlot(prefs,mode,'color')){
+    const p=openPopover(anchor,{title:'修改当前颜色',width:280}),palette=document.createElement('div');
+    palette.className='canvas-color-grid';p.content.append(palette);
+    const apply=value=>{
+      const normalized=editInkSlot(prefs,mode,'color',index,value);
+      anchor.style.backgroundColor=normalized;
+      anchor.setAttribute('aria-label','笔画颜色 '+normalized);
+      prefsChanged();
+    };
+    for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){
+      const b=button('',()=>{apply(color);p.close();});
+      b.className='ink-color';b.style.backgroundColor=color;
+      b.setAttribute('aria-label','颜色 '+color);palette.append(b);
+    }
+    const row=document.createElement('label');row.textContent='自定义颜色';
+    const custom=document.createElement('input');custom.type='color';
+    custom.value=inkSlot(prefs,mode,'color',index);
+    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';
+    hex.value=custom.value;
+    custom.oninput=()=>{hex.value=custom.value;apply(custom.value);};
+    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value);}};
+    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=inkSlot(prefs,mode,'color',index);};
+    row.append(custom,hex);p.content.append(row);
+  }
+  function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
+    if(mode==='pen'){for(const [id,name] of [['fountain','钢笔'],['ballpoint','圆珠笔'],['brush','画笔']]){const b=button(name,()=>{prefs.penStyle=id;prefsChanged();p.close();contextTools();});b.setAttribute('aria-checked',String(prefs.penStyle===id));el.append(b);}}
+    else if(mode==='highlighter'){toggle(el,'直线绘制',prefs.markerStraight,value=>{prefs.markerStraight=value;prefsChanged();});}
+    else if(mode==='eraser'){for(const [id,name] of [['fine','精细橡皮擦'],['standard','标准橡皮擦 · 擦除经过部分'],['brush','画笔橡皮擦 · 擦除整条笔迹']]){const b=button(name,()=>{prefs.eraserStyle=id;prefs.wholeStroke=id==='brush';prefsChanged();p.close();});b.setAttribute('aria-checked',String((prefs.eraserStyle||'standard')===id));el.append(b);}toggle(el,'仅擦除荧光笔痕迹',!!prefs.eraserOnlyHighlighter,value=>{prefs.eraserOnlyHighlighter=value;prefsChanged();});}
+    else{state.selectionFilter={ink:true,material:true,text:true,shape:true,...state.selectionFilter};for(const [key,name] of [['ink','手写笔画'],['material','素材'],['text','文字框'],['shape','图形']])toggle(el,name,state.selectionFilter[key],v=>state.selectionFilter[key]=v);const modeRow=document.createElement('div');modeRow.className='canvas-selection-mode';el.append(modeRow);for(const [id,name] of [['contain','必须全部框住'],['intersect','只需要相交']]){const b=button(name,()=>{state.selectionMode=id;modeRow.querySelectorAll('button').forEach(n=>n.setAttribute('aria-checked',String(n===b)));});b.setAttribute('aria-checked',String((state.selectionMode||'contain')===id));modeRow.append(b);}}
+  }
+  function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:innerWidth>=900?432:360}),tabs=document.createElement('div'),grid=document.createElement('div');p.surface.classList.add('swift-shape-picker');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();let choices=tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','基础图形'],['advanced','高级图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
+  // Keep decoded thumbnail DOM nodes alive between opening the three tabs.
+  // The image loader retains COS 360px blobs; reusing nodes also avoids
+  // decoding and reflowing them every time the picker is opened.
+  function materialPicker(anchor){
+    const p=openPopover(anchor,{title:'添加素材',width:innerWidth>=900?432:340}),tabs=document.createElement('div'),
+      controls=document.createElement('div'),grid=document.createElement('div');
+    p.surface.classList.add('swift-material-picker');
+    tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';
+    p.content.append(tabs,controls,grid);
+    let tab=d.items.some(i=>!i.isParked)?'used':'all',series='all',kind='all',status='all',sortBasis='time',sortOrder='desc';
+    const seriesSelect=document.createElement('select');seriesSelect.setAttribute('aria-label','选择系列');
+    seriesSelect.append(new Option('全部系列','all'),new Option('系列外','none'));
+    for(const group of state.series||[])seriesSelect.append(new Option(group.title,group.id));
+    const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');
+    for(const [id,name] of [['all','全部类型'],...materialKinds])kindSelect.append(new Option(name,id));
+    const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','素材状态');
+    for(const [id,name] of [['all','全部状态'],['preset','预设'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']])statusSelect.append(new Option(name,id));
+    const basisSelect=document.createElement('select');basisSelect.setAttribute('aria-label','排序依据');
+    for(const [id,name] of [['time','最近添加'],['name','名称']])basisSelect.append(new Option(name,id));
+    const orderSelect=document.createElement('select');orderSelect.setAttribute('aria-label','排序顺序');
+    for(const [id,name] of [['desc','降序'],['asc','升序']])orderSelect.append(new Option(name,id));
+    controls.append(seriesSelect,kindSelect,statusSelect,basisSelect,orderSelect);
+    const show=()=>{
+      controls.hidden=tab!=='all';
+      const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,status,sortBasis,sortOrder,
+        d.items.map(i=>[i.id,i.assetID,!!i.isParked,i.cropRect,i.materialMask,i.splitPartIndex]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
+      let rows=pickerRows.get(key);
+      if(!rows){
+        let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)&&
+            (status==='all'||(status==='preset'?a.isCreativePreset:status==='ready'?a.reviewStatus==='ready'&&!a.isCreativePreset:status==='pendingReview'?a.reviewStatus!=='ready'&&!a.isCreativePreset:
+            status==='used'?a.usageStatus==='used':status==='unused'?a.usageStatus!=='used'&&!a.isCreativePreset:
+            status==='inside'?!!a.seriesID:status==='outside'?!a.seriesID:status==='favorite'?!!a.isFavorite:true))).map(a=>({a}));
+        if(tab==='all')list.sort((x,y)=>sortBasis==='name'?x.a.title.localeCompare(y.a.title,'zh-CN')*(sortOrder==='asc'?1:-1):
+          (Date.parse(x.a.createdAt||0)-Date.parse(y.a.createdAt||0))*(sortOrder==='asc'?1:-1));
+        rows=list.filter(({a})=>!!a).map(({a,item})=>{
+          const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;b.dataset.assetId=a.id;
+          if(item)b.dataset.pickerItem=item.id;
+          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+(item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):'')+'</span>';
+          if(item)mountPieceThumbnail(b,item);
+          return b;
+        });
+        pickerRows.set(key,rows);
+        if(pickerRows.size>8)pickerRows.delete(pickerRows.keys().next().value);
+      }
+      grid.replaceChildren(...rows);
+      if(!rows.length)grid.textContent='没有符合条件的素材';
+      tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));
+    };
+    // Delegation stays on this live grid; cached card nodes do not retain
+    // callbacks tied to a closed popover or a stale editor session.
+    grid.onclick=event=>{
+      const b=event.target.closest('button[data-picker-asset]');if(!b||!grid.contains(b))return;
+      const a=asset(b.dataset.pickerAsset),item=d.items.find(i=>i.id===b.dataset.pickerItem);
+      if(!a)return;
+      if(item){p.close();change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}
+      const occupied=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0));
+      const unit=a.isCreativePreset?Math.max(-1,...occupied)+1:
+        Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));
+      if(unit===undefined){toast('此页已使用全部实物数量');return;}
+      if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}
+      p.close();change(()=>{
+        const inserted=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1);
+        inserted.materialUnitIndex=unit;d.items.push(inserted);state.selected=inserted.id;state.multiSelected=[];
+      });
+    };
+    seriesSelect.onchange=()=>{series=seriesSelect.value;show();};
+    kindSelect.onchange=()=>{kind=kindSelect.value;show();};
+    statusSelect.onchange=()=>{status=statusSelect.value;show();};
+    basisSelect.onchange=()=>{sortBasis=basisSelect.value;show();};
+    orderSelect.onchange=()=>{sortOrder=orderSelect.value;show();};
+    for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){
+      const b=button(name,()=>{tab=id;show();});b.dataset.tab=id;tabs.append(b);
+    }
+    show();
+  }
+  function layerPicker(anchor){
+    return openEditorLayerTree(anchor,{draft:d,state,view,checkpoint,saveProject,render,
+      toast,uid,asset,imgTag,esc});
+  }
   function paperPicker(anchor){const p=openPopover(anchor,{title:'画布背景',width:260,menu:true});if(isCurrentExampleProject(state.activeProject))p.content.append(button('恢复样例横线纸',()=>{p.close();change(()=>{d.paperPattern='lines';d.paperRuling=structuredClone(bundledExampleRuling);d.drawCenterGutter=false;});}));for(const [id,name] of [['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']]){const b=button(name,()=>{p.close();change(()=>d.paperPattern=id);});b.setAttribute('role','menuitemradio');b.setAttribute('aria-checked',String(d.paperPattern===id));p.content.append(b);}const row=document.createElement('label');row.className='canvas-toggle';row.textContent='纸张颜色';const input=document.createElement('input');input.type='color';input.value=d.paperColor;input.onchange=()=>{p.close();change(()=>d.paperColor=input.value);};row.append(input);p.content.append(row);}
   function historyMenu(anchor){const p=openPopover(anchor,{title:'历史记录',width:340,menu:true}),project=state.activeProject;
     const row=(entry,title,activate,remove)=>{const line=document.createElement('div');line.className='canvas-history-row';const open=button(title,()=>{p.close();activate();});line.append(open);const actions=document.createElement('div');const rename=button('重命名',()=>{const name=prompt('历史记录名称',title);if(name===null)return;try{renameHistory(entry,name);saveProject();p.close();historyMenu(anchor);}catch(e){toast(e.message);}});rename.setAttribute('aria-label','重命名 '+title);const del=button('删除',()=>{if(!confirm('删除历史记录「'+title+'」？'))return;try{remove();saveProject();p.close();render();}catch(e){toast(e.message);}});del.setAttribute('aria-label','删除 '+title);actions.append(rename,del);line.append(actions);p.content.append(line);};
     project.drafts.forEach((entry,index)=>row(entry,historyTitle(entry,index),()=>{if(!confirm('是否回到「'+historyTitle(entry,index)+'」？当前修改可通过撤销恢复。'))return;view.endTextEditing?.();const same=state.activeDraft===entry.id;if(same)checkpoint();else{state.undo=[];state.redo=[];}restoreHistoryDraft(project,entry.id);state.activeDraft=entry.id;state.selected=null;state.multiSelected=[];saveProject();render();},()=>{deleteDraft(project,entry.id);state.activeDraft=project.activeDraftID;state.selected=null;state.undo=[];state.redo=[];}));
     for(const archive of (project.manualArchives||[]).slice().reverse())row(archive,archive.title||'存档 '+new Date(archive.date).toLocaleString(),()=>handle('restore-archive',archive.id),()=>project.manualArchives=project.manualArchives.filter(a=>a.id!==archive.id));
+    const automatic=(project.autoSceneSnapshots||[]).slice(0,20);
+    if(automatic.length){
+      const heading=document.createElement('h3');heading.className='canvas-auto-snapshot-heading';heading.textContent='自动恢复点';
+      p.content.append(heading);
+      for(const snapshot of automatic){
+        const labels={'30-operations':'累计 30 次操作','5-minutes':'连续编辑 5 分钟','leave-editor':'退出画布','pagehide':'页面关闭','app-background':'切到后台','completed':'完成创作','pre-conflict':'同步冲突前'};
+        const title=new Date(snapshot.at).toLocaleString()+' · '+(labels[snapshot.reason]||'自动保存');
+        row(snapshot,title,()=>{
+          if(!confirm('恢复自动快照会替换当前编辑画面，是否继续？'))return;
+          try{
+            makeAutoSceneSnapshot(project,{reason:'before-restore',force:true});
+            const target=restoreAutoSceneSnapshot(project,snapshot.id);
+            project.drafts=target.drafts;
+            project.activeDraftID=target.activeDraftID;
+            state.activeDraft=target.activeDraftID;
+            state.selected=null;state.multiSelected=[];
+            state.undo=[];state.redo=[];saveProject();render();
+          }catch(error){toast('自动恢复失败：'+error.message);}
+        },()=>{
+          project.autoSceneSnapshots=(project.autoSceneSnapshots||[]).filter(x=>x.id!==snapshot.id);
+          if(!project.autoSceneSnapshots.some(x=>x.hash===snapshot.hash))
+            delete project.autoSceneSnapshotStore?.[snapshot.hash];
+        });
+      }
+    }
     p.content.append(document.createElement('hr'),button('新方案',()=>{p.close();handle('new-draft');}));const aiEntry=button('AI 创作',()=>{p.close();openAICreation();});aiEntry.dataset.editorAi='true';p.content.append(aiEntry);
   }
   function textParagraph(anchor,t,patch){const p=openPopover(anchor,{title:'段落',width:230,menu:true});for(const [id,name] of [['left','左对齐'],['center','居中'],['right','右对齐']])p.content.append(button((t.alignment===id?'✓ ':'')+name,()=>{p.close();patch('alignment',id);}));const entry=entries.find(e=>e.value.id===state.selected&&e.kind==='text');if(entry)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entry);}));}
   function objectInspector(entry){if(!entry)return;const o=entry.value,kind=entry.kind;body.innerHTML='<div class="canvas-object-settings"><header><h2>'+({material:'素材设置',shape:'图形设置',text:'文字设置'}[kind])+'</h2><button type="button" id="object-settings-done">完成</button></header><div id="object-settings-fields"></div></div>';const fields=body.querySelector('#object-settings-fields');body.querySelector('#object-settings-done').onclick=()=>modal.close();
-    const textDraft=kind==='text'?structuredClone(o):null;const mutate=(key,value)=>{if(textDraft){textDraft[key]=value;return;}checkpoint();o[key]=value;if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
-    if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>mutate('zIndex',(o.zIndex||0)+1)],['下移一层',()=>mutate('zIndex',(o.zIndex||0)-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const restored=itemFromAsset(a,d,o.x,o.y);o.width=restored.width;o.height=restored.height;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
+    const textDraft=kind==='text'?structuredClone(o):null;const mutateMany=values=>{if(textDraft){Object.assign(textDraft,values);return;}checkpoint();Object.assign(o,values);if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
+    const mutate=(key,value)=>mutateMany({[key]:value});
+    const raiseWithinParent=(step)=>{
+      const current=sceneLayerEntries(d,{hidden:true}).find(e=>e.value.id===o.id);
+      if(!current)return;
+      const parent=current.parents.at(-1)||null,siblings=parent?parent.children:d.layers;
+      const index=siblings.findIndex(node=>node.id===o.id),target=index+step;
+      if(index<0||target<0||target>=siblings.length)return;
+      const beforeID=step>0?(siblings[target+1]?.id||null):siblings[target].id;
+      change(()=>moveSceneNode(d,o.id,{parentID:parent?.id||null,beforeID}));
+    };
+    if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>raiseWithinParent(1)],['下移一层',()=>raiseWithinParent(-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const units=d.canvas.height/(d.physicalPageHeightMM||297),crop=o.cropRect||{width:1,height:1};o.width=crop.width*a.physicalWidthMM*units;o.height=crop.height*a.physicalHeightMM*units;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
     if(kind==='text'){const draft=textDraft;const row=document.createElement('label');row.textContent='文字内容';const input=document.createElement('textarea');input.value=o.content;input.oninput=()=>draft.content=input.value;row.append(input);fields.append(row);const fontRow=document.createElement('label');fontRow.textContent='字体名称（留空使用基础风格）';const fontInput=document.createElement('input');fontInput.type='text';fontInput.maxLength=120;fontInput.value=draft.fontName||'';fontInput.oninput=()=>draft.fontName=fontInput.value.trim()||null;fontRow.append(fontInput);fields.append(fontRow);for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])toggle(fields,name,!!draft[key],v=>draft[key]=v);for(const [key,name,min,max,step] of [['fontSize','字号',5,400,1],['letterSpacing','字距',-5,30,.1],['fixedLineHeight','固定行高',5,400,.1],['lineSpacing','附加行距',0,80,1],['paragraphSpacing','段落间距',0,80,1]])range(fields,name,draft[key]??(key==='fixedLineHeight'?draft.fontSize*1.3:0),min,max,step,v=>draft[key]=v);toggle(fields,'自动行高',!draft.fixedLineHeight,v=>draft.fixedLineHeight=v?null:draft.fontSize*1.3);fields.append(button('应用文字设置',()=>{draft.content=input.value;checkpoint();const measure=document.createElement('canvas').getContext('2d');measure.font=textFont(draft);const layout=textLines(draft,text=>measure.measureText(text).width),top=draft.y-draft.height/2;draft.height=Math.max(draft.height,layout.height);draft.y=top+draft.height/2;Object.assign(o,draft);state.newTextID=null;saveProject();modal.close();render();},'btn primary'));}
-    const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [['width',kind==='material'?'宽度（mm）':'宽度',1,d.canvas.width*2,.1],['height',kind==='material'?'高度（mm）':'高度',1,d.canvas.height*2,.1],['rotation','旋转（度）',-180,180,.1],['opacity','透明度',0,1,.05]]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
-    if(kind==='shape'&&o.vectorLayers)vectorColors(o,fields);
-    if(kind==='shape'&&!o.vectorLayers){range(fields,'线条粗细',o.lineWidth,0,30,.5,v=>mutate('lineWidth',v));if(['roundedRectangle','frame','checkbox'].includes(o.kind))range(fields,'圆角半径（边长比例）',o.cornerRadius??.1,0,.5,.005,v=>mutate('cornerRadius',v));for(const [key,name] of [['stroke','线条颜色'],['fill','填充颜色']]){const row=document.createElement('label');row.textContent=name;const color=document.createElement('input');color.type='color';color.value=o[key]||'#ffffff';color.onchange=()=>mutate(key,color.value);row.append(color);fields.append(row);}fields.append(button('透明填充',()=>mutate('fill',null)));}
+    // These properties are shared by material, text and digital shapes.
+    const styleRow=document.createElement('label');styleRow.className='canvas-setting';styleRow.textContent='实体叠压方式';
+    const blend=document.createElement('select');blend.setAttribute('aria-label','图层混合方式');
+    for(const [key,name] of [['normal','普通叠放'],['multiply','正片叠底 · 透明纸／胶带']])blend.append(new Option(name,key));
+    blend.value=o.blendMode||'normal';blend.onchange=()=>mutate('blendMode',blend.value);styleRow.append(blend);fields.append(styleRow);
+    const maskRow=document.createElement('label');maskRow.className='canvas-setting';maskRow.textContent='矢量剪裁蒙版（外轮廓、可选孔洞；0–1 坐标）';
+    const maskInput=document.createElement('textarea');maskInput.rows=4;maskInput.value=JSON.stringify(o.vectorMask||null);
+    const maskError=document.createElement('small');maskError.setAttribute('role','alert');
+    maskRow.append(maskInput,maskError);
+    const maskActions=document.createElement('div');maskActions.className='object-setting-actions';
+    const maskRect={outer:[[.05,.05],[.95,.05],[.95,.95],[.05,.95]],holes:[]};
+    const ellipse={outer:Array.from({length:48},(_,i)=>{const a=2*Math.PI*i/48;return [.5+.46*Math.cos(a),.5+.46*Math.sin(a)];}),holes:[]};
+    maskActions.append(button('矩形裁切',()=>{maskInput.value=JSON.stringify(maskRect);}),
+      button('椭圆裁切',()=>{maskInput.value=JSON.stringify(ellipse);}),
+      button('取消蒙版',()=>{mutate('vectorMask',null);maskInput.value='null';}));
+    maskActions.append(button('应用蒙版',()=>{
+      try{const v=JSON.parse(maskInput.value);if(v!==null)validateVectorMask(v);maskError.textContent='';mutate('vectorMask',v);}
+      catch(error){maskError.textContent=error.message;}
+    },'btn'));
+    fields.append(maskRow,maskActions);
+    const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [...(kind==='material'?[]:[['width','宽度',1,d.canvas.width*2,.1],['height','高度',1,d.canvas.height*2,.1]]),['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
+    if(kind==='shape'){
+      const appearance=document.createElement('section');appearance.className='shape-appearance-settings';
+      const appearanceHeading=document.createElement('h3');appearanceHeading.textContent='填充与线条';appearance.append(appearanceHeading);
+      const controls=advancedShapeControls(o.kind);
+      if(controls.length){const heading=document.createElement('h3');heading.textContent='图形内容';fields.append(heading);
+        const current=resolvedShapeOptions(o.kind,o.shapeOptions||{});
+        for(const control of controls){
+          const update=value=>{if(['rows','columns','count'].includes(control.key))mutateMany(shapeRepeatCountPatch(o,control.key,value));
+            else {const next={...o.shapeOptions,[control.key]:value};validateShapeOptions(o.kind,next);mutate('shapeOptions',next);}};
+          if(control.type==='boolean')toggle(fields,control.label,current[control.key],update);
+          else range(fields,control.label,current[control.key],control.min,control.max,control.type==='integer'?1:.01,update);
+        }
+      }
+      if(o.vectorLayers)vectorColors(o,appearance);
+      else {
+        for(const [key,name] of [['fill','填充颜色'],['stroke',o.kind==='paperclip'?'回形针颜色':'边框颜色']]){
+          const row=document.createElement('label');row.className='canvas-setting shape-color-control';row.textContent=name;
+          const color=document.createElement('input');color.type='color';color.value=o[key]||'#ffffff';color.setAttribute('aria-label',name);
+          color.onchange=()=>mutate(key,color.value);row.append(color);
+          row.append(button(o[key]===null?'恢复'+name:'无'+name,()=>{
+            const hidden=o[key]!==null;mutate(key,hidden?null:(key==='stroke'?'#547da4':'#e7eef7'));
+            row.querySelector('button').textContent=hidden?'恢复'+name:'无'+name;
+          }));
+          appearance.append(row);
+        }
+        range(appearance,'线条粗细',o.lineWidth,0,30,.5,v=>mutate('lineWidth',v));
+        const dashRow=document.createElement('label');dashRow.className='canvas-setting';dashRow.textContent='线型';const dash=document.createElement('select');for(const [id,name] of [['solid','实线'],['dash','虚线'],['dot','点线']])dash.append(new Option(name,id));dash.value=o.strokeDash||'solid';dash.setAttribute('aria-label','线型');dash.onchange=()=>mutate('strokeDash',dash.value);dashRow.append(dash);appearance.append(dashRow);
+        range(appearance,'填充不透明度',Math.round((o.fillOpacity??1)*100),0,100,1,v=>mutate('fillOpacity',v/100),false,'%');
+        range(appearance,'线条不透明度',Math.round((o.strokeOpacity??1)*100),0,100,1,v=>mutate('strokeOpacity',v/100),false,'%');
+        if(['roundedRectangle','frame','checkbox'].includes(o.kind))range(appearance,'圆角半径（边长比例）',o.cornerRadius??.1,0,.5,.005,v=>mutate('cornerRadius',v));
+      }
+      range(appearance,'整体不透明度',Math.round((o.opacity??1)*100),0,100,1,v=>mutate('opacity',v/100),false,'%');
+      fields.prepend(appearance);
+    }
     if(kind==='shape'&&(o.vectorPaths||o.vectorLayers)){const geometryKey=o.vectorLayers?'vectorLayers':'vectorPaths',geometryKind=o.vectorLayers?'layers':'paths',row=document.createElement('label');row.textContent=o.vectorLayers?'多色图形色层（0–1 坐标 JSON）':'自由图形轮廓（0–1 坐标 JSON）';const input=document.createElement('textarea');input.rows=6;input.value=JSON.stringify(o[geometryKey]);const error=document.createElement('small');error.setAttribute('role','alert');input.oninput=()=>{try{parseEditableGeometry(input.value,geometryKind);error.textContent='';}catch(e){error.textContent=e.message;}};row.append(input,error);fields.append(row,button('应用图形轮廓',()=>{try{mutate(geometryKey,parseEditableGeometry(input.value,geometryKind));error.textContent='';}catch(e){error.textContent=e.message;}},'btn'));}
     if(kind==='text'){const cancel=button('取消',()=>modal.close());body.querySelector('header').prepend(cancel);body.querySelector('#object-settings-done').textContent='应用';body.querySelector('#object-settings-done').onclick=()=>[...fields.querySelectorAll('button')].find(b=>b.textContent==='应用文字设置').click();const select=(name,key,choices)=>{const row=document.createElement('label');row.textContent=name;const input=document.createElement('select');input.innerHTML=choices.map(([id,label])=>'<option value="'+id+'" '+(draftValue(key)===id?'selected':'')+'>'+label+'</option>').join('');input.onchange=()=>{textDraft[key]=input.value;if(key==='style')textDraft.fontName=null;};row.append(input);fields.append(row);};const draftValue=key=>textDraft[key];select('基础风格','style',[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']]);select('对齐','alignment',[['left','左对齐'],['center','居中'],['right','右对齐']]);const row=document.createElement('label');row.textContent='文字颜色';const color=document.createElement('input');color.type='color';color.value=textDraft.color;color.oninput=()=>textDraft.color=color.value;row.append(color);fields.append(row);onDialogClosed(modal,()=>{if(state.newTextID===o.id&&!o.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==o.id);state.selected=null;state.newTextID=null;state.undo.pop();saveProject();render();}});}
     modal.classList.add('canvas-settings-dialog');onDialogClosed(modal,()=>modal.classList.remove('canvas-settings-dialog'));if(!modal.open)modal.showModal();
   }
-  function duplicate(entry){if(entry.kind==='material'){const a=asset(entry.value.assetID),taken=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!taken.has(i));if(unit===undefined){toast('复制会超出本页实物库存');return;}change(()=>{const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,materialUnitIndex:unit};d.items.push(copy);state.selected=copy.id;});}else handle('duplicate');}
-  function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);
+  function duplicate(entry){
+    if(entry.kind!=='material'){handle('duplicate');return;}
+    const a=asset(entry.value.assetID);if(!a){toast('原始素材不存在');return;}
+    const used=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex??0));
+    const count=a.supply?.quantity??1;
+    const free=a.isCreativePreset?Math.max(-1,...used)+1:
+      Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
+    const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
+    if(free===undefined&&!roll){toast('复制会超出本页实物库存');return;}
+    const copy={...structuredClone({...entry.value}),id:uid(),x:entry.value.x+25,y:entry.value.y+25,
+      materialUnitIndex:free??0};
+    try{
+      const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));
+      validateScenePhysical(trial,c.state.assets);
+    }catch(error){toast(error.message);return;}
+    change(()=>{d.items.push(copy);state.selected=copy.id;});
+  }
+  function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);const top=parseFloat(object.style.top)||0,height=parseFloat(object.style.height)||0;
+    if(top>42&&top+height+52>page.clientHeight)node.classList.add('controls-above');
     let move=null;
-    node.onpointerdown=e=>{if(e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;e.preventDefault();e.stopPropagation();move={id:e.pointerId,x:e.clientX,y:e.clientY,startX:o.x,startY:o.y,changed:false};node.setPointerCapture(e.pointerId);};
-    node.onpointermove=e=>{if(!move||move.id!==e.pointerId)return;const scale=page.getBoundingClientRect().width/d.canvas.width,dx=(e.clientX-move.x)/scale,dy=(e.clientY-move.y)/scale;if(!move.changed&&Math.hypot(e.clientX-move.x,e.clientY-move.y)>3){checkpoint();move.changed=true;node.classList.add('dragging');}if(!move.changed)return;e.preventDefault();e.stopPropagation();moveSelection(d,new Map([[o.id,{x:move.startX,y:move.startY}]]),dx,dy);const displayScale=page.clientWidth/d.canvas.width;object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';syncSelectionGeometry(page,o.id);};
-    node.onpointerup=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();const changed=move.changed;move=null;node.classList.remove('dragging');if(changed){view.selectionClickConsumed=true;saveProject();render();}};
-    node.onpointercancel=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();node.classList.remove('dragging');if(move.changed){o.x=move.startX;o.y=move.startY;state.undo.pop();}move=null;render();};
-    for(const corner of ['nw','ne','sw','se','rotate']){const h=button(corner==='rotate'?'⟳':'',()=>{});h.className='object-handle '+corner;h.setAttribute('aria-label',corner==='rotate'?'旋转对象':'缩放对象 '+corner);node.append(h);let drag=null;h.onpointerdown=e=>{e.preventDefault();e.stopPropagation();checkpoint();h.setPointerCapture(e.pointerId);drag={id:e.pointerId,pointerX:e.clientX,pointerY:e.clientY,x:o.x,y:o.y,width:o.width,height:o.height,rotation:o.rotation||0};};h.onpointermove=e=>{if(!drag||drag.id!==e.pointerId)return;e.preventDefault();e.stopPropagation();const scale=page.getBoundingClientRect().width/d.canvas.width,displayScale=page.clientWidth/d.canvas.width;if(corner==='rotate'){const r=node.getBoundingClientRect();const cx=r.x+r.width/2,cy=r.y+r.height/2,a=Math.atan2(drag.pointerY-cy,drag.pointerX-cx),b=Math.atan2(e.clientY-cy,e.clientX-cx);o.rotation=drag.rotation+Math.atan2(Math.sin(b-a),Math.cos(b-a))*180/Math.PI;}else{Object.assign(o,resizeObject(drag,corner.endsWith('e')?1:-1,corner.startsWith('s')?1:-1,(e.clientX-drag.pointerX)/scale,(e.clientY-drag.pointerY)/scale));Object.assign(o,clampCanvasPosition(d,o,o.x,o.y));}object.style.width=o.width*displayScale+'px';object.style.height=o.height*displayScale+'px';object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';object.style.transform='rotate('+(o.rotation||0)+'deg)';syncSelectionGeometry(page,o.id);};h.onpointerup=e=>{if(!drag)return;e.stopPropagation();drag=null;saveProject();render();};h.onpointercancel=()=>{if(!drag)return;Object.assign(o,{x:drag.x,y:drag.y,width:drag.width,height:drag.height,rotation:drag.rotation});drag=null;state.undo.pop();render();};}
+    node.onpointerdown=e=>{if(e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;// The selected overlay owns the hit area until release. Never peek
+      // through it and select an unrelated overlapping object while dragging.
+      e.preventDefault();e.stopPropagation();move={id:e.pointerId,x:e.clientX,y:e.clientY,startX:o.x,startY:o.y,startFlags:o.userOverrideFlags?.slice(),changed:false};node.setPointerCapture(e.pointerId);};
+    node.onpointermove=e=>{if(!move||move.id!==e.pointerId)return;const scale=page.getBoundingClientRect().width/d.canvas.width,dx=(e.clientX-move.x)/scale,dy=(e.clientY-move.y)/scale;if(!move.changed&&Math.hypot(e.clientX-move.x,e.clientY-move.y)>3){checkpoint();move.changed=true;node.classList.add('dragging');}if(!move.changed)return;e.preventDefault();e.stopPropagation();moveSelection(d,new Map([[o.id,{x:move.startX,y:move.startY}]]),dx,dy);const displayScale=page.clientWidth/d.canvas.width;object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';node.style.left=object.style.left;node.style.top=object.style.top;syncSelectionGeometry(page,o.id);};
+    node.onpointerup=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();const previous=move,changed=move.changed;move=null;node.classList.remove('dragging');if(changed){view.selectionClickConsumed=true;if(materialCenterOutside(d,[selected])&&confirm('素材中心已移出画布，是否撤回这次移动？')){o.x=previous.startX;o.y=previous.startY;o.userOverrideFlags=previous.startFlags;state.undo.pop();}else saveProject();render();}};
+    node.onpointercancel=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();node.classList.remove('dragging');if(move.changed){o.x=move.startX;o.y=move.startY;o.userOverrideFlags=move.startFlags;state.undo.pop();}move=null;render();};
+    // GoodNotes-like grips share the geometry and gesture rules with import
+    // boxes: right = width, top = height, bottom-right = scale plus rotation.
+    for(const [grip,label] of (selected.kind==='material'?[['corner','旋转真实素材（保持实际尺寸）']]:[['top','拉伸对象高度'],['right','拉伸对象宽度'],['corner','缩放并旋转对象']])){
+      const h=button('',()=>{});
+      h.className='object-handle '+grip;
+      h.setAttribute('aria-label',label);
+      node.append(h);
+      let drag=null;
+      h.onpointerdown=e=>{
+        if(e.button>0)return;
+        e.preventDefault();e.stopPropagation();
+        checkpoint();
+        const area=page.getBoundingClientRect(),factor=area.width/d.canvas.width;
+        drag={id:e.pointerId,pointerX:e.clientX,pointerY:e.clientY,
+          start:{x:o.x,y:o.y,width:o.width,height:o.height,rotation:o.rotation||0},
+          flags:o.userOverrideFlags?.slice(),changed:false,scale:factor};
+        h.setPointerCapture(e.pointerId);
+      };
+      h.onpointermove=e=>{
+        if(!drag||drag.id!==e.pointerId)return;
+        e.preventDefault();e.stopPropagation();
+        const rect=page.getBoundingClientRect(),factor=rect.width/d.canvas.width;
+        const from={x:(drag.pointerX-rect.left)/factor,y:(drag.pointerY-rect.top)/factor};
+        const to={x:(e.clientX-rect.left)/factor,y:(e.clientY-rect.top)/factor};
+        const original=drag.start;
+        const out=selected.kind==='material'
+          ?(()=>{
+            const before=Math.atan2(from.y-original.y,from.x-original.x);
+            const after=Math.atan2(to.y-original.y,to.x-original.x);
+            const delta=Math.atan2(Math.sin(after-before),Math.cos(after-before))*180/Math.PI;
+            return {x:original.x-original.width/2,y:original.y-original.height/2,
+              width:original.width,height:original.height,rotation:original.rotation+delta};
+          })()
+          :transformSelectedFrame({
+            x:original.x-original.width/2,y:original.y-original.height/2,
+            width:original.width,height:original.height,rotation:original.rotation
+          },grip,from,to,{minWidth:4,minHeight:4,
+            maxWidth:d.canvas.width,maxHeight:d.canvas.height});
+        const moved=out.width!==original.width||out.height!==original.height||
+          Math.abs(out.rotation-original.rotation)>1e-3;
+        if(!moved)return;
+        drag.changed=true;
+        Object.assign(o,{x:out.x+out.width/2,y:out.y+out.height/2,
+          width:out.width,height:out.height,rotation:out.rotation});
+        Object.assign(o,clampCanvasPosition(d,o,o.x,o.y));
+        if(selected.kind==='material')
+          o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'rotated'])];
+        const displayScale=page.clientWidth/d.canvas.width;
+        const style={
+          width:o.width*displayScale+'px',height:o.height*displayScale+'px',
+          left:(o.x-o.width/2)*displayScale+'px',
+          top:(o.y-o.height/2)*displayScale+'px',
+          transform:'rotate('+(o.rotation||0)+'deg)'
+        };
+        Object.assign(object.style,style);
+        Object.assign(node.style,style);
+        syncSelectionGeometry(page,o.id);
+      };
+      h.onpointerup=e=>{
+        if(!drag||drag.id!==e.pointerId)return;
+        e.stopPropagation();
+        const changed=drag.changed;
+        drag=null;
+        if(changed)saveProject();else state.undo.pop();
+        render();
+      };
+      h.onpointercancel=e=>{
+        if(!drag||drag.id!==e.pointerId)return;
+        e.stopPropagation();
+        Object.assign(o,{x:drag.start.x,y:drag.start.y,width:drag.start.width,
+          height:drag.start.height,rotation:drag.start.rotation,
+          userOverrideFlags:drag.flags});
+        drag=null;state.undo.pop();render();
+      };
+    }
   }
   let typing=null;
   function beginInlineText(entry,isNew=false){
@@ -98,33 +560,249 @@ export function mountCanvasEditor(c){
     if(typing?.item.id===entry.value.id){typing.input.focus();return;}view.endTextEditing?.();
     const item=entry.value,node=page.querySelector('[data-object="'+item.id+'"]');if(!node)return;
     if(!isNew)checkpoint();const before=JSON.stringify(item),undoMark=state.undo.at(-1),input=document.createElement('textarea');input.className='canvas-inline-text';input.value=item.content;input.setAttribute('aria-label','在画布中输入文字');input.spellcheck=false;
-    page.querySelectorAll('.selected-object-overlay').forEach(n=>n.remove());view.selectionGeometryObserver?.disconnect();node.classList.add('typing');node.replaceChildren(input);typing={item,input,before,isNew,undoMark};state.editingTextID=item.id;state.selected=item.id;
+    page.querySelectorAll('.selected-object-overlay').forEach(n=>n.remove());view.selectionGeometryObserver?.disconnect();node.classList.add('typing');node.replaceChildren(input);input.style.textAlign=item.alignment||'left';typing={item,input,before,isNew,undoMark};state.editingTextID=item.id;state.selected=item.id;
     let composing=false;
     const update=()=>{item.content=input.value;const scale=page.clientWidth/d.canvas.width,top=item.y-item.height/2;input.style.height='100%';const height=Math.max(item.fontSize*1.4,input.scrollHeight/scale);if(height>item.height){item.height=height;item.y=top+height/2;node.style.height=height*scale+'px';}saveProject();view.editorViewport?.ensureVisible();};
-    input.oncompositionstart=()=>composing=true;input.oncompositionend=()=>{composing=false;update();};input.oninput=()=>{if(!composing)update();};input.onblur=()=>view.endTextEditing?.();input.onkeydown=e=>{e.stopPropagation();if(!e.isComposing&&!composing&&(e.key==='Escape'||(e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.preventDefault();input.blur();}};
+    input.oncompositionstart=()=>composing=true;input.oncompositionend=()=>{composing=false;update();};input.oninput=()=>{if(!composing)update();};input.onblur=event=>{
+      if(performance.now()<(view.keepTextEditorUntil||0)||event.relatedTarget?.closest?.('.canvas-context-tools'))return;
+      view.endTextEditing?.();
+    };input.onkeydown=e=>{e.stopPropagation();if(!e.isComposing&&!composing&&(e.key==='Escape'||(e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.preventDefault();input.blur();}};
     input.onpaste=e=>{e.preventDefault();const value=e.clipboardData.getData('text/plain');input.setRangeText(value,input.selectionStart,input.selectionEnd,'end');update();};
-    view.endTextEditing=()=>{if(!typing)return;const session=typing;typing=null;state.editingTextID=null;session.item.content=session.input.value;session.input.onblur=null;session.input.blur();const node=session.input.closest('[data-object]');node?.classList.remove('typing');node?.replaceChildren(document.createTextNode(session.item.content));if(!session.item.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;}if(state.undo.at(-1)===session.undoMark&&(session.isNew&&!session.item.content.trim()||!session.isNew&&JSON.stringify(session.item)===session.before))state.undo.pop();saveProject();render();};
+    view.endTextEditing=()=>{
+      if(!typing)return;
+      const session=typing;typing=null;state.editingTextID=null;
+      session.item.content=session.input.value;session.input.onblur=null;session.input.blur();
+      const node=session.input.closest('[data-object]');
+      node?.classList.remove('typing');
+      node?.replaceChildren(document.createTextNode(session.item.content));
+      if(!session.item.content.trim()){
+        d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;
+      }
+      const unchanged=(!session.isNew&&JSON.stringify(session.item)===session.before)||
+        (session.isNew&&!session.item.content.trim());
+      if(state.undo.at(-1)===session.undoMark&&unchanged)state.undo.pop();
+      if(!unchanged)saveProject();
+      render();
+    };
     input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);view.editorViewport?.ensureVisible();
   }
-  function refresh(){view.selectionGeometryObserver?.disconnect();entries=allEntries(d);selected=entries.find(e=>e.value.id===state.selected);page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.with-selection-handles').forEach(n=>n.classList.remove('with-selection-handles'));
-    for(const node of page.querySelectorAll('[data-object]'))node.ondblclick=e=>{e.stopPropagation();const entry=entries.find(e=>e.value.id===node.dataset.object);if(entry?.value.isLocked||entry?.value.locked)return;state.selected=node.dataset.object;if(entry.kind==='text')beginInlineText(entry);else objectInspector(entry);};
-    if(!typing)selectedHandles();syncTools();contextTools();view.editorViewport?.sync();
-    actions.querySelector('[data-act="undo"]').disabled=!state.undo.length;actions.querySelector('[data-act="redo"]').disabled=!state.redo.length;
+  let previousSelectionGeometry=null,previousSelectionObject=null;
+  function refresh(){
+    entries=allEntries(d);selected=entries.find(e=>e.value.id===state.selected);
+    const object=selected?.value,
+      geometry=JSON.stringify([state.selected,state.multiSelected,state.selectedStrokes,
+        object?.x,object?.y,object?.width,object?.height,object?.rotation,
+        object?.locked,object?.isLocked]),
+      wantsOverlay=!!object&&!object.locked&&!object.isLocked&&
+        (state.multiSelected?.length||0)<=1,
+      hasOverlay=!!page.querySelector('.selected-object-overlay');
+    if(geometry!==previousSelectionGeometry||
+       object!==previousSelectionObject||wantsOverlay!==hasOverlay){
+      view.selectionGeometryObserver?.disconnect();
+      page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());
+      page.querySelectorAll('.with-selection-handles').forEach(n=>n.classList.remove('with-selection-handles'));
+      if(!typing)selectedHandles();
+      previousSelectionGeometry=geometry;previousSelectionObject=object;
+    }
+    // A reused node's handler reads the latest entry array, even after Undo.
+    for(const node of page.querySelectorAll('[data-object]')){
+      if(node.dataset.objectDoubleClickBound==='true')continue;
+      node.dataset.objectDoubleClickBound='true';
+      node.ondblclick=e=>{e.stopPropagation();const entry=entries.find(e=>e.value.id===node.dataset.object);if(entry?.value.isLocked||entry?.value.locked)return;state.selected=node.dataset.object;if(entry.kind==='text')beginInlineText(entry);else objectInspector(entry);};
+    }
+    syncTools();contextTools();view.editorViewport?.sync();
+    actions.querySelector('[data-act="undo"]').disabled=!state.undo.length;
+    actions.querySelector('[data-act="redo"]').disabled=!state.redo.length;
   }
   view.editorRefresh=refresh;
   page.ondblclick=e=>{if(state.tool!=='select'||performance.now()<(view.navigationSuppressedUntil||0)||e.target.closest('button,.canvas-inline-text'))return;const entry=entries.find(x=>x.value.id===(e.target.closest('[data-object]')?.dataset.object||state.selected));if(!entry||entry.value.locked||entry.value.isLocked)return;if(entry.kind==='text')beginInlineText(entry);else objectInspector(entry);};
   page.onclick=e=>{if(view.selectionClickConsumed){view.selectionClickConsumed=false;return;}if(e.target.closest('.selected-object-actions,.object-handle,.canvas-inline-text'))return;if(state.tool==='text'){
     const existing=entries.find(x=>x.kind==='text'&&x.value.id===e.target.closest('[data-object]')?.dataset.object);if(existing){beginInlineText(existing);return;}
-    if(e.target.closest('[data-object]'))return;const r=page.getBoundingClientRect();let added;change(()=>{const x=(e.clientX-r.left)/r.width*d.canvas.width,y=(e.clientY-r.top)/r.height*d.canvas.height,width=Math.min(d.canvas.width*.35,d.canvas.width-x);const t={...textBlock('',d),...state.textDefaults,id:uid(),x:x+width/2,y:y+50,width:Math.max(60,width),height:100,alignment:state.textDefaults?.alignment||'left'};d.textBlocks.push(t);added=t;state.selected=t.id;state.tool='select';state.toolHighlight='text';state.multiSelected=[];});beginInlineText({kind:'text',value:added},true);
-  }else if(state.tool==='select'&&!e.target.closest('[data-object],.selected-object-overlay')){view.endTextEditing?.();state.selected=null;state.multiSelected=[];render();}};
-  const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');let stroke=null,erase=null,frame=null;const paint=()=>{frame=null;ctx.clearRect(0,0,ink.width,ink.height);drawInk(ctx,stroke?[...d.strokes,stroke]:d.strokes);},schedule=()=>{if(!frame)frame=requestAnimationFrame(paint);},point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height,p:e.pressure||.5};};paint();
-  ink.onpointerdown=e=>{if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);if(state.tool==='eraser'){erase={id:e.pointerId};d.strokes=eraseStrokes(d.strokes,point(e),prefs.wholeStroke?10:prefs.eraserWidth/2,prefs.wholeStroke);schedule();return;}const marker=state.tool==='highlighter',key=marker?'marker':'pen';stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};schedule();};
-  ink.onpointermove=e=>{if(erase?.id===e.pointerId){for(const sample of e.getCoalescedEvents?.()||[e])d.strokes=eraseStrokes(d.strokes,point(sample),prefs.wholeStroke?10:prefs.eraserWidth/2,prefs.wholeStroke);schedule();return;}if(stroke?.id!==e.pointerId)return;e.preventDefault();for(const sample of e.getCoalescedEvents?.()||[e])stroke.points.push(point(sample));schedule();};
-  ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();schedule();}else if(erase?.id===e.pointerId){erase=null;saveProject();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
-  ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
-  view.cancelInkGesture=ink.onpointercancel;
-  if(state.workspacePanel){const panel=document.createElement('aside');panel.className='canvas-steps-panel';panel.innerHTML='<header><strong>制作步骤与迭代记录</strong></header><h3>制作步骤</h3>';panel.querySelector('header').append(button('×',()=>{state.workspacePanel=false;render();}));const list=document.createElement('ol');for(const step of d.makingSteps||[]){const li=document.createElement('li');li.textContent=typeof step==='string'?step:step.title||step.description||'';list.append(li);}panel.append(list);if(!list.children.length)panel.append(Object.assign(document.createElement('p'),{textContent:'暂无制作步骤'}));panel.append(Object.assign(document.createElement('h3'),{textContent:'真实代理工具记录'}));if(d.compositionIntent)panel.querySelector('ol').before(Object.assign(document.createElement('p'),{textContent:d.compositionIntent}));if(d.agentRun?.note)panel.append(Object.assign(document.createElement('p'),{textContent:d.agentRun.note}));for(const action of d.agentRun?.actions||[])panel.append(Object.assign(document.createElement('p'),{textContent:'第 '+action.turn+' 轮 · '+action.tool+' · '+action.detail}));panel.append(Object.assign(document.createElement('small'),{textContent:'这里展示真实工具执行记录，不是推测出来的样例制作过程。'}));shell.append(panel);shell.classList.add('with-steps');}
-  mountCanvasViewport(c,page);refresh();
+    if(e.target.closest('[data-object]'))return;const r=page.getBoundingClientRect();let added;change(()=>{const x=(e.clientX-r.left)/r.width*d.canvas.width,y=(e.clientY-r.top)/r.height*d.canvas.height,width=Math.min(d.canvas.width*.35,d.canvas.width-x);const t={...textBlock('',d),...state.textDefaults,id:uid(),x:x+width/2,y:y+50,width:Math.max(60,width),height:100,alignment:state.textDefaults?.alignment||'left'};d.textBlocks.push(t);added=t;state.selected=t.id;state.tool='select';state.toolHighlight='text';state.multiSelected=[];state.selectedStrokes=[];});beginInlineText({kind:'text',value:added},true);
+  }else if(state.tool==='select'&&!e.target.closest('[data-object],.selected-object-overlay')){view.endTextEditing?.();state.selected=null;state.multiSelected=[];state.selectedStrokes=[];state.selectionPath=null;render();}};
+  const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');
+  let stroke=null,erase=null,frame=null,painted=0,eraserSamples=[],lastEraserPoint=null,
+    eraseModified=false,backingFrame=null;
+  // The visible canvas is device-pixel-resolution; all stored vectors remain
+  // in immutable logical Scene coordinates and never grow with screen DPI.
+  configureInkBacking(ink,d.canvas.width,d.canvas.height);
+  const clearInk=()=>ctx.clearRect(0,0,d.canvas.width,d.canvas.height);
+  let inkCommitTimer=null,inkNeedsCommit=false;
+  const flushInkCommit=({renderUI=true,force=false}={})=>{
+    if(!inkNeedsCommit)return;
+    if(!force&&(stroke||erase)){scheduleInkCommit();return;}
+    clearTimeout(inkCommitTimer);inkCommitTimer=null;inkNeedsCommit=false;
+    saveProject();
+    if(renderUI&&!stroke&&!erase&&state.route==='editor')render();
+  };
+  const scheduleInkCommit=()=>{
+    inkNeedsCommit=true;clearTimeout(inkCommitTimer);
+    inkCommitTimer=setTimeout(()=>flushInkCommit(),110);
+  };
+  view.flushInkCommit=flushInkCommit;
+  const cursor=document.createElement('div');cursor.className='canvas-eraser-cursor';cursor.setAttribute('aria-hidden','true');cursor.hidden=true;page.append(cursor);
+  const point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/Math.max(1,r.width)*d.canvas.width,y:(e.clientY-r.top)/Math.max(1,r.height)*d.canvas.height,p:e.pressure>0?e.pressure:.5};};
+  const showEraser=e=>{
+    const {radius}=eraserBehavior(prefs),p=point(e),scale=page.clientWidth/d.canvas.width,diameter=radius*2*scale;
+    cursor.hidden=false;cursor.style.width=diameter+'px';cursor.style.height=diameter+'px';
+    cursor.style.left=(p.x*scale-diameter/2)+'px';cursor.style.top=(p.y*scale-diameter/2)+'px';
+  };
+  const paint=()=>{
+    frame=null;
+    if(eraserSamples.length){
+      const {radius,whole}=eraserBehavior(prefs),samples=eraserSamples;eraserSamples=[];
+      const before=d.strokes;
+      const next=eraseStrokesAlongPath(before,samples,radius,whole,!!prefs.eraserOnlyHighlighter);
+      if(before.length!==next.length||
+          before.some((row,index)=>row!==next[index])){
+        // The old Scene is still intact here, so Undo captures the correct
+        // pre-erase state without blocking initial pointerdown.
+        if(erase&&!erase.checkpointed){checkpoint();erase.checkpointed=true;}
+        eraseModified=true;
+      }
+      d.strokes=next;
+      // Show the actual residual strokes using the temporary ink canvas.
+      // Rebuilding hundreds of live SVG nodes during each Pencil move stalls
+      // iOS drawing. The Scene SVGs are restored only after pointerup.
+      page.classList.add('erasing-ink');
+      clearInk();
+      drawInk(ctx,d.strokes);
+    }
+    if(stroke){
+      const pts=stroke.points;
+      if(!painted){drawInk(ctx,[{...stroke,points:[pts[0]]}]);painted=1;}
+      if(pts.length>painted){
+        // Paint only the segments received since the previous frame. Replaying
+        // the full current stroke on every move was O(points^2).
+        drawInk(ctx,[{...stroke,points:pts.slice(Math.max(0,painted-2))}]);
+        painted=pts.length;
+      }
+    }else if(painted){clearInk();painted=0;}
+  };
+  const schedule=()=>{if(frame===null)frame=requestAnimationFrame(paint);};
+  const addStrokeSamples=e=>{
+    const last=stroke.points.at(-1);
+    for(const p of pointerSamples(e,point,last))stroke.points.push(p);
+  };
+  const addEraserSamples=e=>{
+    for(const p of pointerSamples(e,point,lastEraserPoint)){
+      eraserSamples.push(...eraserPathSamples(lastEraserPoint,p,eraserBehavior(prefs).radius));
+      lastEraserPoint=p;
+    }
+  };
+  paint();view.canvasInkRefresh=schedule;
+  // Geometry/DPR/zoom changes may require a different backing scale. Never
+  // recreate the canvas or its pointer listeners, just resize its pixels.
+  const syncBacking=()=>{
+    backingFrame=null;
+    if(!ink.isConnected||stroke||erase)return;
+    const result=configureInkBacking(ink,d.canvas.width,d.canvas.height);
+    if(result.changed){painted=0;clearInk();}
+  };
+  const scheduleBacking=()=>{
+    if(backingFrame===null)backingFrame=requestAnimationFrame(syncBacking);
+  };
+  const inkResizeObserver=typeof ResizeObserver==='function'
+    ?new ResizeObserver(scheduleBacking):null;
+  inkResizeObserver?.observe(ink);
+  page.addEventListener('panzoomchange',scheduleBacking);
+  ink.onpointerdown=e=>{
+    if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;
+    // Pen strokes are staged in a transient buffer until pointerup. Deferring
+    // the expensive Undo snapshot keeps the first Pencil packets responsive.
+    e.preventDefault();ink.setPointerCapture(e.pointerId);
+    if(state.tool==='eraser'){
+      eraseModified=false;erase={id:e.pointerId,checkpointed:false};lastEraserPoint=null;showEraser(e);addEraserSamples(e);schedule();return;
+    }
+    cursor.hidden=true;clearInk();
+    const marker=state.tool==='highlighter',key=marker?'marker':'pen';
+    stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};
+    painted=0;schedule();
+  };
+  // Modern Pointer Events expose the densest samples on pointerrawupdate.
+  // Safari may only deliver coalesced pointermove; both paths deduplicate by
+  // coordinates, so neither loses fast handwriting points.
+  const rawInkMove=e=>{
+    if(erase?.id===e.pointerId){e.preventDefault();showEraser(e);addEraserSamples(e);schedule();}
+    else if(stroke?.id===e.pointerId){e.preventDefault();addStrokeSamples(e);schedule();}
+  };
+  ink.addEventListener('pointerrawupdate',rawInkMove);
+  ink.onpointermove=e=>{
+    if(erase?.id===e.pointerId){e.preventDefault();showEraser(e);addEraserSamples(e);schedule();return;}
+    if(stroke?.id===e.pointerId){e.preventDefault();addStrokeSamples(e);schedule();return;}
+    if(state.tool==='eraser'&&e.pointerType==='pen')showEraser(e);
+  };
+  ink.onpointerup=e=>{
+    if(stroke?.id===e.pointerId){
+      addStrokeSamples(e);
+      // Preserve every final flick/coalesced sample before converting the
+      // transient stroke into an editable vector object.
+      if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
+      checkpoint();
+      const {id,...line}=stroke;line.id=uid();
+      const finished=state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line;
+      d.strokes.push(finished);
+      // Publish one vector node immediately; expensive Scene reconciliation
+      // and disk staging are coalesced after a short pen-idle interval.
+      mountLiveInkStroke(page,d,finished);
+      stroke=null;painted=0;clearInk();scheduleInkCommit();
+    }else if(erase?.id===e.pointerId){
+      addEraserSamples(e);if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
+      erase=null;lastEraserPoint=null;cursor.hidden=true;
+      if(eraseModified)saveProject();
+      render();
+      eraseModified=false;
+      page.classList.remove('erasing-ink');clearInk();
+      if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}
+      else schedule();
+    }
+  };
+  ink.onpointerleave=e=>{if(!erase)cursor.hidden=true;};
+  const discardInkGesture=()=>{
+    if(!stroke&&!erase)return;
+    const eraserCheckpointed=!!erase?.checkpointed;
+    stroke=null;erase=null;lastEraserPoint=null;eraserSamples=[];
+    if(frame!==null){cancelAnimationFrame(frame);frame=null;}
+    cursor.hidden=true;page.classList.remove('erasing-ink');
+    painted=1;
+    if(eraserCheckpointed){
+      const before=state.undo.pop();
+      if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;
+    }
+    clearInk();painted=0;syncInkSceneDOM(page,d);
+  };
+  ink.onpointercancel=e=>{
+    // Safari may cancel a Pencil pointer without a deliberate user undo.
+    // Keep already captured writing; only a true two-finger navigation abort
+    // calls discardInkGesture explicitly through the viewport adapter.
+    if(stroke?.id===e.pointerId||erase?.id===e.pointerId)ink.onpointerup(e);
+  };
+  view.cancelInkGesture=discardInkGesture;
+  mountCanvasViewport(c,page);
+  // Delete only a selected, unlocked canvas object, never focused text fields
+  // or an active inline text editor. Tear down with the viewport listeners.
+  const deleteSelected=e=>{
+    if(state.route!=='editor'||state.editingTextID||!state.selected||!isObjectDeleteKey(e))return;
+    const entry=allEntries(d).find(row=>row.value.id===state.selected);
+    if(!entry||entry.value.locked||entry.value.isLocked)return;
+    e.preventDefault();e.stopPropagation();handle('delete-object');
+  };
+  document.addEventListener('keydown',deleteSelected);
+  const disposeViewport=view.editorDispose;
+  view.editorDispose=()=>{
+    flushInkCommit({renderUI:false,force:true});
+    clearTimeout(inkCommitTimer);view.flushInkCommit=null;
+    inkResizeObserver?.disconnect();
+    page.removeEventListener('panzoomchange',scheduleBacking);
+    ink.removeEventListener('pointerrawupdate',rawInkMove);
+    if(backingFrame!==null)cancelAnimationFrame(backingFrame);
+    if(frame!==null)cancelAnimationFrame(frame);
+    document.removeEventListener('keydown',deleteSelected);
+    disposeViewport?.();
+  };
+  // Navigation gestures remain owned by mountCanvasViewport.
+
+  refresh();
   function vectorColors(shape,target=context){
     if(!shape.vectorLayers)return;
     const colors=[...new Set(shape.vectorLayers.map(layer=>layer.fill))];

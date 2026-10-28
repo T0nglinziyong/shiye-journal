@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shiye:task:3.1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "shiye-gpt-creation-package"
+    },
+    "version": {
+      "const": 3
+    },
+    "contractVersion": {
+      "const": "2.0.0-candidate.1"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "brief": {
+      "type": "string"
+    },
+    "assetManifestRef": {
+      "const": "assets/manifest.json"
+    },
+    "selectedAssets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+          },
+          "priority": {
+            "enum": [
+              "required",
+              "preferred",
+              "available"
+            ]
+          }
+        },
+        "required": [
+          "asset",
+          "priority"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "page": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "single",
+            "spread"
+          ]
+        },
+        "physicalSizeMm": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "safeMarginMm": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "mode",
+        "physicalSizeMm",
+        "locked"
+      ],
+      "additionalProperties": false
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "enum": [
+            "original",
+            "faithful",
+            "collage"
+          ]
+        },
+        "userText": {
+          "type": "string"
+        },
+        "providedFacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy",
+        "userText",
+        "providedFacts",
+        "language"
+      ],
+      "additionalProperties": false
+    },
+    "design": {
+      "type": "object",
+      "properties": {
+        "styles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "purposes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowCrossPage": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "styles",
+        "purposes",
+        "allowCrossPage"
+      ],
+      "additionalProperties": false
+    },
+    "processingPolicy": {
+      "type": "object",
+      "properties": {
+        "allowPhysicalCuts": {
+          "type": "boolean"
+        },
+        "allowDisplayMask": {
+          "type": "boolean"
+        },
+        "lockMaterialScale": {
+          "const": true
+        }
+      },
+      "required": [
+        "allowPhysicalCuts",
+        "allowDisplayMask",
+        "lockMaterialScale"
+      ],
+      "additionalProperties": false
+    },
+    "render": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exportScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 8
+        },
+        "fontProfile": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "profile",
+        "exportScale",
+        "fontProfile"
+      ],
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "shiyeproject-json"
+        },
+        "compactJson": {
+          "const": true
+        },
+        "includePreview": {
+          "const": true
+        }
+      },
+      "required": [
+        "format",
+        "compactJson",
+        "includePreview"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "contractVersion",
+    "taskId",
+    "title",
+    "brief",
+    "assetManifestRef",
+    "selectedAssets",
+    "page",
+    "content",
+    "design",
+    "processingPolicy",
+    "render",
+    "delivery"
+  ],
+  "additionalProperties": false
+}

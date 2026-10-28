@@ -1,0 +1,43 @@
+{
+  "protocolVersion": 1,
+  "transactionId": "complex-revision",
+  "baseSceneRevision": "sha256:e45a66b99f1e36e7e4ba3846e175380ea62e6f02492e99508963d6cac809f81f",
+  "operations": [
+    {
+      "op": "layer.update",
+      "target": "caption",
+      "set": {
+        "content": "把今天折成几片，留一点光从纸窗穿过。\n蓝色留在左页，暖橙从两道窗口间穿行。"
+      }
+    },
+    {
+      "op": "shape.add",
+      "id": "round-accent",
+      "kind": "ellipse",
+      "xMm": 240,
+      "yMm": 28,
+      "widthMm": 12,
+      "heightMm": 12,
+      "fill": "#d5e2d6"
+    },
+    {
+      "op": "text.add",
+      "id": "side-note",
+      "content": "FIELD NOTES / 01",
+      "xMm": 40,
+      "yMm": 28,
+      "widthMm": 68,
+      "fontSizePt": 16,
+      "color": "#304638"
+    },
+    {
+      "op": "group.create",
+      "id": "caption-group",
+      "targets": [
+        "caption",
+        "highlight"
+      ],
+      "name": "书写与高亮"
+    }
+  ]
+}

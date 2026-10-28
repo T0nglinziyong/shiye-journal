@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layer-reorder",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layer.reorder",
+      "target": "caption",
+      "order": {
+        "after": "photo"
+      }
+    }
+  ]
+}

@@ -1,0 +1,792 @@
+/* Visual-only layout refinements. Imported last; does NOT alter stable
+   c9 recognition, paper correction, rendering or asset processing. */
+
+/* English eyebrow + Chinese page title; no extra Chinese tagline / air gap. */
+#view .unified-page-heading{
+  min-height:0;
+  padding:3px 0 7px;
+  margin:0 0 8px;
+  gap:8px 16px;
+  align-items:center;
+}
+#view .unified-page-heading .unified-heading-copy{gap:2px;flex:1 1 auto}
+#view .unified-page-heading .unified-heading-copy .eyebrow{margin:0;line-height:1.2}
+#view .unified-page-heading .unified-heading-copy>p,
+#view .series-heading .series-copy>p,
+#view .import-intro>.eyebrow~p:not(.import-processing),
+#view .import-inspect>.eyebrow~p:not(.import-processing),
+#view .import-review>.eyebrow~p:not(.import-processing) {display:none}
+#view .unified-page-heading .unified-heading-copy h1,
+#view .series-heading .series-copy h1,
+#view .import-intro>h1,
+#view .import-inspect>h1,
+#view .import-review>h1,
+#view .settings-page>h1 {font-size:clamp(24px,2.3vw,30px);line-height:1.16;margin:0}
+#view .series-heading{min-height:0;margin-bottom:6px;padding-block:4px}
+#view .series-heading .series-copy{gap:3px}
+#view .import-intro,#view .import-inspect,#view .import-review{
+  padding-top:clamp(10px,1.2vw,18px);
+}
+#view .import-inspect>.eyebrow,#view .import-intro>.eyebrow,#view .import-review>.eyebrow{
+  line-height:1.2;margin-bottom:3px
+}
+#view .import-inspect>h1,#view .import-intro>h1,#view .import-review>h1{margin:0 0 8px}
+#view .settings-page>h1{margin-top:3px;margin-bottom:10px}
+#view .settings-page>h1::before{
+  content:'FROM YOUR DESK TO YOUR PAGES';
+  display:block;font:600 10px/1.3 ui-monospace,Menlo,monospace;
+  letter-spacing:.19em;color:#829781;margin-bottom:3px
+}
+@media(min-width:700px){
+  body:not(.editing):not(:has(.import-nav)) #view{padding-top:12px}
+  #view .unified-page-heading{min-height:0;padding-block:2px 6px;margin-bottom:6px}
+}
+/* Desktop and iPad landscape/portrait: one search + filter row whenever
+   usable width permits; mobile portrait is the only deliberate wrap case. */
+@media(min-width:700px){
+  #view .filters:has(.four-filter-controls),
+  #view .series-contents .series-filters,
+  #view .works-page .filters[data-template-filters=true]{
+    display:flex!important;flex-direction:row!important;
+    flex-wrap:nowrap!important;align-items:center;gap:8px;
+    grid-template-columns:none!important;
+  }
+  #view .filters:has(.four-filter-controls)>input[type=search],
+  #view .filters:has(.four-filter-controls)>.shiye-search,
+  #view .series-contents .series-filters>.shiye-search{
+    flex:1 1 160px!important;min-width:140px!important;width:auto!important;
+    grid-column:auto!important;grid-row:auto!important;
+  }
+  #view .series-contents .series-filters>.series-filter-menus{
+    display:flex;flex:0 0 auto!important;width:auto!important;min-width:0;
+    overflow:visible
+  }
+  #view .catalog-toolbar .four-filter-controls,
+  #view .filters .four-filter-controls,
+  #view .series-filter-menus .four-filter-controls,
+  #view .works-page .filters[data-template-filters=true]>.four-filter-controls{
+    display:flex!important;flex:0 0 auto!important;flex-wrap:nowrap!important;
+    align-items:center;width:auto!important;min-width:0!important;
+    max-width:none;overflow:visible;gap:6px;
+    grid-column:auto!important;grid-row:auto!important;
+  }
+  #view .filters .filter-control,
+  #view .series-filter-menus .filter-control{flex:0 0 auto;padding:0 9px}
+  #view .filters .library-count,
+  #view .filters .catalog-total,
+  #view .series-filters .series-result-count{
+    flex:0 0 auto;width:auto;white-space:nowrap
+  }
+}
+@media(max-width:699px) and (orientation:portrait){
+  #view .filters:has(.four-filter-controls),
+  #view .series-contents .series-filters,
+  #view .works-page .filters[data-template-filters=true]{
+    display:flex!important;flex-direction:row;flex-wrap:wrap!important;
+    align-items:center;gap:7px;
+  }
+  #view .filters:has(.four-filter-controls)>input[type=search],
+  #view .filters:has(.four-filter-controls)>.shiye-search,
+  #view .series-contents .series-filters>.shiye-search{
+    flex:1 0 100%;width:100%;min-width:0!important
+  }
+  #view .catalog-toolbar .four-filter-controls,
+  #view .series-filter-menus .four-filter-controls,
+  #view .works-page .filters[data-template-filters=true]>.four-filter-controls{
+    display:flex;flex-wrap:wrap;width:100%!important;flex:1 1 100%!important;
+    gap:6px
+  }
+  #view .series-contents .series-filters>.series-filter-menus{
+    flex:1 1 100%;width:100%
+  }
+}
+/* The entire import progress rail, not merely its 475px contents, spans
+   the viewport on desktop, iPad and phone. Never change its steps or actions. */
+body:has(.import-nav) .import-nav{
+  width:100%!important;max-width:none!important;margin:0!important;
+  min-height:60px;height:auto;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  flex-wrap:nowrap;gap:clamp(5px,1.6vw,18px);
+  padding:10px clamp(12px,2.3vw,28px);overflow-x:auto;
+  scrollbar-width:none;white-space:nowrap
+}
+body:has(.import-nav) .import-nav::-webkit-scrollbar{display:none}
+body:has(.import-nav) .import-nav>*{flex:0 0 auto}
+body:has(.import-nav) .import-nav .import-progress{flex:0 0 auto;min-width:0}
+@media(min-width:1000px){
+  body:has(.import-nav) .import-nav{min-height:58px}
+}
+@media(max-width:699px) and (orientation:portrait){
+  body:has(.import-nav) .import-nav{justify-content:flex-start;min-height:56px}
+}
+/* Settings: left-aligned name, right-aligned control, left-aligned small note
+   underneath; preserve the original form IDs and change listeners. */
+#view .settings-detail label:not(.toggle-row){
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(170px,min(38%,320px));
+  column-gap:16px;row-gap:5px;align-items:center;
+  width:100%;min-width:0;flex-direction:unset!important;
+}
+#view .settings-detail label:not(.toggle-row)>select,
+#view .settings-detail label:not(.toggle-row)>input{
+  grid-column:2;grid-row:1;
+  justify-self:end;width:100%;max-width:320px;min-width:0;
+  box-sizing:border-box
+}
+#view .settings-detail label:not(.toggle-row)>small,
+#view .settings-detail label:not(.toggle-row)>.setting-help{
+  grid-column:1/-1;grid-row:2;
+  width:100%;text-align:left;justify-self:start;margin:0
+}
+#view .settings-detail label:not(.toggle-row)>textarea{
+  grid-column:1/-1;grid-row:2;width:100%;max-width:100%
+}
+#view .settings-detail label.toggle-row{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;gap:12px;width:100%;
+}
+#view .settings-detail label.toggle-row>input[type=checkbox]{
+  grid-column:2;justify-self:end;width:19px;max-width:19px
+}
+#view .settings-detail label.toggle-row>span{
+  grid-column:1;justify-self:start;min-width:0;text-align:left;
+}
+#view .settings-detail .recognition-settings-group>p,
+#view .settings-detail .recognition-settings-group .setting-help{
+  text-align:left
+}
+@media(max-width:540px) and (orientation:portrait){
+  #view .settings-detail label:not(.toggle-row){
+    grid-template-columns:minmax(0,1fr) minmax(120px,48%);
+    gap:5px 9px
+  }
+  #view .settings-detail label:not(.toggle-row)>select,
+  #view .settings-detail label:not(.toggle-row)>input{max-width:100%}
+}
+/* Shared GoodNotes-style selection control language. The selected surface and
+   grips are above overlapping objects; visible controls remain compact with
+   larger transparent pointer targets for Pencil, touch and mouse. */
+.multi-box-editor .import-region{z-index:1;cursor:move}
+.multi-box-editor .import-region.active{
+  z-index:1000;pointer-events:auto;
+  border:1.5px solid #526b54;
+  background:#526b5420;
+  box-shadow:0 0 0 1px #fff7
+}
+.multi-box-editor .import-region .box-number{
+  position:absolute;top:0;left:0;
+  padding:2px 5px;font-size:11px;line-height:1.25;
+  pointer-events:none;background:#52634b;color:#fff
+}
+.multi-box-editor .box-grip{
+  position:absolute;box-sizing:border-box;
+  width:22px;height:22px;min-width:0;min-height:0;
+  padding:0;border:0;background:transparent;
+  touch-action:none;z-index:1002;cursor:pointer;
+}
+.multi-box-editor .box-grip::after{
+  content:'';position:absolute;inset:7px;
+  background:#fffefa;border:1.5px solid #52634b;
+  border-radius:2px;box-shadow:0 1px 3px #0002
+}
+.multi-box-editor .box-grip.top{left:calc(50% - 11px);top:-11px;cursor:ns-resize}
+.multi-box-editor .box-grip.right{right:-11px;top:calc(50% - 11px);cursor:ew-resize}
+.multi-box-editor .box-grip.corner{
+  right:-11px;bottom:-11px;cursor:move
+}
+.multi-box-editor .box-grip.corner::after{
+  inset:4px;border-radius:50%;border-width:1.5px
+}
+.multi-box-editor .box-grip.corner::before{
+  content:'↻';position:absolute;inset:0;display:grid;place-items:center;
+  color:#52634b;font-size:12px;font-weight:bold;z-index:1
+}
+.multi-box-editor .box-delete{
+  position:absolute;top:-12px;right:-12px;z-index:1003;
+  width:22px;height:22px;min-width:0;min-height:0;padding:0;
+  border:1px solid #52634b;border-radius:50%;
+  background:#fffefa;color:#52634b;font-size:16px;line-height:1
+}
+.canvas-page .selected-object-overlay{z-index:2147483647;pointer-events:auto}
+.canvas-page .selected-object-overlay .object-handle{
+  position:absolute;width:22px!important;height:22px!important;
+  min-width:0;min-height:0;padding:0!important;border:0!important;
+  border-radius:0;background:transparent!important;
+  touch-action:none;z-index:12;box-shadow:none!important
+}
+.canvas-page .selected-object-overlay .object-handle::after{
+  content:'';position:absolute;inset:7px;
+  top:7px!important;left:7px!important;width:8px!important;height:8px!important;
+  border:1.5px solid #52634b;border-radius:2px;background:#fffefa
+}
+.canvas-page .selected-object-overlay .object-handle.top{
+  left:calc(50% - 11px);top:-11px;cursor:ns-resize
+}
+.canvas-page .selected-object-overlay .object-handle.right{
+  right:-11px;top:calc(50% - 11px);cursor:ew-resize
+}
+.canvas-page .selected-object-overlay .object-handle.corner{
+  right:-11px;bottom:-11px;cursor:move
+}
+.canvas-page .selected-object-overlay .object-handle.corner::after{
+  inset:4px!important;top:4px!important;left:4px!important;
+  width:14px!important;height:14px!important;border-radius:50%
+}
+.canvas-page .selected-object-overlay .object-handle.corner::before{
+  content:'↻';position:absolute;inset:0;z-index:2;
+  display:grid;place-items:center;font-weight:bold;font-size:12px;
+  color:#52634b
+}
+.canvas-page .selected-object-overlay .selected-object-actions{
+  z-index:15;gap:4px;padding:3px 6px;
+  border-radius:15px;background:#fffefaed
+}
+.canvas-page .selected-object-overlay .selected-object-actions button{
+  min-width:24px;width:24px;height:22px;font-size:15px;padding:0
+}
+
+@media(min-width:700px) and (max-width:860px){
+  #view .filters .filter-control,#view .series-filter-menus .filter-control{padding:0 6px;font-size:12px}
+  #view .filters:has(.four-filter-controls)>input[type=search],#view .series-contents .series-filters>.shiye-search{min-width:110px!important}
+}
+
+/* The series overview uses a different wrapper than the material/works bars. */
+@media(min-width:700px){
+ #view .catalog-toolbar .swift-series-controls{
+   display:flex!important;flex-wrap:nowrap!important;align-items:center;gap:8px
+ }
+ #view .catalog-toolbar .swift-series-controls>.shiye-search{
+   flex:1 1 160px!important;width:auto!important;min-width:140px!important
+ }
+ #view .catalog-toolbar .swift-series-controls>.four-filter-controls{
+   display:flex!important;flex:0 0 auto!important;flex-wrap:nowrap!important;
+   width:auto!important;gap:6px;overflow:visible
+ }
+}
+@media(max-width:699px) and (orientation:portrait){
+ #view .catalog-toolbar .swift-series-controls{flex-wrap:wrap}
+ #view .catalog-toolbar .swift-series-controls>.shiye-search{flex:1 0 100%;width:100%}
+ #view .catalog-toolbar .swift-series-controls>.four-filter-controls{
+   width:100%;flex:1 1 100%;flex-wrap:wrap
+ }
+}
+/* Protect selection actions at the bottom edge of the paper. */
+.canvas-page .selected-object-overlay.controls-above .selected-object-actions{
+  top:auto;bottom:calc(100% + 8px)
+}
+
+
+/* 2026-10-11 · Header alignment and precise selection grip refinements.
+   Keep A4 correction and 9 mm material recognition entirely untouched. */
+
+/* The import bar is full width; title + workflow steps + cancel are a single,
+   optically centered group. The back arrow occupies its own left-side cell. */
+body:has(.import-nav) #view .import-nav{
+  display:grid!important;
+  grid-template-columns:minmax(38px,1fr) max-content minmax(38px,1fr)!important;
+  align-items:center!important;
+  justify-content:stretch!important;
+  justify-items:stretch;
+  column-gap:0!important;
+  width:100%!important;
+  max-width:none!important;
+  min-height:56px;
+  padding:7px clamp(12px,2.2vw,28px)!important;
+  overflow:visible;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center{
+  grid-column:2;
+  grid-row:1;
+  justify-self:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:clamp(8px,1.5vw,18px);
+  min-height:38px;
+  white-space:nowrap;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>strong,
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-cancel{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:36px;
+  min-height:36px;
+  margin:0;
+  padding:0 3px;
+  font-size:14px;
+  line-height:20px;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress{
+  display:flex;
+  flex:0 0 auto;
+  align-items:center;
+  gap:7px;
+  height:36px;
+  min-height:36px;
+  margin:0;
+  padding:0;
+  line-height:20px;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  line-height:20px;
+  white-space:nowrap;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span>b{
+  display:inline-grid;
+  place-items:center;
+  vertical-align:middle;
+  flex:0 0 24px;
+  width:24px;height:24px;
+  line-height:1;
+}
+/* Draw both back chevrons as actual centered shapes, rather than relying on
+   the uneven font baseline of the large "‹" character. */
+body:has(.import-nav) #view .import-nav>.import-back{
+  grid-column:1;grid-row:1;justify-self:start;align-self:center;
+  display:inline-grid!important;
+  place-items:center!important;
+  width:36px;height:36px;min-width:36px;min-height:36px;
+  margin:0;padding:0!important;
+  font-size:0!important;line-height:0!important;
+  border:0;background:transparent;
+}
+/* The shared icon manager in icons.js supplies the sole ChevronLeft SVG.
+   Never add a second CSS or manually authored arrow. */
+body:has(.import-nav) #view .import-nav>.import-back::before{
+  content:none!important;
+  display:none!important;
+}
+#view .import-nav>.import-back>.shiye-icon,
+#view .swift-editor-head>[data-act="back-works"]>.shiye-icon{
+  width:18px;height:18px;flex-basis:18px;margin:0;
+}
+#view .swift-editor-head{
+  display:flex;
+  align-items:center!important;
+}
+#view .swift-editor-head>[data-act="back-works"]{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center;
+  gap:9px;
+  min-height:36px;height:36px;
+  margin:0!important;
+  padding:0 9px!important;
+  line-height:20px!important;
+  font-size:14px;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+#view .swift-editor-head>div:first-of-type{
+  display:flex;
+  align-items:center;
+  align-self:center;
+  min-height:36px;
+}
+#view .swift-editor-head h1{
+  display:flex;
+  align-items:center;
+  line-height:22px;
+  margin:0;
+}
+#view .settings-toolbar [data-act="settings-back"],
+#view .detail-back,
+#view .series-back,
+#view .project-preview-back{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  line-height:20px;
+  vertical-align:middle;
+}
+/* On phone screens the workflow stays centered within the space remaining
+   after the back button; only the step group may scroll if truly too wide. */
+@media(max-width:699px){
+  body:has(.import-nav) #view .import-nav{
+    grid-template-columns:36px minmax(0,1fr)!important;
+    column-gap:5px!important;
+    padding-inline:10px!important;
+    overflow:hidden;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center{
+    grid-column:2;
+    width:max-content;max-width:100%;
+    justify-self:center;
+    justify-content:flex-start;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center::-webkit-scrollbar{display:none}
+}
+
+/* Side-edge grips: a longer visual pill inside a comfortable invisible
+   touch target. The bottom-right combined scale/rotate grip is unchanged. */
+.multi-box-editor .box-grip.top{
+  width:38px;height:24px;min-width:38px;min-height:24px;
+  left:calc(50% - 19px);top:-12px;
+}
+.multi-box-editor .box-grip.top::after{
+  inset:auto;
+  width:22px;height:6px;
+  top:9px;left:8px;
+  border-radius:4px;
+}
+.multi-box-editor .box-grip.right{
+  width:24px;height:38px;min-width:24px;min-height:38px;
+  right:-12px;top:calc(50% - 19px);
+}
+.multi-box-editor .box-grip.right::after{
+  inset:auto;
+  width:6px;height:22px;
+  top:8px;left:9px;
+  border-radius:4px;
+}
+.canvas-page .selected-object-overlay .object-handle.top{
+  width:38px!important;height:24px!important;
+  min-width:38px!important;min-height:24px!important;
+  left:calc(50% - 19px)!important;top:-12px!important;
+}
+.canvas-page .selected-object-overlay .object-handle.top::after{
+  width:22px!important;height:6px!important;
+  top:9px!important;left:8px!important;
+  border-radius:4px!important;
+}
+.canvas-page .selected-object-overlay .object-handle.right{
+  width:24px!important;height:38px!important;
+  min-width:24px!important;min-height:38px!important;
+  right:-12px!important;top:calc(50% - 19px)!important;
+}
+.canvas-page .selected-object-overlay .object-handle.right::after{
+  width:6px!important;height:22px!important;
+  top:8px!important;left:9px!important;
+  border-radius:4px!important;
+}
+/* Deletion has the same 14px visible diameter as the bottom-right circular
+   handle, but still gets a 22px touch area. */
+.multi-box-editor .box-delete{
+  width:22px!important;height:22px!important;
+  min-width:22px!important;min-height:22px!important;
+  top:-11px;right:-11px;
+  padding:0!important;margin:0;
+  background:transparent!important;
+  border:0!important;
+  font-size:0!important;
+  display:grid;place-items:center;
+}
+.multi-box-editor .box-delete::after{
+  content:'';
+  position:absolute;
+  width:14px;height:14px;
+  top:4px;left:4px;
+  border:1.5px solid #52634b;
+  border-radius:50%;
+  background:#fffefa;
+  box-sizing:border-box;
+  box-shadow:0 1px 3px #0002;
+  z-index:0;
+}
+.multi-box-editor .box-delete::before{
+  content:'×';
+  position:absolute;
+  inset:0;
+  display:grid;place-items:center;
+  z-index:1;
+  color:#52634b;
+  font:600 11px/1 sans-serif;
+}
+
+
+/* 2026-10-12 · Import flow responsive finish.
+   The saved screen must fit the visible viewport: a single centered card
+   instead of a full-width flex item whose paragraph gets clipped on iPhone. */
+body:has(.import-nav) #view{
+  min-width:0;
+  max-width:100%;
+  overflow-x:clip;
+}
+#view>.import-done{
+  --import-bar-height:86px;
+  display:grid;
+  place-items:center;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  min-height:calc(100dvh - var(--import-bar-height));
+  margin:0;
+  padding:clamp(22px,4vh,52px) clamp(14px,5vw,34px);
+  text-align:center;
+}
+#view .import-done-card{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0;
+  width:min(100%,540px);
+  min-width:0;
+  margin:0 auto;
+  padding:clamp(26px,4vw,44px);
+  border:1px solid #e2e6dd;
+  border-radius:24px;
+  background:#fffefa;
+  box-shadow:0 12px 42px rgba(45,64,45,.055);
+}
+#view .import-done-icon{
+  display:grid;
+  place-items:center;
+  width:66px;
+  height:66px;
+  flex:none;
+  margin-bottom:18px;
+  border-radius:50%;
+  color:#fff;
+  background:#52634b;
+  font-size:36px;
+  font-family:inherit;
+  font-weight:500;
+  line-height:1;
+}
+#view .import-done-card h1{
+  max-width:100%;
+  margin:0;
+  color:#2f4034;
+  font-size:clamp(25px,3.4vw,30px);
+  font-weight:650;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+#view .import-done-card .import-done-count{
+  max-width:100%;
+  margin:12px 0 0;
+  color:#52634b;
+  font-size:16px;
+  font-weight:500;
+  line-height:1.5;
+}
+#view .import-done-count strong{
+  color:#314b38;
+  font-size:19px;
+  font-variant-numeric:tabular-nums;
+}
+#view .import-done-card .import-done-message{
+  width:100%;
+  max-width:40ch;
+  margin:17px auto 0;
+  color:#7c887c;
+  font-size:14px;
+  line-height:1.85;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  white-space:normal;
+  text-wrap:pretty;
+}
+#view .import-done-helper{
+  width:100%;
+  max-width:40ch;
+  margin:12px auto 0;
+  padding:10px 14px;
+  border-radius:12px;
+  background:#f0f3eb;
+  color:#6e7f69;
+  font-size:12px;
+  font-weight:400;
+  line-height:1.65;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+#view .import-done-actions{
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  width:100%;
+  margin:26px 0 0;
+  font-size:14px;
+}
+#view .import-done-actions .btn{
+  display:inline-flex;
+  flex:1 1 0;
+  justify-content:center;
+  align-items:center;
+  width:auto;
+  min-width:0;
+  max-width:175px;
+  min-height:40px;
+  height:auto;
+  margin:0;
+  padding:9px 12px;
+  border-radius:22px;
+  font-size:14px;
+  line-height:20px;
+  white-space:nowrap;
+}
+
+/* Mobile import steps: title/exit in row one; three evenly-sized workflow
+   milestones in row two. Neither is allowed to scroll out of view. */
+@media(max-width:699px){
+  body:has(.import-nav) #view .import-nav{
+    --import-bar-height:110px;
+    display:grid!important;
+    grid-template-columns:36px minmax(0,1fr)!important;
+    grid-template-rows:38px auto;
+    align-items:center;
+    gap:5px 6px!important;
+    width:100%;
+    max-width:100%;
+    height:auto;
+    min-height:102px;
+    margin:0;
+    padding:9px 12px!important;
+    overflow:visible;
+    white-space:normal;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center{
+    display:grid!important;
+    grid-column:2;
+    grid-row:1 / 3;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:38px auto;
+    grid-template-areas:"title exit" "steps steps";
+    align-items:center;
+    justify-content:stretch;
+    justify-self:stretch;
+    gap:4px 8px!important;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    height:auto;
+    min-height:0;
+    margin:0;
+    overflow:visible;
+    white-space:normal;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center>strong{
+    grid-area:title;
+    justify-content:flex-start;
+    width:100%;
+    min-width:0;
+    padding:0;
+    font-size:16px;
+    font-weight:650;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center>.import-cancel{
+    grid-area:exit;
+    flex:none;
+    padding:0 6px;
+    font-size:13px;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress{
+    display:grid!important;
+    grid-area:steps;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:4px!important;
+    width:100%;
+    min-width:0;
+    height:auto;
+    min-height:34px;
+    margin:0;
+    overflow:visible;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span{
+    display:flex!important;
+    justify-content:center;
+    align-items:center;
+    gap:4px!important;
+    width:100%;
+    min-width:0;
+    min-height:32px;
+    height:auto;
+    padding:4px 2px;
+    font-size:10px;
+    line-height:1.25;
+    white-space:nowrap;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span>b{
+    width:20px;height:20px;
+    min-width:20px;flex:0 0 20px;
+    font-size:10px;
+  }
+  body:has(.import-nav) #view .import-nav>.sync-indicator{
+    grid-column:2;
+    grid-row:3;
+    justify-self:end;
+    margin:2px 0 0;
+    min-height:27px;
+    font-size:11px!important;
+  }
+  body:has(.import-nav) #view .import-nav:has(+ .import-done)>.sync-indicator{
+    display:none!important;
+  }
+  #view>.import-done{
+    --import-bar-height:110px;
+    min-height:calc(100dvh - var(--import-bar-height));
+    padding:clamp(20px,5vh,42px) max(16px,env(safe-area-inset-left)) 
+      calc(26px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-right));
+  }
+  #view .import-done-card{
+    width:min(100%,440px);
+    padding:30px clamp(18px,5vw,30px);
+    border-radius:20px;
+  }
+  #view .import-done-icon{
+    width:58px;height:58px;
+    margin-bottom:16px;
+    font-size:30px;
+  }
+  #view .import-done-card h1{font-size:26px}
+  #view .import-done-card .import-done-message{
+    max-width:32ch;
+    margin-top:14px;
+    font-size:13px;
+    line-height:1.7;
+  }
+  #view .import-done-actions{gap:10px;margin-top:24px}
+  #view .import-done-actions .btn{min-height:40px;padding:8px 10px;font-size:14px}
+  /* Import inspection/review also must not inherit desktop min-widths. */
+  #view .import-intro,#view .import-inspect,#view .import-review{
+    width:100%;min-width:0;max-width:100%;overflow-wrap:anywhere;
+  }
+  #view .review-actions{min-width:0}
+  #toast{
+    width:max-content;
+    max-width:calc(100vw - 36px);
+    bottom:calc(20px + env(safe-area-inset-bottom));
+    margin:0;
+    text-align:center;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    line-height:1.5;
+  }
+}
+@media(max-width:350px){
+  body:has(.import-nav) #view .import-nav{padding-inline:8px!important;column-gap:2px!important}
+  body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span{
+    gap:2px!important;font-size:9px;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span>b{
+    width:18px;height:18px;min-width:18px;flex-basis:18px;
+  }
+  #view .import-done-card{padding-inline:16px}
+  #view .import-done-actions{gap:7px}
+  #view .import-done-actions .btn{padding-inline:7px;font-size:13px}
+}
+/* Avoid hiding the action row behind the iOS software keyboard or display
+   cutout on short phones; the card may scroll vertically, never sideways. */
+@media(max-height:540px){
+  #view>.import-done{min-height:0;padding-block:18px 24px}
+  #view .import-done-card{padding-block:18px}
+  #view .import-done-icon{width:48px;height:48px;margin-bottom:8px}
+  #view .import-done-actions{margin-top:14px}
+}

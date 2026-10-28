@@ -1,16 +1,46 @@
 name: Craft browser regression
 
 on:
-  push:
-    branches: [recognition-official-engines]
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - 'src/craft-*.js'
       - 'src/material-*.js'
       - 'src/creative*.js'
+      - 'src/creation-*.js'
+      - 'src/graphic-*.js'
+      - 'src/graphics-*'
+      - 'src/image-*'
+      - 'src/react-creation-mode.jsx'
+      - 'tests/three-modes-browser.mjs'
+      - 'tests/fixtures/three-modes.*'
+      - 'src/svg-paint-geometry.js'
+      - 'src/react-text-effects.jsx'
+      - 'tests/taxonomy-browser.mjs'
+      - 'tests/fixtures/command-taxonomy.*'
+      - 'tests/unified-graphics-browser.mjs'
+      - 'tests/fixtures/unified-graphics.html'
+      - 'src/text-effects.js'
+      - 'src/editor-tools-model.js'
+      - 'tests/type-effects-browser.mjs'
+      - 'tests/fixtures/type-effects.html'
+      - 'scripts/generate-craft-details-example.mjs'
+      - 'src/scene-*.js'
+      - 'src/v3-*.js'
+      - 'src/v3-*.mjs'
+      - 'creation-contract/**'
+      - 'scripts/*creation*'
+      - 'scripts/*offline*'
+      - 'scripts/generate-v3-unified-example.mjs'
       - 'src/app.js'
-      - 'src/offline*.js'
+      - 'src/backup-*.js'
+      - 'src/store.js'
+      - 'tests/backup-*.mjs'
+      - 'src/offline*'
+      - 'src/web-scene-*'
+      - 'src/web-workbench-*'
+      - 'src/web-creation-guide.js'
+      - 'tests/web-workbench-browser.mjs'
       - 'src/*cache*.js'
       - 'src/presentation-resources.js'
       - 'src/lazy-private-images.js'
@@ -64,7 +94,7 @@ jobs:
           SHIYE_CRAFT_SCREENSHOTS: /tmp/shiye-craft-browser
         run: |
           set -euo pipefail
-          npm run dev -- --port 5192 --strictPort > /tmp/shiye-craft-server.log 2>&1 &
+          npm run dev -- --mode browser-test --port 5192 --strictPort > /tmp/shiye-craft-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
@@ -72,11 +102,25 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:5192/ >/dev/null
+          node tests/backup-archive-browser.mjs
           node tests/craft-browser.mjs
           node tests/presentation-browser.mjs
           node tests/craft-multimodal-browser.mjs
-          git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js src/generated/offline-browser-source.js src/generated/offline-glyph-source.js
-      - name: Retain synthetic screenshots and reports
+          node tests/web-workbench-browser.mjs
+          node tests/type-effects-browser.mjs
+          node tests/unified-graphics-browser.mjs
+          node tests/taxonomy-browser.mjs
+          node tests/three-modes-browser.mjs
+          git diff --exit-code -- package.json package-lock.json
+      - name: Verify clean-build reproducibility and generate current creation example
+        run: |
+          node scripts/verify-offline-build.mjs
+          node scripts/generate-v3-unified-example.mjs
+          node scripts/generate-craft-details-example.mjs /tmp/shiye-craft-browser/craft-details
+          mkdir -p /tmp/shiye-craft-browser/creation-package
+          cp -R examples/v3-unified/. /tmp/shiye-craft-browser/creation-package/
+          cp test-results/creation-build.json /tmp/shiye-craft-browser/creation-package/
+      - name: Retain synthetic screenshots, current creation ZIP and build proof
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

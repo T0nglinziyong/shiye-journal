@@ -1,0 +1,57 @@
+name: Storage integration in Chromium
+on:
+  pull_request:
+    branches: [test]
+    paths:
+      - 'src/backup-*.js'
+      - 'src/cloud-store.js'
+      - 'src/private-cache.js'
+      - 'src/project-sync.js'
+      - 'src/store.js'
+      - 'src/app-update.js'
+      - 'src/app.js'
+      - 'public/sw.js'
+      - 'tests/storage-integration-browser.mjs'
+      - '.github/workflows/storage-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: storage-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install pinned browser test driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/shiye-browser" --no-save --package-lock=false agent-browser@0.38.2
+          BROWSER_BIN="$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser"
+          "$BROWSER_BIN" install --with-deps
+          echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
+      - name: Serve real app and test edit responsiveness with synthetic data
+        shell: bash
+        env:
+          SHIYE_TEST_URL: http://127.0.0.1:5193
+        run: |
+          set -euo pipefail
+          npm run dev -- --mode browser-test --port 5193 --strictPort > /tmp/shiye-storage-test.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 80); do
+            if curl -fsS http://127.0.0.1:5193/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5193/ >/dev/null
+          node tests/storage-integration-browser.mjs

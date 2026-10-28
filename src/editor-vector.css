@@ -1,0 +1,10 @@
+.editor-vector-panel>.stack{padding-top:12px;min-width:0}
+.editor-vector-panel svg{display:block;width:100%;height:220px;touch-action:none;background:#f3f3ed;border-radius:10px;overflow:visible}
+.editor-vector-panel svg [role=button]{cursor:grab;outline:none}
+.editor-vector-panel svg [role=button]:focus-visible circle:last-child,.editor-vector-panel svg [role=button]:focus-visible rect:last-child{stroke:#9c4e18;stroke-width:.008em}
+.editor-vector-nudges{display:flex;gap:6px}
+.editor-vector-nudges button{flex:1;min-width:0;min-height:44px;padding:8px 4px;white-space:nowrap}
+.editor-vector-segments input[type=range]{width:100%;accent-color:#56694c;min-height:32px}
+.editor-vector-choices{display:flex;gap:8px}
+.editor-vector-choices button{flex:1;min-height:44px}
+.editor-vector-choices button[aria-pressed=true]{background:#e2e9db;border-color:#637759;color:#32492e}

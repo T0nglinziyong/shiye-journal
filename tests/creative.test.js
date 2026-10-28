@@ -1,8 +1,32 @@
+import {USER_SCENE_POLICY,confirmSceneCapability} from '../src/scene-edit-policy.js';
 import test from 'node:test';import assert from 'node:assert/strict';
-import {draft} from '../src/domain.js';import {applyToolCalls} from '../src/creative.js';
+import {draft,itemFromAsset} from '../src/domain.js';import {applyToolCalls,validateScenePhysical} from '../src/creative.js';
+import {groupSceneLayers} from '../src/scene-v2.js';
+import {duplicateSceneGroup} from '../src/scene-selection-actions.js';
+import {buildMaterialLedger} from '../src/material-ledger.js';
 const asset={id:'a',title:'贴纸',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
 test('valid prefix survives a malformed later tool',()=>{const d=draft();const result=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',x:.5,y:.5}]}},{name:'upsert_text',arguments:{items:[{key:'t1',content:'今日有一阵温柔的风',width:.4}]}},{name:'upsert_primitives',arguments:{items:[{key:'bad',kind:'ellipse',fill:'red'}]}}]},d,[asset],{m1:'a'});assert.deepEqual(result.results.map(x=>x.ok),[true,true,false]);assert.equal(result.draft.items.length,1);assert.equal(result.draft.textBlocks[0].content,'今日有一阵温柔的风');assert.equal(result.draft.primitives.length,0);});
 test('current contract rejects physical-size overrides and never duplicates a unique material',()=>{const d=draft();const invalid=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',x:.3,y:.5,width:800}]}}]},d,[asset],{m1:'a'});assert.equal(invalid.results[0].ok,false);assert.equal(invalid.draft.items.length,0);const result=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',x:.3,y:.5},{asset:'m1',x:.7,y:.5}]}}]},d,[asset],{m1:'a'});assert.equal(result.draft.items.length,1);assert.ok(Math.abs(result.draft.items[0].width-20/297*1000)<.001);});
+test('manual visual deformation keeps one physical source while AI placement remains size-bound',()=>{
+  const d=draft(),item=itemFromAsset(asset,d,100,100);
+  d.items.push(item);
+  item.width*=1.6;item.height*=.7;
+  assert.throws(()=>validateScenePhysical(d,[asset]),/实物尺寸/);
+  item.manualVisualResize=true;
+  assert.equal(validateScenePhysical(d,[asset]),true);
+});
+test('manual group copy keeps one source allocation while rendering a second editable image',()=>{
+  const d=draft(),item=itemFromAsset(asset,d,100,100);
+  d.items.push(item);
+  d.primitives.push({id:'shape',kind:'rectangle',x:140,y:100,width:20,height:20});
+  const group=groupSceneLayers(d,[item.id,'shape'],{id:'original'});
+  let sequence=0;
+  duplicateSceneGroup(d,group,()=>`copy-${++sequence}`,{policy:USER_SCENE_POLICY,confirmation:confirmSceneCapability([item],'material.visualCopy')});
+  assert.equal(d.items.length,2);
+  assert.equal(d.items.filter(entry=>entry.manualVisualCopy).length,1);
+  assert.equal(validateScenePhysical(d,[asset]),true);
+  assert.equal(buildMaterialLedger(d,[asset]).units[0].allocations.length,1);
+});
 test('malformed later JSON does not roll back valid first call',()=>{const result=applyToolCalls({tools:[{name:'upsert_text',arguments:'{"items":[{"key":"t1","content":"一段正文","width":0.5}]}'},{name:'upsert_primitives',arguments:'{oops'}]},draft(),[]);assert.deepEqual(result.results.map(x=>x.ok),[true,false]);assert.equal(result.draft.textBlocks.length,1);});
 test('current crop operation uses source ratios and rejects tiny pieces',()=>{const first=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',piece:'p1',x:.5,y:.5}]}}]},draft(),[asset],{m1:'a'}).draft;
   const crop=values=>({op:'crop',box:{unit:'ratio',mode:'keep',values},angle:0,finish:null});

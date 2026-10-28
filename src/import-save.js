@@ -1,6 +1,12 @@
 import {project,uid} from './domain.js';
 import {paperDimensions} from './paper-sizes.js';
 import {markProjectAssetsUsed} from './library-model.js';
+import {snapshotRecord} from './work-collections.js';
+import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
+import {extractAlphaMask} from './alpha-mask-blob.js';
+import {materialStorageBlobs} from './material-storage-resolution.js';
+import {sha256Hex} from './task-fingerprint.js';
+import {importDefaultTitle} from './import-default-names.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -15,92 +21,131 @@ export function importPaperDimensions(record) {
 }
 export function candidateMetadata(c,record,batchSeriesID) {
   if(c.width!=null&&(!Number.isFinite(c.width)||c.width<=0)||c.height!=null&&(!Number.isFinite(c.height)||c.height<=0))throw Error('素材宽高必须是正数或留空');
-  const quantity=c.quantity??1;if(!Number.isInteger(quantity)||quantity<1)throw Error('素材数量必须是正整数');
   const choice=c.seriesID??record.seriesID??batchSeriesID;
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
-    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'?null:choice||batchSeriesID||null};
-}
-const png=canvas=>new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-async function workBackground(source,candidates) {
-  const canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0);
-  const original=ctx.getImageData(0,0,canvas.width,canvas.height),width=canvas.width,height=canvas.height;
-  const holes=candidates.map(c=>c.region);
-  for(const c of candidates) {
-    const r=c.region,margin=Math.max(.008,Math.min(r.w,r.h)*.13),samples=[[],[],[]];
-    for(const distance of [margin,margin*2,margin*3]) {
-      for(let step=0;step<=10;step++) {
-        const t=step/10;
-        for(const [x,y] of [[r.x+t*r.w,r.y-distance],[r.x+t*r.w,r.y+r.h+distance],[r.x-distance,r.y+t*r.h],[r.x+r.w+distance,r.y+t*r.h]]) {
-          if(x<0||x>=1||y<0||y>=1||holes.some(h=>x>=h.x&&x<=h.x+h.w&&y>=h.y&&y<=h.y+h.h))continue;
-          const offset=(Math.floor(y*height)*width+Math.floor(x*width))*4;
-          for(let k=0;k<3;k++)samples[k].push(original.data[offset+k]);
-        }
-      }
-      if(samples[0].length>=12)break;
-    }
-    const colors=samples.map(s=>s.length?s.sort((a,b)=>a-b)[Math.floor(s.length/2)]:255);
-    const bitmap=await createImageBitmap(c.blob),mask=document.createElement('canvas');mask.width=width;mask.height=height;
-    const m=mask.getContext('2d');m.save();m.translate((r.x+r.w/2)*width,(r.y+r.h/2)*height);m.rotate((r.rotation||0)*Math.PI/180);m.drawImage(bitmap,-r.w*width/2,-r.h*height/2,r.w*width,r.h*height);m.restore();
-    m.globalCompositeOperation='source-in';m.fillStyle='rgb('+colors.join(',')+')';m.fillRect(0,0,width,height);ctx.drawImage(mask,0,0);bitmap.close();
-  }
-  return png(canvas);
+    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
 export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(state.importSaving||state.importStep==='done')return;
   state.importSaving=true;
   try {
-  const assets=[],blobs=[],projects=[],now=new Date().toISOString();let savedCount=0;
-  for(const record of state.importRecords) {
+  const assets=[],blobs=[],projects=[],now=new Date().toISOString(),importBatchID=uid();let savedCount=0;
+  for(const [sourcePageIndex,record] of state.importRecords.entries()) {
+    const sourcePageID=uid();
     if(!record.confirmed)throw Error('请先检查所有照片');
     const chosen=(record.selectedCandidates||[]).filter(c=>c.selected);
-    if(state.importMode==='work') {
+    if(state.importMode==='snapshot') {
+      // Snapshots are single full pages, not segmented or library-classified.
+      // Render exactly the corrected page; never reuse the original perspective
+      // photo when the user has accepted the corrected geometry.
+      const source=record.correctedBitmap||record.bitmap;
+      if(!source)throw Error('校正后的快照页面尚未准备好');
+      const canvas=document.createElement('canvas');
+      canvas.width=source.width;canvas.height=source.height;
+      const ctx=canvas.getContext('2d',{willReadFrequently:record.balanceLight===true});
+      ctx.drawImage(source,0,0);
+      if(record.balanceLight===true){
+        const frame=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const balanced=neutralizePaperChroma(frame.data,canvas.width,canvas.height);
+        if(balanced!==frame.data){frame.data.set(balanced);ctx.putImageData(frame,0,0);}
+      }
+      const image=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('快照页面导出失败')),'image/png'));
+      const blobId=uid(),p=snapshotRecord({
+        title:importDefaultTitle(record.file.name,'snapshot',{sourceIndex:sourcePageIndex}),
+        previewBlobId:blobId,format:'image/png',width:canvas.width,height:canvas.height
+      });
+      projects.push(p);blobs.push({id:blobId,data:image});savedCount++;
+    } else if(state.importMode==='work') {
       const source=record.correctedBitmap||record.bitmap;
       const [paperWidth,paperHeight]=importPaperDimensions(record),ratio=source.width/source.height;
-      const p=project(record.workTitle?.trim()||record.file.name.replace(/\.[^.]+$/,'')||'导入作品',{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
+      const p=project(record.workTitle?.trim()||importDefaultTitle(record.file.name,'work',{sourceIndex:sourcePageIndex}),{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
       d.canvas={width:1000*ratio,height:1000};d.physicalPageHeightMM=paperHeight;
       d.pageRatio='custom:'+Math.round(paperWidth/(d.pageMode==='spread'?2:1))+'x'+Math.round(paperHeight);
-      p.isDraft=false;p.styleTags=record.workTags||[];p.isUsed=!!record.isUsed;
+      // The background is editable paper metadata, NEVER a reconstructed
+      // flattened photo. No inpainting and no locked full-page photo layer.
+      const paperPattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+      d.paperPattern=paperPattern==='columns'?'plain':paperPattern;
+      d.paperColumns=record.workPaperColumns===true||paperPattern==='columns';
+      d.paperColor=record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
+      d.items=[];
+      p.isDraft=false;p.source='imported';p.isUsed=false;
       const elements=chosen.filter(c=>c.region.w<.98||c.region.h<.98);
-      const background=await workBackground(source,elements),backgroundID=uid(),originalID=uid(),baseID=uid();
-      blobs.push({id:backgroundID,data:background},{id:originalID,data:record.originalFile||record.file});
-      const base={id:baseID,title:p.title+' · 底页',kind:'photo',role:'background',tags:[],palette:[],texture:'photo',blobId:backgroundID,originalBlobId:originalID,physicalWidthMM:paperWidth,physicalHeightMM:paperHeight,dimensionSource:'importedPage',supply:{kind:'single',quantity:1},reviewStatus:'ready',usageStatus:'unused',seriesID:null,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-page'};
-      assets.push(base);p.candidateAssetIDs=[baseID];
-      d.items=[{id:uid(),assetID:baseID,x:d.canvas.width/2,y:500,width:d.canvas.width,height:1000,rotation:0,zIndex:-100,isLocked:true,isParked:false,opacity:1}];
-      for(const c of elements) {
-        const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),r=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-element'});
-        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
-        blobs.push({id:blobId,data:c.blob},{id:sourceID,data:c.originalBlob||c.blob});p.candidateAssetIDs.push(id);
-        d.items.push({id:uid(),assetID:id,x:(r.x+r.w/2)*d.canvas.width,y:(r.y+r.h/2)*1000,width:r.w*d.canvas.width,height:r.h*1000,rotation:r.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
+      // Each selected element already carries its aligned candidate RGB frame.
+      // The whole photo is not used when that element is re-cut or re-masked;
+      // keeping it here added a large, shared upload to every work import.
+      p.candidateAssetIDs=[];
+      const choice=record.seriesID&&record.seriesID!==''?record.seriesID:state.importBatchSeriesID||null;
+      const copyToLibrary=choice!=='__no_library__';
+      p.seriesID=choice==='__none__'||choice==='__no_library__'?null:choice||null;
+      for(const [sourceCandidateIndex,c] of elements.entries()) {
+        const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid(),region=c.region;
+        const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
+        const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
+        const encodedMask=await extractAlphaMask(stored.cutout,{
+          maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
+            ?Number(state.preferences.recognitionPixels):900
+        });
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
+          initialMaskBlobId:maskId,finalMaskBlobId:maskId,candidateFrameBlobId,
+          isProjectInternal:!copyToLibrary,
+          usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,
+          seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,
+          createdAt:now,importBatchID,sourcePageID,sourcePageIndex,sourceCandidateIndex,
+          sourceIdentifier:'imported-work-element'});
+        blobs.push({id:maskId,data:encodedMask},
+          {id:candidateFrameBlobId,data:stored.frame},
+          {id:blobId,data:stored.cutout});p.candidateAssetIDs.push(id);
+        d.items.push({id:uid(),assetID:id,x:(region.x+region.w/2)*d.canvas.width,y:(region.y+region.h/2)*1000,
+          width:region.w*d.canvas.width,height:region.h*1000,rotation:region.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
       }
-      if(p.isUsed){
-        const used=new Map(markProjectAssetsUsed(p,assets,now).map(asset=>[asset.id,asset]));
-        for(let i=0;i<assets.length;i++)if(used.has(assets[i].id))assets[i]=used.get(assets[i].id);
-      }
+      // Import establishes the first editable baseline, including paper,
+      // detected cutouts and their physical placements.
+      p.initialEditorSnapshot={drafts:[structuredClone(d)],activeDraftID:d.id};
+      p.draftHistorySnapshots={[d.id]:structuredClone(d)};
       projects.push(p);savedCount++;
     }else {
       if(!chosen.length)continue;
       // Material editing/re-recognition needs only the candidate frame, not the
       // whole imported photograph. Keep the aligned source pixels plus the full
       // candidate-box frame so storage stays local and compact.
-      for(const c of chosen) {
-        const id=uid(),blobId=uid(),originalBlobId=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid();
-        const {mask,...region}=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId,originalCutoutBlobId,candidateFrameBlobId,sourceRegion:structuredClone(region),createdAt:now});
-        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
-        blobs.push({id:blobId,data:c.blob},{id:originalBlobId,data:c.originalBlob||c.blob});savedCount++;
+      for(const [sourceCandidateIndex,c] of chosen.entries()) {
+        const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid();
+        const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
+        const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
+        const encodedMask=await extractAlphaMask(stored.cutout,{
+          maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
+            ?Number(state.preferences.recognitionPixels):900
+        });
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
+          candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,
+          createdAt:now,importBatchID,sourcePageID,sourcePageIndex,sourceCandidateIndex});
+        blobs.push({id:maskId,data:encodedMask},
+          {id:candidateFrameBlobId,data:stored.frame},
+          {id:blobId,data:stored.cutout});savedCount++;
       }
     }
   }
-  if(!savedCount)throw Error('请选择至少一件素材');
+  if(!savedCount)throw Error('请选择至少一件素材或一个页面');
   // Commit the whole batch once. A failed transaction never leaves a partly
   // imported batch that would be duplicated when the user retries.
+  // Import-completed must never be displayed for a candidate whose saved
+  // cutout/original/frame bytes are missing. Those Blob IDs are required for
+  // reliable editing after a later reload on iOS.
+  const invalid=blobs.find(row=>!(row.data instanceof Blob)||row.data.size<8);
+  if(invalid)throw Error('素材原图或抠图字节尚未准备完整，未保存当前批次；请重新识别后再试');
   const result=db.stageImport?await db.stageImport({assets,blobs,projects}):await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
   state.assets.push(...assets);state.projects.push(...projects);for(const b of blobs)urls.set(b.id,URL.createObjectURL(b.data));
   state.importSavedCount=savedCount;state.importPending=!!result?.pending;state.importStep='done';render();
+  // The import is already durable on this device. Let the completed screen
+  // paint before starting its larger cloud batch, bypassing the edit delay.
+  if(result?.pending&&db.flushProjects)setTimeout(()=>{
+    void db.flushProjects().catch(error=>console.warn('导入上传待自动重试',error));
+  },250);
   // Remote enrichment starts only after the entire batch is safely committed.
   // It must not block the success screen or the next import batch.
-  if(state.importMode!=='work'&&onSaved)void Promise.resolve().then(()=>onSaved(assets.map(a=>structuredClone(a)),{waitForSave:()=>db.flushProjects?db.flushProjects():Promise.resolve()})).catch(console.warn);
+  if(onSaved)void Promise.resolve().then(()=>onSaved(
+    assets.filter(a=>!a.isProjectInternal).map(a=>structuredClone(a)),
+    {projects:projects.map(p=>structuredClone(p)),waitForSave:()=>db.flushProjects?db.flushProjects():Promise.resolve()}
+  )).catch(error=>console.warn('导入后的自动整理待重试',error));
   } finally {state.importSaving=false;}
 }

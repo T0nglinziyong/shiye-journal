@@ -6,6 +6,7 @@ export class ChatRequestError extends Error {
 function httpError(status,providerCode=''){
  const code=String(providerCode||'').toLowerCase();
  if(status===401)return new ChatRequestError('authentication','模型请求失败 HTTP 401：密钥无效',{status});
+ if(status===402)return new ChatRequestError('balance','模型请求失败 HTTP 402：这把密钥所属的 API 账号当前余额不可用；请核对服务商余额与所用密钥',{status});
  if(status===403)return new ChatRequestError('permission','模型请求失败 HTTP 403：没有访问权限',{status});
  if(status===429)return new ChatRequestError('rate-limit','模型请求失败 HTTP 429：请求过多或额度限制；请稍后手动重试',{status});
  if(status===413||/context[_ -]?length|maximum[_ -]?context/.test(code))return new ChatRequestError('context-limit','模型上下文超限：请缩短输入或减少素材图片',{status});
@@ -20,9 +21,15 @@ export async function requestChat({endpoint,key,payload,request=fetch,signal,tim
  const abort=()=>controller.abort(signal.reason||new DOMException('已取消','AbortError'));
  const pulse=()=>{clearTimeout(timer);timer=setTimeout(()=>controller.abort(new ChatRequestError('idle-timeout',phase+'超时：连续 '+timeout+' 秒未收到数据。请检查网络或稍后重试。')),timeout*1000);};
  const hard=setTimeout(()=>controller.abort(new ChatRequestError('duration-limit','模型请求超过时间上限，已停止；没有自动重试。')),maxDuration);
- const progress=()=>onProgress({phase,seconds:Math.round((Date.now()-started)/1000),received,keepAlives,networkBytes});
- const ticker=setInterval(progress,1000);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();pulse();progress();
+ const progress=()=>{
+  // Rendering a progress label must never prevent the network request or
+  // leave its timeout/ticker running without a request to cancel.
+  try{onProgress({phase,seconds:Math.round((Date.now()-started)/1000),received,keepAlives,networkBytes});}
+  catch{console.warn('模型进度显示失败；请求继续');}
+ };
+ const ticker=setInterval(progress,1000);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();pulse();
  try {
+  progress();
   const response=await request(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},signal:controller.signal,body:JSON.stringify({...payload,stream:true})});
   if(!response.ok){let providerCode='';try{const body=await response.json();providerCode=body?.error?.code||body?.error?.type||'';}catch{}throw httpError(response.status,providerCode);}
   phase='服务已连接，等待模型开始输出';pulse();progress();

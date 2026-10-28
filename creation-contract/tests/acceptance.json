@@ -1,0 +1,391 @@
+{
+  "scope": "runtime-and-application-release-gates",
+  "executedByThisDelivery": false,
+  "cases": [
+    {
+      "id": "static-invariance",
+      "area": "fixed-assets",
+      "expected": "换三组素材及参数后静态文件逐字节一致",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "no-task-leak",
+      "area": "fixed-assets",
+      "expected": "固定文档/schema/runtime 中无本次素材 ID、hash、日期、任务正文",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "task-schema",
+      "area": "builders",
+      "expected": "TASK 正确映射全部 UI 参数，default 仅规范化一次",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "manifest-identity",
+      "area": "builders",
+      "expected": "短别名稳定、源 UUID/像素 hash/源版本正确",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "same-pixels-new-mm",
+      "area": "builders",
+      "expected": "相同图片改变毫米校准时 sourceRevision 改变而 blob hash 不变",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "overview",
+      "area": "builders",
+      "expected": "总览别名尺寸正确且说明比例模式",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "initial-scene",
+      "area": "builders",
+      "expected": "初始化 Scene 来源与参数一致，无旧任务残留",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "all-original-capabilities",
+      "area": "command",
+      "expected": "39 种旧操作能力均有新等价实现与测试",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "command-common",
+      "area": "command",
+      "expected": "material/text/shape/group 创建与更新复用同一参数语义",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "mm-ratio",
+      "area": "layout",
+      "expected": "同一参考下毫米和比例布局等价",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "relative-rotated",
+      "area": "layout",
+      "expected": "旋转参考、父级、目标的锚点和偏移正确",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "nested-tree",
+      "area": "scene",
+      "expected": "三层 Group 整体移动不改写后代 local transform",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "group-reparent",
+      "area": "scene",
+      "expected": "归组、重父级和无损解组保持 world 与绘制顺序",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "group-compositing",
+      "area": "render",
+      "expected": "重叠子图层的组 opacity、mask、blend 合成正确",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "group-ratio-cycle",
+      "area": "layout",
+      "expected": "自动父边界与子 ratio 循环被拒绝",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "linked-reload",
+      "area": "scene",
+      "expected": "linked 随动与 once 独立符合定义，重载关系不丢失",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "app-linked-edit",
+      "area": "app",
+      "expected": "手动拖动 linked 对象更新偏移，明确解除才 detach",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "physical-parent",
+      "area": "physical",
+      "expected": "父组缩放/斜切不能绕过实体尺寸锁定",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "cut-remnant",
+      "area": "physical",
+      "expected": "切片/余料/废弃状态和源占用正确",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "mask-not-cut",
+      "area": "physical",
+      "expected": "显示遮罩不能产生可重复使用的实体余料",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "window-weave",
+      "area": "physical",
+      "expected": "两个真实开口与一条纸条穿插保留完整来源和可编辑性",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "no-raster-loss",
+      "area": "scene",
+      "expected": "所有矢量/墨迹/工艺重开后仍可编辑",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "duplicate-retry",
+      "area": "transaction",
+      "expected": "同事务同内容重试 no-op，异内容拒绝",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "stale-base",
+      "area": "transaction",
+      "expected": "新事务过期基准明确冲突，无自动 latest",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "atomic-recovery",
+      "area": "transaction",
+      "expected": "中途失败/崩溃/并发不造成半提交",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "dry-preview",
+      "area": "transaction",
+      "expected": "试做不改变 Scene、账本、历史或正式 PNG",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "renderer-profile",
+      "area": "render",
+      "expected": "两个已声明后端的几何/换行一致，容差有记录",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "font-profile",
+      "area": "render",
+      "expected": "缺字体不静默替代；改变 profile 重新排版及审阅",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "pack-stale",
+      "area": "pack",
+      "expected": "修改 Scene/素材/字体后旧 PNG 无法打包",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "visual-honesty",
+      "area": "pack",
+      "expected": "视觉状态来源和当前预览 hash 如实记录",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "required-material",
+      "area": "pack",
+      "expected": "必用素材真实可见使用，decision 不能代替布局",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "compact-json",
+      "area": "pack",
+      "expected": "单行紧凑导出保留完整 Scene 与转义换行",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "app-roundtrip",
+      "area": "app",
+      "expected": "导入编辑器→手动编辑→undo/redo→再导出和预览一致",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "limits-security",
+      "area": "security",
+      "expected": "深度/展开总操作/路径/像素限额与路径安全生效",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    },
+    {
+      "id": "capability-gate",
+      "area": "command",
+      "expected": "未实现契约不能经 help 宣称支持，也不能静默忽略参数",
+      "status": "not-run",
+      "evidenceRequired": [
+        "command",
+        "result",
+        "artifact-or-test-path"
+      ]
+    }
+  ]
+}

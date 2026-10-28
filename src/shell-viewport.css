@@ -1,0 +1,7 @@
+/* The header occupies its own space in the document. Only page content
+   scrolls beneath it; the mobile navigation is fixed outside that header. */
+@media(max-width:699px){
+  #app>.topbar { position:sticky; top:0; }
+  body>.main-nav { position:fixed; top:auto; bottom:0; transform:none; }
+}
+body:has(#app[hidden])>.main-nav { display:none; }

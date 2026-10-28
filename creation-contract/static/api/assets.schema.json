@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shiye:assets:1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "shiye-asset-manifest"
+    },
+    "version": {
+      "const": 1
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+          },
+          "assetID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^assets/[^/\\\\]+\\.png$"
+          },
+          "blobSha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "sourceRevision": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "pixelSize": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "physicalSizeMm": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceSnapshot": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "alias",
+          "assetID",
+          "title",
+          "kind",
+          "path",
+          "blobSha256",
+          "sourceRevision",
+          "pixelSize",
+          "physicalSizeMm",
+          "quantity",
+          "sourceSnapshot"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "overview": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "const": "assets/overview.jpg"
+        },
+        "scaleMode": {
+          "enum": [
+            "uniform-physical",
+            "fit-card"
+          ]
+        },
+        "sourceManifestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "path",
+        "scaleMode",
+        "sourceManifestHash"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "materials",
+    "overview"
+  ],
+  "additionalProperties": false
+}

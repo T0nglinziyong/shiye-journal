@@ -21,3 +21,15 @@ test('selected page purpose changes composition studies without hard quotas',()=
   assert.match(guide,/故意留白、局部叠压、半藏和出血/);
   assert.doesNotMatch(guide,/至少\d|覆盖率\s*\d|最低图层数\s*\d/);
 });
+
+test('the same free direction produces different studies from actual material roles and proportions',()=>{
+  const direction={styles:['随材而定','自动安排'],purposes:['自由创作']};
+  const top=materials=>relevantJournalFamilies({...direction,materials})[0].id;
+  assert.equal(top([{title:'JOURNEY 印刷标题',kind:'text'}]),'dialogue');
+  assert.equal(top([{title:'横线便签',kind:'paper'},{title:'方格底纸',kind:'paper'}]),'paper-collage');
+  assert.equal(top([{title:'意面餐盘',kind:'photo'}]),'food');
+  assert.equal(top([{title:'人物剪影贴纸',kind:'sticker',physicalWidthMM:25,physicalHeightMM:90}]),'silhouette');
+  const input={...direction,materials:[{title:'地图票根',kind:'paper'}]};
+  assert.deepEqual(relevantJournalFamilies(input),relevantJournalFamilies(input));
+  assert.equal(relevantJournalFamilies(input)[0].id,'route');
+});

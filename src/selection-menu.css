@@ -32,3 +32,220 @@
   border-bottom:1px solid #e1e7df;
   box-shadow:0 6px 12px #233f2b12;
 }
+
+/* Compact batch buttons: match the original small tray controls,
+   never enlarge More/Delete because of their label or CSS class. */
+.swift-tray.manage.library-management-tray > button {
+  box-sizing:border-box;
+  display:inline-flex;
+  flex:0 0 90px;
+  align-items:center;
+  justify-content:center;
+  width:90px;
+  min-width:90px;
+  max-width:90px;
+  height:36px;
+  min-height:36px;
+  max-height:36px;
+  margin:0;
+  padding:6px 8px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:400;
+  line-height:1.2;
+  white-space:nowrap;
+  text-align:center;
+  /* SVGs are inserted later by mountIcons. Keep the entire icon+label
+     group inside the fixed, compact button instead of letting the label
+     claim 100% of its width in addition to the icon. */
+  overflow:hidden;
+}
+.swift-tray.manage.library-management-tray > button.shiye-icon-host {
+  gap:4px;
+}
+.swift-tray.manage.library-management-tray > button > svg.shiye-icon {
+  position:static;
+  display:block;
+  flex:0 0 16px;
+  width:16px;
+  height:16px;
+  min-width:16px;
+  max-width:16px;
+  margin:0;
+  overflow:hidden;
+}
+.swift-tray.manage.library-management-tray > button > .selection-action-label {
+  display:block;
+  flex:0 1 auto;
+  min-width:0;
+  width:auto;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:inherit;
+  line-height:inherit;
+  white-space:nowrap;
+  text-align:center;
+}
+@media(max-width:699px) {
+  .swift-tray.manage.library-management-tray {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+    width:calc(100vw - 24px);
+    justify-items:stretch;
+    align-items:center;
+  }
+  .swift-tray.manage.library-management-tray > strong {
+    grid-column:1/-1;
+    min-width:0;
+    text-align:center;
+  }
+  .swift-tray.manage.library-management-tray > button {
+    flex:none;
+    width:100%;
+    min-width:0;
+    max-width:none;
+    height:36px;
+    min-height:36px;
+    max-height:36px;
+    padding:6px 3px;
+    font-size:12px;
+  }
+}
+
+/* Shared catalog selection bar is a compact anchored bottom sheet, including
+   the Asset/Works Recently Deleted tabs. Only the irreversible action needs
+   additional horizontal room; do not globally enlarge other buttons. */
+.swift-tray.manage.deleted-selection-tray > button[data-trash-remove] {
+  flex-basis:132px;
+  width:132px;
+  min-width:132px;
+  max-width:132px;
+}
+.swift-tray.manage.deleted-selection-tray > button[data-trash-remove] .selection-action-label{
+  text-overflow:clip;
+}
+@media(max-width:699px){
+  /* Same three-column geometry as regular asset/series/work selection.
+     Only the irreversible action spans two normal button slots. */
+  .swift-tray.manage.deleted-selection-tray:not([hidden]) {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  .swift-tray.manage.deleted-selection-tray > button:not([data-trash-remove]){
+    width:100%;
+    min-width:0;
+    max-width:none;
+    flex:none;
+    grid-column:span 1;
+  }
+  .swift-tray.manage.deleted-selection-tray > button[data-trash-remove]{
+    grid-column:span 2;
+    width:100%;
+    min-width:0;
+    max-width:none;
+    flex:none;
+  }
+}
+/* The nested choices are a SECOND side pane next to More, never a
+   disclosure list inside it. Both panes use one parent lifecycle. */
+.selection-side-panel.selection-submenu {
+  position:fixed;
+  display:flex;
+  flex-direction:column;
+  z-index:201;
+  min-height:0;
+  box-sizing:border-box;
+  overflow:hidden;
+  padding:0;
+  margin:0;
+  border:1px solid #d9e3d9;
+  border-radius:18px;
+  background:#fffefaf5;
+  box-shadow:0 12px 36px #243b2930;
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  overscroll-behavior:contain;
+}
+.selection-side-heading {
+  flex:none;
+  padding:13px 12px;
+  border-bottom:1px solid #e0e7df;
+  font-size:14px;
+  line-height:1.3;
+  font-weight:600;
+  color:#52634b;
+  text-align:center;
+}
+.selection-side-list {
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  gap:2px;
+  padding:6px;
+  min-height:0;
+  overflow:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.selection-side-pinned {
+  display:flex;
+  flex:none;
+  flex-direction:column;
+  padding:6px;
+  gap:2px;
+  border-bottom:1px solid #e1e7df;
+  background:#fffefa;
+}
+.selection-side-panel :is(.selection-side-list,.selection-side-pinned) > button {
+  width:100%;
+  min-height:42px;
+  flex:none;
+  box-sizing:border-box;
+  margin:0;
+  padding:9px 8px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#303b32;
+  text-align:left;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.selection-side-panel :is(.selection-side-list,.selection-side-pinned) > button:hover,
+.selection-side-panel :is(.selection-side-list,.selection-side-pinned) > button:focus-visible {
+  background:#eaf1e8;
+  outline:2px solid #b4cbb3;
+  outline-offset:-2px;
+}
+.selection-side-panel .selection-action-label { flex:1;min-width:0; }
+.selection-more-menu.selection-side-open [data-expanded-submenu][aria-expanded="true"] {
+  color:#335e40;
+  background:#e7eee5;
+}
+@media(max-width:599px){
+  /* Mobile More uses compact metrics FROM THE FIRST OPEN, whether or not a
+     child is visible. Submenu toggles cannot change its width or appearance. */
+  .selection-more-menu .popover-content{padding:5px;}
+  .selection-more-menu .popover-content > button {
+    padding:8px 5px;
+    grid-template-columns:14px minmax(0,1fr) 10px;
+    column-gap:4px;
+    font-size:12px;
+  }
+  .selection-more-menu .popover-content > button > svg.shiye-icon {
+    width:14px;height:14px;
+  }
+  .selection-more-menu > h3{padding:11px 6px;font-size:13px;}
+  .selection-side-panel .selection-side-heading{padding:10px 7px;font-size:12px}
+  .selection-side-panel :is(.selection-side-list,.selection-side-pinned)>button{
+    padding:8px 6px;
+    font-size:12px;
+    min-height:38px;
+  }
+}

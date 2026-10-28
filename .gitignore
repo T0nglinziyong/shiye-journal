@@ -1,6 +1,7 @@
 node_modules/
 node_modules
 dist/
+.build-sourcemaps/
 .vercel/
 .env
 .env.*
@@ -12,6 +13,10 @@ __pycache__/
 *.shiyepwa
 *.shiyebackup
 实时数据/
+test-data/private-recognition/
 ShiyeJournalFresh.swiftpm/
 auth.json
 credentials.json
+# Derived bundles are generated from the sole source implementation by predev/pretest/build.
+/src/generated/
+/test-results/

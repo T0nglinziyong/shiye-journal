@@ -1,0 +1,41 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-split",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.split",
+      "target": "photo",
+      "pieces": [
+        {
+          "id": "strip-a",
+          "region": {
+            "shape": "rect",
+            "space": "source",
+            "unit": "ratio",
+            "box": [
+              0,
+              0,
+              0.5,
+              1
+            ]
+          }
+        },
+        {
+          "id": "strip-b",
+          "region": {
+            "shape": "rect",
+            "space": "source",
+            "unit": "ratio",
+            "box": [
+              0.5,
+              0,
+              0.5,
+              1
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

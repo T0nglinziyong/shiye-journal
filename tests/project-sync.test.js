@@ -1,6 +1,104 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProjectSync} from '../src/project-sync.js';
+import {syncAffectedKeys,syncEnvelope} from '../src/unified-sync-outbox.js';
+
+test('a work does not upload before its imported material while independent work proceeds',async()=>{
+  const material=syncEnvelope('batch',{id:'import',names:['assets'],operations:[
+    {store:'assets',action:'put',item:{id:'new-cutout'}}]});
+  const draft={id:'d',layers:[{id:'layer',type:'material',assetID:'new-cutout'}]};
+  const dependent=syncEnvelope('project',{id:'dependent',drafts:[draft]});
+  const independent=syncEnvelope('project',{id:'independent',drafts:[{id:'d',layers:[]}]});
+  let revision=1,rows=[material,dependent,independent].map((record,index)=>({
+    record,serial:index+1,baseRevision:1,operationID:'op-'+index}));
+  const uploaded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    recordKeys:syncAffectedKeys,authoritativeCommit:true,
+    commit:async record=>{if(record.id===material.id)throw Error('image offline');
+      uploaded.push(record.id);revision++;}});
+  await assert.rejects(sync.flush(),/image offline/);
+  assert.deepEqual(uploaded,[independent.id]);
+  assert.deepEqual((await sync.pending()).map(row=>row.record.id),[material.id,dependent.id]);
+});
+
+test('a missing material keeps its original error and a durable, delayed retry',async()=>{
+  let rows=[{record:{id:'project:work',kind:'project',payload:{id:'work'}},
+    serial:1,baseRevision:7,operationID:'source-operation'}],reconciles=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>7,clock:()=>1000,
+    reconcile:async()=>{reconciles++;return 'rebase';},
+    commit:async()=>{throw Object.assign(Error('素材尚未到达'),{code:'SHIYE_SOURCE_PENDING'});}});
+  await assert.rejects(sync.flush(),/素材尚未到达/);
+  assert.equal(reconciles,0);
+  assert.equal(sync.status().conflicts,0);
+  assert.equal(sync.status().pending,1);
+  assert.ok(sync.status().nextAttemptAt>=31000);
+});
+
+test('a changed work forks durably before the editor is redirected',async()=>{
+  let disk=[{record:{id:'project:old',kind:'project',payload:{id:'old',title:'local'}},
+    serial:1,baseRevision:2,operationID:'source-op'}],revision=3;
+  const events=[],uploads=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);events.push('persist');},
+    revision:()=>revision,reconcile:async record=>record.payload.id==='old'?'conflict':'rebase',
+    onConflict:async()=>({id:'project:fork',kind:'project',payload:{id:'fork',title:'local · 另一编辑版本'}}),
+    onForked:()=>events.push('redirect'),
+    commit:async record=>{uploads.push(record.payload.id);revision++;}});
+  await sync.flush();
+  assert.deepEqual(uploads,['fork']);
+  assert.ok(events.indexOf('persist')<events.indexOf('redirect'));
+  assert.deepEqual(disk,[]);
+});
+test('a merged cloud scene is published to the editor only after the replacement is durable',async()=>{
+  let disk=[{record:{id:'project:p',kind:'project',payload:{id:'p',title:'local'}},
+    serial:1,baseRevision:1,operationID:'local-op'}],revision=2;
+  const events=[],sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);events.push('persist');},revision:()=>revision,
+    reconcile:async()=>({kind:'replace',record:{id:'project:p',kind:'project',payload:{id:'p',title:'merged'}}}),
+    onReplaced:()=>events.push('editor-update'),commit:async()=>{revision++;}});
+  await sync.flush();
+  assert.ok(events.indexOf('persist')<events.indexOf('editor-update'));
+  assert.deepEqual(disk,[]);
+});
+test('a newer local edit cannot be replaced by an older in-flight cloud merge',async()=>{
+  let disk=[{record:{id:'project:p',kind:'project',payload:{id:'p',title:'old'}},
+    serial:1,baseRevision:1,operationID:'old-op'}],revision=2;
+  const gate=defer(),started=defer(),published=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);},revision:()=>revision,
+    reconcile:async record=>{
+      if(record.payload.title==='old'){
+        started.resolve();await gate.promise;
+        return {kind:'replace',record:{id:'project:p',kind:'project',payload:{id:'p',title:'merged-old'}}};
+      }
+      return 'conflict';
+    },onReplaced:()=>published.push('old'),commit:async()=>{throw Error('newer draft must reconcile first');}});
+  const upload=sync.flush();await started.promise;
+  await sync.stage({id:'project:p',kind:'project',payload:{id:'p',title:'new'}},{baseRevision:1});
+  gate.resolve();await upload;
+  assert.deepEqual(published,[]);
+  assert.equal(disk[0].record.payload.title,'new');
+  assert.equal(disk[0].baseRevision,1);
+});
+test('remote winner cannot advance or dismiss a newer local draft',async()=>{
+  let disk=[{record:{id:'project:p',kind:'project',payload:{id:'p',title:'old'}},
+    serial:1,baseRevision:1,operationID:'old-op'}];
+  const gate=defer(),started=defer(),superseded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);},revision:()=>2,
+    reconcile:async record=>{if(record.payload.title==='old'){
+      started.resolve();await gate.promise;return 'remote';
+    }return 'conflict';},onSuperseded:()=>superseded.push('old'),
+    commit:async()=>{throw Error('newer draft must reconcile first');}});
+  const upload=sync.flush();await started.promise;
+  await sync.stage({id:'project:p',kind:'project',payload:{id:'p',title:'new'}},{baseRevision:1});
+  gate.resolve();await upload;
+  assert.deepEqual(superseded,[]);
+  assert.equal(disk[0].record.payload.title,'new');
+  assert.equal(disk[0].baseRevision,1);
+});
 
 test('reopened outbox recognizes an acknowledged import instead of replaying it',async()=>{
   let rows=[{record:{id:'batch',assets:[{id:'a'}]},serial:1,baseRevision:4}],calls=0;
@@ -12,7 +110,139 @@ test('append-only import retries after an unrelated cloud revision',async()=>{
   const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),commit:async()=>calls++,revision:()=>5,reconcile:async()=> 'rebase'});
   await sync.flush();assert.equal(calls,1);assert.deepEqual(rows,[]);
 });
+test('a confirmed conflict stays pending without scheduling the same background replay',async()=>{
+  let rows=[{record:{id:'stale'},serial:1,baseRevision:1}],reconciles=0,timers=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=next,
+    revision:()=>2,reconcile:async()=>{reconciles++;return 'conflict';},
+    commit:async()=>{throw Error('stale row must not commit');},
+    setTimer:()=>{timers++;return 1;},clearTimer:()=>{}});
+  await sync.flush();
+  assert.equal(sync.status().conflicts,1);
+  await sync.resumeScheduled();
+  await sync.resume();
+  assert.equal(reconciles,1);
+  assert.equal(timers,0);
+  assert.equal((await sync.pending()).length,1);
+});
+test('a stale conflict cannot replay on resume and holds only its own later edits',async()=>{
+  let revision=9,rows=[
+    {record:{id:'old',key:'same'},serial:1,baseRevision:1,operationID:'old-op'},
+    {record:{id:'new',key:'same'},serial:2,baseRevision:1,operationID:'new-op'}
+  ],oldChecks=0,uploaded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next)},revision:()=>revision,
+    recordKeys:record=>[{store:'projects',id:record.key}],
+    reconcile:async record=>{if(record.id==='old'){oldChecks++;return 'conflict';}return 'rebase';},
+    commit:async record=>{uploaded.push(record.id);revision++;}});
+  await sync.flush();
+  assert.deepEqual(uploaded,[]);
+  await sync.resume();
+  assert.equal(oldChecks,1);
+  assert.deepEqual(uploaded,[]);
+  assert.deepEqual(rows.map(row=>row.record.id),['old','new']);
+  await sync.resume();
+  assert.equal(oldChecks,1);
+});
+test('a failed record keeps its retry deadline across reopen while an independent record commits',async()=>{
+  let now=1000,revision=0,failed=true;
+  let rows=[
+    {record:{id:'bad'},serial:1,baseRevision:0,operationID:'bad-op'},
+    {record:{id:'good'},serial:2,baseRevision:0,operationID:'good-op'}
+  ];
+  const calls=[],options={load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    authoritativeCommit:true,clock:()=>now,autoFlushDelayMs:10000,
+    setTimer:()=>1,clearTimer:()=>{},reconcile:async()=> 'rebase',
+    commit:async record=>{calls.push(record.id);
+      if(record.id==='bad'&&failed)throw Object.assign(Error('temporary network error'),{code:'503'});
+      revision++;
+    }};
+  const first=createProjectSync(options);
+  await assert.rejects(first.flush(),/未获确认/);
+  assert.deepEqual(calls,['bad','good']);
+  assert.deepEqual(rows.map(row=>row.record.id),['bad']);
+  assert.equal(rows[0].attempt,1);
+  assert.equal(rows[0].lastFailureClass,'transient');
+  const due=rows[0].nextAttemptAt;
+  assert.ok(due>now);
+  failed=false;
+  const reopened=createProjectSync(options);
+  await reopened.resume();
+  assert.deepEqual(calls,['bad','good'],'reopening does not erase the durable retry deadline');
+  now=due+1;
+  await reopened.resume();
+  assert.deepEqual(calls,['bad','good','bad']);
+  assert.deepEqual(rows,[]);
+});
+test('a structured validation failure remains pending without a background retry storm',async()=>{
+  let rows=[{record:{id:'invalid'},serial:1,baseRevision:0,operationID:'invalid-op'}],calls=0;
+  const options={load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>0,
+    authoritativeCommit:true,setTimer:()=>{throw Error('invalid row must not schedule a timer');},
+    reconcile:async()=> 'rebase',commit:async()=>{calls++;throw Object.assign(Error('invalid payload'),{code:'P0001'});}};
+  await assert.rejects(createProjectSync(options).flush(),/invalid payload/);
+  assert.equal(rows[0].lastFailureClass,'invalid');
+  const reopened=createProjectSync(options);
+  await reopened.resumeScheduled();
+  await reopened.resume();
+  assert.equal(calls,1);
+  assert.equal(reopened.status().conflicts,1);
+});
+test('a CAS conflict with an unchanged visible revision waits for durable retry instead of flooding the database',async()=>{
+  let rows=[{record:{id:'project:stale',kind:'project',payload:{id:'stale'}},
+    serial:1,baseRevision:1,operationID:'old-op'}],commits=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>2,
+    authoritativeCommit:true,autoFlushDelayMs:10000,
+    retryConflicts:()=>true,
+    setTimer:()=>1,clearTimer:()=>{},
+    reconcile:async()=> 'rebase',
+    commit:async()=>{commits++;throw Object.assign(Error('此记录已由另一设备修改'),{code:'40001'});}});
+  await assert.rejects(sync.flush(),/稍后自动核对/);
+  assert.equal(commits,2,'the stale base is rebased once, then the still-hidden conflict is deferred');
+  assert.equal(rows[0].lastFailureClass,'transient');
+  assert.ok(rows[0].nextAttemptAt>0);
+  await sync.resumeScheduled();
+  await sync.resume();
+  assert.equal(commits,2);
+});
+test('background sync excludes confirmed conflict batches from preparation and coalescing',async()=>{
+  let revision=7,rows=[{record:{id:'old',key:'shared'},serial:1,baseRevision:1,operationID:'old-op'}];
+  const prepared=[],uploaded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next)},revision:()=>revision,
+    reconcile:async record=>record.id==='old'?'conflict':'rebase',
+    commit:async record=>{uploaded.push(record.id);revision++;},
+    prepare:async records=>prepared.push(records.map(record=>record.id)),
+    coalesce:records=>{if(records.length>1)throw Error('confirmed conflict entered coalescing');return null;},
+    autoFlushDelayMs:3600000,setTimer:()=>1,clearTimer:()=>{}});
+  await sync.flush();
+  await sync.stage({id:'new',key:'shared'},{baseRevision:1});
+  await sync.resume();
+  assert.deepEqual(prepared,[['old'],['new']]);
+  assert.deepEqual(uploaded,['new']);
+  assert.deepEqual(rows.map(row=>row.record.id),['old']);
+});
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
+test('empty sync reports its idle transition after the network promise settles',async()=>{
+  const statuses=[];
+  let sync;
+  sync=createProjectSync({load:async()=>[],write:async()=>{},commit:async()=>{},
+    revision:()=>0,onStatus:()=>statuses.push(sync.status())});
+  await sync.flush();
+  assert.equal(sync.status().uploading,false);
+  assert.equal(statuses.at(-1).uploading,false);
+  assert.equal(statuses.at(-1).pending,0);
+});
+test('targeted pending inspection returns an isolated match without copying unrelated imports',async()=>{
+  const rows=[{record:{id:'batch-a',kind:'batch',payload:{operations:[{store:'blobs',action:'put',item:{id:'a',data:new Blob(['a'])}}]}},serial:1,baseRevision:0},
+    {record:{id:'batch-b',kind:'batch',payload:{operations:[{store:'blobs',action:'put',item:{id:'b',data:new Blob(['b'])}}]}},serial:2,baseRevision:0}];
+  const sync=createProjectSync({load:async()=>rows,write:async()=>{},commit:async()=>{},revision:()=>0});
+  let visited=0;
+  const found=await sync.inspectPending(entries=>{for(const row of entries){visited++;if(row.record.id==='batch-b')return row.record.payload.operations[0].item;}return null;});
+  assert.equal(visited,2);assert.equal(found.id,'b');found.id='changed';
+  assert.equal((await sync.pending())[1].record.payload.operations[0].item.id,'b');
+});
 test('project edits are durably staged before slow cloud commits, and newer edits are retained',async()=>{
   let rows=[],revision=0;const gate=defer(),commits=[];
   const q=createProjectSync({load:async()=>rows,write:async value=>{rows=structuredClone(value);},revision:()=>revision,commit:async record=>{commits.push(record.title);if(commits.length===1)await gate.promise;revision++;}});
@@ -24,7 +254,18 @@ test('failed network edits survive reload and cannot silently overwrite a differ
   let rows=[],revision=3;const q=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{throw Error('offline');}});
   await q.stage({id:'a',title:'unsent'});await assert.rejects(q.flush(),/offline/);assert.equal(rows[0].record.title,'unsent');
   let calls=0;revision=4;const reopened=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{calls++;}});
-  await assert.rejects(reopened.flush(),/云端版本已变化/);assert.equal(calls,0);assert.equal((await reopened.pending())[0].record.title,'unsent');
+  await reopened.flush();assert.equal(reopened.status().conflicts,1);assert.equal(reopened.status().error,null);assert.equal(calls,0);assert.equal((await reopened.pending())[0].record.title,'unsent');
+});
+test('database rejection keeps its error code and the durable row',async()=>{
+  let rows=[],commits=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),
+    revision:()=>2019,reconcile:async()=> 'rebase',commit:async()=>{
+      commits++;const error=Error('此对象已被删除');error.code='P0001';throw error;
+    }});
+  await sync.stage({id:'delete-batch'});
+  await assert.rejects(sync.flush(),error=>error.code==='P0001'&&/已被删除/.test(error.message));
+  assert.equal(commits,1);
+  assert.deepEqual(rows.map(row=>row.record.id),['delete-batch']);
 });
 test('local successful transactions advance pending base revisions without discarding them',async()=>{
   let rows=[{record:{id:'a'},serial:1,baseRevision:2}],revision=3;
@@ -90,7 +331,493 @@ test('transient outbox load failure can recover in the same session',async()=>{
   });
   await assert.rejects(sync.flush(),/temporary IndexedDB read failure/);
   await sync.flush();
-  assert.equal(reads,2);
+  assert.equal(reads,4,'initial retry plus preupload and locked durable refreshes');
   assert.equal(commits,1);
   assert.deepEqual(rows,[]);
+});
+
+test('background sync refreshes durable rows after acquiring the cross-tab lease',async()=>{
+  let disk=[],revision=0,leaseHeld=false,commits=[];
+  const withLease=async fn=>{leaseHeld=true;return fn();};
+  const make=()=>createProjectSync({
+    load:async()=>structuredClone(disk),
+    write:async rows=>{const old=new Map(disk.map(row=>[row.record.id,row]));
+      for(const row of rows)old.set(row.record.id,structuredClone(row));
+      // The fixture intentionally models durable rows added by other tabs.
+      disk=[...old.values()];
+    },
+    commit:async record=>{assert.equal(leaseHeld,true);commits.push(record.id);revision++;disk=disk.filter(row=>row.record.id!==record.id);},
+    revision:()=>revision,runExclusive:withLease
+  });
+  // Start tab B before tab A adds a queued item.
+  const tabB=make();await tabB.pending();
+  disk.push({serial:1,baseRevision:0,operationID:'other',record:{id:'from-other-tab'}});
+  await tabB.flush();
+  assert.deepEqual(commits,['from-other-tab']);
+});
+
+
+test('stale edited project is saved under a new ID without overwriting cloud original',async()=>{
+  let revision=990,rows=[{record:{id:'original',title:'my offline draft'},serial:1,baseRevision:600,operationID:'op'}];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async()=> 'conflict',
+    onConflict:async record=>({...record,id:'safe-copy',title:record.title+'（同步冲突副本）'}),
+    commit:async record=>{committed.push(record);revision++;}
+  });
+  await sync.flush();
+  assert.deepEqual(committed.map(r=>r.id),['safe-copy']);
+  assert.equal(committed[0].title,'my offline draft（同步冲突副本）');
+  assert.equal(rows.length,0);
+});
+test('unresolved change cannot stop independent later queued changes',async()=>{
+  let revision=990,rows=[
+    {record:{id:'conflict'},serial:1,baseRevision:600,operationID:'stuck'},
+    {record:{id:'safe'},serial:2,baseRevision:600,operationID:'independent'}
+  ];
+  const uploaded=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async record=>record.id==='safe'?'rebase':'conflict',
+    commit:async record=>{uploaded.push(record.id);revision++;}
+  });
+  await sync.flush();
+  assert.deepEqual(uploaded,['safe']);
+  assert.deepEqual(rows.map(row=>row.record.id),['conflict']);
+  assert.equal(sync.status().conflicts,1);
+  assert.equal(sync.status().error,null);
+});
+
+test('failed upload retains its row while independent queued records commit',async()=>{
+  let revision=0,fail=true;
+  let rows=[
+    {record:{id:'broken',key:'shared'},serial:1,baseRevision:0,operationID:'broken-op'},
+    {record:{id:'dependent',key:'shared'},serial:2,baseRevision:0,operationID:'dependent-op'},
+    {record:{id:'independent',key:'other'},serial:3,baseRevision:0,operationID:'other-op'}
+  ];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    reconcile:async()=> 'rebase',
+    commit:async record=>{
+      if(record.id==='broken'&&fail)throw Error('object upload failed');
+      committed.push(record.id);revision++;
+    }
+  });
+  await assert.rejects(sync.flush(),/未获确认/);
+  assert.deepEqual(committed,['independent']);
+  assert.deepEqual(rows.map(row=>row.record.id),['broken','dependent']);
+  assert.equal(sync.status().conflicts,0);
+  fail=false;
+  await sync.flush();
+  assert.deepEqual(committed,['independent','broken','dependent']);
+  assert.deepEqual(rows,[]);
+});
+
+test('unchanged remote revision is an unconfirmed upload, not a conflict',async()=>{
+  let rows=[];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>7,
+    commit:async()=>{throw Error('conflict');},reconcile:async()=> 'rebase'});
+  await sync.stage({id:'draft'});
+  await assert.rejects(sync.flush(),/云端版本未变化/);
+  assert.equal(sync.status().conflicts,0);
+  assert.equal(rows.length,1);
+});
+
+test('diagnostic callback observes a blocked row and subsequent safe commit without payloads',async()=>{
+  let revision=3,rows=[
+    {record:{id:'first',kind:'project',payload:{id:'private-work'}},serial:1,baseRevision:2,operationID:'one'},
+    {record:{id:'second',kind:'batch',payload:{operations:[]}},serial:2,baseRevision:2,operationID:'two'}
+  ];
+  const events=[];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async record=>record.id==='first'?'conflict':'rebase',
+    commit:async()=>{revision++;},onDiagnostic:event=>events.push(event)});
+  await sync.flush();
+  assert.ok(events.some(event=>event.action==='conflict'&&event.kind==='project'));
+  assert.ok(events.some(event=>event.action==='committed'&&event.kind==='batch'));
+  assert.ok(events.every(event=>!JSON.stringify(event).includes('private-work')));
+});
+
+
+test('durably staged deletion can retire older unsent saves for the same work only',async()=>{
+  let rows=[
+    {record:{id:'deleted',title:'old editor state'},serial:1,baseRevision:5,operationID:'old'},
+    {record:{id:'untouched',title:'other editor state'},serial:2,baseRevision:5,operationID:'other'}
+  ];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>5,commit:async()=>{}});
+  assert.equal(await sync.cancelPendingFor(['deleted']),1);
+  assert.deepEqual(rows.map(row=>row.record.id),['untouched']);
+});
+
+
+test('editor edits are locally staged but cloud commits are coalesced every 10 seconds',async()=>{
+  let time=0,nextTimerID=0,revision=5,rows=[],commits=[];
+  const timers=new Map();
+  const setTimer=(fn,delay)=>{const id=++nextTimerID;timers.set(id,{fn,at:time+delay});return id;};
+  const clearTimer=id=>timers.delete(id);
+  const advance=async(to)=>{
+    time=to;
+    for(const [id,timer] of [...timers]){
+      if(timer.at<=time){timers.delete(id);timer.fn();}
+    }
+    for(let i=0;i<100;i++)await Promise.resolve();
+  };
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,
+    commit:async record=>{commits.push({...record,time});revision++;},
+    autoFlushDelayMs:10000,clock:()=>time,setTimer,clearTimer
+  });
+  await sync.stage({id:'draft',title:'first'});
+  assert.equal(rows[0].record.title,'first','local IndexedDB outbox is saved before return');
+  await advance(9000);
+  await sync.stage({id:'draft',title:'latest'});
+  assert.equal(commits.length,0,'no network write for each small operation');
+  await advance(10000);
+  assert.deepEqual(commits.map(x=>x.title),['latest']);
+  await sync.stage({id:'draft',title:'after-upload'});
+  await advance(15000);
+  assert.equal(commits.length,1);
+  await sync.flush();
+  assert.deepEqual(commits.map(x=>x.title),['latest','after-upload'],'manual sync skips automatic interval');
+  assert.deepEqual(rows,[]);
+});
+test('background wake-up schedules queued changes rather than forcing a cloud write',async()=>{
+  let time=0,timers=[],rows=[],commits=0,revision=7;
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,commit:async()=>{commits++;revision++;},
+    autoFlushDelayMs:10000,clock:()=>time,
+    setTimer:(fn,delay)=>{timers.push({fn,delay});return timers.length;},
+    clearTimer:()=>{}
+  });
+  await sync.stage({id:'work',title:'change'});
+  await sync.resumeScheduled();
+  assert.equal(commits,0);
+  assert.equal(timers.length,1);
+  assert.ok(timers[0].delay>=10000);
+});
+
+
+test('edits arriving mid-upload wait for the next cloud window',async()=>{
+  let time=0,revision=0,rows=[],id=0;
+  const timers=new Map(),writes=[];
+  let started,release;
+  const opened=new Promise(resolve=>started=resolve),pending=new Promise(resolve=>release=resolve);
+  const queue=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,clock:()=>time,autoFlushDelayMs:10000,
+    setTimer:(fn,delay)=>{timers.set(++id,{fn,at:time+delay});return id;},
+    clearTimer:i=>timers.delete(i),
+    commit:async record=>{
+      writes.push({title:record.title,time});
+      if(writes.length===1){started();await pending;}
+      revision++;
+    }
+  });
+  await queue.stage({id:'work',title:'first'});
+  time=10000;
+  for(const [key,task] of [...timers])if(task.at<=time){timers.delete(key);task.fn();}
+  await opened;
+  await queue.stage({id:'work',title:'second'});
+  release();
+  for(let i=0;i<50;i++)await Promise.resolve();
+  assert.deepEqual(writes.map(x=>x.title),['first']);
+  assert.equal(rows[0].record.title,'second');
+  time=20000;
+  for(const [key,task] of [...timers])if(task.at<=time){timers.delete(key);task.fn();}
+  for(let i=0;i<50;i++)await Promise.resolve();
+  assert.deepEqual(writes,[{title:'first',time:10000},{title:'second',time:20000}]);
+  assert.deepEqual(rows,[]);
+});
+
+
+test('newer cloud editor revision wins without creating a conflict copy',async()=>{
+  let rows=[{serial:1,baseRevision:10,operationID:'pending',record:{
+    id:'same-work',title:'older local edit',updatedAt:'2026-10-09T09:30:00Z'}}];
+  const superseded=[],commits=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async value=>{rows=structuredClone(value)},
+    revision:()=>12,reconcile:async()=> 'remote',
+    onSuperseded:record=>superseded.push(record.id),
+    onConflict:async()=>{throw Error('No fork expected')},
+    commit:async record=>commits.push(record.id)
+  });
+  await sync.flush();
+  assert.deepEqual(commits,[]);
+  assert.deepEqual(superseded,['same-work']);
+  assert.deepEqual(rows,[]);
+});
+test('a multi-store mutation keeps newer operations and drops older ones',async()=>{
+  let rows=[{serial:1,baseRevision:8,operationID:'batch-1',record:{
+    id:'batch-1',names:['assets'],operations:[
+      {action:'put',store:'assets',item:{id:'recent'},modifiedAt:'2026-10-09T11:00:00Z'},
+      {action:'put',store:'assets',item:{id:'stale'},modifiedAt:'2026-10-09T10:00:00Z'}
+    ]}}];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async value=>{rows=structuredClone(value)},
+    revision:()=>20,
+    reconcile:async batch=>batch.operations.length===2?
+      {kind:'replace',record:{...batch,operations:batch.operations.slice(0,1)}}:'rebase',
+    commit:async batch=>committed.push(batch.operations.map(op=>op.item.id))
+  });
+  await sync.flush();
+  assert.deepEqual(committed,[['recent']]);
+  assert.deepEqual(rows,[]);
+});
+
+test('manual conflict choices preserve queue bytes until a reviewed serial is confirmed',async()=>{
+ const clone=x=>structuredClone(x);
+ for(const choice of ['cloud','local','both']){
+  let rows=[],serverRevision=9;
+  const sync=createProjectSync({
+   load:async()=>clone(rows),reload:async()=>clone(rows),
+   write:async next=>{rows=clone(next);},
+   commit:async()=>{serverRevision++;},revision:()=>serverRevision,
+   reconcile:async()=> 'conflict',autoFlushDelayMs:3600000
+  });
+  await sync.stage({id:'local-scene',title:'local words'},{baseRevision:2});
+  const pending=(await sync.pending())[0];
+  await assert.rejects(sync.resolvePending('local-scene',pending.serial+10,
+    {record:{id:'lost-scene'},baseRevision:serverRevision}),/发生了新修改/);
+  assert.equal(rows[0].record.title,'local words');
+  const selected=choice==='cloud'?null:choice==='local'?{id:'local-scene',title:'local words'}:
+    {id:'independent-copy',title:'both'};
+  await sync.resolvePending('local-scene',pending.serial,
+    {record:selected,baseRevision:serverRevision});
+  const actual=await sync.pending();
+  if(choice==='cloud')assert.deepEqual(actual,[]);
+  else{assert.equal(actual.length,1);assert.equal(actual[0].record.id,selected.id);
+    assert.equal(actual[0].baseRevision,9);}
+  sync.pause();
+ }
+});
+
+
+test('independent upload preparation runs before the shared account commit lock',async()=>{
+  let revision=0,lease=Promise.resolve(),held=false,preparing=[];
+  const gates=[];
+  const runExclusive=fn=>{
+    const task=lease.then(async()=>{held=true;try{return await fn();}finally{held=false;}});
+    lease=task.catch(()=>{});return task;
+  };
+  const make=id=>{
+    let rows=[];
+    const gate=new Promise(resolve=>gates.push(resolve));
+    return createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+      write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+      prepare:async()=>{assert.equal(held,false);preparing.push(id);await gate;},
+      runExclusive,reconcile:async()=> 'rebase',commit:async()=>{assert.equal(held,true);revision++;}});
+  };
+  const a=make('a'),b=make('b');
+  await a.stage({id:'a'});await b.stage({id:'b'});
+  const first=a.flush(),second=b.flush();
+  for(let i=0;i<100&&preparing.length<2;i++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.deepEqual(preparing.sort(),['a','b']);
+  assert.equal(held,false,'one slow immutable upload must not hold the revision lock');
+  for(const release of gates)release();
+  await Promise.all([first,second]);
+  assert.equal(revision,2,'metadata commits remain serialized and versioned');
+});
+test('a failed preupload is not repeated under the account lock and independent rows still commit',async()=>{
+  let revision=0,rows=[
+    {record:{id:'slow',key:'slow'},serial:1,baseRevision:0,operationID:'slow-op'},
+    {record:{id:'ready',key:'ready'},serial:2,baseRevision:0,operationID:'ready-op'}
+  ],held=false;
+  const committed=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,prepareLimit:2,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    prepare:async(_records,prepared)=>new Map([[prepared[0].operationID,Error('image upload timed out')]]),
+    runExclusive:async fn=>{held=true;try{return await fn();}finally{held=false;}},
+    reconcile:async()=> 'rebase',
+    commit:async record=>{assert.equal(held,true);committed.push(record.id);revision++;}
+  });
+  try{
+    await assert.rejects(sync.resume(),/image upload timed out/);
+    assert.deepEqual(committed,['ready']);
+    assert.deepEqual(rows.map(row=>row.record.id),['slow']);
+    assert.ok(rows[0].nextAttemptAt>0);
+  }finally{sync.pause();}
+});
+test('browser TimeoutError from a COS PUT remains an automatic retry, not a manual conflict',async()=>{
+  let rows=[{record:{id:'image'},serial:1,baseRevision:0,operationID:'image-op'}];
+  const timeout=new DOMException('The operation timed out','TimeoutError');
+  assert.equal(timeout.code,23);
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>0,
+    requiresPrepare:()=>true,
+    prepare:async(_records,prepared)=>new Map([[prepared[0].operationID,timeout]]),
+    reconcile:async()=> 'rebase',commit:async()=>{throw Error('preupload must finish first');},
+    setTimer:()=>1,clearTimer:()=>{}});
+  await assert.rejects(sync.flush(),/timed out/);
+  assert.equal(rows[0].lastFailureClass,'transient');
+  assert.ok(rows[0].nextAttemptAt>0);
+  assert.equal(sync.status().conflicts,0);
+  sync.pause();
+});
+test('a failed preupload still acknowledges an already committed operation',async()=>{
+  let rows=[{record:{id:'saved'},serial:1,baseRevision:0,operationID:'saved-op'}],writes=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>1,
+    prepare:async()=>new Map([['saved-op',Error('network unavailable')]]),
+    reconcile:async()=> 'committed',commit:async()=>{writes++;}
+  });
+  try{
+    await sync.resume();
+    assert.equal(writes,0);
+    assert.equal(rows.length,0);
+  }finally{sync.pause();}
+});
+test('a bounded preupload pass never uploads a third image while holding the lock',async()=>{
+  let revision=0,rows=['one','two','three'].map((id,index)=>({
+    record:{id,hasImage:true},serial:index+1,baseRevision:0,operationID:id+'-op'
+  }));
+  const prepared=new Set(),committed=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,prepareLimit:2,
+    requiresPrepare:record=>record.hasImage,
+    prepare:async(_records,batch)=>{for(const row of batch)prepared.add(row.operationID);},
+    reconcile:async()=> 'rebase',commit:async(record,operationID)=>{
+      assert.ok(prepared.has(operationID),'image bytes must be prepared outside the lock');
+      committed.push(record.id);revision++;
+    }
+  });
+  try{
+    await sync.flush();
+    assert.deepEqual(committed,['one','two','three']);
+    assert.equal(rows.length,0);
+  }finally{sync.pause();}
+});
+test('a dependent image waits for the older edit retry instead of spinning through empty preparation cycles',async()=>{
+  const rows=[
+    {record:{id:'older',key:'shared',hasImage:true},serial:1,baseRevision:0,
+      operationID:'older-op',attempt:1,nextAttemptAt:5000},
+    {record:{id:'newer',key:'shared',hasImage:true},serial:2,baseRevision:0,
+      operationID:'newer-op'}
+  ];
+  const timers=[],diagnostics=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async()=>{},revision:()=>0,clock:()=>1000,requiresPrepare:record=>record.hasImage,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    prepare:async()=>{throw Error('a blocked image cannot prepare yet');},
+    commit:async()=>{throw Error('a blocked image cannot commit yet');},
+    onDiagnostic:event=>diagnostics.push(event),
+    setTimer:(_fn,delay)=>{timers.push(delay);return timers.length;},clearTimer:()=>{}});
+  await sync.resume();
+  assert.deepEqual(timers,[4000]);
+  assert.equal(diagnostics.filter(event=>event.action==='prepare-start').length,0);
+  sync.pause();
+});
+test('a fresh independent batch is not queued behind unrelated retries',async()=>{
+  let revision=4,rows=[
+    {record:{id:'old',key:'old'},serial:1,baseRevision:1,operationID:'old-op',attempt:3,nextAttemptAt:0},
+    {record:{id:'fresh',key:'fresh'},serial:2,baseRevision:4,operationID:'fresh-op'}
+  ];
+  const prepared=[],committed=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,prepareLimit:1,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    prepare:async records=>prepared.push(records.map(record=>record.id)),
+    reconcile:async()=> 'rebase',
+    commit:async record=>{committed.push(record.id);revision++;}});
+  await sync.flush();
+  assert.deepEqual(prepared,[['fresh']]);
+  assert.equal(committed[0],'fresh');
+  assert.deepEqual(committed.sort(),['fresh','old']);
+});
+test('staging independent rows persists the whole set atomically',async()=>{
+  let rows=[],writes=0,fail=true;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),revision:()=>3,
+    write:async next=>{writes++;if(fail)throw Error('quota');rows=structuredClone(next);},
+    commit:async()=>{}});
+  await assert.rejects(sync.stageMany([{id:'a'},{id:'b'}]),/quota/);
+  assert.deepEqual(await sync.pending(),[]);
+  fail=false;await sync.stageMany([{id:'a'},{id:'b'}]);
+  assert.equal(writes,2);
+  assert.deepEqual((await sync.pending()).map(row=>row.record.id),['a','b']);
+});
+test('an upload acknowledgement and a fresh edit never write the same local outbox concurrently',async()=>{
+  let rows=[{record:{id:'old'},serial:1,baseRevision:0,operationID:'old-op'}];
+  let activeWrites=0,maxWrites=0,releaseAck,ackStarted;
+  const sawAck=new Promise(resolve=>ackStarted=resolve);
+  const ackGate=new Promise(resolve=>releaseAck=resolve);
+  let revision=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{
+      activeWrites++;maxWrites=Math.max(maxWrites,activeWrites);
+      if(!next.some(row=>row.record.id==='old')){ackStarted();await ackGate;}
+      rows=structuredClone(next);activeWrites--;
+    },revision:()=>revision,autoFlushDelayMs:10000,commit:async()=>{revision++;}});
+  try{
+    const flush=sync.resume();await sawAck;
+    const stage=sync.stage({id:'new'});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(maxWrites,1,'a fresh stage waits for the acknowledgement write');
+    releaseAck();await Promise.all([flush,stage]);
+    assert.deepEqual(rows.map(row=>row.record.id),['new']);
+  }finally{releaseAck();sync.pause();}
+});
+test('queue refresh and local staging share the IndexedDB baseline gate',async()=>{
+  let rows=[],reloadStarted,releaseReload,activeReads=0,activeWrites=0;
+  const saved=[];
+  const started=new Promise(resolve=>reloadStarted=resolve);
+  const gate=new Promise(resolve=>releaseReload=resolve);
+  const sync=createProjectSync({load:async()=>structuredClone(rows),
+    reload:async()=>{activeReads++;reloadStarted();await gate;activeReads--;
+      return structuredClone(rows);},
+    write:async next=>{activeWrites++;
+      assert.equal(activeReads,0,'a local write cannot overlap queue refresh');
+      rows=structuredClone(next);saved.push(rows.map(row=>row.record.id));activeWrites--;},
+    revision:()=>0,commit:async()=>{},autoFlushDelayMs:10000});
+  try{
+    const resume=sync.resume();await started;
+    const stage=sync.stage({id:'new'});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(activeWrites,0);
+    releaseReload();await Promise.all([resume,stage]);
+    assert.equal(activeReads,0);
+    assert.ok(saved.some(ids=>ids.includes('new')),'the new edit was durably staged');
+  }finally{releaseReload();sync.pause();}
+});
+
+test('background processing holds known oversize row but commits unrelated changes',async()=>{
+ let disk=[{record:{id:'blocked',kind:'project'},serial:1,operationID:'oversize-op',baseRevision:7,lastFailureClass:'oversize'},
+  {record:{id:'independent',kind:'project'},serial:2,operationID:'other-op',baseRevision:7}];
+ const committed=[],sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+  write:async rows=>{disk=structuredClone(rows)},revision:()=>7,authoritativeCommit:true,
+  commit:async record=>{committed.push(record.id)},setTimer:()=>1,clearTimer:()=>{}});
+ await sync.resume();
+ assert.deepEqual(committed,['independent']);assert.equal(disk.length,1);
+ assert.equal(disk[0].operationID,'oversize-op');assert.equal(disk[0].lastFailureClass,'oversize');
+});
+test('403 CloudBase function denial never forks or discards a local pending operation',async()=>{
+ const denial=Object.assign(Error('forbidden'),{status:403,code:'OPERATION_FORBIDDEN'});
+ let disk=[],reconciles=0,forks=0,attempts=0;
+ const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+  write:async rows=>{disk=structuredClone(rows)},revision:()=>7,authoritativeCommit:true,
+  commit:async()=>{attempts++;throw denial},reconcile:async()=>{reconciles++;return 'conflict'},
+  onConflict:async()=>{forks++;return {id:'new',kind:'project'}},
+  setTimer:()=>1,clearTimer:()=>{}});
+ await sync.stage({id:'pending',kind:'project'});
+ const before=disk[0].operationID;
+ await assert.rejects(sync.flush(),error=>error.status===403);
+ assert.equal(attempts,1);assert.equal(reconciles,0);assert.equal(forks,0);
+ assert.equal(disk.length,1);assert.equal(disk[0].operationID,before);
+ assert.equal(disk[0].lastFailureClass,'auth');
 });

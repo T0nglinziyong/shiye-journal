@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>Editable typography / synthetic</title>
+<style>body{margin:0;background:#f6f1e9;font:15px sans-serif}main{max-width:900px;margin:auto;padding:24px}canvas{max-width:100%;height:auto;display:block}h1{font-size:22px}#editor{border:1px solid #cbd3d5;margin-top:18px}</style>
+<main><h1>Editable text effects — synthetic regression</h1><canvas id="effects"></canvas><canvas id="editor"></canvas></main>
+<script type="module">
+import * as fabric from 'fabric';
+import {createFabricSceneBridge} from '/src/fabric-scene-bridge.js';
+import {drawSceneText} from '/src/editor-tools-model.js';
+import {renderSceneCanvas} from '/src/scene-renderer.js';
+import {applySceneNodeChange} from '/src/scene-edit-kernel.js';
+import {USER_SCENE_POLICY} from '/src/scene-edit-policy.js';
+const base={id:'title',type:'text',content:'GO',x:240,y:100,width:280,height:110,fontSize:70,fontName:'sans-serif',color:'#375972',alignment:'center',rotation:0,opacity:1};
+const outline={color:'#CF8C51',width:6,offsetX:0,offsetY:0},gradient={angleDeg:90,stops:[{offset:0,color:'#FF0000'},{offset:1,color:'#0000FF'}]};
+const modes=[{}, {textOutline:outline}, {textOutline:{...outline,offsetX:7,offsetY:5}}, {textGradient:gradient}, {textGradient:gradient,textOutline:{color:'#EED7AC',width:5,offsetX:0,offsetY:0}}];
+const c=document.querySelector('#effects');c.width=900;c.height=500;const ctx=c.getContext('2d');
+window.__typePixels=[];
+for(let i=0;i<modes.length;i++){
+ const sample=document.createElement('canvas');sample.width=300;sample.height=160;const x=sample.getContext('2d');x.translate(150,80);drawSceneText(x,{...base,...modes[i]});window.__typePixels.push([...x.getImageData(0,0,300,160).data]);
+ const left=30+(i%3)*290,top=20+Math.floor(i/3)*220;ctx.fillStyle='#FFFFFF';ctx.fillRect(left,top,270,190);ctx.drawImage(sample,left-15,top);ctx.fillStyle='#30463D';ctx.font='14px sans-serif';ctx.fillText(['Plain','Outline','Offset outline','Gradient','Gradient + outline'][i],left+15,top+175);
+}
+const node={...base,textOutline:outline,textGradient:gradient},page={sceneVersion:2,canvas:{width:480,height:200},physicalPageHeightMM:100,layers:[node],pageMode:'single',pageRatio:'a5'};
+const canvas=new fabric.Canvas('editor',{width:480,height:200}),bridge=createFabricSceneBridge(fabric),object=await bridge.fromNode(node);canvas.add(object);canvas.renderAll();
+window.__typeTest={page,node,object,canvas,bridge,applySceneNodeChange,policy:USER_SCENE_POLICY,renderSceneCanvas};
+window.__typeReady=true;
+</script>

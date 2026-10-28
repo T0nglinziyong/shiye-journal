@@ -5,7 +5,7 @@ import {
   FileSearch, Search, Plus, Check, CircleCheck, SquareCheck, Square, X, ChevronLeft,
   ChevronRight, ArrowRight, Undo2, Redo2, RotateCcw, Share, Copy, Trash2,
   LockKeyhole, LockKeyholeOpen, Eye, EyeOff, Star, HardDrive, Scan, Camera, File,
-  ShoppingBasket, CircleEllipsis, CircleHelp, FileDown, FileUp
+  ShoppingBasket, CircleEllipsis, CircleHelp, FileDown, FileUp, Group, Ungroup, Scissors, Ticket
 } from 'lucide';
 
 // Named imports keep the bundle limited to the SVGs actually used.
@@ -21,7 +21,8 @@ const iconNodes=Object.freeze({
   rotate:RotateCcw,share:Share,copy:Copy,trash:Trash2,lock:LockKeyhole,
   unlock:LockKeyholeOpen,eye:Eye,eyeOff:EyeOff,star:Star,use:Copy,drive:HardDrive,
   viewfinder:Scan,camera:Camera,file:File,basket:ShoppingBasket,pencilCircle:PenLine,
-  more:CircleEllipsis,help:CircleHelp,fileDown:FileDown,fileUp:FileUp
+  more:CircleEllipsis,help:CircleHelp,fileDown:FileDown,fileUp:FileUp,
+  group:Group,ungroup:Ungroup,scissors:Scissors,tape:Ticket
 });
 
 export function createIcon(name){
@@ -34,12 +35,12 @@ export function createIcon(name){
 export const swiftIconSymbols=Object.freeze({leaf:'leaf',folder:'folder',sparkles:'sparkles',book:'book.closed',archive:'archivebox',settings:'gearshape',cursor:'cursorarrow',marquee:'rectangle.dashed',marker:'highlighter',eraser:'eraser',lasso:'lasso',text:'textformat',shape:'square.on.circle',material:'photo.on.rectangle.angled',layers:'square.3.layers.3d',paper:'square.grid.3x3',grid:'square.grid.2x2',status:'line.3.horizontal.decrease.circle',history:'list.number',context:'doc.text.magnifyingglass',search:'magnifyingglass',undo:'arrow.uturn.backward',redo:'arrow.uturn.forward',share:'square.and.arrow.up',checkCircle:'checkmark.circle',checkSquare:'checkmark.square'});
 export function iconMarkup(name){return createIcon(name)?.outerHTML||'';}
 
-const tools={select:['cursor','选择'],marquee:['marquee','矩形框选'],pen:['pen','钢笔'],highlighter:['marker','荧光笔'],eraser:['eraser','橡皮擦'],lasso:['lasso','套索对象'],text:['text','文字'],shape:['shape','添加图形'],material:['material','添加素材']};
-const actions={'match-library':'folder','match-context':'context','reset-match':'rotate','match-use':'use','match-generate':'sparkles','match-export-gpt':'fileDown','match-import-gpt':'fileUp','create-from-basket':'pen',undo:'undo',redo:'redo','back-works':'back','settings-back':'back','detail-back':'back','import-back':'back','detail-series':'folder','similar':'search','detail-match':'sparkles','edit-asset':'pen','delete-object':'trash',duplicate:'copy','export-png':'share',print:'share','paper-menu':'paper','new-draft':'plus','new-project':'plus','new-series':'plus'};
-const labels={'设置':'settings','关闭':'close','返回':'back','历史记录':'history','使用 Apple Pencil':'pencilCircle','导出作品':'share','图层':'layers','画布背景':'paper','底纸':'paper','制作步骤与迭代记录':'history','复制对象':'copy','删除对象':'trash','编辑对象':'history','旋转对象':'rotate','锁定图层':'lock','解锁图层':'unlock','隐藏图层':'eye','显示图层':'eyeOff','调整图层顺序':'sort','已加入搭配素材篮':'check','设为必用':'star','取消必用':'star','移出素材篮':'close','作品详情':'more'};
+const tools={select:['cursor','选择'],marquee:['marquee','矩形框选'],pen:['pen','钢笔'],highlighter:['marker','荧光笔'],eraser:['eraser','橡皮擦'],lasso:['lasso','套索对象'],scissors:['scissors','剪刀'],tape:['tape','胶带'],text:['text','文字'],shape:['shape','添加图形'],material:['material','添加素材']};
+const actions={'match-library':'folder','match-context':'context','reset-match':'rotate','match-use':'use','match-generate':'sparkles','match-export-gpt':'fileDown','match-import-gpt':'fileUp','create-from-basket':'pen',undo:'undo',redo:'redo','back-works':'back','settings-back':'back','detail-back':'back','import-back':'back','detail-series':'folder','detail-similar':'search','similar':'search','detail-match':'sparkles','edit-asset':'pen','delete-object':'trash',duplicate:'copy','export-png':'share',print:'share','paper-menu':'paper','new-draft':'plus','new-project':'plus','new-series':'plus'};
+const labels={'设置':'settings','关闭':'close','返回':'back','历史记录':'history','使用 Apple Pencil':'pencilCircle','导出作品':'share','图层':'layers','画布背景':'paper','底纸':'paper','制作步骤与迭代记录':'history','复制对象':'copy','删除对象':'trash','编辑对象':'pen','复制组合':'copy','删除组合':'trash','组合所选对象':'group','解开组合':'ungroup','复制套选对象':'copy','删除套选对象':'trash','合并套选图层':'group','旋转对象':'rotate','锁定图层':'lock','解锁图层':'unlock','隐藏图层':'eye','显示图层':'eyeOff','调整图层顺序':'sort','已加入搭配素材篮':'check','设为必用':'star','取消必用':'star','移出素材篮':'close','作品详情':'more'};
 const categories={'AI 与创作':'sparkles','导入与识别':'viewfinder','界面与素材库':'grid','数据与诊断':'drive'};
 const glyphPrefix=/^[\s]*[♧♙♜▣▤▱▦▧▢☷≡✦✣⚙↶↷↥➤◇◌◉◷⊞⊗⊙★☆☑□✓＋+‹›→↑↓↕⟳×✕✖⋯]+[\s　]*/u;
-const iconOnly=/^[\s♧♙♜▣▤▱▦▧▢☷≡✦✣⚙↶↷↥➤◇◌◉◷⊞⊗⊙★☆☑□✓＋+‹›→↑↓↕⟳×✕✖⋯]*$/u;
+const iconOnly=/^[\s♧♙♜▣▤▱▦▧▢☷≡✦✣⚙↶↷↥➤◇◌◉◷⊞⧉✎⊗⊙★☆☑□✓＋+‹›→↑↓↕⟳×✕✖⋯]*$/u;
 const selector='button[data-act],button[data-route],button[aria-label],button[data-filter-heading],#top-settings,#top-basket,.brand>b,.settings-icon,.batch-check,.basket-card-check,.card[data-act="series-detail"] h3>span[aria-hidden],input[type="search"],.series-entry-cover,.action-card>.card-image,.work-entry>.card-image,.library-select-toggle,.series-back,.library-management-tray>button,.selection-more-menu button,.selection-submenu>button,.matching-page .basket>h3,.matching-page .match-panel-head>h3,.canvas-context-tools>button';
 const mounts=new WeakMap();
 
@@ -71,7 +72,7 @@ function decorate(node){
   if(node.matches('.series-back')){putIcon(node,'back');return;}
   if(node.matches('.library-management-tray>button,.selection-more-menu button,.selection-submenu>button')){
     if(node.matches('.selection-submenu>button')&&['‹ 更多操作','更多操作'].includes(node.textContent.trim())){putIcon(node,'back');return;}
-    const name={'全选页面':'checkCircle','全选当前结果':'checkCircle','清空选择':'close','查看所选':'eye','返回筛选':'back','加入搭配':'sparkles','更多操作':'more','删除素材':'trash','删除系列':'trash','加入系列 ›':'layers','重新识别':'sparkles','导出图像 ›':'share','‹ 更多操作':'back','新建系列…':'plus'}[node.textContent.trim()];if(name)putIcon(node,name);return;
+    const name={'全选页面':'checkCircle','全选当前结果':'checkCircle','清空选择':'close','查看所选':'eye','返回筛选':'back','加入搭配':'sparkles','更多操作':'more','删除素材':'trash','删除系列':'trash','删除作品':'trash','删除快照':'trash','恢复所选':'history','彻底删除所选':'trash','移除恢复记录':'trash','加入系列 ›':'layers','重新识别':'sparkles','导出图像 ›':'share','导出素材 ›':'share','导出系列 ›':'share','导出作品 ›':'share','导出快照 ›':'share','设置状态 ›':'status','编辑系列信息':'pen','‹ 更多操作':'back','新建系列…':'plus'}[node.textContent.trim()];if(name)putIcon(node,name);return;
   }
   if(node.matches('.canvas-context-tools>button')){
     if(node.textContent==='☷'){node.setAttribute('aria-label','段落设置');putIcon(node,'history',true);return;}
@@ -87,9 +88,13 @@ function decorate(node){
   if(node.dataset.act==='tool'&&tools[node.dataset.val]){const [name,label]=tools[node.dataset.val];if(!node.getAttribute('aria-label'))node.setAttribute('aria-label',label);putIcon(node,name,iconOnly.test(node.textContent)||node.textContent==='Aa');return;}
   const nav={library:'folder',matching:'sparkles',works:'book'}[node.dataset.route];
   if(nav){const slot=node.querySelector('span[aria-hidden]');if(slot)putIcon(slot,nav,true);else putIcon(node,nav);return;}
-  if(node.id==='top-basket'){putIcon(node,'archive');return;}
+  if(node.id==='top-basket'){
+    if(!node.querySelector('svg[data-shiye-icon="archive"]'))putIcon(node,'archive');
+    return;
+  }
   if(node.id==='top-settings'){putIcon(node,'settings',true);return;}
   if(node.dataset.act==='select-file'){const name={gallery:'material',camera:'camera',files:'file'}[node.dataset.val];if(name)putIcon(node,name);return;}
+  if(node.querySelector('.detail-link-icon svg'))return;
   const label=node.getAttribute('aria-label'),name=labels[label]||actions[node.dataset.act];
   if(name){const only=iconOnly.test(node.textContent);if(only&&!label)node.setAttribute('aria-label',node.title||{'new-project':'新建作品','new-series':'新建系列','new-draft':'新建方案',undo:'撤销',redo:'重做'}[node.dataset.act]||node.dataset.act);putIcon(node,name,only);if(name==='star')node.querySelector('svg.shiye-icon')?.setAttribute('fill',label==='取消必用'?'currentColor':'none');}
 }
