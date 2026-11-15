@@ -7,6 +7,7 @@ import {extractAlphaMask} from './alpha-mask-blob.js';
 import {materialStorageBlobs} from './material-storage-resolution.js';
 import {sha256Hex} from './task-fingerprint.js';
 import {importDefaultTitle} from './import-default-names.js';
+import {boundedMap} from './bounded-map.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -25,7 +26,7 @@ export function candidateMetadata(c,record,batchSeriesID) {
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
     dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
-export async function saveImportBatch({state,db,urls,render,onSaved}) {
+export async function saveImportBatch({state,db,urls,render,onSaved,resolveCandidate=async(_record,c)=>c}) {
   if(state.importSaving||state.importStep==='done')return;
   state.importSaving=true;
   try {
@@ -33,7 +34,8 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   for(const [sourcePageIndex,record] of state.importRecords.entries()) {
     const sourcePageID=uid();
     if(!record.confirmed)throw Error('请先检查所有照片');
-    const chosen=(record.selectedCandidates||[]).filter(c=>c.selected);
+    const chosen=await boundedMap((record.selectedCandidates||[]).filter(c=>c.selected),2,
+      candidate=>candidate.previewOnly?resolveCandidate(record,candidate):candidate);
     if(state.importMode==='snapshot') {
       // Snapshots are single full pages, not segmented or library-classified.
       // Render exactly the corrected page; never reuse the original perspective

@@ -11,8 +11,9 @@ const candidateBoxes=candidates=>candidates.map((candidate,sourceIndex)=>{
     {...candidate,sourceIndex,rotation:candidate.rotation||0};
 });
 
-export function ManualBoxEditor({state,previewRef,onCancel,onDone,onError}){
-  const [boxes,setBoxes]=useState(()=>candidateBoxes(state.importCandidates||[]));
+export function ManualBoxEditor({state,previewRef,allowRotation=true,onCancel,onDone,onError}){
+  const [boxes,setBoxes]=useState(()=>candidateBoxes(state.importCandidates||[]).map(box=>
+    allowRotation?box:{...box,rotation:0,orientedBox:null}));
   const boxesRef=useRef(boxes);boxesRef.current=boxes;
   const [selected,setSelected]=useState(null),selectedRef=useRef(null);
   const [rect,setRect]=useState({left:0,top:0,width:1,height:1}),
@@ -81,7 +82,11 @@ export function ManualBoxEditor({state,previewRef,onCancel,onDone,onError}){
       x:Math.max(0,Math.min(1-original.w,original.x+end.x-gesture.start.x)),
       y:Math.max(0,Math.min(1-original.h,original.y+end.y-gesture.start.y))
     });
-    else{
+    else if(gesture.mode==='resize'){
+      const w=Math.max(.008,Math.min(1-original.x,original.w+end.x-gesture.start.x));
+      const h=Math.max(.008,Math.min(1-original.y,original.h+end.y-gesture.start.y));
+      Object.assign(box,{w,h,rotation:0});
+    }else{
       const width=overlay.current.clientWidth,height=overlay.current.clientHeight;
       const output=transformSelectedFrame({x:original.x*width,y:original.y*height,
         width:original.w*width,height:original.h*height,rotation:original.rotation||0},
@@ -94,8 +99,8 @@ export function ManualBoxEditor({state,previewRef,onCancel,onDone,onError}){
     }
     if(original&&['x','y','w','h','rotation'].some(key=>
       Math.abs((box[key]||0)-(original[key]||0))>1e-6))box.manualChanged=true;
-    box.orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
-      width:box.w,height:box.h,rotation:box.rotation||0,autoDeskew:true,source:'manual'};
+    box.orientedBox=allowRotation?{centerX:box.x+box.w/2,centerY:box.y+box.h/2,
+      width:box.w,height:box.h,rotation:box.rotation||0,autoDeskew:true,source:'manual'}:null;
     const next=[...boxesRef.current];next[index]=box;update(next);
   };
   const pointerUp=event=>{
@@ -130,7 +135,7 @@ export function ManualBoxEditor({state,previewRef,onCancel,onDone,onError}){
       {selected===index?<>
         <button type="button" className="box-grip top" data-mode="top" aria-label="拉伸高度"/>
         <button type="button" className="box-grip right" data-mode="right" aria-label="拉伸宽度"/>
-        <button type="button" className="box-grip corner" data-mode="corner" aria-label="缩放并旋转"/>
+        <button type="button" className="box-grip corner" data-mode={allowRotation?'corner':'resize'} aria-label={allowRotation?'缩放并旋转':'缩放候选框'}/>
         <button type="button" className="box-delete" aria-label="删除选中素材框"
           onPointerDown={event=>event.stopPropagation()} onClick={event=>{
             event.stopPropagation();removeSelected();}}>×</button>

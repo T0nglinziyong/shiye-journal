@@ -1923,18 +1923,18 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
         <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showSam?<SamRegionOverlay previewRef={previewRef} regions={candidates}
           mode={state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
           onRegionClick={onSamRegionClick}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
-        {manual?<ManualBoxEditor state={state} previewRef={previewRef} onCancel={onManualCancel}
+        {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<div className="import-photo-tools">{previewing?<>{button('readjust-paper','重新调整')}{button('apply-paper-preview',state.paperPreviewApplied?'✓ 已应用校正':'✓ 使用校正结果',!!state.paperPreviewApplied)}</>:
           <>{button('rotate-photo','↻ 旋转 90°')}{button('preview-crop',snapshot?'□ 预览校正':'□ 预览校正')}</>}
           {!snapshot?button('manual-import-box','手动补框',false,'btn primary'):null}</div>}
         {showSam?<div className="sam-review-tools" aria-label="分割结果显示方式">
           <button className={state.importSamDisplayMode==='regions'?'active':''} type="button" onClick={()=>onSamViewChange('regions')}>彩色区域</button>
           <button className={state.importSamDisplayMode!=='regions'?'active':''} type="button" onClick={()=>onSamViewChange('boxes')}>候选框</button>
-          <button className={state.importSamMerging?'active':''} type="button" onClick={onSamMergeToggle}>{state.importSamMerging?'取消合并':'合并区域'}</button>
+          <button className={state.importSamMerging?'active':''} type="button" onClick={onSamMergeToggle}>{state.importSamMerging?'取消合并':'合并为同一纸片'}</button>
           {state.importSamMerging?<button type="button" disabled={(state.importSamMergeSelection?.size||0)<2}
             onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button>:null}
         </div>:null}
-        {showSam&&state.importSamMerging?<small>点选图中至少两个区域，再点“合并所选”。合并只合并已有透明 Mask。</small>:null}
+        {showSam&&state.importSamMerging?<small>点选同一纸片上的区域，合并时会包含它们之间的底色；有共同底纸 Mask 时优先使用其轮廓。</small>:null}
       </div></section>
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}

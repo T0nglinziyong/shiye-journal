@@ -1,9 +1,7 @@
-import assert from 'node:assert/strict';
-
 export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=[],trash=[],blobs=[]}={}){
   const user={id:'ui-test-user'},account={user_id:user.id,username:'ui-test',is_admin:false};
   const state={revision:0,epoch:'00000000-0000-4000-8000-000000000001',
-    records:new Map(),changes:[],receipts:new Map(),objects:new Map()};
+    records:new Map(),changes:[],receipts:new Map(),objects:new Map(),jobs:new Map()};
   for(const [store,rows] of Object.entries({assets,series,projects,meta,trash,blobs}))
     for(const record of rows)state.records.set(store+':'+record.id,structuredClone(record));
   const selectRows=(table,filters,columns)=>{
@@ -16,6 +14,7 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
     else if(table==='shiye_changes')rows=state.changes;
     else if(table==='shiye_commit_receipts_v3')rows=[...state.receipts].map(([operation_id,result])=>({operation_id,result}));
     else if(table==='shiye_commits')rows=[];
+    else if(table==='shiye_compute_jobs')rows=[...state.jobs.values()];
     else throw Error('UI fixture table not registered: '+table);
     rows=rows.filter(row=>filters.every(([op,key,value])=>{
       if(op==='eq')return row[key]===value;
@@ -58,7 +57,25 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
       return query;
     },
     async rpc(name,args){
-      assert.equal(name,'shiye_commit_v3_guarded');
+      if(name==='shiye_enqueue_compute_job_v1'){
+        const blob=state.objects.get(args.p_input_path);
+        if(!blob)return {data:null,error:{message:'input missing'}};
+        const image=await createImageBitmap(blob),width=image.width,height=image.height;
+        image.close?.();
+        const pack=(x0,y0,x1,y1)=>({bbox_xyxy:[x0,y0,x1,y1],area:(x1-x0)*(y1-y0),
+          maskBits:btoa(String.fromCharCode(...new Uint8Array(Math.ceil((x1-x0)*(y1-y0)/8)).fill(255)))});
+        const x=Math.floor(width*.2),y=Math.floor(height*.25),w=Math.floor(width*.18),h=Math.floor(height*.25);
+        const objects=args.p_kind==='material-segmentation'
+          ?[pack(...args.p_parameters.box)]:[pack(x,y,x+w,y+h),pack(x+w+24,y,x+w*2+24,y+h)];
+        const backgrounds=args.p_kind==='material-segmentation'?[]:
+          [pack(Math.max(0,x-12),Math.max(0,y-12),Math.min(width,x+w*2+36),Math.min(height,y+h+12))];
+        const resultPath=args.p_input_path.replace(/input\.png$/,'result.json');
+        state.objects.set(resultPath,new Blob([JSON.stringify({version:2,width,height,model:args.p_model,
+          objects,backgrounds})],{type:'application/json'}));
+        state.jobs.set(args.p_id,{id:args.p_id,status:'completed',result_path:resultPath,error_code:null});
+        return {data:{id:args.p_id,status:'completed'},error:null};
+      }
+      if(name!=='shiye_commit_v3_guarded')throw Error('UI fixture RPC not registered: '+name);
       if(state.receipts.has(args.operation_id))return {data:state.receipts.get(args.operation_id),error:null};
       if(args.base_revision>state.revision||args.expected_epoch!==state.epoch)
         return {data:null,error:{code:'PT409',message:'fixture revision changed'},status:409};
@@ -84,6 +101,7 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
   };
   const storage={from:()=>({
     upload:async(path,data)=>{if(state.objects.has(path))return {data:null,error:{statusCode:409,message:'exists'}};state.objects.set(path,data);return {data:{path},error:null};},
+    copy:async(source,target)=>{if(!state.objects.has(source))return {data:null,error:{statusCode:404,message:'missing'}};state.objects.set(target,state.objects.get(source));return {data:{path:target},error:null};},
     download:async path=>state.objects.has(path)?{data:state.objects.get(path),error:null}:{data:null,error:{statusCode:404,message:'missing'}},
     exists:async path=>({data:state.objects.has(path),error:null})
   })};

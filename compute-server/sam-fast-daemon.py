@@ -64,6 +64,7 @@ def main():
         context = torch.autocast(device_type="cuda", dtype=torch.bfloat16) if device == "cuda" else torch.no_grad()
         materials = output / "materials"
         materials.mkdir(parents=True, exist_ok=True)
+        background_masks = []
         with torch.inference_mode(), context:
             if job.get("box") is not None:
                 box = job["box"]
@@ -85,7 +86,7 @@ def main():
                 if points not in (8, 12, 16, 24, 32) or crops not in (0, 1, 2) or granularity not in ("coarse", "balanced", "fine"):
                     raise ValueError("Invalid SAM automatic parameters")
                 generator = SAM2AutomaticMaskGenerator(model, points_per_side=points,
-                    points_per_batch=64, pred_iou_thresh=.70, stability_score_thresh=.90,
+                    points_per_batch=128, pred_iou_thresh=.70, stability_score_thresh=.90,
                     crop_n_layers=crops, crop_n_points_downscale_factor=1,
                     min_mask_region_area=0)
                 raw = generator.generate(image)
@@ -103,6 +104,10 @@ def main():
                         "stability_score": item["stability_score"], "point_coords": item["point_coords"],
                         "crop_box": item["crop_box"], "source_file": f"object-{index+1:03d}.png"})
                 carriers = find_composite_carriers(candidates, image)
+                # Preserve the underlying paper/card proposals for interactive
+                # grouping. A union of foreground cutouts alone leaves the
+                # shared background transparent, which is not one material.
+                background_masks = [carrier["segmentation"] for carrier, _ in carriers[:12]]
                 carrier_ids = {id(candidate): f"container-{index+1:02d}"
                                for index, (candidate, _) in enumerate(carriers)}
                 pools = {None: []}
@@ -127,22 +132,28 @@ def main():
                 groups.sort(key=lambda group: (group[0]["container_id"] or "",
                     min(item["bbox_xyxy"][1] for item in group),
                     min(item["bbox_xyxy"][0] for item in group)))
+            def packed_object(mask):
+                ys, xs = np.nonzero(mask)
+                if not len(xs):
+                    return None
+                x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
+                packed = np.packbits(mask[y0:y1, x0:x1].ravel(), bitorder="little")
+                return {"bbox_xyxy": [x0, y0, x1, y1], "area": int(mask.sum()),
+                        "maskBits": base64.b64encode(packed.tobytes()).decode("ascii")}
             objects = []
             for group in groups:
                 mask = np.zeros((height, width), dtype=bool)
                 for member in group:
                     mask |= member["segmentation"]
-                ys, xs = np.nonzero(mask)
-                if not len(xs):
-                    continue
-                x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
-                packed = np.packbits(mask[y0:y1, x0:x1].ravel(), bitorder="little")
-                objects.append({"bbox_xyxy": [x0, y0, x1, y1], "area": int(mask.sum()),
-                                "maskBits": base64.b64encode(packed.tobytes()).decode("ascii")})
+                item = packed_object(mask)
+                if item:
+                    objects.append(item)
+            backgrounds = [item for mask in background_masks if (item := packed_object(mask))]
         if len(objects) > 250:
             raise ValueError("Too many SAM materials")
         manifest = {"version": 2, "width": width, "height": height,
-                    "model": "sam2-" + model_size, "objects": objects}
+                    "model": "sam2-" + model_size, "objects": objects,
+                    "backgrounds": backgrounds}
         (materials / "result.json").write_text(json.dumps(manifest))
         return {"objects": len(objects), "milliseconds": round((time.perf_counter() - started) * 1000)}
 

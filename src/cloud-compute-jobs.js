@@ -31,7 +31,7 @@ export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=2
     // A corrected page already uploaded for automatic recognition need not
     // travel from the phone again when the user adjusts a box.
     unwrap(await bucket().copy(`${user.id}/compute/${sourceJobId}/input.png`,inputPath,{upsert:false}),'识别输入复制');
-  }else unwrap(await bucket().upload(inputPath,correctedBlob,{contentType:'image/png',upsert:false}),'识别输入上传');
+  }else unwrap(await bucket().upload(inputPath,correctedBlob,{contentType:correctedBlob.type||'image/png',upsert:false}),'识别输入上传');
   const parameters={pointsPerSide:Number(pointsPerSide),cropNLayers:Number(cropNLayers),granularity,
     preprocessing:{illumination:preprocessing.illumination,denoise:preprocessing.denoise,
       localContrast:preprocessing.localContrast},
@@ -90,7 +90,10 @@ export async function waitForSegmentationJob(jobId,{signal,onStatus=()=>{}}={}){
       if(job.status==='completed')return loadSegmentationResult(job);
       if(job.status==='failed')throw Error('模型识别失败：'+(job.error_code||'请稍后重试'));
       // Long backoff is only a lost-notice safety net, not the source of truth.
-      await pause(job.status==='queued'?30000:60000);
+      // MQTT is the primary wake-up path. A short bounded fallback prevents a
+      // missed notification from adding 30–60 seconds to a manual correction.
+      const elapsed=30*60_000-(deadline-Date.now());
+      await pause(elapsed<15000?2000:job.status==='queued'?10000:15000);
     }
     throw Error('识别任务等待超时；结果仍保存在云端，可重新打开后检查');
   }finally{
@@ -112,7 +115,7 @@ async function loadSegmentationResult(job){
   if(![1,2].includes(manifest.version)||!Array.isArray(manifest.objects)||manifest.objects.length>250||
     !Number.isInteger(manifest.width)||!Number.isInteger(manifest.height))
     throw Error('识别结果格式无效');
-  return boundedMap(manifest.objects,4,async object=>{
+  const regions=await boundedMap(manifest.objects,4,async object=>{
     const [x0,y0,x1,y1]=object.bbox_xyxy||[];
     if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
       throw Error('识别结果区域无效');
@@ -137,4 +140,17 @@ async function loadSegmentationResult(job){
       segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
       mask:{width:canvas.width,height:canvas.height,alpha,topologyPreserved:true}};
   });
+  if(manifest.version===2&&manifest.backgrounds!==undefined){
+    if(!Array.isArray(manifest.backgrounds)||manifest.backgrounds.length>12)throw Error('共同底纸数据无效');
+    regions.backgrounds=manifest.backgrounds.map(object=>{
+      const [x0,y0,x1,y1]=object.bbox_xyxy||[];
+      if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
+        throw Error('共同底纸区域无效');
+      const width=x1-x0,height=y1-y0;
+      return {x:x0/manifest.width,y:y0/manifest.height,w:width/manifest.width,h:height/manifest.height,
+        pixels:object.area,segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
+        mask:{width,height,alpha:decodeSamMaskBits(object.maskBits,width,height),topologyPreserved:true}};
+    });
+  }
+  return regions;
 }

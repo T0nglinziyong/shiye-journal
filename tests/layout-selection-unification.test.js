@@ -12,10 +12,12 @@ test('import recognition internals unchanged while manual UI is a separate adapt
 });
 test('three matching GoodNotes grips, no independent upper rotation grip',async()=>{
  const [manual,editor,css]=await Promise.all(['react-manual-box-editor.jsx','canvas-editor-ui.js','layout-refinements.css'].map(src));
- for(const mode of ['top','right','corner']){
+ for(const mode of ['top','right']){
   assert.match(manual,new RegExp('data-mode="'+mode+'"'));
   assert.ok(editor.includes("'"+mode+"'"),'Missing grip '+mode);
  }
+ assert.match(manual,/data-mode=\{allowRotation\?'corner':'resize'\}/);
+ assert.ok(editor.includes("'corner'"),'Missing rotation grip for non-SAM methods');
  assert.doesNotMatch(manual,/class="box-rotate"/);
  assert.doesNotMatch(editor,/for\(const corner of \['nw','ne','sw','se','rotate'\]/);
  assert.match(css,/\.import-region\.active/);
