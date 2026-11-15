@@ -66,7 +66,8 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
           maskBits:btoa(String.fromCharCode(...new Uint8Array(Math.ceil((x1-x0)*(y1-y0)/8)).fill(255)))});
         const x=Math.floor(width*.2),y=Math.floor(height*.25),w=Math.floor(width*.18),h=Math.floor(height*.25);
         const objects=args.p_kind==='material-segmentation'
-          ?[pack(...args.p_parameters.box)]:[pack(x,y,x+w,y+h),pack(x+w+24,y,x+w*2+24,y+h)];
+          ?[pack(...args.p_parameters.box)]:[pack(x,y,x+w,y+h),pack(x+w+24,y,x+w*2+24,y+h),
+            ...(state.samExtraCandidate?[pack(Math.floor(width*.76),y,Math.floor(width*.86),y+h)]:[])];
         const backgrounds=args.p_kind==='material-segmentation'?[]:
           [pack(Math.max(0,x-12),Math.max(0,y-12),Math.min(width,x+w*2+36),Math.min(height,y+h+12))];
         const resultPath=args.p_input_path.replace(/input\.png$/,'result.json');

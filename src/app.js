@@ -3239,12 +3239,16 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   const created=[];
   try{
     next.push(...await boundedMap(plans,2,async({region,original},index)=>{
-      if(original)return original;
+      if(original){matchedPrevious.add(original);return original;}
+      const old=sameCandidate(region);
+      // A merge changes one carrier while every untouched region keeps its
+      // existing mask and thumbnail. Re-extracting those previews made a
+      // two-region merge wait for the whole page again.
+      if(old?.region===region)return old;
       const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:record.file.name,sourceIndex:state.importIndex,lighting});
       if((state.importRecognition||state.preferences.recognition).startsWith('sam2-'))regenerated.previewOnly=true;
       // Changing only colour must not reset manual names, tags, dimensions or
       // choices, and must never cause the segmentation algorithm to rerun.
-      const old=sameCandidate(region);
       if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','dimensionSource','width','height']){
         if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
       }
