@@ -16,7 +16,9 @@ const expected={
   // library materials no longer copy sourceRegion; import sheets keep explicit batch/page/item ordering.
   // Recognition and segmentation are unchanged. Imported work and snapshot
   // titles now use the shared readable-name helper before metadata is saved.
-  'import-save.js':'979f80b1e99afe179d0a32c106755a9874583b1c',
+  // SAM preview cutouts are resolved against the high-resolution source before
+  // this file stores them; the established import transaction stays atomic.
+  'import-save.js':'5ba3d91ba2f9736dcf5988a374d51a6bd89d72a8',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){
