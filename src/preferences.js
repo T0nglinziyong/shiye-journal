@@ -15,6 +15,7 @@ const defaults={
   // precision-first manufactured aperture recovery.
   recognitionShapeRegularization:true,
   recognitionApertures:true,
+  samPointsPerSide:24,samCropNLayers:1,samGranularity:'balanced',
   customPaperWidth:210,customPaperHeight:297,display:'grid',backdrop:'auto',maxPageItems:40,seriesCoverLayout:'auto',
   markTapeUsedWithProject:false
 };
@@ -39,6 +40,9 @@ export function normalizePreferences(value={}){
     recognitionChromaEdges:value?.recognitionChromaEdges!==false,
     recognitionShapeRegularization:value?.recognitionShapeRegularization!==false,
     recognitionApertures:value?.recognitionApertures!==false,
+    samPointsPerSide:[8,12,16,24,32].includes(Number(value?.samPointsPerSide))?Number(value.samPointsPerSide):24,
+    samCropNLayers:[0,1,2].includes(Number(value?.samCropNLayers))?Number(value.samCropNLayers):1,
+    samGranularity:['coarse','balanced','fine'].includes(value?.samGranularity)?value.samGranularity:'balanced',
     autoOrganize:value?.autoOrganize!==false,autoOrganizeWorks:value?.autoOrganizeWorks!==false,
     maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):40,
     seriesCoverLayout:seriesCoverMode(value?.seriesCoverLayout),

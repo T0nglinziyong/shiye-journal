@@ -70,7 +70,8 @@ import {classificationQueue} from './classification-queue.js';
 import {mountIcons,iconMarkup} from './icons.js';
 import {startCloudSession} from './entry.js';
 import {cloudClient,cloudEnabled,cloudRealtime,cloudRealtimeEnabled,requireCloudUser} from './cloud-session.js';
-import {startCloudRevisionRealtime} from './cloud-revision-realtime.js';
+import {startEmqxRevisionRealtime} from './emqx-revision-realtime.js';
+import {submitSegmentationJob,waitForSegmentationJob} from './cloud-compute-jobs.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {describeSyncError} from './sync-browser-compat.js';
 import {explainUserError} from './user-facing-error.js';
@@ -378,7 +379,7 @@ view.addEventListener('change',event=>{
 function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
-  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,mergeSharedCarrier:view.querySelector('#setting-merge-carrier').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false};
+  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||state.preferences.candidateDiscovery||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels')?.value??state.preferences.recognitionPixels),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma')?.checked??state.preferences.recognitionChromaEdges,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes')?.checked??state.preferences.recognitionShapeRegularization,recognitionApertures:view.querySelector('#setting-postprocess-apertures')?.checked??state.preferences.recognitionApertures,mergeSharedCarrier:view.querySelector('#setting-merge-carrier')?.checked??state.preferences.mergeSharedCarrier,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false,samPointsPerSide:Number(view.querySelector('#setting-sam-points')?.value||state.preferences.samPointsPerSide||24),samCropNLayers:Number(view.querySelector('#setting-sam-crops')?.value??state.preferences.samCropNLayers??1),samGranularity:view.querySelector('#setting-sam-granularity')?.value||state.preferences.samGranularity||'balanced'};
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value),seriesCoverLayout:view.querySelector('#setting-series-cover-layout').value};
 }
 const routeScroll=new Map();
@@ -2922,6 +2923,7 @@ async function prefetchImportRecord(rec,settings,revision){
   }
 }
 function scheduleImportPrefetch(){
+  if((state.preferences.recognition||'').startsWith('sam2-'))return;
   if(state.route!=='import'||state.importStep!=='inspect'||state.importMode==='snapshot')return;
   const rec=state.importRecords.slice(state.importIndex+1).find(r=>!r.confirmed&&!r.candidateData?.length&&!importPrefetchJobs.has(r));
   if(!rec)return;
@@ -3055,6 +3057,25 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
     toast('正在按旋转框分割 '+(index+1)+' / '+regions.length);
+    const chosen=state.importRecognition||state.preferences.recognition;
+    if(chosen.startsWith('sam2-')){
+      if(!state.correctedBitmap)throw Error('SAM 手动画框需要先完成整页透视矫正');
+      const manualRegion=manualPhysicalRegion(box,source.width,source.height);
+      const polygon=manualRegion.physicalBoundary;
+      const promptBox=[Math.max(0,Math.floor(Math.min(...polygon.map(p=>p[0]))*source.width)),
+        Math.max(0,Math.floor(Math.min(...polygon.map(p=>p[1]))*source.height)),
+        Math.min(source.width,Math.ceil(Math.max(...polygon.map(p=>p[0]))*source.width)),
+        Math.min(source.height,Math.ceil(Math.max(...polygon.map(p=>p[1]))*source.height))];
+      const correctedBlob=await new Promise((resolve,reject)=>source.toBlob(value=>value?resolve(value):reject(Error('矫正图导出失败')),'image/png'));
+      const jobId=await submitSegmentationJob(correctedBlob,{model:chosen,
+        pointsPerSide:state.preferences.samPointsPerSide,cropNLayers:state.preferences.samCropNLayers,
+        granularity:state.preferences.samGranularity,kind:'material-segmentation',box:promptBox,
+        preprocessing:recognitionPreprocessOptions()});
+      const [candidate]=await waitForSegmentationJob(jobId);
+      if(!candidate?.mask?.alpha?.length)throw Error('SAM 未在手动画框内找到素材，请调整框选位置');
+      return {...candidate,manualGeometry:true,manualSearchBoundary:polygon,
+        orientedBox:manualRegion.orientedBox};
+    }
     const limit=state.preferences.recognitionPixels||900,
       scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
@@ -3105,7 +3126,25 @@ async function refreshImportCandidates(regions,{manual=false}={}){
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
-  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,candidateDiscovery:state.preferences.candidateDiscovery||'unified',recognitionPixels:state.preferences.recognitionPixels,
+  const selectedRecognition=state.importRecognition||state.preferences.recognition;
+  let regions;
+  if(selectedRecognition.startsWith('sam2-')){
+    if(!state.correctedBitmap)throw Error('SAM 识别需要先完成 A4 透视矫正，请检查纸张四角');
+    const paperRatio=pw/ph,imageRatio=source.width/source.height;
+    if(Math.abs(imageRatio-paperRatio)/paperRatio>.03)throw Error('矫正图方向与纸张长短边不一致，请重新检查校正方向');
+    state.importProcessing='正在上传矫正后的整页图像…';render();
+    const correctedBlob=await new Promise((resolve,reject)=>source.toBlob(value=>value?resolve(value):reject(Error('矫正图导出失败')),'image/png'));
+    const options={model:selectedRecognition,pointsPerSide:state.preferences.samPointsPerSide,
+      cropNLayers:state.preferences.samCropNLayers,granularity:state.preferences.samGranularity,
+      preprocessing:recognitionPreprocessOptions()};
+    const signature=JSON.stringify(options);
+    const jobId=record.computeJobId&&record.computeJobSignature===signature&&record.computeJobBitmap===source
+      ?record.computeJobId:await submitSegmentationJob(correctedBlob,options);
+    Object.assign(record,{computeJobId:jobId,computeJobSignature:signature,computeJobBitmap:source});
+    state.importProcessing='拾页计算服务器正在分割整页素材…';render();
+    regions=await waitForSegmentationJob(jobId);
+    record.computeJobId=null;
+  }else regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:selectedRecognition,candidateDiscovery:state.preferences.candidateDiscovery||'unified',recognitionPixels:state.preferences.recognitionPixels,
     recognitionSource:state.correctedBitmap&&state.paperCorners?{bitmap:state.importBitmap,corners:state.paperCorners}:null,
     recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.importMergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},
     onAnalysis:analysis=>{record.recognitionAnalysis=analysis;},onProgress:p=>{
@@ -3552,14 +3591,14 @@ window.addEventListener('shiye-sync-project-committed',event=>{
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{const recovered=!!lastSyncError&&!error;if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');if(recovered)privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
-const CLOUD_POLL_MS=5000,REALTIME_FALLBACK_MS=60000;
+const CLOUD_POLL_MS=300000,REALTIME_FALLBACK_MS=300000;
 let revisionRealtimeReady=false;
 let stopRevisionRealtime=()=>{};
 function subscribeAccountRevision(userID){
   stopRevisionRealtime();stopRevisionRealtime=()=>{};revisionRealtimeReady=false;
-  if(!cloudEnabled||!cloudRealtimeEnabled)return;
-  try{stopRevisionRealtime=startCloudRevisionRealtime({
-    realtime:cloudRealtime(),userID,
+  if(!cloudEnabled)return;
+  try{stopRevisionRealtime=startEmqxRevisionRealtime({
+    userID,
     onChange:()=>backgroundCloudCheck({force:true}),
     onReady:()=>{revisionRealtimeReady=true;backgroundCloudCheck({force:true});},
     onError:error=>{revisionRealtimeReady=false;console.warn('账号实时通知暂不可用；仍会定期核对云端版本',error?.message);}
@@ -3596,7 +3635,7 @@ function backgroundCloudCheck({force=false}={}){
 }
 // Cloud sync is bidirectional: poll lightweight version metadata while the
 // document remains visible, not only when focus/online events happen.
-setInterval(backgroundCloudCheck,CLOUD_POLL_MS);
+setInterval(backgroundCloudCheck,30000);
 // Detect complete UI stalls even when no sync promise rejects. The timer
 // resumes after a main-thread block and records its duration locally.
 let lastMainThreadTick=performance.now();

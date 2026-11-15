@@ -1,9 +1,11 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,timingSafeEqual} from 'node:crypto';
 import {createTicketHandler} from '../cos-tickets.mjs';
 import {ServiceError,object} from './errors.mjs';
 
 const routes=new Map([['/api/cos','POST'],['/api/platform-health','GET'],
   ['/api/storage-usage','GET'],['/api/search','POST'],['/api/search-index','POST'],
+  ['/api/realtime-notify','POST'],['/api/realtime-session','GET'],
+  ['/api/job-submit','POST'],['/api/worker-notify','POST'],
   ['/api/telemetry','POST'],['/api/account-reset','POST'],['/api/account-gc','POST']]);
 const eventCodes=new Set(['sync-failed','cos-ticket-failed','cos-put-failed',
   'image-decode-failed','app-start','api-failed']);
@@ -21,12 +23,13 @@ export function sanitizeTelemetry(input){
   });
 }
 export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searchService,
-  inventory,garbageCollect,build=null,logger=console.log,clock=Date.now,windows=new Map()}={}){
+  inventory,garbageCollect,realtimePublish,realtimeCredentials,jobLookup,workerToken,
+  realtimeReady=false,build=null,logger=console.log,clock=Date.now,windows=new Map()}={}){
   if(typeof verifyUser!=='function')throw TypeError('CloudBase 身份验证器未配置');
   // Instance-local limits absorb bursts. Paid embedding limits are additionally
   // enforced in PostgreSQL by createSearchService; these are not a global quota.
   function accept(identity,route){
-    const now=clock(),key=identity.userID+':'+route,limit=route==='/api/telemetry'?4:120;
+    const now=clock(),key=identity.userID+':'+route,limit=route==='/api/telemetry'?4:route==='/api/realtime-notify'?10:120;
     let window=windows.get(key);
     if(!window||window.until<=now){window={until:now+60000,count:0};windows.set(key,window);}
     if(++window.count>limit)throw new ServiceError(429,'RATE_LIMITED','请求过于频繁，请稍后重试');
@@ -45,6 +48,21 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
       if(event.method!==routes.get(route))throw new ServiceError(405,'METHOD_NOT_ALLOWED','请求方法不允许');
       const token=/^Bearer ([A-Za-z0-9._~-]{20,8192})$/.exec(event.authorization||'')?.[1];
       if(!token)throw new ServiceError(401,'AUTH_REQUIRED','请先登录');
+      if(route==='/api/worker-notify'){
+        const actual=Buffer.from(token),expected=Buffer.from(workerToken||'');
+        if(!expected.length||actual.length!==expected.length||!timingSafeEqual(actual,expected))
+          throw new ServiceError(403,'WORKER_AUTH','计算服务器未获授权');
+        const id=event.body?.jobId;
+        if(!/^[a-f0-9-]{36}$/i.test(id||'')||Object.keys(event.body).some(key=>key!=='jobId'))
+          throw new ServiceError(400,'INVALID_JOB','任务编号无效');
+        const job=await jobLookup(id);
+        if(!job||!['completed','failed'].includes(job.status))
+          throw new ServiceError(409,'JOB_NOT_FINISHED','任务尚未完成');
+        const topic='shiye/users/'+encodeURIComponent(job.user_id)+'/sync';
+        await realtimePublish(topic,{type:'job_'+job.status,jobId:id,eventId:requestId,
+          emittedAt:new Date(clock()).toISOString()});
+        status=200;code='OK';return {version:1,status,body:{accepted:true},requestId};
+      }
       const identity=await verifyUser(token);
       if(!identity?.userID)throw new ServiceError(401,'AUTH_REQUIRED','登录失效或账号未获授权');
       accept(identity,route);
@@ -65,8 +83,44 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
         }catch(error){if(error.code!=='MIGRATION_REQUIRED')throw error;}
         status=200;code='OK';body={platform:'cloudbase',apiVersion:1,build:safeBuild(build),
           authentication:'verified',cos:{configured:cosReady},capabilities,
-          images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:maintenance};
+          realtime:{configured:realtimeReady,transport:'emqx-http'},images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:maintenance};
+      }else if(route==='/api/realtime-notify'){
+        const input=event.body;
+        if(input.type!=='sync_changed'||!['journal','materials','works','settings','all'].includes(input.scope)||
+          (input.revision!==undefined&&(!Number.isSafeInteger(input.revision)||input.revision<0))||
+          Object.keys(input).some(key=>!['type','scope','revision'].includes(key)))
+          throw new ServiceError(400,'INVALID_REALTIME_EVENT','实时通知格式无效');
+        if(!realtimeReady||typeof realtimePublish!=='function')
+          throw new ServiceError(503,'REALTIME_UNAVAILABLE','实时通知尚未配置');
+        // Identity is verified above; clients never select another account or topic.
+        const topic='shiye/users/'+encodeURIComponent(identity.userID)+'/sync';
+        const payload={type:'sync_changed',scope:input.scope,eventId:requestId,emittedAt:new Date(clock()).toISOString(),
+          ...(input.revision===undefined?{}:{revision:input.revision})};
+        body=await realtimePublish(topic,payload);status=200;code='OK';
+      }else if(route==='/api/realtime-session'){
+        if(typeof realtimeCredentials!=='function')
+          throw new ServiceError(503,'REALTIME_UNAVAILABLE','实时订阅尚未配置');
+        // The CloudBase identity, never a caller-supplied user ID, selects the
+        // broker account. ACLs must allow that account to subscribe to this
+        // exact topic and deny all other publish/subscribe operations.
+        const credential=realtimeCredentials(identity.userID);
+        if(!credential)throw new ServiceError(503,'REALTIME_ACCOUNT_UNAVAILABLE','此账号的实时订阅尚未开通');
+        status=200;code='OK';body={
+          endpoint:'wss://g9eb1e1c.ala.cn-hangzhou.emqxsl.cn:8084/mqtt',
+          topic:'shiye/users/'+encodeURIComponent(identity.userID)+'/sync',
+          username:credential.username,password:credential.password
+        };
+      }else if(route==='/api/job-submit'){
+        const id=event.body?.jobId;
+        if(!/^[a-f0-9-]{36}$/i.test(id||'')||Object.keys(event.body).some(key=>key!=='jobId'))
+          throw new ServiceError(400,'INVALID_JOB','任务编号无效');
+        const job=await jobLookup(id,token,identity.userID);
+        if(!job)throw new ServiceError(404,'JOB_NOT_FOUND','任务不存在');
+        if(job.status==='queued'||job.status==='running')
+          await realtimePublish('shiye-job',{type:'job_queued',jobId:id,eventId:requestId});
+        status=200;code='OK';body={id,status:job.status};
       }else if(route==='/api/storage-usage'){
+
         const database=await rpc('shiye_account_storage_v1',token,{});
         const cos=inventory?await inventory(identity):{inventoryComplete:false,reason:'未配置 COS 枚举'};
         status=200;code='OK';body={scope:'current-account',database,cos};

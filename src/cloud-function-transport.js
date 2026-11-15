@@ -6,6 +6,10 @@ export const CLOUD_API_ROUTES=Object.freeze({
   '/api/storage-usage':'GET',
   '/api/search':'POST',
   '/api/search-index':'POST',
+  '/api/realtime-notify':'POST',
+  '/api/realtime-session':'GET',
+  '/api/job-submit':'POST',
+  '/api/worker-notify':'POST',
   '/api/telemetry':'POST',
   '/api/account-reset':'POST',
   '/api/account-gc':'POST'

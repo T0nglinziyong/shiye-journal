@@ -48,13 +48,14 @@
     "fflate": "0.8.2",
     "idb": "8.0.3",
     "lucide": "1.48.0",
+    "mqtt": "^5.16.1",
     "opentype.js": "2.0.0",
+    "paper": "0.12.18",
     "pdf-lib": "1.17.1",
     "perfect-freehand": "1.2.3",
     "polygon-clipping": "0.15.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "roughjs": "4.6.6",
-    "paper": "0.12.18"
+    "roughjs": "4.6.6"
   }
 }
