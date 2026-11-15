@@ -1,5 +1,6 @@
 import {cloudClient,cloudStorage,requireCloudUser} from './cloud-session.js';
 import {cloudApiRequest} from './cloud-api-origin.js';
+import {boundedMap} from './bounded-map.js';
 
 const bucket=()=>cloudStorage().from('shiye-private');
 const uuid=/^[a-f0-9-]{36}$/i;
@@ -11,9 +12,11 @@ const unwrap=(result,label)=>{
 const file=(blob)=>blob instanceof Blob&&blob.size>0;
 
 export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=24,cropNLayers=1,
-  granularity='balanced',kind='material-recognition',box=null,
+  granularity='balanced',kind='material-recognition',box=null,sourceJobId=null,
   preprocessing={illumination:false,denoise:false,localContrast:false}}={}){
-  if(!file(correctedBlob)||!['sam2-tiny','sam2-small','sam2-large'].includes(model)||
+  if((!sourceJobId&&!file(correctedBlob))||
+    (sourceJobId&&(!uuid.test(sourceJobId)||kind!=='material-segmentation'))||
+    !['sam2-tiny','sam2-small','sam2-large'].includes(model)||
     ![8,12,16,24,32].includes(Number(pointsPerSide))||![0,1,2].includes(Number(cropNLayers))||
     !['coarse','balanced','fine'].includes(granularity)||
     !['material-recognition','material-segmentation'].includes(kind)||
@@ -22,7 +25,12 @@ export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=2
       !box.every(Number.isInteger)||box[0]<0||box[1]<0||box[2]<=box[0]||box[3]<=box[1])))
     throw Error('分割模型或参数无效');
   const user=await requireCloudUser(),id=crypto.randomUUID(),inputPath=`${user.id}/compute/${id}/input.png`;
-  unwrap(await bucket().upload(inputPath,correctedBlob,{contentType:'image/png',upsert:false}),'识别输入上传');
+  if(sourceJobId){
+    // CloudBase checks SELECT on the source and INSERT on this new job path.
+    // A corrected page already uploaded for automatic recognition need not
+    // travel from the phone again when the user adjusts a box.
+    unwrap(await bucket().copy(`${user.id}/compute/${sourceJobId}/input.png`,inputPath,{upsert:false}),'识别输入复制');
+  }else unwrap(await bucket().upload(inputPath,correctedBlob,{contentType:'image/png',upsert:false}),'识别输入上传');
   const parameters={pointsPerSide:Number(pointsPerSide),cropNLayers:Number(cropNLayers),granularity,
     preprocessing:{illumination:preprocessing.illumination,denoise:preprocessing.denoise,
       localContrast:preprocessing.localContrast},
@@ -103,8 +111,7 @@ async function loadSegmentationResult(job){
   if(manifest.version!==1||!Array.isArray(manifest.objects)||manifest.objects.length>250||
     !Number.isInteger(manifest.width)||!Number.isInteger(manifest.height))
     throw Error('识别结果格式无效');
-  const regions=[];
-  for(const object of manifest.objects){
+  return boundedMap(manifest.objects,4,async object=>{
     const [x0,y0,x1,y1]=object.bbox_xyxy||[];
     if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0||
       !/^material-\d{3}\.png$/.test(object.file||''))throw Error('识别结果区域无效');
@@ -116,9 +123,8 @@ async function loadSegmentationResult(job){
     const rgba=ctx.getImageData(0,0,canvas.width,canvas.height).data;
     const alpha=new Uint8Array(canvas.width*canvas.height);
     for(let i=0;i<alpha.length;i++)alpha[i]=rgba[i*4+3];
-    regions.push({x:x0/manifest.width,y:y0/manifest.height,w:canvas.width/manifest.width,h:canvas.height/manifest.height,
+    return {x:x0/manifest.width,y:y0/manifest.height,w:canvas.width/manifest.width,h:canvas.height/manifest.height,
       pixels:object.area,segmentationMethod:manifest.model,segmentationFailed:false,
-      mask:{width:canvas.width,height:canvas.height,alpha,topologyPreserved:true}});
-  }
-  return regions;
+      mask:{width:canvas.width,height:canvas.height,alpha,topologyPreserved:true}};
+  });
 }
