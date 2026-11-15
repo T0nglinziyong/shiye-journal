@@ -95,10 +95,10 @@ async function runFastOrLegacy(input,output,job){
     (job.kind==='material-segmentation'&&(!Array.isArray(p.box)||p.box.length!==4||
       !p.box.every(Number.isInteger)||p.box[0]<0||p.box[1]<0||p.box[2]<=p.box[0]||p.box[3]<=p.box[1])))
     throw Error('Invalid SAM task kind or box');
-  if(Object.values(p.preprocessing).some(Boolean))return runPipeline(input,output,job);
   try{
     return await samDaemon.run({input,output,model:job.model.replace(/^sam2-/,''),
       pointsPerSide:p.pointsPerSide,cropNLayers:p.cropNLayers,granularity:p.granularity,
+      preprocessing:p.preprocessing,
       ...(job.kind==='material-segmentation'?{box:p.box}:{})});
   }catch(error){
     console.warn('Resident SAM unavailable; retrying standalone pipeline:',error.message);

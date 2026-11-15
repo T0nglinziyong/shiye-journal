@@ -67,8 +67,18 @@ try{
     'SAM box editing must not offer unsupported rotation');
   await click('.import-photo-tools button:nth-child(1)');
 
+  const nextOpenAt=performance.now();
   await click('[data-act="import-confirm-photo"]','.queue-item.active');
-  await wait('.import-candidate-tile',30000);
+  const nextDeadline=Date.now()+30000;
+  while(Date.now()<nextDeadline){
+    const visible=await evaluate(`(()=>({active:document.querySelector('.queue-item.active')?.textContent||'',
+      count:document.querySelectorAll('.import-candidate-tile').length}))()`);
+    if(visible.active.includes('照片 2')&&visible.count===2)break;
+    await sleep(50);
+  }
+  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),2);
+  const nextOpenMs=Math.round(performance.now()-nextOpenAt);
+  assert.ok(nextOpenMs<4000,`a prefetched photo should open with its review thumbnails ready (${nextOpenMs} ms)`);
   await click('[data-act="import-confirm-photo"]','.review-candidates');
   await evaluate('window.__blobFrames=[]');
   const saveStart=performance.now();
@@ -78,5 +88,5 @@ try{
   assert.ok(maxExport>1024,'saving must re-extract selected materials from the high-resolution source');
   assert.deepEqual(b.errors,[]);
   console.log(JSON.stringify({jobs:initial.jobs,inputBytes:initial.inputs.map(item=>item.size),
-    highResEdge:maxExport,recognitionMs,saveMs}));
+    highResEdge:maxExport,recognitionMs,nextOpenMs,saveMs}));
 }finally{await b.close();}
