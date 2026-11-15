@@ -2,6 +2,7 @@ import {prepareUploadJobs} from './upload-preparation.js';
 import {cloudMetadataRecord,assertCloudCommitSize} from './cloud-record-guard.js';
 import {readCloudPages} from './cloud-page-read.js';
 import {cloudClient,requireCloudUser,cloudStorage} from './cloud-session.js';
+import {cloudApiRequest} from './cloud-api-origin.js';
 import {privateCache,outboxVersionRows} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
@@ -29,7 +30,7 @@ import {decodeImageBlob} from './image-blob-decoder.js';
 import {yieldToForeground,scheduleForegroundIdle} from './foreground-idle.js';
 import {boundedMap} from './bounded-map.js';
 import {assetBlobIDs,splitIndependentAssetImport,splitWideMetadataMutation,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
-export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null,
+export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null,notifyRevision=()=>{},
   onAccountEpochChanged=()=>{if(typeof window!=='undefined')window.dispatchEvent(new Event('shiye-account-epoch-changed'));}}){
 const writeProvider=()=>{if(!objectStorage?.enabled)throw Error('CloudBase 云存储不可用；待同步资料仍留在本机');return 'cloudbase';};
 const usableBlob=value=>value instanceof Blob&&value.size>0;
@@ -1266,6 +1267,10 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
       durationMs:Date.now()-activeDirect.startedAt});
     try{channel()?.postMessage({source:sessionTag,type:'committed',revision});}
     catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
+    // Publishing is advisory: a committed CloudBase transaction must never be
+    // rolled back or kept in the local outbox because EMQX is unavailable.
+    void Promise.resolve().then(()=>notifyRevision(revision,[...changedStores]))
+      .catch(error=>console.warn('实时通知未发送，客户端将补同步',error?.message));
     }finally{writesInFlight--;activeDirect=null;reportSync();}
   };
   const pending=queue.then(run).catch(error=>{
@@ -1806,7 +1811,13 @@ return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
-const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCloudBaseStorage({storage:cloudStorage,enabled:Boolean(import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID)})});
+const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCloudBaseStorage({storage:cloudStorage,enabled:Boolean(import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID)}),
+  notifyRevision:async(revision,stores)=>{
+    const scope=stores.length===1&&stores[0]==='assets'?'materials':stores.length===1&&stores[0]==='projects'?'works':'all';
+    const response=await cloudApiRequest('/api/realtime-notify',{method:'POST',
+      body:JSON.stringify({type:'sync_changed',scope,revision})});
+    if(!response.ok)throw Error('HTTP '+response.status);
+  }});
 export const cloudCloseCacheBeforeRemoteReset=()=>current.cloudCloseCacheBeforeRemoteReset();
 export const cloudSetResetCleanupPending=(...args)=>current.cloudSetResetCleanupPending(...args);
 export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);

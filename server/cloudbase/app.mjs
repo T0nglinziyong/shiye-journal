@@ -6,6 +6,7 @@ import {createPostgresRPC} from './postgres.mjs';
 import {embeddingConfiguration,createEmbeddingClient} from './embeddings.mjs';
 import {createSearchService} from './search.mjs';
 import {createStorageGarbageCollector} from './storage-gc.mjs';
+import {ServiceError} from './errors.mjs';
 
 const burstWindows=new Map();
 const tiers=new Set([256,360,480,600,720,960,1200,1440,1920,2560,3200,3840,5120]);
@@ -26,7 +27,10 @@ export async function main(event,context){
   search.vectorEnabled=!!config;
   const handle=createCloudBaseService({
     verifyUser:token=>verifyCloudBaseUser(token,{envId}),cosReady:ready,rpc,searchService:search,
-    garbageCollect,
+    garbageCollect,realtimePublish:publishRealtimeEvent,realtimeReady:realtimeConfigured(env),
+    realtimeCredentials:userID=>realtimeUserCredential(userID,env),
+    jobLookup:(id,token,userID)=>lookupComputeJob(id,token||env.SHIYE_CLOUDBASE_SERVICE_KEY,{envId,userID}),
+    workerToken:env.SHIYE_GPU_WORKER_TOKEN,
     build:env.SHIYE_BUILD_SHA,windows:burstWindows,
     sign:async({path,method,headers,variant})=>{
       const edge=variant?Number(/^preview([1-9]\d{0,3})$/.exec(variant)?.[1]):null;
@@ -61,4 +65,54 @@ export async function main(event,context){
     }
   });
   return handle(event,context);
+}
+
+// EMQX carries small change notifications; CloudBase remains authoritative.
+export function realtimeConfigured(env=process.env){
+  return !!(env.SHIYE_EMQX_API_BASE&&env.SHIYE_EMQX_APP_ID&&env.SHIYE_EMQX_APP_SECRET);
+}
+export function realtimeUserCredential(userID,env=process.env){
+  if(!/^[A-Za-z0-9_-]{1,64}$/.test(userID||''))return null;
+  let accounts;
+  try{accounts=JSON.parse(env.SHIYE_EMQX_USER_CREDENTIALS_B64
+    ?Buffer.from(env.SHIYE_EMQX_USER_CREDENTIALS_B64,'base64').toString('utf8')
+    :env.SHIYE_EMQX_USER_CREDENTIALS||'{}');}catch{return null;}
+  const entry=accounts?.[userID];
+  // The credential map exists only in the cloud function environment. Each
+  // username has an exact-topic subscribe ACL in EMQX Serverless.
+  return entry&&typeof entry.username==='string'&&/^shiye-user-[A-Za-z0-9_-]{1,64}$/.test(entry.username)&&
+    typeof entry.password==='string'&&entry.password.length>=20
+    ?{username:entry.username,password:entry.password}:null;
+}
+export async function lookupComputeJob(id,token,{envId,userID,fetcher=fetch}={}){
+  if(!/^[a-f0-9-]{36}$/i.test(id||'')||!token||!envId)return null;
+  const url=new URL(`https://${envId}.api.tcloudbasegateway.com/v1/rdb/rest/shiye_compute_jobs`);
+  url.searchParams.set('select','id,user_id,status');
+  url.searchParams.set('id','eq.'+id);
+  if(userID)url.searchParams.set('user_id','eq.'+userID);
+  const response=await fetcher(url,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+    signal:AbortSignal.timeout(10000),cache:'no-store'});
+  if(!response.ok)throw new ServiceError(503,'JOB_LOOKUP_FAILED','任务查询暂不可用');
+  const rows=await response.json();
+  return Array.isArray(rows)&&rows[0]?.id===id&&(!userID||rows[0]?.user_id===userID)?rows[0]:null;
+}
+export async function publishRealtimeEvent(topic,payload,{env=process.env,fetcher=fetch}={}){
+  if(!realtimeConfigured(env))throw new ServiceError(503,'REALTIME_UNAVAILABLE','实时通知尚未配置');
+  const base=new URL(env.SHIYE_EMQX_API_BASE);
+  if(base.origin!=='https://g9eb1e1c.ala.cn-hangzhou.emqxsl.cn:8443'||base.pathname!=='/api/v5'||base.search||base.hash||base.username||base.password)
+    throw new ServiceError(503,'REALTIME_CONFIGURATION','实时通知地址配置无效');
+  if(typeof topic!=='string'||topic.length>256||/[+#\u0000]/.test(topic)||!(topic==='shiye-job'||topic.startsWith('shiye/users/')||topic.startsWith('shiye/diagnostics/')))
+    throw new ServiceError(400,'INVALID_REALTIME_TOPIC','实时通知主题无效');
+  const text=JSON.stringify(payload);
+  if(!text||Buffer.byteLength(text,'utf8')>4096)throw new ServiceError(400,'INVALID_REALTIME_PAYLOAD','实时通知内容过大');
+  let response,data;
+  try{
+    response=await fetcher(base.href+'/publish',{method:'POST',redirect:'error',signal:AbortSignal.timeout(5000),
+      headers:{'content-type':'application/json','authorization':'Basic '+Buffer.from(env.SHIYE_EMQX_APP_ID+':'+env.SHIYE_EMQX_APP_SECRET).toString('base64')},
+      body:JSON.stringify({topic,qos:1,retain:false,payload_encoding:'plain',payload:text})});
+    data=await response.json();
+  }catch{throw new ServiceError(503,'REALTIME_PUBLISH_FAILED','实时通知暂时不可用，请稍后重试');}
+  if(response.status===200&&typeof data?.id==='string')return {accepted:true,messageId:data.id,subscribersMatched:true};
+  if(response.status===202&&data?.reason_code===16)return {accepted:true,messageId:null,subscribersMatched:false};
+  throw new ServiceError(503,'REALTIME_PUBLISH_FAILED','实时通知发布失败，请稍后重试');
 }

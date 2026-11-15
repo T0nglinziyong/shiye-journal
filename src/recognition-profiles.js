@@ -54,13 +54,22 @@ export const recognitionPixelOptions=Object.freeze([
 const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
 const pixelValues=new Set(recognitionPixelOptions.map(([value])=>value));
 export const recognitionOptions=recognitionStrategies.map(({id,label})=>[id,label]);
+export const computeRecognitionOptions=Object.freeze([
+  ['sam2-tiny','SAM 2.1 Tiny · 速度优先'],
+  ['sam2-small','SAM 2.1 Small · 均衡'],
+  ['sam2-large','SAM 2.1 Large · 精度优先']
+]);
+recognitionOptions.push(...computeRecognitionOptions);
+export const isComputeRecognition=value=>computeRecognitionOptions.some(([id])=>id===value);
 export const candidateDiscoveryOptions=Object.freeze([['legacy','原版 · 前景连通区域'],['physical','物理载体 · 多尺度边缘与颜色'],['unified','统一候选 · 物理载体与漏检补全']]);
 export const candidateDiscoveryAllowed=value=>candidateDiscoveryOptions.some(([id])=>id===value);
-export const recognitionMethodDetails=recognitionStrategies.map(({id,label,description})=>({id,label,description}));
-export const recognitionModeAllowed=value=>strategiesByID.has(value);
+export const recognitionMethodDetails=[...recognitionStrategies.map(({id,label,description})=>({id,label,description})),
+  ...computeRecognitionOptions.map(([id,label])=>({id,label,description:'整页上传至拾页计算服务器，先矫正和预处理，再用 SAM 生成透明 Mask；不运行传统候选或边缘分割。'}))];
+export const recognitionModeAllowed=value=>strategiesByID.has(value)||isComputeRecognition(value);
 export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
 
 export function recognitionProfile(value='auto',analysisMaxDimension=900){
+  if(isComputeRecognition(value))throw Error('SAM 模型须经云端任务流程运行，不能回退到传统 CV');
   const mode=strategiesByID.has(value)?value:'auto';
   const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):900;
   const {refineCandidates}=strategiesByID.get(mode);
