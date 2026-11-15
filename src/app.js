@@ -2984,20 +2984,23 @@ async function prefetchImportRecord(rec,settings,revision,signal){
         onAnalysis:analysis=>{if(valid())rec.recognitionAnalysis=analysis;}});if(!valid())return;
     }
     candidates=filterAutomaticMaterialBoxes(candidates,{paperWidthMM:pw,paperHeightMM:ph,enabled:settings.paperSize!=='none'});
-    let candidateData=[];
-    if(!settings.recognition.startsWith('sam2-')){
-      const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
-      const lighting=settings.materialColorMode!=='original'&&correctedBitmap
-        ?await estimatePageLighting(source,candidates):null;
-      candidateData=await boundedMap(candidates,2,async(region,index)=>{
-        if(!valid())return null;
-        const candidate=await extractImportCandidate(source,box,region,{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:rec.file.name,sourceIndex:state.importRecords.indexOf(rec),lighting});
-        candidateURLs[index]=candidate.url;
-        return candidate;
-      });
-    }
+    // Build compact review thumbnails while this page is in the background.
+    // Waiting until it is opened made a pre-recognized 21-item page take eight
+    // more seconds to inspect on the live site. Final save still re-extracts
+    // SAM materials from the original photo at full resolution.
+    const sam=settings.recognition.startsWith('sam2-');
+    const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
+    const lighting=settings.materialColorMode!=='original'&&correctedBitmap
+      ?await estimatePageLighting(source,candidates):null;
+    const candidateData=await boundedMap(candidates,2,async(region,index)=>{
+      if(!valid())return null;
+      const candidate=await extractImportCandidate(source,box,region,{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:rec.file.name,sourceIndex:state.importRecords.indexOf(rec),lighting});
+      if(sam)candidate.previewOnly=true;
+      candidateURLs[index]=candidate.url;
+      return candidate;
+    });
     if(!valid())return;
-    const keepBitmap=!settings.recognition.startsWith('sam2-');
+    const keepBitmap=!sam;
     Object.assign(rec,{bitmap:keepBitmap?bitmap:null,recognitionDecodeMode:settings.candidateDiscovery==='unified'?'research':'legacy',autoPaperCorners:corners&&!rec.corners?structuredClone(corners):null,correctedBitmap,correctedURL,
       appliedCorners:correctedBitmap?JSON.stringify(corners):null,backgroundDetected:!!correctedBitmap,
       candidates,candidateData,candidateURLs,selection:candidates.map((_,i)=>i),prefetchStatus:'ready'});

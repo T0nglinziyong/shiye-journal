@@ -6,6 +6,8 @@ and the model resident avoids cold Python startup on every phone request.
 
 import argparse
 import base64
+from collections import OrderedDict
+import hashlib
 import json
 import sys
 import time
@@ -13,8 +15,40 @@ import traceback
 from pathlib import Path
 
 import numpy as np
+import cv2
 from PIL import Image
 import torch
+
+
+def preprocess_image(image, options):
+    if not isinstance(options, dict) or any(type(options.get(name)) is not bool for name in
+        ("illumination", "denoise", "localContrast")):
+        raise ValueError("Invalid preprocessing options")
+    if not any(options.values()):
+        return image
+    height, width = image.shape[:2]
+    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    light = lab[:, :, 0]
+    denoised = (cv2.GaussianBlur(light, (3, 3), 0, borderType=cv2.BORDER_REPLICATE)
+                if options["denoise"] else light)
+    if options["illumination"]:
+        scale = min(1, 128 / max(width, height))
+        small = cv2.resize(denoised, (max(1, round(width * scale)),
+                                      max(1, round(height * scale))), interpolation=cv2.INTER_AREA)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+        background = cv2.morphologyEx(small, cv2.MORPH_CLOSE, kernel)
+        blurred = cv2.GaussianBlur(background, (15, 15), 0)
+        field = cv2.resize(blurred, (width, height), interpolation=cv2.INTER_LINEAR)
+        samples = blurred.ravel()
+        reference = int(np.partition(samples, int(len(samples) * .9))[int(len(samples) * .9)]) or 1
+        gain = np.clip(reference / np.maximum(field.astype(np.float32), 1), .9, 1.35)
+        normalized = np.minimum(255, np.floor(denoised.astype(np.float32) * gain + .5)).astype(np.uint8)
+    else:
+        normalized = denoised.copy()
+    if options["localContrast"]:
+        normalized = cv2.createCLAHE(clipLimit=1.12, tileGridSize=(8, 8)).apply(normalized)
+    lab[:, :, 0] = normalized
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
 
 def main():
@@ -37,6 +71,7 @@ def main():
     }
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cache = {}
+    prompt_cache = OrderedDict()
     small_checkpoint, small_config = models["small"]
     cache["small"] = build_sam2(small_config, str(root / "checkpoints" / small_checkpoint),
                                   device=device, apply_postprocessing=False)
@@ -50,6 +85,7 @@ def main():
         checkpoint, config = models[model_size]
         source = Path(job["input"])
         output = Path(job["output"])
+        source_bytes = source.read_bytes()
         image = np.array(Image.open(source).convert("RGB"), copy=True)
         height, width = image.shape[:2]
         if min(width, height) < 600 or width * height > 20_000_000:
@@ -61,6 +97,9 @@ def main():
             cache[model_size] = build_sam2(config, str(root / "checkpoints" / checkpoint),
                                            device=device, apply_postprocessing=False)
         model = cache[model_size]
+        preprocessing = job.get("preprocessing", {"illumination": False,
+            "denoise": False, "localContrast": False})
+        model_image = preprocess_image(image, preprocessing)
         context = torch.autocast(device_type="cuda", dtype=torch.bfloat16) if device == "cuda" else torch.no_grad()
         materials = output / "materials"
         materials.mkdir(parents=True, exist_ok=True)
@@ -70,8 +109,20 @@ def main():
                 box = job["box"]
                 if len(box) != 4 or not (0 <= box[0] < box[2] <= width and 0 <= box[1] < box[3] <= height):
                     raise ValueError("Invalid SAM box")
-                predictor = SAM2ImagePredictor(model)
-                predictor.set_image(image)
+                # The same corrected page is copied for each prompt. Reuse its
+                # encoded image features so later box edits only run the mask head.
+                key = (model_size, hashlib.sha256(source_bytes).digest(),
+                       tuple(preprocessing[name] for name in ("illumination", "denoise", "localContrast")))
+                predictor = prompt_cache.get(key)
+                if predictor is None:
+                    predictor = SAM2ImagePredictor(model)
+                    predictor.set_image(model_image)
+                    prompt_cache[key] = predictor
+                    if len(prompt_cache) > 2:
+                        _, evicted = prompt_cache.popitem(last=False)
+                        evicted.reset_predictor()
+                else:
+                    prompt_cache.move_to_end(key)
                 masks, scores, _ = predictor.predict(box=np.asarray(box, dtype=np.float32),
                                                      multimask_output=True)
                 best = int(np.argmax(scores))
@@ -89,7 +140,7 @@ def main():
                     points_per_batch=128, pred_iou_thresh=.70, stability_score_thresh=.90,
                     crop_n_layers=crops, crop_n_points_downscale_factor=1,
                     min_mask_region_area=0)
-                raw = generator.generate(image)
+                raw = generator.generate(model_image)
                 selected, _ = select_proposals(raw, (width, height), "fine", 200)
                 candidates = []
                 for index, item in enumerate(selected):
