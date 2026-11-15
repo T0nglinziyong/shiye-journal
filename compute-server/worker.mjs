@@ -45,7 +45,7 @@ async function notify(jobId){
       version:1,route:'/api/worker-notify',method:'POST',
       authorization:'Bearer '+env.SHIYE_GPU_WORKER_TOKEN,body:{jobId}
     });
-    const result=typeof response?.result==='string'?JSON.parse(response.result):response?.result;
+    const result=typeof response?.result==='string'?JSON.parse(response.result):(response?.result||response);
     if(result?.status!==200)throw Error('Notice was not accepted');
   }catch(error){console.warn('Completion notice unavailable; client backoff will recover:',error.message);}
 }
