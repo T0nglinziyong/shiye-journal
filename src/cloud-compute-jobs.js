@@ -1,6 +1,7 @@
 import {cloudClient,cloudStorage,requireCloudUser} from './cloud-session.js';
 import {cloudApiRequest} from './cloud-api-origin.js';
 import {boundedMap} from './bounded-map.js';
+import {decodeSamMaskBits} from './sam-mask-bits.js';
 
 const bucket=()=>cloudStorage().from('shiye-private');
 const uuid=/^[a-f0-9-]{36}$/i;
@@ -108,13 +109,21 @@ async function loadSegmentationResult(job){
     throw Error('识别结果路径与当前账号不匹配');
   const blob=unwrap(await bucket().download(job.result_path),'识别结果下载');
   const manifest=JSON.parse(await blob.text());
-  if(manifest.version!==1||!Array.isArray(manifest.objects)||manifest.objects.length>250||
+  if(![1,2].includes(manifest.version)||!Array.isArray(manifest.objects)||manifest.objects.length>250||
     !Number.isInteger(manifest.width)||!Number.isInteger(manifest.height))
     throw Error('识别结果格式无效');
   return boundedMap(manifest.objects,4,async object=>{
     const [x0,y0,x1,y1]=object.bbox_xyxy||[];
-    if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0||
-      !/^material-\d{3}\.png$/.test(object.file||''))throw Error('识别结果区域无效');
+    if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
+      throw Error('识别结果区域无效');
+    if(manifest.version===2){
+      const width=x1-x0,height=y1-y0,alpha=decodeSamMaskBits(object.maskBits,width,height);
+      return {x:x0/manifest.width,y:y0/manifest.height,w:width/manifest.width,h:height/manifest.height,
+        pixels:object.area,segmentationMethod:manifest.model,segmentationFailed:false,
+        segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
+        mask:{width,height,alpha,topologyPreserved:true}};
+    }
+    if(!/^material-\d{3}\.png$/.test(object.file||''))throw Error('识别结果区域无效');
     const maskBlob=unwrap(await bucket().download(prefix+object.file),'分割 Mask 下载');
     const bitmap=await createImageBitmap(maskBlob);
     if(bitmap.width!==x1-x0||bitmap.height!==y1-y0){bitmap.close?.();throw Error('识别结果尺寸无效');}
@@ -125,6 +134,7 @@ async function loadSegmentationResult(job){
     for(let i=0;i<alpha.length;i++)alpha[i]=rgba[i*4+3];
     return {x:x0/manifest.width,y:y0/manifest.height,w:canvas.width/manifest.width,h:canvas.height/manifest.height,
       pixels:object.area,segmentationMethod:manifest.model,segmentationFailed:false,
+      segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
       mask:{width:canvas.width,height:canvas.height,alpha,topologyPreserved:true}};
   });
 }

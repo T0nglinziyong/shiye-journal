@@ -51,6 +51,7 @@ import {ImportCandidateDialog} from './react-import-candidate-dialog.jsx';
 import {SettingsDiagnosticsDialog} from './react-ai-diagnostics.jsx';
 import {ReactSelectionTray} from './react-selection-tray.jsx';
 import {ManualBoxEditor} from './react-manual-box-editor.jsx';
+import {SamRegionOverlay} from './react-sam-region-overlay.jsx';
 import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName} from './material-taxonomy.js';
@@ -1890,7 +1891,8 @@ function ImportNavigation({state,onAction}){
 }
 
 export function ImportInspectionPage({state,format,onAction,onSettingChange,
-  onRecognitionSettingChange,onRemoveRecord,onCheckCandidate,onManualCancel,onManualDone,onManualError,onPaperChange}){
+  onRecognitionSettingChange,onRemoveRecord,onCheckCandidate,onManualCancel,onManualDone,onManualError,onPaperChange,
+  onSamViewChange,onSamMergeToggle,onSamRegionClick,onSamMerge}){
   const [,setRevision]=useState(0);
   useEffect(()=>{
     const refresh=()=>setRevision(value=>value+1);
@@ -1899,9 +1901,11 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
   },[]);
   const previewRef=useRef(null);
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
-  const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
   const candidates=state.importProcessing?[]:state.importCandidates||[];
   const busy=!!state.importProcessing;
+  const sam=String(state.importRecognition||state.preferences.recognition||'').startsWith('sam2-');
+  const showSam=!!(sam&&!manual&&!previewing&&!busy&&state.correctedURL&&candidates.length);
+  const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:showSam?state.correctedURL:state.importURL;
   const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} data-react-action="true" disabled={busy||disabled} onClick={()=>onAction(action)}>{label}</button>;
   return <><ImportNavigation state={state} onAction={onAction}/>
     <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
@@ -1916,11 +1920,21 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
       <div className="inspect-columns"><section className="panel import-preparation"><h2>照片 {state.importIndex+1}</h2><div className="photo-preparation-content">
         <h3>{previewing?'查看校正结果':snapshot?'调整页面边框':'选择画面范围'}</h3>
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
-        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
+        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showSam?<SamRegionOverlay previewRef={previewRef} regions={candidates}
+          mode={state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
+          onRegionClick={onSamRegionClick}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<div className="import-photo-tools">{previewing?<>{button('readjust-paper','重新调整')}{button('apply-paper-preview',state.paperPreviewApplied?'✓ 已应用校正':'✓ 使用校正结果',!!state.paperPreviewApplied)}</>:
           <>{button('rotate-photo','↻ 旋转 90°')}{button('preview-crop',snapshot?'□ 预览校正':'□ 预览校正')}</>}
           {!snapshot?button('manual-import-box','手动补框',false,'btn primary'):null}</div>}
+        {showSam?<div className="sam-review-tools" aria-label="分割结果显示方式">
+          <button className={state.importSamDisplayMode==='regions'?'active':''} type="button" onClick={()=>onSamViewChange('regions')}>彩色区域</button>
+          <button className={state.importSamDisplayMode!=='regions'?'active':''} type="button" onClick={()=>onSamViewChange('boxes')}>候选框</button>
+          <button className={state.importSamMerging?'active':''} type="button" onClick={onSamMergeToggle}>{state.importSamMerging?'取消合并':'合并区域'}</button>
+          {state.importSamMerging?<button type="button" disabled={(state.importSamMergeSelection?.size||0)<2}
+            onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button>:null}
+        </div>:null}
+        {showSam&&state.importSamMerging?<small>点选图中至少两个区域，再点“合并所选”。合并只合并已有透明 Mask。</small>:null}
       </div></section>
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}
@@ -1942,10 +1956,10 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
             <small>设为默认值会同步本批后续照片，并用于以后新导入的照片；之前的照片不变。</small></>:null}
         </div>{!snapshot?<><hr/><h3>候选素材 · {state.importProcessing?'识别中':candidates.length}</h3>
           {button('recognition-diagnostics','导出识别诊断',false,'btn mini')}
-          <div className="import-candidate-grid">{candidates.map((candidate,index)=><div key={index} className="candidate-choice"><button className={`import-candidate-tile ${state.importCandidateSelection?.has(index)?'selected':''}`}
+          <div className="import-candidate-grid">{candidates.map((candidate,index)=><div key={index} className="candidate-choice"><button className={`import-candidate-tile ${(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)?'selected':''}`}
             data-act="import-toggle-candidate" data-id={index} data-react-action="true"
-            aria-pressed={!!state.importCandidateSelection?.has(index)} onClick={()=>onAction('import-toggle-candidate',String(index))}><span className="candidate-thumb"><img src={state.importCandidateURLs?.[index]||''} alt=""/></span>
-            <span>素材 {index+1} {state.importCandidateSelection?.has(index)?'✓':'○'}</span><small>{state.importCandidateData?.[index]?.width?`${format(state.importCandidateData[index].width)} × ${format(state.importCandidateData[index].height)} mm`:'尺寸待检查'}</small></button>
+            aria-pressed={!!(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)} onClick={()=>state.importSamMerging?onSamRegionClick(index):onAction('import-toggle-candidate',String(index))}><span className="candidate-thumb"><img src={state.importCandidateURLs?.[index]||''} alt=""/></span>
+            <span>素材 {index+1} {(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)?'✓':'○'}</span><small>{state.importCandidateData?.[index]?.width?`${format(state.importCandidateData[index].width)} × ${format(state.importCandidateData[index].height)} mm`:'尺寸待检查'}</small></button>
             <button className="btn mini" data-import-check={index} disabled={busy} onClick={()=>onCheckCandidate(index)}>检查边缘</button></div>)}</div></>:null}</div>
         <button className="btn primary confirm-photo" data-act="import-confirm-photo" data-react-action="true" onClick={()=>onAction("import-confirm-photo")} disabled={busy}>→ 确认</button>
       </section></div>

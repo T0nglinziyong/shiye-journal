@@ -72,3 +72,27 @@ test('completed SAM masks download in bounded parallel order',async()=>{
     }
   }
 });
+
+test('packed SAM result restores transparent holes without per-object downloads',async()=>{
+  const manifest=new Blob([JSON.stringify({version:2,width:4,height:2,model:'sam2-small',
+    objects:[{bbox_xyxy:[0,0,4,2],area:7,maskBits:Buffer.from([0xef]).toString('base64')}]})]);
+  let downloads=0;
+  const old={window:globalThis.window,document:globalThis.document};
+  globalThis.window={addEventListener(){},removeEventListener(){}};
+  globalThis.document={addEventListener(){},removeEventListener(){}};
+  globalThis.__computeMock={storage:{from:()=>({download:async path=>{
+    downloads++;assert.ok(path.endsWith('/result.json'));return {data:manifest};
+  }})},client:{from:()=>({select:()=>({eq:()=>({single:async()=>({data:{id:jobID,status:'completed',
+    result_path:`${userID}/compute/${jobID}/result.json`}})})})})}};
+  try{
+    const {waitForSegmentationJob}=await moduleUnderTest();
+    const regions=await waitForSegmentationJob(jobID);
+    assert.equal(downloads,1);
+    assert.deepEqual([...regions[0].mask.alpha],[255,255,255,255,0,255,255,255]);
+  }finally{
+    delete globalThis.__computeMock;
+    for(const [key,value] of Object.entries(old)){
+      if(value===undefined)delete globalThis[key];else globalThis[key]=value;
+    }
+  }
+});
