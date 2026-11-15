@@ -1,0 +1,4 @@
+.sam-region-overlay{position:absolute;z-index:5;max-width:none!important;max-height:none!important;touch-action:manipulation;cursor:pointer}
+.sam-review-tools{display:flex;gap:6px;flex-wrap:wrap;padding-top:8px;flex:none}
+.sam-review-tools button{border:1px solid #b9c9bb;background:#fff;color:#315b42;border-radius:8px;padding:7px 10px;font-size:13px}
+.sam-review-tools button.active{background:#315b42;color:#fff}

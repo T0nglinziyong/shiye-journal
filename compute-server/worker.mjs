@@ -5,6 +5,8 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {boundedMap} from '../src/bounded-map.js';
+import {SamDaemonClient} from './sam-daemon-client.mjs';
 
 const env=process.env;
 const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',
@@ -13,6 +15,9 @@ for(const key of required)if(!env[key])throw Error('Missing worker configuration
 const workerID='shiye-compute-01',topic='shiye-job';
 const gateway=`https://${env.SHIYE_CLOUDBASE_ENV_ID}.api.tcloudbasegateway.com`;
 const root=path.dirname(fileURLToPath(import.meta.url));
+const samRoot=env.SHIYE_SAM_ROOT||path.resolve(root,'../../sam2.1-local');
+const samDaemon=new SamDaemonClient(samRoot);
+void samDaemon.start().catch(error=>console.warn('SAM warmup unavailable:',error.message));
 const uuid=/^[a-f0-9-]{36}$/i;
 const auth={'Authorization':'Bearer '+env.SHIYE_CLOUDBASE_SERVICE_KEY};
 let running=false,rerun=false,nextHint=null;
@@ -79,28 +84,55 @@ function runPipeline(input,output,job){
     child.on('close',code=>{clearTimeout(timer);code===0?resolve():reject(Error('Pipeline exit '+code));});
   });
 }
+async function runFastOrLegacy(input,output,job){
+  const p=job.parameters||{};
+  if(!['tiny','small','large'].includes(job.model?.replace(/^sam2-/,''))||
+    ![8,12,16,24,32].includes(p.pointsPerSide)||![0,1,2].includes(p.cropNLayers)||
+    !['coarse','balanced','fine'].includes(p.granularity)||!p.preprocessing||
+    ['illumination','denoise','localContrast'].some(key=>typeof p.preprocessing[key]!=='boolean'))
+    throw Error('Invalid model parameters');
+  if(!['material-recognition','material-segmentation'].includes(job.kind)||
+    (job.kind==='material-segmentation'&&(!Array.isArray(p.box)||p.box.length!==4||
+      !p.box.every(Number.isInteger)||p.box[0]<0||p.box[1]<0||p.box[2]<=p.box[0]||p.box[3]<=p.box[1])))
+    throw Error('Invalid SAM task kind or box');
+  if(Object.values(p.preprocessing).some(Boolean))return runPipeline(input,output,job);
+  try{
+    return await samDaemon.run({input,output,model:job.model.replace(/^sam2-/,''),
+      pointsPerSide:p.pointsPerSide,cropNLayers:p.cropNLayers,granularity:p.granularity,
+      ...(job.kind==='material-segmentation'?{box:p.box}:{})});
+  }catch(error){
+    console.warn('Resident SAM unavailable; retrying standalone pipeline:',error.message);
+    return runPipeline(input,output,job);
+  }
+}
 async function processJob(job){
   const prefix=`${job.user_id}/compute/${job.id}/`;
   if(!uuid.test(job.id)||!/^\d{10,22}$/.test(job.user_id)||job.input_path!==prefix+'input.png'||
     !Number.isInteger(job.attempts)||job.attempts<1||job.attempts>3)throw Error('Claimed job invalid');
   const temp=await mkdtemp(path.join(os.tmpdir(),'shiye-compute-'));
+  const started=performance.now(),stages={};
   try{
     const input=path.join(temp,'input.png'),output=path.join(temp,'output');
     await writeFile(input,await download(job.input_path));
-    await runPipeline(input,output,job);
+    stages.downloadMs=Math.round(performance.now()-started);
+    await runFastOrLegacy(input,output,job);
+    stages.modelMs=Math.round(performance.now()-started-stages.downloadMs);
     const materials=path.join(output,'materials');
     const manifest=JSON.parse(await readFile(path.join(materials,'result.json'),'utf8'));
-    if(!manifest.objects.length||manifest.objects.length>250)throw Error('Model produced no usable masks or too many objects');
-    for(const item of manifest.objects){
+    if(![1,2].includes(manifest.version)||!manifest.objects.length||manifest.objects.length>250)
+      throw Error('Model produced no usable masks or too many objects');
+    if(manifest.version===1)await boundedMap(manifest.objects,4,async item=>{
       if(!/^material-\d{3}\.png$/.test(item.file))throw Error('Output file invalid');
       await upload(prefix+item.file,await readFile(path.join(materials,item.file)),'image/png');
-    }
+    });
     await upload(prefix+'result.json',Buffer.from(JSON.stringify(manifest)),'application/json');
+    stages.uploadMs=Math.round(performance.now()-started-stages.downloadMs-stages.modelMs);
     const finished=await rpc('shiye_finish_compute_job_v1',{
       p_id:job.id,p_worker_id:workerID,p_attempt:job.attempts,p_result_path:prefix+'result.json'});
     if(finished?.status!=='completed')throw Error('Job completion not committed');
     await notify(job.id);
-    console.log('Completed job',job.id,'objects',manifest.objects.length);
+    console.log('Completed job',job.id,'objects',manifest.objects.length,'timing',JSON.stringify({
+      ...stages,totalMs:Math.round(performance.now()-started)}));
   }catch(error){
     console.error('Job failed',job.id,error.message);
     try{
