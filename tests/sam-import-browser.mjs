@@ -19,6 +19,7 @@ try{
     recognitionDefaultsVersion:4,recognition:'sam2-small',paperSize:'a4',orientation:'landscape',
     samPointsPerSide:24,samCropNLayers:1,samGranularity:'balanced'}))`);
   await command('Page.reload');await wait('.series-grid');
+  await evaluate('window.__SHIYE_UI_CLOUD__.state.samExtraCandidate=true');
   await click('.swift-tabs button:nth-child(2)','.asset-grid');
   await click('[data-act="import"]','.import-nav');
   const recognitionStart=performance.now();
@@ -49,13 +50,16 @@ try{
   const recognitionMs=Math.round(performance.now()-recognitionStart);
 
   await click('.sam-review-tools button:nth-child(1)');
+  const untouchedPreview=await evaluate(`document.querySelectorAll('.import-candidate-tile img')[2].src`);
   await click('.sam-review-tools button:nth-child(3)');
   await click('.candidate-choice:nth-child(1) .import-candidate-tile');
   await click('.candidate-choice:nth-child(2) .import-candidate-tile');
   await click('.sam-review-tools button:last-child');
   await wait('.import-candidate-tile',30000);
-  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),1,
-    'two printed regions on the same paper become one material');
+  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),2,
+    'two printed regions on the same paper become one material while the separate material remains');
+  assert.equal(await evaluate(`document.querySelector('.import-candidate-tile img').src`),untouchedPreview,
+    'merging must retain the unchanged material preview');
 
   await click('[data-act="manual-import-box"]','.multi-box-editor');
   const box=await evaluate(`(()=>{const r=document.querySelector('.multi-box-editor .import-region').getBoundingClientRect();
@@ -73,10 +77,10 @@ try{
   while(Date.now()<nextDeadline){
     const visible=await evaluate(`(()=>({active:document.querySelector('.queue-item.active')?.textContent||'',
       count:document.querySelectorAll('.import-candidate-tile').length}))()`);
-    if(visible.active.includes('照片 2')&&visible.count===2)break;
+    if(visible.active.includes('照片 2')&&visible.count===3)break;
     await sleep(50);
   }
-  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),2);
+  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),3);
   const nextOpenMs=Math.round(performance.now()-nextOpenAt);
   assert.ok(nextOpenMs<4000,`a prefetched photo should open with its review thumbnails ready (${nextOpenMs} ms)`);
   await click('[data-act="import-confirm-photo"]','.review-candidates');
