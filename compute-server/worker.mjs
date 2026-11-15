@@ -5,7 +5,6 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {boundedMap} from '../src/bounded-map.js';
 
 const env=process.env;
 const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',
@@ -85,28 +84,23 @@ async function processJob(job){
   if(!uuid.test(job.id)||!/^\d{10,22}$/.test(job.user_id)||job.input_path!==prefix+'input.png'||
     !Number.isInteger(job.attempts)||job.attempts<1||job.attempts>3)throw Error('Claimed job invalid');
   const temp=await mkdtemp(path.join(os.tmpdir(),'shiye-compute-'));
-  const started=performance.now(),stages={};
   try{
     const input=path.join(temp,'input.png'),output=path.join(temp,'output');
     await writeFile(input,await download(job.input_path));
-    stages.downloadMs=Math.round(performance.now()-started);
     await runPipeline(input,output,job);
-    stages.modelMs=Math.round(performance.now()-started-stages.downloadMs);
     const materials=path.join(output,'materials');
     const manifest=JSON.parse(await readFile(path.join(materials,'result.json'),'utf8'));
     if(!manifest.objects.length||manifest.objects.length>250)throw Error('Model produced no usable masks or too many objects');
-    await boundedMap(manifest.objects,4,async item=>{
+    for(const item of manifest.objects){
       if(!/^material-\d{3}\.png$/.test(item.file))throw Error('Output file invalid');
       await upload(prefix+item.file,await readFile(path.join(materials,item.file)),'image/png');
-    });
+    }
     await upload(prefix+'result.json',Buffer.from(JSON.stringify(manifest)),'application/json');
-    stages.uploadMs=Math.round(performance.now()-started-stages.downloadMs-stages.modelMs);
     const finished=await rpc('shiye_finish_compute_job_v1',{
       p_id:job.id,p_worker_id:workerID,p_attempt:job.attempts,p_result_path:prefix+'result.json'});
     if(finished?.status!=='completed')throw Error('Job completion not committed');
     await notify(job.id);
-    console.log('Completed job',job.id,'objects',manifest.objects.length,'timing',JSON.stringify({
-      ...stages,totalMs:Math.round(performance.now()-started)}));
+    console.log('Completed job',job.id,'objects',manifest.objects.length);
   }catch(error){
     console.error('Job failed',job.id,error.message);
     try{
