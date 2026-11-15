@@ -145,4 +145,7 @@ client.on('message',(incoming,bytes)=>{
   catch{/* Invalid notifications do not affect authoritative database state. */}
 });
 client.on('error',error=>console.error('MQTT connection unavailable:',error.message));
-setInterval(()=>void drain(),30000).unref();
+// Keep the durable queue scan alive even if broker authentication or the
+// connection fails. MQTT is only a low-latency wake-up hint.
+setInterval(()=>void drain(),30000);
+void drain();
