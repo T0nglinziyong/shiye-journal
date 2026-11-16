@@ -2992,7 +2992,10 @@ async function prefetchImportRecord(rec,settings,revision,signal){
         onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;},
         onAnalysis:analysis=>{if(valid())rec.recognitionAnalysis=analysis;}});if(!valid())return;
     }
-    candidates=filterAutomaticMaterialBoxes(candidates,{paperWidthMM:pw,paperHeightMM:ph,enabled:settings.paperSize!=='none'});
+    // The hybrid model already applies its own proposal policy. A second
+    // physical-size cutoff here silently hid narrow black-card materials.
+    if(!isComputeRecognition(settings.recognition))candidates=filterAutomaticMaterialBoxes(candidates,
+      {paperWidthMM:pw,paperHeightMM:ph,enabled:settings.paperSize!=='none'});
     // Build compact review thumbnails while this page is in the background.
     // Waiting until it is opened made a pre-recognized 21-item page take eight
     // more seconds to inspect on the live site. Final save still re-extracts
@@ -3132,15 +3135,22 @@ async function rotateImportPhoto(){
     computeJobId:null,computeJobBitmap:null,computeSourceJobId:null,computeSourceBitmap:null,
     computeInputBlob:null,computeInputBitmap:null,computeBackgrounds:[],recognitionAnalysis:null,
     backgroundDetected:false});
-  rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
-  state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();
+  rec.originalFile||=rec.file;
+  const rotatedName=rec.file.name.replace(/\.[^.]+$/, '')+'.png';
+  rec.file=new File([blob],rotatedName,{type:'image/png'});
+  const oldURL=rec.url;rec.url=URL.createObjectURL(blob);
+  state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;
   if(state.paperOrientation==='landscape')state.paperOrientation='portrait';
   else if(state.paperOrientation==='portrait')state.paperOrientation='landscape';
-  state.importBitmap=await decodeRecognitionImage(rec.file,{research:(state.preferences.candidateDiscovery||'unified')==='unified'});
-  rec.bitmap=state.importBitmap;rec.recognitionDecodeMode=(state.preferences.candidateDiscovery||'unified')==='unified'?'research':'legacy';
+  state.importBitmap=canvas;rec.bitmap=canvas;
+  rec.recognitionDecodeMode=(state.preferences.candidateDiscovery||'unified')==='unified'?'research':'legacy';
   state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
   rec.recognitionAnalysis=null;rec.computeRawCandidates=null;rec.computeBackgrounds=[];
-  saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
+  saveActiveImportRecord();
+  bitmap.close?.();
+  if(bitmap instanceof HTMLCanvasElement){bitmap.width=0;bitmap.height=0;}
+  try{await switchImportRecord(state.importIndex,true);}
+  finally{URL.revokeObjectURL(oldURL);}
 }
 async function previewCorrection(){
   if(!state.importBitmap)return;discardPaperPreview();const [pw,ph]=paperDimensions();
@@ -3179,7 +3189,8 @@ async function mergeSelectedImportRegions(){
   const selected=[...(state.importSamMergeSelection||[])];
   if(selected.length<2){toast('请至少点选两个彩色区域');return;}
   const record=state.importRecords[state.importIndex];
-  const merged=mergeSamRegions(state.importCandidates,selected,record.computeBackgrounds||[]);
+  const merged=mergeSamRegions(state.importCandidates,selected,record.computeBackgrounds||[],
+    state.correctedBitmap||state.importBitmap);
   const excluded=new Set(merged.absorbedIndices||selected);
   const regions=state.importCandidates.filter((_,index)=>!excluded.has(index));
   regions.push(merged);
@@ -3339,7 +3350,8 @@ async function previewCrop(){
   if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
   if(regions.length&&regions.every(region=>!region.mask?.alpha?.length))
     throw Error('素材边缘分割未完成，请联网刷新后重试识别；当前候选框尚未生成可用素材。');
-  regions=filterAutomaticMaterialBoxes(regions,{paperWidthMM:pw,paperHeightMM:ph,enabled:state.paperSize!=='none'});
+  if(!isComputeRecognition(selectedRecognition))regions=filterAutomaticMaterialBoxes(regions,
+    {paperWidthMM:pw,paperHeightMM:ph,enabled:state.paperSize!=='none'});
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
   if(await refreshImportCandidates(regions)){

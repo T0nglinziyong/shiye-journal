@@ -5,14 +5,18 @@ const color=index=>{
   return `hsl(${hue} 78% 46%)`;
 };
 
-export function SamRegionOverlay({previewRef,regions,mode,selected,onRegionClick}){
+export function SamRegionOverlay({previewRef,regions,frameSize,mode,selected,onRegionClick}){
   const canvasRef=useRef(null);
   const selectionKey=[...(selected||[])].sort((a,b)=>a-b).join(',');
   useLayoutEffect(()=>{
     const host=previewRef.current,canvas=canvasRef.current;
     if(!host||!canvas||!regions.length)return;
-    const frameWidth=regions[0].segmentationFrameWidth||1024;
-    const frameHeight=regions[0].segmentationFrameHeight||Math.round(frameWidth*host.clientHeight/host.clientWidth);
+    const sourceWidth=frameSize?.width||regions[0].segmentationFrameWidth||1024;
+    const sourceHeight=frameSize?.height||regions[0].segmentationFrameHeight||
+      Math.round(sourceWidth*host.clientHeight/host.clientWidth);
+    const frameScale=Math.min(1,1200/Math.max(sourceWidth,sourceHeight));
+    const frameWidth=Math.max(1,Math.round(sourceWidth*frameScale));
+    const frameHeight=Math.max(1,Math.round(sourceHeight*frameScale));
     const paint=()=>{
       const width=host.clientWidth,height=host.clientHeight;
       if(!width||!height)return;
@@ -46,7 +50,7 @@ export function SamRegionOverlay({previewRef,regions,mode,selected,onRegionClick
     };
     paint();const observer=new ResizeObserver(paint);observer.observe(host);
     return ()=>observer.disconnect();
-  },[previewRef,regions,mode,selectionKey]);
+  },[previewRef,regions,frameSize,mode,selectionKey]);
   const click=event=>{
     const rect=event.currentTarget.getBoundingClientRect();
     const x=(event.clientX-rect.left)*event.currentTarget.width/rect.width;

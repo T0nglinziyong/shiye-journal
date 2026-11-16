@@ -1,10 +1,26 @@
 // A group is one physical paper/card, including the background between its
 // printed elements. Prefer a SAM carrier proposal over a rectangular fallback.
-export function mergeSamRegions(regions,indices,backgrounds=[]){
+export function mergeSamRegions(regions,indices,backgrounds=[],frame=null){
   const selected=[...new Set(indices)].sort((a,b)=>a-b),chosen=selected.map(index=>regions[index]);
   if(chosen.length<2||chosen.some(region=>!region?.mask?.alpha))throw Error('请至少选择两个已分割区域');
   const width=chosen[0].segmentationFrameWidth,height=chosen[0].segmentationFrameHeight;
-  if(!Number.isInteger(width)||!Number.isInteger(height)||chosen.some(region=>
+  if(!Number.isInteger(width)||!Number.isInteger(height)){
+    // Local CV masks use their own analysis raster. A merged material includes
+    // the shared carrier between selections, so use one enclosing background
+    // frame in the displayed image's coordinate system.
+    const fw=frame?.width||1024,fh=frame?.height||1024;
+    const x0=Math.max(0,Math.floor(Math.min(...chosen.map(item=>item.x))*fw)-Math.round(fw*.01));
+    const y0=Math.max(0,Math.floor(Math.min(...chosen.map(item=>item.y))*fh)-Math.round(fh*.01));
+    const x1=Math.min(fw,Math.ceil(Math.max(...chosen.map(item=>item.x+item.w))*fw)+Math.round(fw*.01));
+    const y1=Math.min(fh,Math.ceil(Math.max(...chosen.map(item=>item.y+item.h))*fh)+Math.round(fh*.01));
+    const outWidth=x1-x0,outHeight=y1-y0,alpha=new Uint8Array(outWidth*outHeight).fill(255);
+    return {x:x0/fw,y:y0/fh,w:outWidth/fw,h:outHeight/fh,pixels:alpha.length,
+      segmentationMethod:chosen[0].segmentationMethod,segmentationFailed:false,
+      segmentationFrameWidth:fw,segmentationFrameHeight:fh,
+      mask:{width:outWidth,height:outHeight,alpha,topologyPreserved:true},
+      absorbedIndices:selected,mergeBasis:'enclosing-background',manuallyMerged:true};
+  }
+  if(chosen.some(region=>
     region.segmentationFrameWidth!==width||region.segmentationFrameHeight!==height))
     throw Error('所选区域不在同一张分割图上');
   const box=region=>({x:Math.round(region.x*width),y:Math.round(region.y*height),
