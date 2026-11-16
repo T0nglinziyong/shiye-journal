@@ -1920,7 +1920,7 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
       <div className="inspect-columns"><section className="panel import-preparation"><h2>照片 {state.importIndex+1}</h2><div className="photo-preparation-content">
         <div className="import-preparation-heading"><h3>{previewing?'查看校正结果':state.editingPaperCorners||snapshot?'调整页面边框':'选择画面范围'}</h3>
           <div className="import-view-actions">
-            <button type="button" data-act="rotate-photo" data-react-action="true" disabled={busy||manual} onClick={()=>onAction('rotate-photo')} aria-label="旋转 90 度" title="旋转 90 度">↻ <span>旋转</span></button>
+            <button type="button" data-act="rotate-photo" data-react-action="true" disabled={busy||manual} onClick={()=>onAction('rotate-photo')} aria-label="旋转 90 度" title="旋转 90 度">↻ <span>旋转 90°</span></button>
             {sam?<div className="import-view-switch" aria-label="切换分割视图">
               <button type="button" className={state.importSamDisplayMode!=='regions'?'active':''} disabled={!showSam} aria-pressed={state.importSamDisplayMode!=='regions'} onClick={()=>onSamViewChange('boxes')}>候选框</button>
               <button type="button" className={state.importSamDisplayMode==='regions'?'active':''} disabled={!showSam} aria-pressed={state.importSamDisplayMode==='regions'} onClick={()=>onSamViewChange('regions')}>彩色区域</button>
