@@ -63,6 +63,7 @@ def main():
     from proposal_policy import largest_connected_component, select_proposals
     from postprocess_results import (find_composite_carriers, inside,
                                      page_edge_artifact, merge_groups)
+    from fastsam_hybrid import FastSamHybrid, smooth_mask
 
     models = {
         "tiny": ("sam2.1_hiera_tiny.pt", "configs/sam2.1/sam2.1_hiera_t.yaml"),
@@ -71,6 +72,7 @@ def main():
     }
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cache = {}
+    fast_hybrid = None
     prompt_cache = OrderedDict()
     small_checkpoint, small_config = models["small"]
     cache["small"] = build_sam2(small_config, str(root / "checkpoints" / small_checkpoint),
@@ -80,6 +82,9 @@ def main():
     def execute(job):
         started = time.perf_counter()
         model_size = job["model"]
+        hybrid = model_size == "fastsam-sam2-small"
+        if hybrid:
+            model_size = "small"
         if model_size not in models:
             raise ValueError("Unsupported SAM model")
         checkpoint, config = models[model_size]
@@ -127,9 +132,17 @@ def main():
                                                      multimask_output=True)
                 best = int(np.argmax(scores))
                 mask, _, _ = largest_connected_component(masks[best])
+                if hybrid:
+                    mask = smooth_mask(mask)
                 candidates = [{"segmentation": mask, "predicted_iou": float(scores[best]),
                                "container_id": None, "source_file": "prompt"}]
                 groups = [candidates] if np.any(mask) else []
+            elif hybrid:
+                nonlocal fast_hybrid
+                if fast_hybrid is None:
+                    fast_hybrid = FastSamHybrid(root / "checkpoints" / "FastSAM-s.pt")
+                masks, background_masks = fast_hybrid.segment(model_image, model, device)
+                groups = [[{"segmentation": mask}] for mask in masks]
             else:
                 points = int(job["pointsPerSide"])
                 crops = int(job["cropNLayers"])
@@ -203,7 +216,8 @@ def main():
         if len(objects) > 250:
             raise ValueError("Too many SAM materials")
         manifest = {"version": 2, "width": width, "height": height,
-                    "model": "sam2-" + model_size, "objects": objects,
+                    "model": "fastsam-sam2-small" if hybrid else "sam2-" + model_size,
+                    "objects": objects,
                     "backgrounds": backgrounds}
         (materials / "result.json").write_text(json.dumps(manifest))
         return {"objects": len(objects), "milliseconds": round((time.perf_counter() - started) * 1000)}

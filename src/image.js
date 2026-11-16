@@ -99,9 +99,18 @@ export function softenOutputAlpha(alpha,width,height){
   }
   return result;
 }
+export function candidateCropBounds(bitmapWidth,bitmapHeight,paper,region){
+  const left=Math.max(0,Math.min(bitmapWidth-1,Math.round(bitmapWidth*(paper.x+region.x*paper.w))));
+  const top=Math.max(0,Math.min(bitmapHeight-1,Math.round(bitmapHeight*(paper.y+region.y*paper.h))));
+  // Round the two edges in the same coordinate system. Rounding the start
+  // and the width independently can shift the right/bottom edge by one pixel
+  // when a 1024px model mask is placed on a high-resolution rectification.
+  const right=Math.max(left+1,Math.min(bitmapWidth,Math.round(bitmapWidth*(paper.x+(region.x+region.w)*paper.w))));
+  const bottom=Math.max(top+1,Math.min(bitmapHeight,Math.round(bitmapHeight*(paper.y+(region.y+region.h)*paper.h))));
+  return {x:left,y:top,w:right-left,h:bottom-top};
+}
 export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={}){
-  const x=Math.max(0,Math.round(bitmap.width*(paper.x+region.x*paper.w))),y=Math.max(0,Math.round(bitmap.height*(paper.y+region.y*paper.h)));
-  const w=Math.min(bitmap.width-x,Math.max(1,Math.round(bitmap.width*paper.w*region.w))),h=Math.min(bitmap.height-y,Math.max(1,Math.round(bitmap.height*paper.h*region.h)));
+  const {x,y,w,h}=candidateCropBounds(bitmap.width,bitmap.height,paper,region);
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d');
   ctx.drawImage(bitmap,x,y,w,h,0,0,w,h);
@@ -109,7 +118,10 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
   if(region.mask&&!raw){
     const m=region.mask,mask=document.createElement('canvas');mask.width=m.width;mask.height=m.height;
     const mc=mask.getContext('2d'),frame=mc.createImageData(m.width,m.height);
-    const outputAlpha=region.shapeModel?m.alpha:softenOutputAlpha(m.alpha,m.width,m.height);
+    const modelMask=/^(sam2-|fastsam|yoloe)/.test(region.segmentationMethod||'');
+    // SAM masks are already the model's final topology. Smoothing their
+    // 1024px boundary here and then scaling it to 4K made a wide fuzzy edge.
+    const outputAlpha=region.shapeModel||modelMask?m.alpha:softenOutputAlpha(m.alpha,m.width,m.height);
     for(let i=0;i<outputAlpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=outputAlpha[i];}
     mc.putImageData(frame,0,0);
     // The pixel alpha is authoritative. Rebuilding the cutout from only the
@@ -121,7 +133,7 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
     // The authoritative segmented mask, contour, identity and dimensions stay
     // byte-for-byte intact. In particular, no morphological shape edits run.
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-    ctx.filter='blur(0.45px)';
+    ctx.filter=modelMask?'none':'blur(0.45px)';
     ctx.drawImage(mask,0,0,w,h);
     ctx.filter='none';ctx.globalCompositeOperation='source-over';
   }

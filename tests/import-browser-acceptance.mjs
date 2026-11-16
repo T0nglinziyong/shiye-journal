@@ -25,7 +25,10 @@ try {
     if(w>=820){const rect=await evaluate('(()=>{const p=document.querySelector(".import-preparation").getBoundingClientRect(),i=document.querySelector(".import-inspector").getBoundingClientRect(),buttons=[document.querySelector(".import-photo-tools .btn"),document.querySelector(".confirm-photo")].map(e=>e.getBoundingClientRect().height);return {bottom:p.bottom-i.bottom,buttons};})()');assert.ok(Math.abs(rect.bottom)<1);assert.ok(Math.abs(rect.buttons[0]-rect.buttons[1])<1);}
     const before=await evaluate('document.querySelectorAll(".import-candidate-tile").length');await click('[data-act="preview-crop"]','[data-act="readjust-paper"]');await screenshot('correction-preview',w,h);assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),before);assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),0);await click('[data-act="readjust-paper"]','.paper-handle');
   }
-  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await click('[data-act="manual-import-box"]','.multi-box-editor');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
+  await click('[data-act="apply-paper-preview"]','[data-act="manual-import-box"]');
+  await click('[data-act="manual-import-box"]','.multi-box-editor');
   for(const [w,h] of [[390,844],[1024,768],[390,844]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(100);
     const position=await evaluate('(()=>{const base=document.querySelector("#crop-preview"),image=base.querySelector("img"),overlay=base.querySelector(".multi-box-editor"),a=base.getBoundingClientRect(),b=overlay.getBoundingClientRect(),scale=Math.min(base.clientWidth/image.naturalWidth,base.clientHeight/image.naturalHeight);return {x:b.left-a.left,y:b.top-a.top,w:b.width,h:b.height,expectedX:(base.clientWidth-image.naturalWidth*scale)/2,expectedY:(base.clientHeight-image.naturalHeight*scale)/2,expectedW:image.naturalWidth*scale,expectedH:image.naturalHeight*scale,regions:overlay.querySelectorAll(".import-region").length};})()');

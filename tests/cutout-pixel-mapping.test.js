@@ -4,6 +4,8 @@ import {rectifiedPixelSize} from '../src/perspective.js';
 import {fittedSize,resampleMask,scaleFramePlacement} from '../src/cutout-edit-resolution.js';
 import {fullResolutionPlacement} from '../src/cutout-full-resolution.js';
 import {imageTier} from '../src/image-variants.js';
+import {candidateCropBounds,cropBitmap} from '../src/image.js';
+import {createCanvas,loadImage} from 'canvas';
 
 test('A4 correction never exceeds the longest-edge 4096px limit',()=>{
  const a=rectifiedPixelSize(3024,4032,4096,210/297);
@@ -47,4 +49,34 @@ test('small edited alpha scales without emitting new high-resolution mask',()=>{
  assert.equal(resized.alpha[0],0);
  assert.equal(resized.alpha[15],255);
  assert.ok(resized.alpha.every(a=>a>=0&&a<=255));
+});
+
+test('SAM candidate crop uses matching high-resolution endpoints',()=>{
+ const region={x:313/1024,y:217/724,w:126/1024,h:81/724};
+ const bounds=candidateCropBounds(4032,2851,{x:0,y:0,w:1,h:1},region);
+ assert.equal(bounds.x,Math.round(4032*313/1024));
+ assert.equal(bounds.x+bounds.w,Math.round(4032*439/1024));
+ assert.equal(bounds.y+bounds.h,Math.round(2851*298/724));
+ assert.equal(bounds.w,497);
+});
+
+test('SAM export does not soften its low-resolution mask before projection',async()=>{
+ const before=globalThis.document;
+ globalThis.document={createElement:()=>{
+   const canvas=createCanvas(1,1);
+   canvas.toBlob=callback=>callback(new Blob([canvas.toBuffer('image/png')],{type:'image/png'}));
+   return canvas;
+ }};
+ try{
+   const source=createCanvas(8,8);
+   source.getContext('2d').fillRect(0,0,8,8);
+   const mask={width:1,height:1,alpha:new Uint8Array([255]),topologyPreserved:true};
+   const result=await cropBitmap(source,{x:0,y:0,w:1,h:1},
+     {x:0,y:0,w:1,h:1,segmentationMethod:'sam2-small',mask});
+   const decoded=await loadImage(Buffer.from(await result.arrayBuffer()));
+   const target=createCanvas(8,8),ctx=target.getContext('2d');ctx.drawImage(decoded,0,0);
+   const rgba=ctx.getImageData(0,0,8,8).data;
+   assert.equal(rgba[(4*8+4)*4+3],255);
+   assert.equal(mask.alpha[0],255);
+ }finally{globalThis.document=before;}
 });

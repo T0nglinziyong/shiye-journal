@@ -18,7 +18,7 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(typeof recognitionProfile('hybrid',1200).refineCandidates,'function');
   assert.deepEqual(recognitionPixelOptions.map(([value])=>value),[900,1200,1600]);
   assert.deepEqual(recognitionOptions.map(([id])=>id),['auto','morphgac','physical','grabcut','hybrid',
-    'sam2-tiny','sam2-small','sam2-large']);
+    'fastsam-sam2-small','sam2-tiny','sam2-small','sam2-large']);
   assert.deepEqual(candidateDiscoveryOptions.map(([id])=>id),['legacy','physical','unified']);
   assert.equal(candidateDiscoveryAllowed('physical'),true);
   assert.equal(candidateDiscoveryAllowed('random'),false);

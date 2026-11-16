@@ -39,6 +39,19 @@ test('manual SAM box reuses the owner-scoped corrected page in CloudBase',async(
   }finally{delete globalThis.__computeMock;}
 });
 
+test('hybrid method uses the existing guarded small-model job with an explicit algorithm',async()=>{
+  const calls=[];
+  globalThis.__computeMock={storage:{from:()=>({
+    upload:async(...args)=>{calls.push(['upload',...args]);return {data:{path:args[0]}};}
+  })},client:{rpc:async(name,args)=>{calls.push(['rpc',name,args]);return {data:{id:args.p_id,status:'queued'}};}}};
+  try{
+    const {submitSegmentationJob}=await moduleUnderTest();
+    await submitSegmentationJob(new Blob(['page'],{type:'image/png'}),{model:'fastsam-sam2-small'});
+    assert.equal(calls[1][2].p_model,'sam2-small');
+    assert.equal(calls[1][2].p_parameters.algorithm,'fastsam-sam2');
+  }finally{delete globalThis.__computeMock;}
+});
+
 test('completed SAM masks download in bounded parallel order',async()=>{
   const canvas=createCanvas(2,2),ctx=canvas.getContext('2d');
   ctx.fillStyle='rgba(255,0,0,1)';ctx.fillRect(0,0,2,2);

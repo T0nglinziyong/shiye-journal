@@ -10,6 +10,8 @@ test('automatic A4 corner detection uses the selected physical width/height rati
 
 test('edited A4 corners cannot silently reuse material cutouts from old rectification',()=>{
   const app=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
-  assert.match(app,/record\?\.appliedCorners!==JSON\.stringify\(state\.paperCorners\)/);
-  assert.match(app,/纸张四角已调整/);
+  assert.match(app,/record\.appliedCorners!==JSON\.stringify\(state\.paperCorners\)/);
+  assert.match(app,/Math\.abs\(actual-pw\/ph\)<\.003/);
+  assert.match(app,/!correctionMatches\(record\)/);
+  assert.match(app,/纸张边框或方向已调整/);
 });

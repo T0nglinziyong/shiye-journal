@@ -86,6 +86,9 @@ function runPipeline(input,output,job){
 }
 async function runFastOrLegacy(input,output,job){
   const p=job.parameters||{};
+  const hybrid=p.algorithm==='fastsam-sam2';
+  if(p.algorithm!==undefined&&!hybrid)throw Error('Unsupported segmentation algorithm');
+  if(hybrid&&job.model!=='sam2-small')throw Error('Hybrid requires SAM 2.1 Small');
   if(!['tiny','small','large'].includes(job.model?.replace(/^sam2-/,''))||
     ![8,12,16,24,32].includes(p.pointsPerSide)||![0,1,2].includes(p.cropNLayers)||
     !['coarse','balanced','fine'].includes(p.granularity)||!p.preprocessing||
@@ -96,11 +99,12 @@ async function runFastOrLegacy(input,output,job){
       !p.box.every(Number.isInteger)||p.box[0]<0||p.box[1]<0||p.box[2]<=p.box[0]||p.box[3]<=p.box[1])))
     throw Error('Invalid SAM task kind or box');
   try{
-    return await samDaemon.run({input,output,model:job.model.replace(/^sam2-/,''),
+    return await samDaemon.run({input,output,model:hybrid?'fastsam-sam2-small':job.model.replace(/^sam2-/,''),
       pointsPerSide:p.pointsPerSide,cropNLayers:p.cropNLayers,granularity:p.granularity,
       preprocessing:p.preprocessing,
       ...(job.kind==='material-segmentation'?{box:p.box}:{})});
   }catch(error){
+    if(hybrid)throw error;
     console.warn('Resident SAM unavailable; retrying standalone pipeline:',error.message);
     return runPipeline(input,output,job);
   }

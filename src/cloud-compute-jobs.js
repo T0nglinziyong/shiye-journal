@@ -17,7 +17,7 @@ export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=2
   preprocessing={illumination:false,denoise:false,localContrast:false}}={}){
   if((!sourceJobId&&!file(correctedBlob))||
     (sourceJobId&&(!uuid.test(sourceJobId)||kind!=='material-segmentation'))||
-    !['sam2-tiny','sam2-small','sam2-large'].includes(model)||
+    !['fastsam-sam2-small','sam2-tiny','sam2-small','sam2-large'].includes(model)||
     ![8,12,16,24,32].includes(Number(pointsPerSide))||![0,1,2].includes(Number(cropNLayers))||
     !['coarse','balanced','fine'].includes(granularity)||
     !['material-recognition','material-segmentation'].includes(kind)||
@@ -33,11 +33,12 @@ export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=2
     unwrap(await bucket().copy(`${user.id}/compute/${sourceJobId}/input.png`,inputPath,{upsert:false}),'识别输入复制');
   }else unwrap(await bucket().upload(inputPath,correctedBlob,{contentType:correctedBlob.type||'image/png',upsert:false}),'识别输入上传');
   const parameters={pointsPerSide:Number(pointsPerSide),cropNLayers:Number(cropNLayers),granularity,
+    ...(model==='fastsam-sam2-small'?{algorithm:'fastsam-sam2'}:{}),
     preprocessing:{illumination:preprocessing.illumination,denoise:preprocessing.denoise,
       localContrast:preprocessing.localContrast},
     ...(kind==='material-segmentation'?{box}:{})};
   const result=await cloudClient().rpc('shiye_enqueue_compute_job_v1',{
-    p_id:id,p_request_id:id,p_kind:kind,p_model:model,
+    p_id:id,p_request_id:id,p_kind:kind,p_model:model==='fastsam-sam2-small'?'sam2-small':model,
     p_parameters:parameters,p_input_path:inputPath
   });
   unwrap(result,'识别任务提交');

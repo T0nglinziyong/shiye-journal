@@ -22,7 +22,7 @@ import {seriesContentsModel} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
 import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
-  recognitionMethodDetails} from './recognition-profiles.js';
+  recognitionMethodDetails,isComputeRecognition} from './recognition-profiles.js';
 import {matchingViewModel} from './matching-view.js';
 import {styleGroups,purposeGroups,matchingContentOptions,matchingIntentPlaceholder} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
@@ -1616,20 +1616,20 @@ export function SettingsRecognitionPage({preferences,onAction}){
     ['custom','自定义尺寸']];
   const method=recognitionMethodDetails.find(x=>x.id===recognitionMethod);
   return <SettingsDetailShell title="导入与识别" kind="settingsRecognition" onAction={onAction}>
-    <SettingsGroup title="素材识别方法" description={recognitionMethod?.startsWith('sam2-')?'先矫正整页纸张，再由拾页计算服务器生成候选框与透明 Mask。':'候选框算法决定素材数量与位置；Mask 算法再逐件细化透明边缘。'}>
-      {!recognitionMethod?.startsWith('sam2-')?<SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'unified'}
+    <SettingsGroup title="素材识别方法" description={isComputeRecognition(recognitionMethod)?'先矫正整页纸张，再由拾页计算服务器生成候选框与透明 Mask。':'候选框算法决定素材数量与位置；Mask 算法再逐件细化透明边缘。'}>
+      {!isComputeRecognition(recognitionMethod)?<SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'unified'}
         choices={candidateDiscoveryOptions} help="默认“统一候选 + 自动”为新研究算法；选择“原版前景连通区域 + MorphGAC”可回到旧算法。"/>:null}
       <label>识别方法<select id="setting-recognition" value={recognitionMethod}
         onChange={event=>setRecognitionMethod(event.target.value)}>
         {recognitionOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}
       </select><small data-recognition-method-note="" className="setting-help">{method?.description||'推荐使用默认 MorphGAC。'}</small></label>
-      {recognitionMethod?.startsWith('sam2-')?<>
-        <SettingsSelect id="setting-sam-points" label="SAM 采样密度" value={p.samPointsPerSide||24}
+      {isComputeRecognition(recognitionMethod)?<>
+        {recognitionMethod.startsWith('sam2-')?<><SettingsSelect id="setting-sam-points" label="SAM 采样密度" value={p.samPointsPerSide||24}
           choices={[[8,'8 · 最快'],[12,'12'],[16,'16'],[24,'24 · 推荐'],[32,'32 · 更细']]}/>
         <SettingsSelect id="setting-sam-crops" label="SAM 裁剪层数" value={p.samCropNLayers??1}
-          choices={[[0,'0 · 整页'],[1,'1 · 局部补检'],[2,'2 · 最细、最慢']]}/>
-        <SettingsSelect id="setting-sam-granularity" label="素材合并颗粒度" value={p.samGranularity||'balanced'}
-          choices={[["coarse","较粗"],["balanced","均衡"],["fine","最细"]]}/>
+          choices={[[0,'0 · 整页'],[1,'1 · 局部补检'],[2,'2 · 最细、最慢']]}/></>:null}
+        {recognitionMethod.startsWith('sam2-')?<SettingsSelect id="setting-sam-granularity" label="素材合并颗粒度" value={p.samGranularity||'balanced'}
+          choices={[["coarse","较粗"],["balanced","均衡"],["fine","最细"]]}/>:null}
       </>:null}
     </SettingsGroup>
     <SettingsGroup title="1 · 纸张校正" description="检测纸张四角并透视拉正，为候选定位和真实尺寸提供坐标。">
@@ -1640,24 +1640,24 @@ export function SettingsRecognitionPage({preferences,onAction}){
       <SettingsToggle id="setting-whole-paper" label="未检测到纸边时使用整张图" checked={p.wholePaper}
         help="未找到纸边时按整张图估算尺寸；不会生成透视校正。"/>
     </SettingsGroup>
-    <SettingsGroup title="2 · 素材数量与候选框" description={recognitionMethod?.startsWith('sam2-')?'SAM 使用整张矫正图生成候选；上方的采样密度、裁剪层数和合并颗粒度控制结果。':'统一候选的整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。有纸张尺寸时，自动结果过滤短边小于 9 mm 的实体，手动补框不受限。'}>
-      {!recognitionMethod?.startsWith('sam2-')?<SettingsToggle id="setting-merge-carrier" label="合并共同载体" checked={p.mergeSharedCarrier!==false}
+    <SettingsGroup title="2 · 素材数量与候选框" description={recognitionMethod==='fastsam-sam2-small'?'快速分割一次处理整张矫正图；黑卡作为载体继续识别内部素材，白底纸片优先保持整件。':isComputeRecognition(recognitionMethod)?'SAM 使用整张矫正图生成候选；上方的采样密度、裁剪层数和合并颗粒度控制结果。':'统一候选的整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。有纸张尺寸时，自动结果过滤短边小于 9 mm 的实体，手动补框不受限。'}>
+      {!isComputeRecognition(recognitionMethod)?<SettingsToggle id="setting-merge-carrier" label="合并共同载体" checked={p.mergeSharedCarrier!==false}
         help="同一浅色纸片上的图案视为一件；关闭后可尝试按独立图案拆分。"/>
       :null}
     </SettingsGroup>
-    <SettingsGroup title="3 · 图像预处理" description={recognitionMethod?.startsWith('sam2-')?'可在整页 SAM 推理前均衡光照、去噪和增强局部对比；原色素材仍从未处理的矫正图提取。':'亮度、去噪和对比度只作用于边界分割；Lab 色差边缘也会影响整页候选。'}>
-      {!recognitionMethod?.startsWith('sam2-')?<SettingsSelect id="setting-recognition-pixels" label="边缘分析分辨率" value={p.recognitionPixels}
+    <SettingsGroup title="3 · 图像预处理" description={isComputeRecognition(recognitionMethod)?'可在整页 SAM 推理前均衡光照、去噪和增强局部对比；原色素材仍从未处理的矫正图提取。':'亮度、去噪和对比度只作用于边界分割；Lab 色差边缘也会影响整页候选。'}>
+      {!isComputeRecognition(recognitionMethod)?<SettingsSelect id="setting-recognition-pixels" label="边缘分析分辨率" value={p.recognitionPixels}
         choices={recognitionPixelOptions} help="统一候选固定使用 900 px；手动补框和非统一候选使用所选分辨率。最终从高清校正图提取。"/>:null}
       <SettingsToggle id="setting-preprocess-light" label="亮度均衡" checked={p.balanceLight===true}
-        help={recognitionMethod?.startsWith('sam2-')?'SAM 推理前处理整页图像；原色输出不受影响。':'仅用于单件分割，减轻明显光照不均；通常无需开启。'}/>
+        help={isComputeRecognition(recognitionMethod)?'SAM 推理前处理整页图像；原色输出不受影响。':'仅用于单件分割，减轻明显光照不均；通常无需开启。'}/>
       <SettingsToggle id="setting-preprocess-denoise" label="轻度去噪" checked={p.recognitionDenoise===true}
         help="图像噪点较多时开启。"/>
       <SettingsToggle id="setting-preprocess-contrast" label="局部对比增强" checked={p.recognitionLocalContrast===true}
         help="浅色边界不明显时尝试开启。"/>
-      {!recognitionMethod?.startsWith('sam2-')?<SettingsToggle id="setting-preprocess-chroma" label="Lab 色差边缘" checked={p.recognitionChromaEdges!==false}
+      {!isComputeRecognition(recognitionMethod)?<SettingsToggle id="setting-preprocess-chroma" label="Lab 色差边缘" checked={p.recognitionChromaEdges!==false}
         help="以颜色差补充灰度边缘，推荐开启。"/>:null}
     </SettingsGroup>
-    {!recognitionMethod?.startsWith('sam2-')?<SettingsGroup title="4 · 轮廓后处理" description="控制非统一自动分割的形状与打孔后处理；默认算法使用内部形状仲裁，不读取以下两项开关。">
+    {!isComputeRecognition(recognitionMethod)?<SettingsGroup title="4 · 轮廓后处理" description="控制非统一自动分割的形状与打孔后处理；默认算法使用内部形状仲裁，不读取以下两项开关。">
       <SettingsToggle id="setting-postprocess-shapes" label="规则形状规整" checked={p.recognitionShapeRegularization!==false}
         help="边缘证据充分时校直卡片或拟合圆形。"/>
       <SettingsToggle id="setting-postprocess-apertures" label="重复孔洞恢复" checked={p.recognitionApertures!==false}
@@ -1903,8 +1903,8 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
   const candidates=state.importProcessing?[]:state.importCandidates||[];
   const busy=!!state.importProcessing;
-  const sam=String(state.importRecognition||state.preferences.recognition||'').startsWith('sam2-');
-  const showSam=!!(sam&&!manual&&!previewing&&!busy&&state.correctedURL&&candidates.length);
+  const sam=isComputeRecognition(state.importRecognition||state.preferences.recognition);
+  const showSam=!!(sam&&!manual&&!previewing&&!state.editingPaperCorners&&!busy&&state.correctedURL&&candidates.length);
   const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:showSam?state.correctedURL:state.importURL;
   const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} data-react-action="true" disabled={busy||disabled} onClick={()=>onAction(action)}>{label}</button>;
   return <><ImportNavigation state={state} onAction={onAction}/>
@@ -1918,23 +1918,32 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
         <button type="button" className="queue-remove" aria-label={`移除照片 ${index+1}`}
           onClick={()=>onRemoveRecord(index)}>移除</button></div>)}</div>
       <div className="inspect-columns"><section className="panel import-preparation"><h2>照片 {state.importIndex+1}</h2><div className="photo-preparation-content">
-        <h3>{previewing?'查看校正结果':snapshot?'调整页面边框':'选择画面范围'}</h3>
+        <div className="import-preparation-heading"><h3>{previewing?'查看校正结果':state.editingPaperCorners||snapshot?'调整页面边框':'选择画面范围'}</h3>
+          <div className="import-view-actions">
+            <button type="button" data-act="rotate-photo" data-react-action="true" disabled={busy||manual} onClick={()=>onAction('rotate-photo')} aria-label="旋转 90 度" title="旋转 90 度">↻ <span>旋转 90°</span></button>
+            {sam?<div className="import-view-switch" aria-label="切换分割视图">
+              <button type="button" className={state.importSamDisplayMode!=='regions'?'active':''} disabled={!showSam} aria-pressed={state.importSamDisplayMode!=='regions'} onClick={()=>onSamViewChange('boxes')}>候选框</button>
+              <button type="button" className={state.importSamDisplayMode==='regions'?'active':''} disabled={!showSam} aria-pressed={state.importSamDisplayMode==='regions'} onClick={()=>onSamViewChange('regions')}>彩色区域</button>
+            </div>:null}
+          </div></div>
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
         <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showSam?<SamRegionOverlay previewRef={previewRef} regions={candidates}
           mode={state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
           onRegionClick={onSamRegionClick}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
-          onDone={onManualDone} onError={onManualError}/>:<div className="import-photo-tools">{previewing?<>{button('readjust-paper','重新调整')}{button('apply-paper-preview',state.paperPreviewApplied?'✓ 已应用校正':'✓ 使用校正结果',!!state.paperPreviewApplied)}</>:
-          <>{button('rotate-photo','↻ 旋转 90°')}{button('preview-crop',snapshot?'□ 预览校正':'□ 预览校正')}</>}
-          {!snapshot?button('manual-import-box','手动补框',false,'btn primary'):null}</div>}
-        {showSam?<div className="sam-review-tools" aria-label="分割结果显示方式">
-          <button className={state.importSamDisplayMode==='regions'?'active':''} type="button" onClick={()=>onSamViewChange('regions')}>彩色区域</button>
-          <button className={state.importSamDisplayMode!=='regions'?'active':''} type="button" onClick={()=>onSamViewChange('boxes')}>候选框</button>
-          <button className={state.importSamMerging?'active':''} type="button" onClick={onSamMergeToggle}>{state.importSamMerging?'取消合并':'合并为同一纸片'}</button>
-          {state.importSamMerging?<button type="button" disabled={(state.importSamMergeSelection?.size||0)<2}
-            onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button>:null}
-        </div>:null}
-        {showSam&&state.importSamMerging?<small>点选同一纸片上的区域，合并时会包含它们之间的底色；有共同底纸 Mask 时优先使用其轮廓。</small>:null}
+          onDone={onManualDone} onError={onManualError}/>:<>
+          {previewing?<div className="import-secondary-tools">{button('readjust-paper','返回调整')}{button('apply-paper-preview',state.paperPreviewApplied?'返回识别结果':'使用校正结果')}</div>:null}
+          {showSam&&state.importSamMerging?<div className="import-secondary-tools">
+            <small>点选同一纸片上的区域；合并会包含区域间的底色。</small>
+            <button type="button" className="btn" onClick={onSamMergeToggle}>取消</button>
+            <button type="button" className="btn primary" disabled={(state.importSamMergeSelection?.size||0)<2} onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button>
+          </div>:null}
+          <div className="import-photo-tools import-primary-tools">
+            {button('preview-crop','预览矫正',previewing)}
+            {!snapshot?button('manual-import-box','手动补框',previewing||state.editingPaperCorners||state.importSamMerging):null}
+            {!snapshot?<button type="button" className={`btn ${state.importSamMerging?'active':''}`} disabled={busy||!showSam} aria-pressed={!!state.importSamMerging} onClick={onSamMergeToggle}>合并对象</button>:null}
+          </div>
+        </>}
       </div></section>
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}

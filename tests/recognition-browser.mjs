@@ -12,7 +12,7 @@ try{
   assert.ok(await evaluate('!!document.querySelector("#setting-candidate-discovery")'));
   const defaults=await evaluate('({method:document.querySelector("#setting-recognition").value,pixels:Number(document.querySelector("#setting-recognition-pixels").value),light:document.querySelector("#setting-preprocess-light").checked,denoise:document.querySelector("#setting-preprocess-denoise").checked,contrast:document.querySelector("#setting-preprocess-contrast").checked,chroma:document.querySelector("#setting-preprocess-chroma").checked,oldEdge:!!document.querySelector("#setting-postprocess-edge"),oldCurve:!!document.querySelector("#setting-postprocess-curves"),methods:[...document.querySelector("#setting-recognition").options].map(x=>x.value),discoveries:[...document.querySelector("#setting-candidate-discovery").options].map(x=>x.value),discovery:document.querySelector("#setting-candidate-discovery").value})');
   assert.deepEqual(defaults.methods,['auto','morphgac','physical','grabcut','hybrid',
-    'sam2-tiny','sam2-small','sam2-large']);
+    'fastsam-sam2-small','sam2-tiny','sam2-small','sam2-large']);
   assert.deepEqual(defaults.discoveries,['legacy','physical','unified']);assert.equal(defaults.discovery,'unified');
   assert.equal(defaults.method,'auto');assert.equal(defaults.pixels,900);
   assert.equal(defaults.light,false);assert.equal(defaults.denoise,false);assert.equal(defaults.contrast,false);assert.equal(defaults.chroma,true);

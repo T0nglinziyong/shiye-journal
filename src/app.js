@@ -106,6 +106,7 @@ import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions} from './paper-sizes.js';
 import {refineManualBoxes,hasManualForegroundEvidence,manualSegmentationMethod} from './manual-import-recognition.js';
 import {manualPhysicalRegion} from './manual-import-geometry.js';
+import {postprocessSamCandidates} from './sam-postprocess.js';
 import {seriesCovers,markProjectAssetsUsed,usedAssetIDs} from './library-model.js';
 import {clearSeriesContentFilters,snapshotSeriesContentFilters,restoreSeriesContentFilters} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
@@ -131,7 +132,7 @@ import {boundedMap} from './bounded-map.js';
 import {samInputBlob,samInputBox,samInputSize} from './sam-input.js';
 import {mergeSamRegions} from './sam-region-merge.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
-import {recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
+import {recognitionPixelOptions,recognitionMethodDetails,recognitionProfile,isComputeRecognition} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
@@ -864,7 +865,9 @@ function render(){
           state.showManualBox=false;
           state.importRecords[state.importIndex].manualEdits=true;
           state.importRecords[state.importIndex].confirmed=false;
-          saveActiveImportRecord();render();toast('已更新素材框，请核对候选预览');
+          saveActiveImportRecord();
+          if(isComputeRecognition(state.importRecognition))state.importRecords[state.importIndex].computeRawCandidates=[...state.importCandidates];
+          render();toast('已更新素材框，请核对候选预览');
         },onManualError:toast,onPaperChange:saveActiveImportRecord})
       :null;
   const routeIdentity=[state.route,
@@ -1352,7 +1355,7 @@ async function runAppAction(action,id,value){try{
   case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';await switchImportRecord(state.importIndex,true);}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-continue':if(state.importStep==='done'){resetImportBatch();render();}break;
-  case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;discardPaperPreview();render();break;case 'apply-paper-preview':await applyPaperPreview();break;
+  case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;state.editingPaperCorners=true;discardPaperPreview();render();break;case 'apply-paper-preview':await applyPaperPreview();break;
   case 'rotate-photo':await rotateImportPhoto();break;
   case 'import-toggle-candidate':await actionStore.dispatch({type:'import/candidate/toggle',payload:{index:Number(id)}});break;
   case 'import-confirm-photo':await confirmImportPhoto();break;
@@ -2944,13 +2947,13 @@ async function prefetchImportRecord(rec,settings,revision,signal){
     if(corners&&settings.paperSize!=='none'){
       // Background SAM work only needs a compact page. Full-resolution
       // correction is deferred until the selected materials are saved.
-      const corrected=await rectifyA4Frame(bitmap,corners,settings.recognition.startsWith('sam2-')?1024:4096,pw/ph);
+      const corrected=await rectifyA4Frame(bitmap,corners,isComputeRecognition(settings.recognition)?1024:4096,pw/ph);
       correctedBitmap=corrected.canvas;correctedTransportBlob=corrected.blob;
       correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
     }
     const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
     let candidates;
-    if(settings.recognition.startsWith('sam2-')){
+    if(isComputeRecognition(settings.recognition)){
       if(!correctedBitmap)throw Error('SAM 预识别需要先完成 A4 透视矫正');
       const paperRatio=pw/ph,imageRatio=source.width/source.height;
       if(Math.abs(imageRatio-paperRatio)/paperRatio>.03)throw Error('预识别的纸张长短边方向不一致');
@@ -2973,6 +2976,12 @@ async function prefetchImportRecord(rec,settings,revision,signal){
       candidates=await waitForSegmentationJob(jobId,{signal});
       rec.computeBackgrounds=candidates.backgrounds||[];
       if(!valid())return;
+      rec.computeRawCandidates=[...candidates];
+      candidates=await postprocessSamCandidates(rec.computeRawCandidates,correctedBitmap,{
+        mergeSharedCarrier:settings.mergeSharedCarrier,shapeRegularization:settings.shapeRegularization,
+        apertures:settings.apertures,backgrounds:rec.computeBackgrounds,
+        paperWidthMM:pw,paperHeightMM:ph});
+      if(!valid())return;
       rec.computeJobId=null;
     }else{
       candidates=await detectPaperCandidates(source,box,6,{balanceLight:settings.balanceLight,paperRectified:!!correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,
@@ -2988,7 +2997,7 @@ async function prefetchImportRecord(rec,settings,revision,signal){
     // Waiting until it is opened made a pre-recognized 21-item page take eight
     // more seconds to inspect on the live site. Final save still re-extracts
     // SAM materials from the original photo at full resolution.
-    const sam=settings.recognition.startsWith('sam2-');
+    const sam=isComputeRecognition(settings.recognition);
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
@@ -3002,7 +3011,8 @@ async function prefetchImportRecord(rec,settings,revision,signal){
     if(!valid())return;
     const keepBitmap=!sam;
     Object.assign(rec,{bitmap:keepBitmap?bitmap:null,recognitionDecodeMode:settings.candidateDiscovery==='unified'?'research':'legacy',autoPaperCorners:corners&&!rec.corners?structuredClone(corners):null,correctedBitmap,correctedURL,
-      appliedCorners:correctedBitmap?JSON.stringify(corners):null,backgroundDetected:!!correctedBitmap,
+      appliedCorners:correctedBitmap?JSON.stringify(corners):null,
+      appliedPaperRatio:correctedBitmap?pw/ph:null,backgroundDetected:!!correctedBitmap,
       candidates,candidateData,candidateURLs,selection:candidates.map((_,i)=>i),prefetchStatus:'ready'});
     if(keepBitmap)bitmap=null;
     correctedBitmap=correctedURL=null;candidateURLs=[];updateImportPrefetchLabel(rec);
@@ -3040,7 +3050,7 @@ function resetImportBatch(){
   const bitmaps=new Set(),objectURLs=new Set();
   for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
   for(const b of bitmaps)b.close?.();for(const u of objectURLs)URL.revokeObjectURL(u);
-  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importSamDisplayMode:'boxes',importSamMerging:false,importSamMergeSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
+  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importSamDisplayMode:'boxes',importSamMerging:false,importSamMergeSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,editingPaperCorners:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
 }
 function openImportGallery(mode){
   resetImportBatch();state.importMode=mode;route('import');
@@ -3053,10 +3063,10 @@ async function switchImportRecord(index,skipSave=false){
   state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
   state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importMergeSharedCarrier=rec.importMergeSharedCarrier??(state.preferences.mergeSharedCarrier!==false);state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
   state.paperCorners=rec.corners||null;
-  state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;discardPaperPreview();
+  state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;state.editingPaperCorners=false;discardPaperPreview();
   state.importSamMergeSelection=new Set();state.importSamMerging=false;
   const progress=message=>{state.importProcessing=message;const status=view.querySelector('.import-processing');if(status)status.textContent=message;};
-  state.importProcessing=state.importMode==='snapshot'?'正在读取页面…':state.importRecognition?.startsWith('sam2-')?'正在读取照片…':'正在读取照片并加载本机识别引擎…';render();
+  state.importProcessing=state.importMode==='snapshot'?'正在读取页面…':isComputeRecognition(state.importRecognition)?'正在读取照片…':'正在读取照片并加载本机识别引擎…';render();
   // Paint the selected photo before decoding, engine initialization or warp.
   await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
   try{
@@ -3088,9 +3098,9 @@ async function switchImportRecord(index,skipSave=false){
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
     const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,
-      state.importRecognition?.startsWith('sam2-')?1024:4096,pw/ph);
+      isComputeRecognition(state.importRecognition)?1024:4096,pw/ph);
     if(!isCurrent())return;
-    state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
+    state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.appliedPaperRatio=pw/ph;rec.backgroundDetected=true;
     rec.computeInputBlob=blob;rec.computeInputBitmap=canvas;
   }
   if(!isCurrent())return;
@@ -3106,31 +3116,50 @@ async function switchImportRecord(index,skipSave=false){
   }
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
-function discardPaperPreview(){state.paperPreviewBitmap?.close?.();if(state.paperPreviewURL&&state.paperPreviewURL!==state.correctedURL)URL.revokeObjectURL(state.paperPreviewURL);state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;}
+function discardPaperPreview(){if(state.paperPreviewBitmap!==state.correctedBitmap)state.paperPreviewBitmap?.close?.();if(state.paperPreviewURL&&state.paperPreviewURL!==state.correctedURL)URL.revokeObjectURL(state.paperPreviewURL);state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;}
 async function rotateImportPhoto(){
   if(!state.importBitmap)return;const rec=state.importRecords[state.importIndex];
   if(rec.manualEdits&&!confirm('旋转会重新识别这张照片并舍弃候选编辑，继续吗？'))return;
   const bitmap=state.importBitmap,canvas=document.createElement('canvas');canvas.width=bitmap.height;canvas.height=bitmap.width;const ctx=canvas.getContext('2d');ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(bitmap,0,0);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
-  const old=state.paperCorners;resetPaperCorrection(state);state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw Error('旋转图像失败');
+  const old=state.paperCorners;
+  resetPaperCorrection(state);
+  state.editingPaperCorners=false;
+  for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
+  importPrefetchJobs.delete(rec);
+  Object.assign(rec,{correctedBitmap:null,correctedURL:null,appliedCorners:null,appliedPaperRatio:null,autoPaperCorners:null,
+    candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null,
+    computeJobId:null,computeJobBitmap:null,computeSourceJobId:null,computeSourceBitmap:null,
+    computeInputBlob:null,computeInputBitmap:null,computeBackgrounds:[],recognitionAnalysis:null,
+    backgroundDetected:false});
+  rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
+  state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();
+  if(state.paperOrientation==='landscape')state.paperOrientation='portrait';
+  else if(state.paperOrientation==='portrait')state.paperOrientation='landscape';
   state.importBitmap=await decodeRecognitionImage(rec.file,{research:(state.preferences.candidateDiscovery||'unified')==='unified'});
   rec.bitmap=state.importBitmap;rec.recognitionDecodeMode=(state.preferences.candidateDiscovery||'unified')==='unified'?'research':'legacy';
   state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
-  rec.recognitionAnalysis=null;
+  rec.recognitionAnalysis=null;rec.computeRawCandidates=null;rec.computeBackgrounds=[];
   saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
 }
 async function previewCorrection(){
   if(!state.importBitmap)return;discardPaperPreview();const [pw,ph]=paperDimensions();
+  const rec=state.importRecords[state.importIndex];
+  if(correctionMatches(rec)&&state.correctedBitmap){
+    state.paperPreviewBitmap=state.correctedBitmap;state.paperPreviewURL=state.correctedURL;
+    state.showCorrectionPreview=true;state.editingPaperCorners=false;state.paperPreviewApplied=true;render();return;
+  }
   const {canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,
-    state.importRecognition?.startsWith('sam2-')?1536:4096,pw/ph);state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
+    isComputeRecognition(state.importRecognition)?1536:4096,pw/ph);state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.editingPaperCorners=false;state.paperPreviewApplied=false;render();
 }
 async function applyPaperPreview(){
   const rec=state.importRecords[state.importIndex];if(!state.paperPreviewBitmap)return;
-  if(rec.appliedCorners===JSON.stringify(state.paperCorners)&&state.correctedBitmap){state.paperPreviewApplied=true;render();return;}
+  if(correctionMatches(rec)&&state.correctedBitmap){state.showCorrectionPreview=false;state.editingPaperCorners=false;discardPaperPreview();render();return;}
   if(rec.manualEdits&&!confirm('重新校正会舍弃本照片的名称、手动选框和修补结果并重新识别，继续吗？'))return;
   state.correctedBitmap?.close?.();if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
-  state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
-  rec.recognitionAnalysis=null;
+  const [pw,ph]=paperDimensions();
+  state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;state.showCorrectionPreview=false;state.editingPaperCorners=false;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.appliedPaperRatio=pw/ph;rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
+  rec.recognitionAnalysis=null;rec.computeRawCandidates=null;rec.computeBackgrounds=[];
   state.importProcessing=state.importMode==='snapshot'?'正在更新校正后的页面…':'正在按新校正结果识别…';render();
   try{if(state.importMode!=='snapshot')await previewCrop();toast(state.importMode==='snapshot'?'已使用校正结果':'已使用校正结果，候选素材已更新');}
   finally{state.importProcessing='';if(state.route==='import')render();}
@@ -3140,7 +3169,7 @@ async function openManualImportBox(){
   if(state.paperPreviewBitmap)await applyPaperPreview();
   if(state.paperPreviewBitmap)return;
   const rec=state.importRecords[state.importIndex];
-  if(state.importRecognition?.startsWith('sam2-')&&rec?.appliedCorners!==JSON.stringify(state.paperCorners)){
+  if(isComputeRecognition(state.importRecognition)&&!correctionMatches(rec)){
     toast('请先预览并应用当前纸张四角，再手动补框');return;
   }
   state.showManualBox=true;render();
@@ -3161,6 +3190,7 @@ async function mergeSelectedImportRegions(){
     state.importCandidateData[regions.length-1].selected=true;
     state.importSamMergeSelection=new Set();state.importSamMerging=false;
     record.manualEdits=true;record.confirmed=false;saveActiveImportRecord();
+    record.computeRawCandidates=[...state.importCandidates];
     toast(merged.mergeBasis==='sam-background'?'已按共同底纸合并，无需重新运行 SAM':'已包含所选区域间的背景，可手动调整边框');
   }catch(error){toast('区域合并失败：'+error.message);}
   finally{state.importProcessing='';if(state.route==='import')render();}
@@ -3188,7 +3218,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
     toast('正在按候选框分割 '+(index+1)+' / '+regions.length);
     const chosen=state.importRecognition||state.preferences.recognition;
-    if(chosen.startsWith('sam2-')){
+    if(isComputeRecognition(chosen)){
       if(!state.correctedBitmap)throw Error('SAM 手动画框需要先完成整页透视矫正');
       const polygon=[[box.x,box.y],[box.x+box.w,box.y],[box.x+box.w,box.y+box.h],[box.x,box.y+box.h]];
       const promptBox=[Math.max(0,Math.floor(box.x*source.width)),
@@ -3246,7 +3276,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       // two-region merge wait for the whole page again.
       if(old?.region===region)return old;
       const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:record.file.name,sourceIndex:state.importIndex,lighting});
-      if((state.importRecognition||state.preferences.recognition).startsWith('sam2-'))regenerated.previewOnly=true;
+      if(isComputeRecognition(state.importRecognition||state.preferences.recognition))regenerated.previewOnly=true;
       // Changing only colour must not reset manual names, tags, dimensions or
       // choices, and must never cause the segmentation algorithm to rerun.
       if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','dimensionSource','width','height']){
@@ -3266,7 +3296,7 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   const selectedRecognition=state.importRecognition||state.preferences.recognition;
   let regions;
-  if(selectedRecognition.startsWith('sam2-')){
+  if(isComputeRecognition(selectedRecognition)){
     if(!state.correctedBitmap)throw Error('SAM 识别需要先完成 A4 透视矫正，请检查纸张四角');
     const paperRatio=pw/ph,imageRatio=source.width/source.height;
     if(Math.abs(imageRatio-paperRatio)/paperRatio>.03)throw Error('矫正图方向与纸张长短边不一致，请重新检查校正方向');
@@ -3289,6 +3319,11 @@ async function previewCrop(){
     regions=await waitForSegmentationJob(jobId);
     record.computeBackgrounds=regions.backgrounds||[];
     record.computeJobId=null;
+    record.computeRawCandidates=[...regions];
+    regions=await postprocessSamCandidates(record.computeRawCandidates,source,{
+      mergeSharedCarrier:state.importMergeSharedCarrier!==false,
+      ...recognitionPostprocessOptions(),backgrounds:record.computeBackgrounds,
+      paperWidthMM:pw,paperHeightMM:ph});
   }else regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:selectedRecognition,candidateDiscovery:state.preferences.candidateDiscovery||'unified',recognitionPixels:state.preferences.recognitionPixels,
     recognitionSource:state.correctedBitmap&&state.paperCorners?{bitmap:state.importBitmap,corners:state.paperCorners}:null,
     recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.importMergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},
@@ -3324,6 +3359,8 @@ function changeImportCalibration(key,value){
     if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}
     state[key]=n;
   }else state[key]=value;
+  if(['paperSize','paperOrientation','customImportWidth','customImportHeight'].includes(key)&&
+    state.correctedBitmap&&!correctionMatches(state.importRecords[state.importIndex]))state.editingPaperCorners=true;
   recalibrateImport();
 }
 async function changeImportRecognitionSetting(key,value){
@@ -3350,7 +3387,14 @@ async function changeImportRecognitionSetting(key,value){
   saveActiveImportRecord();render();
   try{
     if(state.importMode!=='snapshot'){
-      if(reuse&&record?.recognitionAnalysis){
+      if(reuse&&isComputeRecognition(state.importRecognition||state.preferences.recognition)&&record?.computeRawCandidates?.length){
+        const [pw,ph]=paperDimensions();
+        const regions=await postprocessSamCandidates(record.computeRawCandidates,state.correctedBitmap,{
+          mergeSharedCarrier:state.importMergeSharedCarrier!==false,
+          ...recognitionPostprocessOptions(),backgrounds:record.computeBackgrounds,
+          paperWidthMM:pw,paperHeightMM:ph});
+        await refreshImportCandidates(regions);
+      }else if(reuse&&record?.recognitionAnalysis){
         const regions=await reprocessPaperCandidates(record.recognitionAnalysis,{
           mergeSharedCarrier:state.importMergeSharedCarrier!==false,
           postprocess:recognitionPostprocessOptions()
@@ -3390,14 +3434,20 @@ function editImportReviewCandidate(recordIndex,candidateIndex,changes){
 
 async function chooseCandidate(index){if(index>=0){state.importCandidateSelection=new Set([index]);render();}else await previewCrop();}
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}
+function correctionMatches(record){
+  if(!record?.appliedCorners||record.appliedCorners!==JSON.stringify(state.paperCorners))return false;
+  const [pw,ph]=paperDimensions(),actual=record.appliedPaperRatio||
+    (record.correctedBitmap?record.correctedBitmap.width/record.correctedBitmap.height:null);
+  return Number.isFinite(actual)&&Math.abs(actual-pw/ph)<.003;
+}
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
   const record=state.importRecords[state.importIndex];
   // A paper size edit recalibrates millimetres only. The extracted pixels and
   // applied corner correction stay valid until the corners themselves change.
   if(state.paperSize!=='none'&&state.paperCorners&&state.correctedBitmap
-    &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
-    toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;
+    &&!correctionMatches(record)){
+    toast('纸张边框或方向已调整，请先“预览矫正”并使用校正结果，再确认素材');return;
   }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode==='material'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
