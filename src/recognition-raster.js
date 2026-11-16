@@ -24,7 +24,9 @@ function mozJpegDecoder(){
   })().catch(error=>{mozJpegInitPromise=null;throw error;});
 }
 export async function decodeRecognitionImage(blob,{research=false}={}){
-  if(research&&(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||''))){
+  const jpeg=blob.type==='image/jpeg'||blob.type==='image/jpg'||
+    (!blob.type&&/\.jpe?g$/i.test(blob.name||''));
+  if(research&&jpeg){
     // The research reference uses libjpeg's encoded samples without applying
     // display ICC. Decode with one pinned codec so Safari/Chromium and devices
     // feed identical pixels into paper correction and material discovery.
@@ -32,7 +34,7 @@ export async function decodeRecognitionImage(blob,{research=false}={}){
     const image=await decodeMozJpeg(bytes,{preserveOrientation:true});
     return pixelCanvas(image.data,image.width,image.height);
   }
-  if(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||'')){
+  if(jpeg){
     const bytes=new Uint8Array(await blob.arrayBuffer());
     const image=decode(bytes,{useTArray:true,maxResolutionInMP:60,maxMemoryUsageInMB:512});
     // Orientation is applied explicitly to raw pixels. Neither EXIF handling

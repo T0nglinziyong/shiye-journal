@@ -1901,11 +1901,13 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
   },[]);
   const previewRef=useRef(null);
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
-  const candidates=state.importProcessing?[]:state.importCandidates||[];
+  const candidates=state.importCandidates||[];
   const busy=!!state.importProcessing;
   const sam=isComputeRecognition(state.importRecognition||state.preferences.recognition);
-  const showSam=!!(sam&&!manual&&!previewing&&!state.editingPaperCorners&&!busy&&state.correctedURL&&candidates.length);
-  const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:showSam?state.correctedURL:state.importURL;
+  const showRegions=!!(!manual&&!previewing&&!state.editingPaperCorners&&candidates.length&&
+    (state.correctedURL||state.importURL));
+  const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:
+    state.editingPaperCorners?state.importURL:state.correctedURL||state.importURL;
   const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} data-react-action="true" disabled={busy||disabled} onClick={()=>onAction(action)}>{label}</button>;
   return <><ImportNavigation state={state} onAction={onAction}/>
     <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
@@ -1921,27 +1923,26 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
         <div className="import-preparation-heading"><h3>{previewing?'查看校正结果':state.editingPaperCorners||snapshot?'调整页面边框':'选择画面范围'}</h3>
           <div className="import-view-actions">
             <button type="button" data-act="rotate-photo" data-react-action="true" disabled={busy||manual} onClick={()=>onAction('rotate-photo')} aria-label="旋转 90 度" title="旋转 90 度">↻ <span>旋转 90°</span></button>
-            {sam?<div className="import-view-switch" aria-label="切换分割视图">
-              <button type="button" className={state.importSamDisplayMode!=='regions'?'active':''} disabled={!showSam} aria-pressed={state.importSamDisplayMode!=='regions'} onClick={()=>onSamViewChange('boxes')}>候选框</button>
-              <button type="button" className={state.importSamDisplayMode==='regions'?'active':''} disabled={!showSam} aria-pressed={state.importSamDisplayMode==='regions'} onClick={()=>onSamViewChange('regions')}>彩色区域</button>
+            {!snapshot?<div className="import-view-switch" aria-label="切换分割视图">
+              <button type="button" className={state.importSamDisplayMode!=='regions'?'active':''} disabled={!showRegions} aria-pressed={state.importSamDisplayMode!=='regions'} onClick={()=>onSamViewChange('boxes')}>候选框</button>
+              <button type="button" className={state.importSamDisplayMode==='regions'?'active':''} disabled={!showRegions} aria-pressed={state.importSamDisplayMode==='regions'} onClick={()=>onSamViewChange('regions')}>彩色区域</button>
             </div>:null}
           </div></div>
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
-        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showSam?<SamRegionOverlay previewRef={previewRef} regions={candidates}
+        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showRegions?<SamRegionOverlay previewRef={previewRef} regions={candidates}
+          frameSize={state.correctedBitmap||state.importBitmap}
           mode={state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
-          onRegionClick={onSamRegionClick}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
+          onRegionClick={busy?()=>{}:onSamRegionClick}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<>
-          {previewing?<div className="import-secondary-tools">{button('readjust-paper','返回调整')}{button('apply-paper-preview',state.paperPreviewApplied?'返回识别结果':'使用校正结果')}</div>:null}
-          {showSam&&state.importSamMerging?<div className="import-secondary-tools">
-            <small>点选同一纸片上的区域；合并会包含区域间的底色。</small>
-            <button type="button" className="btn" onClick={onSamMergeToggle}>取消</button>
-            <button type="button" className="btn primary" disabled={(state.importSamMergeSelection?.size||0)<2} onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button>
-          </div>:null}
-          <div className="import-photo-tools import-primary-tools">
-            {button('preview-crop','预览矫正',previewing)}
-            {!snapshot?button('manual-import-box','手动补框',previewing||state.editingPaperCorners||state.importSamMerging):null}
-            {!snapshot?<button type="button" className={`btn ${state.importSamMerging?'active':''}`} disabled={busy||!showSam} aria-pressed={!!state.importSamMerging} onClick={onSamMergeToggle}>合并对象</button>:null}
+          {state.importSamMerging?<small className="import-action-hint">点选同一纸片上的区域，合并时包含区域间的底色。</small>:null}
+          <div className={`import-photo-tools import-primary-tools ${previewing||state.importSamMerging||snapshot?'import-mode-tools':''}`}>
+            {previewing?<>{button('readjust-paper','返回调整')}{button('apply-paper-preview',state.paperPreviewApplied?'返回识别结果':'使用校正结果')}</>:
+              state.importSamMerging?<><button type="button" className="btn" disabled={busy} onClick={onSamMergeToggle}>取消合并</button>
+                <button type="button" className="btn primary" disabled={busy||(state.importSamMergeSelection?.size||0)<2} onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button></>:
+              <>{button('preview-crop','预览矫正')}
+                {!snapshot?button('manual-import-box','手动补框',state.editingPaperCorners):null}
+                {!snapshot?<button type="button" className="btn" disabled={busy||!showRegions} onClick={onSamMergeToggle}>合并对象</button>:null}</>}
           </div>
         </>}
       </div></section>
@@ -1963,7 +1964,7 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
           {!snapshot?<><small>{state.paperSize==='none'?'当前照片不计算素材尺寸':'尺寸变化仅更新标尺；不重新抠图'}</small>
             <button className="import-default-action" id="save-import-defaults" type="button" onClick={()=>onAction("import-save-defaults")}>将当前参数设为以后导入的默认值</button>
             <small>设为默认值会同步本批后续照片，并用于以后新导入的照片；之前的照片不变。</small></>:null}
-        </div>{!snapshot?<><hr/><h3>候选素材 · {state.importProcessing?'识别中':candidates.length}</h3>
+        </div>{!snapshot?<><hr/><h3>候选素材 · {candidates.length}</h3>
           {button('recognition-diagnostics','导出识别诊断',false,'btn mini')}
           <div className="import-candidate-grid">{candidates.map((candidate,index)=><div key={index} className="candidate-choice"><button className={`import-candidate-tile ${(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)?'selected':''}`}
             data-act="import-toggle-candidate" data-id={index} data-react-action="true"

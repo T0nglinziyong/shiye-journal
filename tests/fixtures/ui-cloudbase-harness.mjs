@@ -72,7 +72,7 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
         const backgrounds=args.p_kind==='material-segmentation'?[]:
           [pack(Math.max(0,x-12),Math.max(0,y-12),Math.min(width,x+w*2+36),Math.min(height,y+h+12))];
         const resultPath=args.p_input_path.replace(/input\.png$/,'result.json');
-        state.objects.set(resultPath,new Blob([JSON.stringify({version:2,width,height,
+        state.objects.set(resultPath,new Blob([JSON.stringify(state.samResult||{version:2,width,height,
           model:args.p_parameters.algorithm==='fastsam-sam2'?'fastsam-sam2-small':args.p_model,
           objects,backgrounds})],{type:'application/json'}));
         state.jobs.set(args.p_id,{id:args.p_id,status:'completed',result_path:resultPath,error_code:null});
@@ -111,8 +111,11 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
   window.__SHIYE_UI_CLOUD__={user,account,client,storage,invoke,state};
   // COS is a signed, direct transfer in production. No network leaves tests.
   window.XMLHttpRequest=undefined;
+  const originalFetch=window.fetch.bind(window);
   window.fetch=async(input,init={})=>{
     const url=String(input);
+    if(new URL(url,location.href).origin===location.origin&&new URL(url,location.href).pathname.startsWith('/assets/'))
+      return originalFetch(input,init);
     if(url.startsWith('https://cos.ui-test/')){
       const path=decodeURIComponent(url.slice('https://cos.ui-test/'.length));
       if(init.method==='PUT'){state.objects.set(path,init.body);return new Response(null,{status:200});}
