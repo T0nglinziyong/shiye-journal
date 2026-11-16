@@ -1,8 +1,9 @@
 export function resetPaperCorrection(state){
-  state.correctedBitmap?.close?.();state.correctedBitmap=null;
-  if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
+  const correctedBitmap=state.correctedBitmap,correctedURL=state.correctedURL;
+  correctedBitmap?.close?.();state.correctedBitmap=null;
+  if(correctedURL)URL.revokeObjectURL(correctedURL);
   state.correctedURL=null;state.paperCorners=null;
-  state.paperPreviewBitmap?.close?.();state.paperPreviewBitmap=null;
-  if(state.paperPreviewURL)URL.revokeObjectURL(state.paperPreviewURL);
+  if(state.paperPreviewBitmap!==correctedBitmap)state.paperPreviewBitmap?.close?.();state.paperPreviewBitmap=null;
+  if(state.paperPreviewURL&&state.paperPreviewURL!==correctedURL)URL.revokeObjectURL(state.paperPreviewURL);
   state.paperPreviewURL=null;state.showCorrectionPreview=false;state.paperPreviewApplied=false;
 }
