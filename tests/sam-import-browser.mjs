@@ -16,7 +16,7 @@ const {evaluate,wait,click,command,sleep}=b;
 try{
   await wait('.series-grid');
   await evaluate(`localStorage.setItem('shiye-ui-preferences-v1',JSON.stringify({
-    recognitionDefaultsVersion:4,recognition:'sam2-small',paperSize:'a4',orientation:'landscape',
+    recognitionDefaultsVersion:4,recognition:'fastsam-sam2-small',paperSize:'a4',orientation:'landscape',
     samPointsPerSide:24,samCropNLayers:1,samGranularity:'balanced'}))`);
   await command('Page.reload');await wait('.series-grid');
   await evaluate('window.__SHIYE_UI_CLOUD__.state.samExtraCandidate=true');
@@ -46,6 +46,9 @@ try{
       .map(([,blob])=>({size:blob.size,type:blob.type}))})`);
   assert.equal(initial.ready,true,'second photo should be processed before it is opened');
   assert.equal(initial.jobs,2);
+  assert.deepEqual(await evaluate(`window.__SHIYE_UI_CLOUD__.state.jobRequests.map(request=>
+    [request.p_model,request.p_parameters.algorithm])`),
+    [['sam2-small','fastsam-sam2'],['sam2-small','fastsam-sam2']]);
   assert.ok(initial.inputs.every(item=>item.type==='image/png'&&item.size<200000));
   const recognitionMs=Math.round(performance.now()-recognitionStart);
 

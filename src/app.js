@@ -131,7 +131,7 @@ import {boundedMap} from './bounded-map.js';
 import {samInputBlob,samInputBox,samInputSize} from './sam-input.js';
 import {mergeSamRegions} from './sam-region-merge.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
-import {recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
+import {recognitionPixelOptions,recognitionMethodDetails,recognitionProfile,isComputeRecognition} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
@@ -2944,13 +2944,13 @@ async function prefetchImportRecord(rec,settings,revision,signal){
     if(corners&&settings.paperSize!=='none'){
       // Background SAM work only needs a compact page. Full-resolution
       // correction is deferred until the selected materials are saved.
-      const corrected=await rectifyA4Frame(bitmap,corners,settings.recognition.startsWith('sam2-')?1024:4096,pw/ph);
+      const corrected=await rectifyA4Frame(bitmap,corners,isComputeRecognition(settings.recognition)?1024:4096,pw/ph);
       correctedBitmap=corrected.canvas;correctedTransportBlob=corrected.blob;
       correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
     }
     const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
     let candidates;
-    if(settings.recognition.startsWith('sam2-')){
+    if(isComputeRecognition(settings.recognition)){
       if(!correctedBitmap)throw Error('SAM 预识别需要先完成 A4 透视矫正');
       const paperRatio=pw/ph,imageRatio=source.width/source.height;
       if(Math.abs(imageRatio-paperRatio)/paperRatio>.03)throw Error('预识别的纸张长短边方向不一致');
@@ -2988,7 +2988,7 @@ async function prefetchImportRecord(rec,settings,revision,signal){
     // Waiting until it is opened made a pre-recognized 21-item page take eight
     // more seconds to inspect on the live site. Final save still re-extracts
     // SAM materials from the original photo at full resolution.
-    const sam=settings.recognition.startsWith('sam2-');
+    const sam=isComputeRecognition(settings.recognition);
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
@@ -3056,7 +3056,7 @@ async function switchImportRecord(index,skipSave=false){
   state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;discardPaperPreview();
   state.importSamMergeSelection=new Set();state.importSamMerging=false;
   const progress=message=>{state.importProcessing=message;const status=view.querySelector('.import-processing');if(status)status.textContent=message;};
-  state.importProcessing=state.importMode==='snapshot'?'正在读取页面…':state.importRecognition?.startsWith('sam2-')?'正在读取照片…':'正在读取照片并加载本机识别引擎…';render();
+  state.importProcessing=state.importMode==='snapshot'?'正在读取页面…':isComputeRecognition(state.importRecognition)?'正在读取照片…':'正在读取照片并加载本机识别引擎…';render();
   // Paint the selected photo before decoding, engine initialization or warp.
   await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
   try{
@@ -3088,7 +3088,7 @@ async function switchImportRecord(index,skipSave=false){
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
     const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,
-      state.importRecognition?.startsWith('sam2-')?1024:4096,pw/ph);
+      isComputeRecognition(state.importRecognition)?1024:4096,pw/ph);
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
     rec.computeInputBlob=blob;rec.computeInputBitmap=canvas;
@@ -3122,7 +3122,7 @@ async function rotateImportPhoto(){
 async function previewCorrection(){
   if(!state.importBitmap)return;discardPaperPreview();const [pw,ph]=paperDimensions();
   const {canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,
-    state.importRecognition?.startsWith('sam2-')?1536:4096,pw/ph);state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
+    isComputeRecognition(state.importRecognition)?1536:4096,pw/ph);state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
 }
 async function applyPaperPreview(){
   const rec=state.importRecords[state.importIndex];if(!state.paperPreviewBitmap)return;
@@ -3140,7 +3140,7 @@ async function openManualImportBox(){
   if(state.paperPreviewBitmap)await applyPaperPreview();
   if(state.paperPreviewBitmap)return;
   const rec=state.importRecords[state.importIndex];
-  if(state.importRecognition?.startsWith('sam2-')&&rec?.appliedCorners!==JSON.stringify(state.paperCorners)){
+  if(isComputeRecognition(state.importRecognition)&&rec?.appliedCorners!==JSON.stringify(state.paperCorners)){
     toast('请先预览并应用当前纸张四角，再手动补框');return;
   }
   state.showManualBox=true;render();
@@ -3188,7 +3188,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
     toast('正在按候选框分割 '+(index+1)+' / '+regions.length);
     const chosen=state.importRecognition||state.preferences.recognition;
-    if(chosen.startsWith('sam2-')){
+    if(isComputeRecognition(chosen)){
       if(!state.correctedBitmap)throw Error('SAM 手动画框需要先完成整页透视矫正');
       const polygon=[[box.x,box.y],[box.x+box.w,box.y],[box.x+box.w,box.y+box.h],[box.x,box.y+box.h]];
       const promptBox=[Math.max(0,Math.floor(box.x*source.width)),
@@ -3246,7 +3246,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       // two-region merge wait for the whole page again.
       if(old?.region===region)return old;
       const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:record.file.name,sourceIndex:state.importIndex,lighting});
-      if((state.importRecognition||state.preferences.recognition).startsWith('sam2-'))regenerated.previewOnly=true;
+      if(isComputeRecognition(state.importRecognition||state.preferences.recognition))regenerated.previewOnly=true;
       // Changing only colour must not reset manual names, tags, dimensions or
       // choices, and must never cause the segmentation algorithm to rerun.
       if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','dimensionSource','width','height']){
@@ -3266,7 +3266,7 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   const selectedRecognition=state.importRecognition||state.preferences.recognition;
   let regions;
-  if(selectedRecognition.startsWith('sam2-')){
+  if(isComputeRecognition(selectedRecognition)){
     if(!state.correctedBitmap)throw Error('SAM 识别需要先完成 A4 透视矫正，请检查纸张四角');
     const paperRatio=pw/ph,imageRatio=source.width/source.height;
     if(Math.abs(imageRatio-paperRatio)/paperRatio>.03)throw Error('矫正图方向与纸张长短边不一致，请重新检查校正方向');

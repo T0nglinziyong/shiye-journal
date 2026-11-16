@@ -1,7 +1,7 @@
 export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=[],trash=[],blobs=[]}={}){
   const user={id:'ui-test-user'},account={user_id:user.id,username:'ui-test',is_admin:false};
   const state={revision:0,epoch:'00000000-0000-4000-8000-000000000001',
-    records:new Map(),changes:[],receipts:new Map(),objects:new Map(),jobs:new Map()};
+    records:new Map(),changes:[],receipts:new Map(),objects:new Map(),jobs:new Map(),jobRequests:[]};
   for(const [store,rows] of Object.entries({assets,series,projects,meta,trash,blobs}))
     for(const record of rows)state.records.set(store+':'+record.id,structuredClone(record));
   const selectRows=(table,filters,columns)=>{
@@ -58,6 +58,7 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
     },
     async rpc(name,args){
       if(name==='shiye_enqueue_compute_job_v1'){
+        state.jobRequests.push(args);
         const blob=state.objects.get(args.p_input_path);
         if(!blob)return {data:null,error:{message:'input missing'}};
         const image=await createImageBitmap(blob),width=image.width,height=image.height;
@@ -71,7 +72,8 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
         const backgrounds=args.p_kind==='material-segmentation'?[]:
           [pack(Math.max(0,x-12),Math.max(0,y-12),Math.min(width,x+w*2+36),Math.min(height,y+h+12))];
         const resultPath=args.p_input_path.replace(/input\.png$/,'result.json');
-        state.objects.set(resultPath,new Blob([JSON.stringify({version:2,width,height,model:args.p_model,
+        state.objects.set(resultPath,new Blob([JSON.stringify({version:2,width,height,
+          model:args.p_parameters.algorithm==='fastsam-sam2'?'fastsam-sam2-small':args.p_model,
           objects,backgrounds})],{type:'application/json'}));
         state.jobs.set(args.p_id,{id:args.p_id,status:'completed',result_path:resultPath,error_code:null});
         return {data:{id:args.p_id,status:'completed'},error:null};
