@@ -21,13 +21,15 @@ for(const row of rows){
       data.items.add(new File([bytes],'case${row.case}.jpg',{type:'image/jpeg'}));
       input.files=data.files;input.dispatchEvent(new Event('change'));
     })()`);
-    await b.wait('.paper-handle',90000);
+    await b.wait('.import-inspect',90000);
     const idleStarted=Date.now();
     while(Date.now()-idleStarted<90000){
       if(await b.evaluate('document.querySelector(".import-inspect")?.getAttribute("aria-busy")==="false"'))break;
       await b.sleep(50);
     }
     assert.equal(await b.evaluate('document.querySelector(".import-inspect")?.getAttribute("aria-busy")'),'false');
+    await b.click('[data-act="preview-crop"]','[data-act="readjust-paper"]');
+    await b.click('[data-act="readjust-paper"]','.paper-handle');
     const automatic=await b.evaluate(`(()=>{
       const overlay=document.querySelector('.paper-corner-overlay');
       return {count:document.querySelectorAll('.import-candidate-tile').length,
