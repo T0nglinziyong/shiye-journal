@@ -1,24 +1,17 @@
 export function createImportController({
   view,state,render,actions,refreshReact
 }){
-  let mountedSource=null;
-  let mountedIndex=-1;
-  const photoSource=()=>state.showManualBox?state.correctedURL||state.importURL:
-    state.showCorrectionPreview?state.paperPreviewURL||state.correctedURL:state.importURL;
   return {
     patch(){
       if(view.dataset.renderedRoute!=='import'||
          view.dataset.renderedImportStep!==state.importStep||
          view.dataset.renderedManualBox!==String(!!state.showManualBox)||
          view.dataset.renderedImportMode!==state.importMode||
-         state.importStep!=='inspect'||mountedIndex!==state.importIndex||
-         mountedSource!==photoSource())return false;
+         state.importStep!=='inspect'||!view.querySelector('.import-inspect'))return false;
       refreshReact();
       return true;
     },
     mount(lifetime){
-      mountedSource=photoSource();
-      mountedIndex=state.importIndex;
       lifetime.use(actions.subscribe(event=>{
         if(event.scope!=='import')return;
         if(event.type==='import/candidate/toggle')refreshReact();

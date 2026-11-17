@@ -12,7 +12,7 @@ import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {EditorShapeOptions} from './react-editor-shape-options.jsx';
 import {EditorVectorPanel} from './react-editor-vector.jsx';
-import {canStartCreation,creationModeDescription} from './creation-methods.js';
+import {canStartCreation} from './creation-methods.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {cloudbaseEnabled} from './cloud-session.js';
@@ -1031,7 +1031,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
         </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
       </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
-      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　根据本页方向和素材篮推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
+      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　推荐搭配</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
         <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
         <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
@@ -1040,7 +1040,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
-    <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'手动选入与普通推荐候选为必用；如无法容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}{state.aiSettings.autoUsePresets?'AI 自动补充的预设始终可选，不必全部使用。':''}不使用的素材不会发送给 AI。</p>
+    <section className="panel match-action"><h2>开始创作</h2>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
     <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>
@@ -1931,7 +1931,7 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
   return <><ImportNavigation state={state} onAction={onAction}/>
     <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
       {!snapshot?<div className="eyebrow">FROM YOUR DESK TO YOUR PAGES</div>:null}<h1>检查这一批</h1>
-      {!snapshot?<p>逐张确认，最后一起归类。</p>:null}<p className="import-processing" role="status">{state.importProcessing||''}</p>
+      {!snapshot?<p>逐张确认，最后一起归类。</p>:null}<p className="import-processing" role="status">{state.importProcessing||(snapshot?state.correctedURL?'已完成页面校正':'等待页面校正':candidates.length?`已完成分割 · ${candidates.length} 件候选素材`:'等待素材识别')}</p>
       <div className="import-queue"><div><strong>{state.importRecords.length} 张照片</strong> <small>{state.importRecords.filter(record=>record.confirmed).length} 张已确认</small></div>
         <button className="btn" data-act="select-file" data-val="gallery" data-react-action="true" onClick={()=>onAction("select-file",null,"gallery")} disabled={state.importRecords.length>=12}>＋ 添加照片</button></div>
       <div className="queue-strip">{state.importRecords.map((record,index)=><div key={index} className="queue-card"><button className={`queue-item ${index===state.importIndex?'active':''}`}
@@ -1950,8 +1950,8 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
         <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showRegions?<SamRegionOverlay regions={splitActive&&!state.importSamSplitPrompt&&splitSources.length?splitSources:candidates}
           frameSize={state.correctedBitmap||state.importBitmap}
-          mode={splitActive?'regions':state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
-          onRegionClick={busy?()=>{}:onSamRegionClick} onRegionBox={splitActive&&!busy?onSamRegionBox:null}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
+          mode={splitActive?'regions':state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:null}
+          onRegionClick={state.importSamMerging&&!busy?onSamRegionClick:null} onRegionBox={splitActive&&!busy?onSamRegionBox:null}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<>
           {state.importSamMerging?<small className="import-action-hint">{splitActive?state.importSamSplitPrompt?'请点选或框出要分离的部分，使用局部 SAM 精修。':'点选或框出其中一块，恢复这件素材的所有原始区域。':'点选区域后可合并或拆分；合并时包含区域间的底色。'}</small>:null}

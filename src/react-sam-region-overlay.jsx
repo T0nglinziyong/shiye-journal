@@ -8,6 +8,7 @@ const color=index=>{
 export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick,onRegionBox}){
   const canvasRef=useRef(null);
   const dragRef=useRef(null),ignoreClickRef=useRef(false);
+  const interactive=typeof onRegionClick==='function'||typeof onRegionBox==='function';
   const selectionKey=[...(selected||[])].sort((a,b)=>a-b).join(',');
   useLayoutEffect(()=>{
     const canvas=canvasRef.current,host=canvas?.parentElement;
@@ -53,6 +54,7 @@ export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick,
     return ()=>observer.disconnect();
   },[regions,frameSize,mode,selectionKey]);
   const click=event=>{
+    if(!onRegionClick)return;
     if(ignoreClickRef.current){ignoreClickRef.current=false;return;}
     const rect=event.currentTarget.getBoundingClientRect();
     const x=(event.clientX-rect.left)*event.currentTarget.width/rect.width;
@@ -102,9 +104,9 @@ export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick,
     const box=event.currentTarget.parentElement?.querySelector('.sam-region-drag-box');
     if(box)box.style.display='none';
   };
-  return <><canvas ref={canvasRef} className={`sam-region-overlay ${onRegionBox?'drawing':''}`} onClick={click}
+  return <><canvas ref={canvasRef} className={`sam-region-overlay ${interactive?'interactive':''} ${onRegionBox?'drawing':''}`} onClick={click}
     onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}
-    role="img" aria-label={mode==='regions'?'彩色分割区域，可点选':'候选框，可点选'}/>
+    role="img" aria-label={mode==='regions'?interactive?'彩色分割区域，可点选':'彩色分割区域':interactive?'候选框，可点选':'候选框'}/>
     {onRegionBox?<div className="sam-region-drag-box" aria-hidden="true"/>:null}</>;
 }
 

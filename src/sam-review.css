@@ -1,4 +1,5 @@
-.sam-region-overlay{position:absolute;z-index:5;max-width:none!important;max-height:none!important;touch-action:manipulation;cursor:pointer}
+.sam-region-overlay{position:absolute;z-index:5;max-width:none!important;max-height:none!important;pointer-events:none}
+.sam-region-overlay.interactive{pointer-events:auto;touch-action:manipulation;cursor:pointer}
 .sam-region-overlay.drawing{touch-action:none;cursor:crosshair}
 .sam-region-drag-box{position:absolute;z-index:6;display:none;border:2px dashed #52634b;background:#9bb79545;pointer-events:none}
 .import-preparation-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;min-width:0}

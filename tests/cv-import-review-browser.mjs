@@ -34,6 +34,14 @@ try{
   const baseline=await evaluate(`({count:document.querySelectorAll('.import-candidate-tile').length,
     source:document.querySelector('#crop-preview img')?.src,overlay:!!document.querySelector('.sam-region-overlay')})`);
   assert.ok(baseline.count>0&&baseline.overlay&&baseline.source.startsWith('blob:'));
+  const stable=await evaluate(`(()=>{const before=[...document.querySelectorAll('.import-candidate-tile')].map(node=>node.getAttribute('aria-pressed'));
+    document.querySelector('.sam-region-overlay').click();
+    return {before,after:[...document.querySelectorAll('.import-candidate-tile')].map(node=>node.getAttribute('aria-pressed')),
+      interactive:document.querySelector('.sam-region-overlay').classList.contains('interactive'),
+      status:document.querySelector('.import-processing')?.textContent};})()`);
+  assert.deepEqual(stable.before,stable.after);
+  assert.equal(stable.interactive,false);
+  assert.match(stable.status,/已完成分割/);
   for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await b.command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
     const layout=await evaluate(`({overflow:document.documentElement.scrollWidth-innerWidth,
@@ -53,7 +61,7 @@ try{
   assert.equal(await evaluate(`document.querySelector('.import-view-switch button:nth-child(2)').getAttribute('aria-pressed')`),'true');
   const beforeMerge=await evaluate(`document.querySelectorAll('.import-candidate-tile').length`);
   await click('.import-primary-tools button:nth-child(3)');
-  assert.equal(await evaluate(`document.querySelectorAll('.import-primary-tools button').length`),2);
+  assert.equal(await evaluate(`document.querySelectorAll('.import-primary-tools button').length`),3);
   await click('.candidate-choice:nth-child(1) .import-candidate-tile');
   await click('.candidate-choice:nth-child(2) .import-candidate-tile');
   await click('.import-primary-tools button.primary');
@@ -67,6 +75,23 @@ try{
   await click('[data-act="apply-paper-preview"]');
   await click('[data-act="manual-import-box"]','.multi-box-editor');
   assert.equal(await evaluate(`!!document.querySelector('.multi-box-editor')`),true);
+  await evaluate(`document.querySelector('.import-photo-tools button')?.click()`);
+  await evaluate(`(async()=>{globalThis.__importPage=document.querySelector('.import-inspect');
+    globalThis.__importQueue=document.querySelector('.queue-strip');
+    const other=document.createElement('canvas');other.width=900;other.height=650;
+    const y=other.getContext('2d');y.fillStyle='#392d27';y.fillRect(0,0,900,650);
+    y.fillStyle='#fafaf5';y.fillRect(60,45,780,555);
+    y.fillStyle='#47724f';y.fillRect(230,170,260,210);
+    const blob=await new Promise(resolve=>other.toBlob(resolve,'image/png'));
+    const dt=new DataTransfer();dt.items.add(new File([blob],'cv-page-2.png',{type:'image/png'}));
+    const input=document.querySelector('#file-input');input.files=dt.files;input.dispatchEvent(new Event('change'));
+  })()`);
+  await wait('[data-act="import-switch"][data-id="1"]');
+  assert.ok(await evaluate(`document.querySelector('.import-inspect')===globalThis.__importPage&&
+    document.querySelector('.queue-strip')===globalThis.__importQueue`));
+  await click('[data-act="import-switch"][data-id="0"]');await idle();
+  assert.ok(await evaluate(`document.querySelector('.import-inspect')===globalThis.__importPage&&
+    document.querySelector('#crop-preview img')?.src===${JSON.stringify(baseline.source)}`));
   console.log(JSON.stringify({cvCandidates:baseline.count,sharedPreview:true,postprocessStable:true}));
   assert.deepEqual(b.errors,[]);
 }finally{await b.close();}

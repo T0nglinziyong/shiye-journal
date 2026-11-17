@@ -867,7 +867,7 @@ function render(){
             }
             void splitImportBySource(index);return;
           }
-          if(!state.importSamMerging){void handle('import-toggle-candidate',String(index));return;}
+          if(!state.importSamMerging)return;
           const selection=new Set(state.importSamMergeSelection||[]);
           if(selection.has(index))selection.delete(index);else selection.add(index);
           state.importSamMergeSelection=selection;render();
@@ -889,7 +889,7 @@ function render(){
   const routeIdentity=[state.route,
     state.route==='library'?`${parity.libraryTab}:${state.seriesID||'all'}`:'',
     state.route==='works'?parity.workTab:'',
-    state.route==='import'?`${state.importStep}:${state.importIndex}`:'',
+    state.route==='import'?state.importStep:'',
     state.route==='editor'?state.activeProject?.id||'':'',
     state.route==='settings'?state.settingsSection||'home':'',
     state.route==='assetDetail'?state.detailAssetID:'',
