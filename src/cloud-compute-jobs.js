@@ -13,7 +13,7 @@ const unwrap=(result,label)=>{
 const file=(blob)=>blob instanceof Blob&&blob.size>0;
 
 export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=24,cropNLayers=1,
-  granularity='balanced',kind='material-recognition',box=null,sourceJobId=null,
+  granularity='balanced',kind='material-recognition',box=null,sourceJobId=null,recreateInput=null,
   preprocessing={illumination:false,denoise:false,localContrast:false}}={}){
   if((!sourceJobId&&!file(correctedBlob))||
     (sourceJobId&&(!uuid.test(sourceJobId)||kind!=='material-segmentation'))||
@@ -30,7 +30,15 @@ export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=2
     // CloudBase checks SELECT on the source and INSERT on this new job path.
     // A corrected page already uploaded for automatic recognition need not
     // travel from the phone again when the user adjusts a box.
-    unwrap(await bucket().copy(`${user.id}/compute/${sourceJobId}/input.png`,inputPath,{upsert:false}),'识别输入复制');
+    try{unwrap(await bucket().copy(`${user.id}/compute/${sourceJobId}/input.png`,inputPath,{upsert:false}),'识别输入复制');}
+    catch(error){
+      // Old scratch inputs expire. An open import page can still make a new
+      // manual correction from its local rectified bitmap.
+      if(![400,404].includes(Number(error?.status))||typeof recreateInput!=='function')throw error;
+      const recreated=await recreateInput();
+      if(!file(recreated))throw Error('本地矫正图已不可用，请重新打开照片');
+      unwrap(await bucket().upload(inputPath,recreated,{contentType:recreated.type||'image/png',upsert:false}),'识别输入重传');
+    }
   }else unwrap(await bucket().upload(inputPath,correctedBlob,{contentType:correctedBlob.type||'image/png',upsert:false}),'识别输入上传');
   const parameters={pointsPerSide:Number(pointsPerSide),cropNLayers:Number(cropNLayers),granularity,
     ...(model==='fastsam-sam2-small'?{algorithm:'fastsam-sam2'}:{}),

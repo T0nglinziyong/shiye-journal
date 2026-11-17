@@ -154,13 +154,12 @@ try{
     await verifyImportGeometry(width);
     report.push({width,height,selection:true,import:true,navigation:true});
   }
-  // A restored matching route must publish its saved controls without a tab switch.
-  await click('.match-preset-toggle input');
-  await wait('.match-preset-toggle input:checked');
+  // Basket order must remain stable after restoring the matching route.
+  assert.equal(await evaluate('!!(document.querySelector(".basket").compareDocumentPosition(document.querySelector(".match-recommendations")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
   await sleep(200);
   await command('Page.reload');
-  await wait('.match-preset-toggle input:checked');
-  assert.equal(await evaluate('document.querySelector(".match-preset-toggle input").checked'),true);
+  await wait('.matching-page .basket');
+  assert.equal(await evaluate('!!(document.querySelector(".basket").compareDocumentPosition(document.querySelector(".match-recommendations")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
   await writeFile(directory+'/report.json',JSON.stringify(report,null,2));
   console.log('Responsive visual regression: '+report.length+' viewports passed');
 }catch(error){

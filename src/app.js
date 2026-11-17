@@ -190,7 +190,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchAutoUsePresets:false,matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -974,6 +974,7 @@ function readAIForm(){
   return {...old,provider,keys,key,endpoint,model,
     includeStructureReference:q('structure-reference').checked,
     autoIncludeRecommendations:q('auto-recommendations').checked,
+    autoUsePresets:q('auto-presets').checked,
     requireAllCandidates:q('require-all').checked,
     includeThumbnails:vision,customVision:false,finalVisualReview:q('final-visual-review').checked,
     temperature:q('temperature').value,
@@ -1001,7 +1002,7 @@ function updateMatchingFromReact(key,value,options){
     state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
     normalizeMatchingDirection(state);
   }else if(['matchContentPolicy','matchMode',
-    'matchRatio','matchIntent','matchCreationMode','matchAutoUsePresets'].includes(key))state[key]=value;
+    'matchRatio','matchIntent'].includes(key))state[key]=value;
   else return;
   void matchingSession.persist().catch(error=>{
     console.warn('本机搭配状态未保存；不影响云端作品同步',error);
@@ -3309,6 +3310,7 @@ async function splitImportByBox(box){
       Math.ceil(x1*source.width),Math.ceil(y1*source.height)];
     const jobId=await submitSegmentationJob(correctedBlob,{
       model:state.importRecognition||state.preferences.recognition,sourceJobId,
+      recreateInput:sourceJobId?async()=>(await samInputBlob(source)).blob:null,
       pointsPerSide:state.preferences.samPointsPerSide,cropNLayers:state.preferences.samCropNLayers,
       granularity:state.preferences.samGranularity,kind:'material-segmentation',
       box:samInputBox(promptBox,{width:source.width,height:source.height},inputSize),
@@ -3358,6 +3360,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       const inputSize=sourceJobId?record.computeInputSize:samInputSize(source.width,source.height);
       const correctedBlob=sourceJobId?null:(await samInputBlob(source)).blob;
       const jobId=await submitSegmentationJob(correctedBlob,{model:chosen,sourceJobId,
+        recreateInput:sourceJobId?async()=>(await samInputBlob(source)).blob:null,
         pointsPerSide:state.preferences.samPointsPerSide,cropNLayers:state.preferences.samCropNLayers,
         granularity:state.preferences.samGranularity,kind:'material-segmentation',
         box:samInputBox(promptBox,{width:source.width,height:source.height},inputSize),

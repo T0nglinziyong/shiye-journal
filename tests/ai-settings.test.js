@@ -7,7 +7,7 @@ const memoryStorage=()=>{const entries=new Map();return {getItem:key=>entries.ge
 
 test('creative delivery settings survive save and reload without changing provider parameters',()=>{
   const storage=memoryStorage();
-  const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
+  const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,autoIncludeRecommendations:true,autoUsePresets:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
   const saved=saveAISettings(settings,storage),restored=loadAISettings(storage);
   assert.deepEqual(restored,saved);
   for(const [key,value] of Object.entries(settings))if(!['includeThumbnails','maxTurns','deliveryMode'].includes(key))assert.deepEqual(restored[key],value,key);

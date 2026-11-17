@@ -39,6 +39,23 @@ test('manual SAM box reuses the owner-scoped corrected page in CloudBase',async(
   }finally{delete globalThis.__computeMock;}
 });
 
+test('manual SAM box reuploads the local corrected page after scratch input expires',async()=>{
+  const calls=[];
+  globalThis.__computeMock={storage:{from:()=>({
+    copy:async()=>({error:{message:'not found',status:404},status:404}),
+    upload:async(...args)=>{calls.push(['upload',...args]);return {data:{path:args[0]}};}
+  })},client:{rpc:async(name,args)=>{calls.push(['rpc',name,args]);return {data:{id:args.p_id,status:'queued'}};}}};
+  try{
+    const {submitSegmentationJob}=await moduleUnderTest();
+    await submitSegmentationJob(null,{model:'sam2-small',kind:'material-segmentation',
+      sourceJobId:sourceID,box:[10,20,100,120],
+      recreateInput:async()=>new Blob(['rectified'],{type:'image/png'})});
+    assert.equal(calls[0][0],'upload');
+    assert.equal(calls[0][1].endsWith('/input.png'),true);
+    assert.equal(calls[1][1],'shiye_enqueue_compute_job_v1');
+  }finally{delete globalThis.__computeMock;}
+});
+
 test('hybrid method uses the existing guarded small-model job with an explicit algorithm',async()=>{
   const calls=[];
   globalThis.__computeMock={storage:{from:()=>({

@@ -1,0 +1,10 @@
+[Unit]
+Description=每天回收拾页计算临时文件
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=shiye-compute-cleanup.service
+
+[Install]
+WantedBy=timers.target
