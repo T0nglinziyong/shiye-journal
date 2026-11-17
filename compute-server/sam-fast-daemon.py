@@ -61,8 +61,8 @@ def main():
     from sam2.build_sam import build_sam2
     from sam2.sam2_image_predictor import SAM2ImagePredictor
     from proposal_policy import largest_connected_component, select_proposals
-    from postprocess_results import (find_composite_carriers, inside,
-                                     page_edge_artifact, merge_groups)
+    from carrier_policy import (find_composite_carriers, inside,
+                                page_edge_artifact, merge_groups)
     from fastsam_hybrid import FastSamHybrid, smooth_mask
 
     models = {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {samInputSize,samInputBox} from '../src/sam-input.js';
 import {mergeSamRegions} from '../src/sam-region-merge.js';
-import {mergeLightCarriers} from '../src/sam-postprocess.js';
+import {mergeSharedCarriers} from '../src/sam-postprocess.js';
 
 test('SAM input preserves A4 orientation and maps manual boxes',()=>{
   assert.deepEqual(samInputSize(4096,2897),{width:1024,height:724});
@@ -43,19 +43,17 @@ test('detected carrier absorbs all child print regions and keeps the card outlin
   assert.equal(merged.pixels,32);
 });
 
-test('automatic carrier option joins light paper and preserves dark collage cards',()=>{
+test('automatic carrier grouping uses child structure rather than paper brightness',()=>{
   const frame={segmentationFrameWidth:100,segmentationFrameHeight:100,segmentationMethod:'sam2-small'};
-  const child=(x,y)=>({...frame,x:x/100,y:y/100,w:.05,h:.05,
-    mask:{width:5,height:5,alpha:new Uint8Array(25).fill(255)}});
+  const child=(x,y,size=5)=>({...frame,x:x/100,y:y/100,w:size/100,h:size/100,
+    mask:{width:size,height:size,alpha:new Uint8Array(size*size).fill(255)}});
   const background=(x)=>({...frame,x:x/100,y:.1,w:.25,h:.25,
     mask:{width:25,height:25,alpha:new Uint8Array(625).fill(255)}});
   const raw=[child(12,13),child(23,15),child(52,13),child(63,15)];
-  const pixels=new Uint8ClampedArray(100*100*4).fill(240);
-  for(let y=10;y<35;y++)for(let x=50;x<75;x++){
-    const at=(y*100+x)*4;pixels[at]=pixels[at+1]=pixels[at+2]=35;
-  }
-  const joined=mergeLightCarriers(raw,[background(10),background(50)],pixels,100,100);
-  assert.equal(joined.length,3);
-  assert.ok(joined.some(region=>region.manuallyMerged&&region.x===.1));
-  assert.ok(joined.includes(raw[2])&&joined.includes(raw[3]));
+  const joined=mergeSharedCarriers(raw,[background(10),background(50)]);
+  assert.equal(joined.length,2);
+  assert.ok(joined.every(region=>region.manuallyMerged));
+  const distinct=[child(12,13,12),child(24,13,10)];
+  assert.deepEqual(mergeSharedCarriers(distinct,[background(10)]),distinct,
+    'large pieces on a shared carrier remain separate');
 });

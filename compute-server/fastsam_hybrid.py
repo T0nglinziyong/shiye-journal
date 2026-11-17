@@ -10,11 +10,11 @@ import torch
 from ultralytics import FastSAM
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from proposal_policy import largest_connected_component, mask_box, select_proposals
-from postprocess_results import find_composite_carriers, inside, page_edge_artifact
+from carrier_policy import find_composite_carriers, inside, page_edge_artifact
 
 
 def _printed_carrier_footer(item, carriers, height):
-    """Ignore tiny printed credits at the foot of a dark collage card."""
+    """Ignore tiny printed credits at the foot of a collage carrier."""
     x0, y0, x1, y1 = item["bbox_xyxy"]
     width, item_height = x1-x0, y1-y0
     if item_height > height*.027 or width < item_height*3:
@@ -30,7 +30,7 @@ def _printed_carrier_footer(item, carriers, height):
 
 def _merge_aligned_photograph_fragments(items, width):
     # A photo may be split at a horizon. Join only near full-width aligned
-    # horizontal strips. Collage labels on a black carrier remain separate.
+    # horizontal strips. Collage labels on a carrier remain separate.
     parent = list(range(len(items)))
 
     def root(index):
@@ -80,8 +80,8 @@ def _proposals(result, image):
                           "bbox": [box[0], box[1], box[2]-box[0], box[3]-box[1]],
                           "area": area, "predicted_iou": float(confidences[index])})
     carriers = find_composite_carriers(all_items, image)
-    black_card = bool(carriers)
-    cap = .12 if black_card else .20
+    has_composite_carrier = bool(carriers)
+    cap = .12 if has_composite_carrier else .20
     pool = [item for item in all_items if item["area"] / (width*height) < cap
             and not page_edge_artifact(item, width, height)]
     selected, _ = select_proposals(pool, (width, height), "coarse", 500)
@@ -96,7 +96,7 @@ def _proposals(result, image):
                for parent in selected):
             continue
         outside.append(child)
-    if black_card:
+    if has_composite_carrier:
         outside = [item for item in outside if item["area"] > width*height*.001
                    and not _printed_carrier_footer(item, carriers, height)]
     else:

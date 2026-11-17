@@ -66,7 +66,7 @@ export const candidateDiscoveryOptions=Object.freeze([['legacy','原版 · 前�
 export const candidateDiscoveryAllowed=value=>candidateDiscoveryOptions.some(([id])=>id===value);
 export const recognitionMethodDetails=[...recognitionStrategies.map(({id,label,description})=>({id,label,description})),
   ...computeRecognitionOptions.map(([id,label])=>({id,label,description:id==='fastsam-sam2-small'
-    ?'整页矫正后用 FastSAM 寻找纸片和黑卡内素材，再用 SAM 2.1 Small 精修与平滑边缘。候选框和彩色区域均可检查。'
+    ?'整页矫正后用 FastSAM 寻找独立素材和复合载体内的素材，再用 SAM 2.1 Small 精修与平滑边缘。候选框和彩色区域均可检查。'
     :'整页上传至拾页计算服务器，先矫正和预处理，再用 SAM 生成透明 Mask；不运行传统候选或边缘分割。'}))];
 export const recognitionModeAllowed=value=>strategiesByID.has(value)||isComputeRecognition(value);
 export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));

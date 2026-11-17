@@ -1660,9 +1660,9 @@ export function SettingsRecognitionPage({preferences,onAction}){
       <SettingsToggle id="setting-whole-paper" label="未检测到纸边时使用整张图" checked={p.wholePaper}
         help="未找到纸边时按整张图估算尺寸；不会生成透视校正。"/>
     </SettingsGroup>
-    <SettingsGroup title="2 · 素材数量与候选框" description={methodCategory==='api'?'API 模型接入后沿用这组载体规则。':recognitionMethod==='fastsam-sam2-small'?'快速分割一次处理整张矫正图；黑卡作为载体继续识别内部素材，白底纸片优先保持整件。':methodCategory==='server'?'SAM 使用整张矫正图生成候选；上方的采样密度、裁剪层数和合并颗粒度控制结果。':'统一候选的整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。有纸张尺寸时，自动结果过滤短边小于 9 mm 的实体，调整框选不受限。'}>
+    <SettingsGroup title="2 · 素材数量与候选框" description={methodCategory==='api'?'API 模型接入后沿用这组载体规则。':recognitionMethod==='fastsam-sam2-small'?'快速分割一次处理整张矫正图；依据区域包含关系保留独立素材，不按纸片颜色决定是否拆分。':methodCategory==='server'?'SAM 使用整张矫正图生成候选；上方的采样密度、裁剪层数和合并颗粒度控制结果。':'统一候选的整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。有纸张尺寸时，自动结果过滤短边小于 9 mm 的实体，调整框选不受限。'}>
       <SettingsToggle id="setting-merge-carrier" label="合并共同载体" checked={p.mergeSharedCarrier!==false}
-        help="同一浅色纸片上的图案视为一件；关闭后可尝试按独立图案拆分。"/>
+        help="同一载体上的零散印刷图案可合为一件；独立素材保持分开。关闭后恢复已保存的细分区域。"/>
     </SettingsGroup>
     <SettingsGroup title="3 · 图像预处理" description={methodCategory==='server'?'可在整页 SAM 推理前均衡光照、去噪和增强局部对比；原色素材仍从未处理的矫正图提取。':methodCategory==='api'?'配置将在 API 模型接入后用于矫正图的预处理。':'亮度、去噪和对比度只作用于边界分割；Lab 色差边缘也会影响整页候选。'}>
       <SettingsToggle id="setting-preprocess-light" label="亮度均衡" checked={p.balanceLight===true}
