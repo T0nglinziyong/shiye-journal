@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {materialKinds,materialRoles,materialTextures} from '../src/material-taxonomy.js';
-import {classificationResult} from '../src/classification.js';
+import {classificationResult,constrainMaterialClassification} from '../src/classification.js';
 
 test('material classification stays inside a finite shared vocabulary with an explicit other choice',()=>{
   for(const options of [materialKinds,materialRoles]){
@@ -18,4 +18,15 @@ test('material classification stays inside a finite shared vocabulary with an ex
   for(const change of [{kind:'invented'},{role:'invented'},{texture:'模型随意发挥的材质'},{texture:'待记录'}]){
     assert.throws(()=>classificationResult({...base,...change},'asset'),/预设范围/);
   }
+});
+
+test('model-created material labels are normalized before saving',()=>{
+  const value={title:'蓝色纸片',tags:['蓝色'],kind:'纸张',role:'主角',texture:'纸张'};
+  assert.deepEqual(classificationResult(constrainMaterialClassification(value),'asset').kind,'paper');
+  const invented=classificationResult(constrainMaterialClassification({
+    ...value,kind:'蓝色纸艺',role:'主题角色',texture:'幻彩材质'
+  }),'asset');
+  assert.equal(invented.kind,'other');
+  assert.equal(invented.role,'other');
+  assert.equal(invented.texture,'未确定');
 });

@@ -728,13 +728,40 @@ test('a missing remote thumbnail is rebuilt from its original instead of showing
   const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cloudbase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.ok(a.state.downloads>=2);
 });
+test('a missing cloud cover is rebuilt at 480px and queued for cloud repair',async()=>{
+  const previous={document:globalThis.document,createImageBitmap:globalThis.createImageBitmap,
+    OffscreenCanvas:globalThis.OffscreenCanvas};
+  globalThis.document={visibilityState:'visible'};
+  globalThis.createImageBitmap=async()=>({width:1200,height:900,close(){}});
+  globalThis.OffscreenCanvas=class{
+    constructor(width,height){this.width=width;this.height=height;}
+    getContext(){return {drawImage(){}};}
+    async convertToBlob(){return new Blob([`cover-${this.width}x${this.height}`],{type:'image/webp'});}
+  };
+  try{
+    const original='owner-uuid/source',uploaded=[];
+    const storage={enabled:true,
+      async download(path){if(path===original)return new Blob(['original'],{type:'image/png'});throw Object.assign(Error('missing'),{status:404});},
+      async upload(path,blob){uploaded.push([path,blob]);}
+    };
+    const {db,state}=fixture(null,storage);state.rows=[{id:'b',storagePath:original,storageProvider:'cloudbase'}];
+    assert.equal(await (await db.cloudPreview('b')).text(),'cover-480x360');
+    for(let i=0;i<25&&!uploaded.length;i++)await new Promise(resolve=>setTimeout(resolve,100));
+    assert.equal(uploaded[0]?.[0],original+'-preview480.webp');
+    assert.equal(await uploaded[0][1].text(),'cover-480x360');
+  }finally{
+    for(const [key,value] of Object.entries(previous)){
+      if(value===undefined)delete globalThis[key];else globalThis[key]=value;
+    }
+  }
+});
 test('AI cover uses COS derivative only and never downloads original on error',async()=>{
   const calls=[],cos={enabled:true,
     async download(path){calls.push('GET:'+path);throw Error('COS 404');},
     async preview(path){calls.push('CI:'+path);throw Error('派生图暂不可用');}};
   const a=fixture(null,cos);a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cloudbase'}];
   await assert.rejects(a.db.cloudPreview('b',480,{allowRemoteOriginal:false}),/派生图暂不可用/);
-  assert.deepEqual(calls,['GET:owner-uuid/hash-preview480.webp','CI:owner-uuid/hash']);
+  assert.deepEqual(calls,['GET:owner-uuid/hash-preview480.webp']);
 });
 test('CloudBase immutable thumbnails are reused without downloading originals',async()=>{
   const cache=memoryCache(),calls=[],remote=new Map(),original='owner-uuid/'+'a'.repeat(64),

@@ -1365,7 +1365,16 @@ async function runAppAction(action,id,value){try{
   }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':if(state.editingPaperCorners)await previewCorrection();else{state.editingPaperCorners=true;render();}break;case 'confirm-import':{
     const highRes=createHighResCandidateResolver();
-    try{await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets,resolveCandidate:highRes.resolve});}
+    try{await saveImportBatch({state,db,urls,render,onSaved:(records,context)=>{
+      // The imported cutouts are already held by this account's local URLs.
+      // Build card-sized covers from them while cloud upload continues.
+      void boundedMap(records,2,async record=>{
+        try{const source=urls.get(record.blobId);if(source){const blob=await fetch(source).then(r=>r.blob());
+          await privateImages.primeLocal(record.blobId,blob);}}
+        catch(error){console.warn('本地素材封面待重试',error?.message);}
+      });
+      return organizeSavedAssets(records,context);
+    },resolveCandidate:highRes.resolve});}
     finally{highRes.dispose();}
     break;}
   case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';await switchImportRecord(state.importIndex,true);}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;

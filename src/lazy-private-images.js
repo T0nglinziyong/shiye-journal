@@ -121,6 +121,8 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       try{blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier,{allowRemoteOriginal});}
       catch(error){emit({phase:'failed',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started,error});throw error;}
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
+      // A just-imported local cover may have completed during a remote read.
+      if(!full&&tier===COVER_EDGE&&previews.has(id))return previews.get(id);
       if(!blob){const error=Error('图片尚未同步到可读取位置');emit({phase:'failed',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started,error});throw error;}
       if(full&&urls.has(id))return urls.get(id);
       const url=URL.createObjectURL(blob);
@@ -259,7 +261,28 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   // observing them on document.body rescanned the ENTIRE gallery every time
   // navigation changed a CSS class.
   changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
-  return {load,available(id,requested=false){
+  return {load,async primeLocal(id,blob){
+    if(disposed||!id||!(blob instanceof Blob)||!blob.size||previews.has(id))return;
+    const epoch=generation,bitmap=await createImageBitmap(blob);
+    try{
+      const scale=Math.min(1,COVER_EDGE/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+      canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+      const small=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));
+      if(!small?.size||disposed||epoch!==generation||previews.has(id))return;
+      const url=URL.createObjectURL(small);
+      previews.set(id,url);previewSizes.set(id,small.size);
+      notifyImageInvalidation([id]);
+      for(const img of root.querySelectorAll('img')){
+        const src=img.getAttribute('src')||'';
+        if(!src.endsWith('#shiye-image='+encodeURIComponent(id)))continue;
+        delete img.dataset.imageError;img.src=url;
+      }
+      queueTrim();
+    }finally{bitmap.close?.();}
+  },available(id,requested=false){
     if(urls.has(id))return {url:urls.get(id),sufficient:true,type:'original'};
     const tier=requested===false?COVER_EDGE:imageTier(requested);
     return cachedChoice(id,tier)||null;

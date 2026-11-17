@@ -1005,10 +1005,31 @@ async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
       if(usableBlob(stored)){await rememberImageVariant(record.storagePath,edge,stored);return stored;}
     }catch{/* One-time cache miss. */}
   }
-  if(!objectStorage?.preview)throw Error('CloudBase 图片封面尚不可用');
-  const preview=await objectStorage.preview(record.storagePath,variant,record.storageProvider);
+  if(edge!==COVER_EDGE){
+    if(!objectStorage?.preview)throw Error('CloudBase 图片预览尚不可用');
+    const source=await objectStorage.preview(record.storagePath,variant,record.storageProvider);
+    const preview=await makeThumbnail(source,edge)||source;
+    if(!usableBlob(preview))throw Error('CloudBase 图片预览为空');
+    await rememberImageVariant(record.storagePath,edge,preview);
+    return preview;
+  }
+  if(!allowRemoteOriginal)throw Error('派生图暂不可用；原图未被下载');
+  // PG Storage does not transform images. When the optional derivative is
+  // absent, read the immutable original once, derive a real compact cover on
+  // this device and repair the deterministic cloud thumbnail in the background.
+  const original=await downloadObject(record.storagePath,record.storageProvider);
+  const preview=await makeThumbnail(original,edge)||original;
   if(!usableBlob(preview))throw Error('CloudBase 图片封面为空');
   await rememberImageVariant(record.storagePath,edge,preview);
+  if(edge===COVER_EDGE&&preview.type==='image/webp'&&!previewJobs.has(record.storagePath)){
+    previewJobs.add(record.storagePath);
+    const expectedOwner=owner,path=record.storagePath;
+    scheduleForegroundIdle(()=>{void (async()=>{
+      if(await identity()!==expectedOwner)return;
+      await uploadObject(path+'-preview480.webp',preview,'image/webp',record.storageProvider);
+    })().catch(error=>console.warn('云存储封面待补齐',error?.message))
+      .finally(()=>previewJobs.delete(path));},{minIdleMs:800,delayMs:500});
+  }
   return preview;
 }
 async function makeThumbnail(data,edge=480){
