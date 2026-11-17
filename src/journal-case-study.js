@@ -12,7 +12,8 @@ export const journalMaterialRoles = Object.freeze([
 ]);
 
 export function classifyJournalMaterial(asset={}){
-  const words=[asset.title,asset.role,asset.kind,asset.texture,...(asset.tags||[]),...(asset.contentTags||[]),...(asset.materialTags||[])].filter(Boolean).join(' ').toLowerCase();
+  const words=[asset.title,asset.role,asset.kind,asset.kindDetail,...(asset.tags||[]),
+    ...(asset.contentTags||[]),...(asset.materialTags||[])].filter(Boolean).join(' ').toLowerCase();
   const roles=[];
   if(/底纸|背景|书写页|横线纸|background|base/.test(words))roles.push('base');
   if(/照片|摄影|主图|主视觉|插画|photo|focal/.test(words))roles.push('focal');

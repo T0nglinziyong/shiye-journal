@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff,verifyOfflineTaskPackage,inspectOfflinePackage,importEditableWork,importEditableWorkPackage,EDITABLE_PACKAGE_ENTRY,EDITABLE_WORK_FORMAT} from '../src/offline-creation.js';
 import {tinyPNG} from './offline-canvas-test-support.mjs';
-const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色'],contentTags:['星星'],placementHints:['可作书写底纸']};
+const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色'],contentTags:['星星'],layoutFits:['local.text']};
 const make=async(options={})=>createOfflineHandoff({project:options.p||project('测试创作'),assets:options.assets||[asset],aliases:options.aliases||{m1:asset.id},previews:options.previews||[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true,...options.settings}});
 const entries=async task=>unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
 const read=(files,path)=>JSON.parse(strFromU8(files[path]));
@@ -20,7 +20,7 @@ test('editable GPT package uses one v3 command entry and authoritative Scene',as
  assert.equal(context.materials[0].physicalWidthMM,40);assert.equal(read(files,'assets/manifest.json').assets[0].assetID,asset.id);
  assert.equal(context.physicalScaleRef,'assets/size-map.jpg');
  assert.deepEqual(context.materials[0].metadataHints.contentTags,['星星']);
- assert.deepEqual(context.materials[0].metadataHints.placementHints,['可作书写底纸']);
+ assert.deepEqual(context.materials[0].metadataHints.layoutFits,['local.text']);
  assert.equal(context.materials[0].metadataHints.styleTags,undefined);
  assert.ok(strFromU8(files['design/GUIDE.md']).length<12000);
  assert.equal(read(files,'scene.json').format,EDITABLE_WORK_FORMAT);

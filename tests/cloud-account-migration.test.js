@@ -28,9 +28,24 @@ test('migration never overwrites a version advanced by another device after prev
  await assert.rejects(db.cloudMigrationCommit({expectedRevision:snapshot.revision,changes:plan.changes}),/版本已变化/);
  assert.equal(state.calls.length,0);
 });
-test('migration rejects arbitrary writes against assets, meta or photos',async()=>{
+test('account migration commits only the exact validated legacy asset conversion',async()=>{
+ const {db,state}=server();
+ state.collections.assets=[{id:'asset-old',title:'拼贴',kind:'other',role:'other',tags:['手工标签']}];
+ const snapshot=await db.cloudMigrationInventory();
+ const plan=await prepareStorageMigration(snapshot.collections);
+ assert.equal(plan.review.length,0);
+ const asset=plan.changes.find(change=>change.store==='assets');
+ assert.equal(asset.converted.role,'other');
+ const result=await db.cloudMigrationCommit({expectedRevision:snapshot.revision,changes:plan.changes});
+ assert.equal(result.updated,2);
+ assert.deepEqual(state.calls[0].operations.map(op=>op.store),['assets','projects']);
+});
+test('migration rejects arbitrary writes against assets and other stores',async()=>{
  const {db}=server();
  await assert.rejects(db.cloudMigrationCommit({expectedRevision:3,changes:[{id:'secret',store:'meta',converted:{id:'secret'}}]}),/写入目标不安全/);
+ await assert.rejects(db.cloudMigrationCommit({expectedRevision:3,changes:[{id:'asset',store:'assets',
+  original:{id:'asset',kind:'sticker',role:'accent',tags:[]},
+  converted:{id:'asset',classificationVersion:2,kind:'other'}}]}),/写入目标不安全/);
 });
 
 test('migration stops before writing when an overlapping old scene is quarantined locally',async()=>{

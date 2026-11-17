@@ -1,32 +1,74 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {materialKinds,materialRoles,materialTextures} from '../src/material-taxonomy.js';
-import {classificationResult,constrainMaterialClassification} from '../src/classification.js';
+import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,tagGroups,
+  MATERIAL_TAXONOMY_VERSION} from '../src/material-taxonomy.js';
+import {initialMaterialClassification,userMaterialClassification,applyAIClassification,
+  validateMaterialClassification} from '../src/material-classification.js';
+import {migrateMaterialV1} from '../src/data-migrations/material-v1-to-v2.js';
 
-test('material classification stays inside a finite shared vocabulary with an explicit other choice',()=>{
-  for(const options of [materialKinds,materialRoles]){
-    assert.equal(new Set(options.map(([id])=>id)).size,options.length);
-    assert.ok(options.some(([id])=>id==='other'));
-  }
-  assert.ok(materialTextures.includes('其他'));
-  assert.ok(materialTextures.includes('未确定'));
-  const base={title:'不规则剪片',tags:[],kind:'other',role:'other',texture:'未确定'};
-  assert.deepEqual(classificationResult(base,'asset'),{
-    title:'不规则剪片',tags:[],kind:'other',role:'other',texture:'未确定',
-    reviewStatus:'ready',contentTags:[],styleTags:[],materialTags:[],placementHints:[],semanticColorNames:[]
-  });
-  for(const change of [{kind:'invented'},{role:'invented'},{texture:'模型随意发挥的材质'},{texture:'待记录'}]){
-    assert.throws(()=>classificationResult({...base,...change},'asset'),/预设范围/);
-  }
+test('four fixed category dictionaries have stable unique ids and seven open tag groups',()=>{
+ assert.equal(MATERIAL_TAXONOMY_VERSION,2);
+ for(const rows of [materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,tagGroups])
+  assert.equal(new Set(rows.map(([id])=>id)).size,rows.length);
+ assert.equal(materialKinds.length,14);assert.equal(materialRoles.length,10);
+ assert.equal(contentCategories.length,13);assert.equal(layoutFits.length,24);assert.equal(tagGroups.length,7);
+ for(const rows of [materialKinds,materialRoles,contentCategories,layoutFits])
+  assert.ok(rows.some(([id])=>id==='other'));
 });
-
-test('model-created material labels are normalized before saving',()=>{
-  const value={title:'蓝色纸片',tags:['蓝色'],kind:'纸张',role:'主角',texture:'纸张'};
-  assert.deepEqual(classificationResult(constrainMaterialClassification(value),'asset').kind,'paper');
-  const invented=classificationResult(constrainMaterialClassification({
-    ...value,kind:'蓝色纸艺',role:'主题角色',texture:'幻彩材质'
-  }),'asset');
-  assert.equal(invented.kind,'other');
-  assert.equal(invented.role,'other');
-  assert.equal(invented.texture,'未确定');
+test('user-confirmed type survives AI content and material guesses',()=>{
+ const base={...initialMaterialClassification({kind:'sticker',role:'accent'}),title:'布纹贴纸',
+  categoryEvidence:{kind:{source:'user',confidence:1}},tagEvidence:{}};
+ const result={modelVersion:'vision-1',kind:{id:'paper',confidence:.99},
+  kindDetail:{id:'paper.textured',confidence:.97},role:{id:'accent',confidence:.92},
+  contentTags:[{value:'布纹',confidence:.95}],materialTags:[{value:'布料',confidence:.45}],
+  tags:[{value:'我自己的标签',confidence:.9}]};
+ const output=applyAIClassification(base,result);
+ assert.equal(output.kind,'sticker');assert.equal(output.kindDetail,null);
+ assert.deepEqual(output.contentTags,['布纹']);assert.deepEqual(output.materialTags,[]);
+ assert.deepEqual(output.tags,['我自己的标签']);
+ const confirmed=userMaterialClassification(output,{materialTags:['贴纸纸'],tags:['自定义']});
+ assert.deepEqual(applyAIClassification(confirmed,result).materialTags,['贴纸纸']);
+ assert.deepEqual(applyAIClassification(confirmed,result).tags,['自定义']);
+ validateMaterialClassification(confirmed);
+});
+test('legacy migration preserves custom tags and does not invent a subtype',()=>{
+ const converted=migrateMaterialV1({id:'a',title:'小纸片',kind:'sticker',role:'annotation',
+  texture:'贴纸纸',tags:['用户标签'],contentTags:['猫'],semanticColorNames:['蓝色'],
+  placementHints:['角落放置']});
+ assert.equal(converted.kind,'sticker');assert.equal(converted.kindDetail,null);
+ assert.equal(converted.role,'marker');assert.deepEqual(converted.tags,['用户标签','角落放置']);
+ assert.deepEqual(converted.materialTags,['贴纸纸']);assert.deepEqual(converted.colorTags,['蓝色']);
+ assert.equal(Object.hasOwn(converted,'texture'),false);
+});
+test('unmapped legacy categories become other without losing original ids or user tags',()=>{
+ const converted=migrateMaterialV1({id:'legacy',kind:'unknown-paper-craft',role:'other',
+  tags:['用户自定义'],contentTags:['蝴蝶']});
+ assert.equal(converted.kind,'other');assert.equal(converted.role,'other');
+ assert.equal(converted.kindDetail,'other.unclassified');
+ assert.deepEqual(converted.tags,['用户自定义']);
+ assert.deepEqual(converted.contentTags,['蝴蝶']);
+ assert.equal(converted.categoryEvidence.kind.originalId,'unknown-paper-craft');
+ assert.equal(converted.categoryEvidence.role.originalId,'other');
+ assert.deepEqual(converted.contentCategories,[]);
+ assert.deepEqual(converted.layoutFits,[]);
+});
+test('explicit confirmation protects unchanged categories and all open tag groups',()=>{
+ const prior={...initialMaterialClassification({kind:'sticker',role:'accent',tags:['自定义']}),
+  title:'蝴蝶贴纸',kindDetail:'sticker.subject'};
+ const confirmed=userMaterialClassification(prior,{}, {confirm:true});
+ const ai={modelVersion:'vision-2',kind:{id:'paper',confidence:.99},
+  kindDetail:{id:'paper.patterned',confidence:.99},role:{id:'background',confidence:.98},
+  tags:[{value:'模型标签',confidence:.95}],contentCategories:[{id:'animals',confidence:.9}]};
+ const result=applyAIClassification(confirmed,ai);
+ assert.equal(result.kind,'sticker');assert.equal(result.kindDetail,'sticker.subject');
+ assert.equal(result.role,'accent');assert.deepEqual(result.tags,['自定义']);
+ assert.deepEqual(result.contentCategories,[]);
+ assert.equal(applyAIClassification({...confirmed,reviewStatus:'ready'},ai).reviewStatus,'ready');
+});
+test('a user-confirmed subtype prevents AI from switching its parent type',()=>{
+ const prior={...initialMaterialClassification({kind:'sticker'}),kindDetail:'sticker.subject',
+  categoryEvidence:{kind:{source:'default'},kindDetail:{source:'user',confidence:1}}};
+ const result=applyAIClassification(prior,{modelVersion:'vision-2',kind:{id:'paper',confidence:.99},
+  kindDetail:{id:'paper.patterned',confidence:.99},role:{id:'support',confidence:.9}});
+ assert.equal(result.kind,'sticker');assert.equal(result.kindDetail,'sticker.subject');
 });

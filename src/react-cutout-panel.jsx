@@ -13,10 +13,10 @@ function Toggle({id,label,description,checked,onChange}){
 }
 function MaskTools({state,actions,note,extra}){
   return <div className="cutout-mask-tools"><div className="cutout-tabs two">
-    <button type="button" data-repair="restore" className={state.restore?'selected':''} onClick={()=>actions.repair(true)}>补回</button>
-    <button type="button" data-repair="erase" className={!state.restore?'selected':''} onClick={()=>actions.repair(false)}>擦除</button></div>
+    <button type="button" data-repair="restore" disabled={state.busy} className={state.restore?'selected':''} onClick={()=>actions.repair(true)}>补回</button>
+    <button type="button" data-repair="erase" disabled={state.busy} className={!state.restore?'selected':''} onClick={()=>actions.repair(false)}>擦除</button></div>
     <label>笔宽 · 短边的 <b id="brush-value">{Math.round(state.ratio*100)}%</b>
-      <BoundedSlider id="cutout-strength" min={.5} max={20} step={.5} value={state.ratio*100}
+      <BoundedSlider id="cutout-strength" min={.5} max={20} step={.5} value={state.ratio*100} disabled={state.busy}
         onChange={value=>actions.ratio(value/100)}/></label>
     <div className="cutout-brush-actions"><button type="button" id="cutout-undo" disabled={!state.history||state.busy} onClick={actions.undo}>↶ 撤销</button>
       <button type="button" id="cutout-refine" disabled={!state.lastStroke||state.busy} onClick={actions.refine}>细化涂抹</button></div>
@@ -42,7 +42,7 @@ export function CutoutPanel({state,actions,canvasRef}){
   <section className="cutout-controls"><div id="cutout-mode-panel">
     {state.mode==='rough'?<div className="stack"><h3>手动修补边缘</h3>
       <MaskTools {...common} note="这里的涂抹只作为重新识别的初始范围；主算法可以继续向真实物理边缘扩张或收缩。"
-        extra={<div className="form-grid"><button type="button" id="cutout-rough-enter" onClick={actions.restoreEntry}>恢复进入时 mask</button>
+        extra={<div className="form-grid"><button type="button" id="cutout-rough-enter" disabled={state.busy} onClick={actions.restoreEntry}>恢复进入时 mask</button>
           <button type="button" id="cutout-rough-original" disabled={state.busy} onClick={actions.restoreRecognition}>恢复原始识别 mask</button></div>}/>
       <details className="cutout-advanced"><summary>重新识别设置</summary>
         <label>识别方法<select id="cutout-method" value={state.recognition.method} onChange={event=>actions.recognition('method',event.target.value)}>

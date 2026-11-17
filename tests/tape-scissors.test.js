@@ -9,6 +9,7 @@ import {validateScenePhysical} from '../src/creative.js';
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {detectTapeFlatCrop,normalizeTapeFlatCrop} from '../src/tape-flat-crop.js';
 import {assetEditorValue} from '../src/asset-editor.js';
+import {initialMaterialClassification} from '../src/material-classification.js';
 
 const source={id:'paper',kind:'paper',title:'纸片',physicalWidthMM:100,physicalHeightMM:80};
 function page(){
@@ -78,7 +79,7 @@ test('tape flattening crops segmentation hairs without replacing the original PN
   assert.ok(crop.left>=.11&&crop.right<=.89,JSON.stringify(crop));
   assert.ok(crop.top>=.2&&crop.bottom<=.8,JSON.stringify(crop));
   assert.throws(()=>normalizeTapeFlatCrop({left:.8,right:.2,top:0,bottom:1}),/修平边界/);
-  const old={id:'t',title:'花纹',kind:'sticker',role:'support',texture:'未确定',
+  const old={id:'t',title:'花纹',...initialMaterialClassification({kind:'sticker',role:'support'}),
     physicalWidthMM:100,physicalHeightMM:16,blobId:'original-png'};
   const values={title:old.title,kind:'tape',role:old.role,texture:old.texture,
     width:'100',height:'16',tags:'',contentTags:'',styleTags:'',materialTags:'',

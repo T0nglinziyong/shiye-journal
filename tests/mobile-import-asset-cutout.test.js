@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {candidateMetadata} from '../src/import-save.js';
 import {assetEditorValue} from '../src/asset-editor.js';
+import {initialMaterialClassification} from '../src/material-classification.js';
 import {decodeImageBlob} from '../src/image-blob-decoder.js';
 import {validatePhysicalDraft} from '../src/domain.js';
 
@@ -18,7 +19,7 @@ test('old quantity input is ignored when importing current material metadata',()
  assert.equal(a.supply,undefined);
 });
 test('material editor removes stock metadata and no-op stays stable',()=>{
- const old={id:'a',title:'胶带',kind:'tape',supply:{kind:'single',quantity:1}};
+ const old={id:'a',title:'胶带',...initialMaterialClassification({kind:'tape'}),supply:{kind:'single',quantity:1}};
  const values={title:'胶带',kind:'tape',role:'support',texture:'',
    width:'40',height:'80',quantity:'999',tags:'',contentTags:'',
    styleTags:'',materialTags:'',seriesID:'',reviewStatus:'ready',
@@ -29,7 +30,7 @@ test('material editor removes stock metadata and no-op stays stable',()=>{
  assert.equal(assetEditorValue(edited,values),edited,'an unchanged save must not create another cloud write');
 });
 test('material editor keeps tape orientation and validates period along that axis',()=>{
- const old={id:'vertical-tape',title:'竖向胶带',kind:'tape',
+ const old={id:'vertical-tape',title:'竖向胶带',...initialMaterialClassification({kind:'tape'}),
    physicalWidthMM:20,physicalHeightMM:80};
  const values={title:old.title,kind:'tape',role:'support',texture:'未确定',
    width:'20',height:'80',tags:'',contentTags:'',styleTags:'',materialTags:'',

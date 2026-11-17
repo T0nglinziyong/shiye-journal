@@ -5,14 +5,17 @@ import {createHash,randomUUID} from 'node:crypto';
 
 export const FUNCTION_FILES=Object.freeze([
  'server/cloudbase-user.mjs','server/cos-tickets.mjs',
- ...['app','credentials','errors','postgres','embeddings','search','service','storage-gc'].map(name=>'server/cloudbase/'+name+'.mjs')
+ ...['app','credentials','errors','postgres','embeddings','search','service','storage-gc','classification'].map(name=>'server/cloudbase/'+name+'.mjs'),
+ 'cloudfunctions/shiye-api/src/package.json',
+ 'src/material-taxonomy.js','src/material-classification.js'
 ]);
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function buildCloudBaseFunctions({root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),output=join(root,'.cloudbase-build')}={}){
  const target=resolve(output),temporary=target+'.'+randomUUID()+'.tmp';
  if(target===resolve(root)||target===resolve(root,'..'))throw Error('构建目录不能覆盖源码');
  const files=[['cloudfunctions/shiye-api/index.js','index.js'],
-  ['cloudfunctions/shiye-api/package.json','package.json'],...FUNCTION_FILES.map(path=>[path,path])];
+  ['cloudfunctions/shiye-api/package.json','package.json'],...FUNCTION_FILES.map(path=>
+   [path,path==='cloudfunctions/shiye-api/src/package.json'?'src/package.json':path])];
  const manifest={format:'shiye-cloudbase-function-bundle',version:1,function:'shiye-api',files:{}};
  try{
   const functionDir=join(temporary,'functions','shiye-api');

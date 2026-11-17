@@ -8,6 +8,7 @@ import {candidateMetadata,importPaperDimensions,saveImportBatch} from '../src/im
 import {classificationResult,classifyRecord} from '../src/classification.js';
 import {createAIRecorder,redact} from '../src/ai-diagnostics.js';
 import {assetEditorValue} from '../src/asset-editor.js';
+import {initialMaterialClassification} from '../src/material-classification.js';
 import {draft,physicalPlacement,recommend} from '../src/domain.js';
 
 async function withCutoutPixels(run){
@@ -105,7 +106,7 @@ test('import records preserve candidate metadata and explicit unassigned series'
   assert.deepEqual(importPaperDimensions({paperSize:'custom',customImportWidth:12,customImportHeight:500,paperOrientation:'portrait'}),[12,500]);
 });
 test('classification rejects malformed enums and uses configured endpoint without changing stock',async()=>{
-  assert.throws(()=>classificationResult({title:'x',tags:[],kind:'wrong',role:'focal',texture:'paper'},'asset'),/类型/);
+  assert.throws(()=>classificationResult({title:'x',tags:[]},'asset'),/CloudBase/);
   let payload;
   const result=await classifyRecord({kind:'project',record:{drafts:[]},settings:{key:'test-key',model:'test',endpoint:'https://example.test/chat',requestTimeout:30,provider:'custom'},assets:[],request:async(url,options)=>{assert.equal(url,'https://example.test/chat');payload=JSON.parse(options.body);return new Response(JSON.stringify({choices:[{message:{content:'{"title":"春天","tags":["植物"]}'}}]}));}});
   assert.equal(payload.model,'test');assert.deepEqual(result.styleTags,['植物']);
@@ -173,9 +174,11 @@ test('AI metrics contain no private body; opt-in context redacts credentials bef
   assert.deepEqual(redact({headers:{Authorization:'Bearer secret'},key:'secret',text:'secret'},'secret'),{text:'[REDACTED]'});
 });
 test('asset metadata removes stock while preserving dimensions and explicit usage status',()=>{
-  const old={id:'a',title:'old',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
+  const old={id:'a',title:'old',...initialMaterialClassification({kind:'paper'}),physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
   const fields={title:'纸品',kind:'paper',role:'support',texture:'牛皮纸',width:'20',height:'30',quantity:'0',tags:'旅行',contentTags:'票据',styleTags:'复古',materialTags:'牛皮纸',seriesID:'s',reviewStatus:'ready',usageStatus:'unused'};
-  const a=assetEditorValue(old,fields);assert.equal(a.supply,undefined);assert.deepEqual(a.tags,['旅行','票据','复古','牛皮纸']);assert.equal(a.seriesID,'s');assert.equal(a.usageStatus,'unused');assert.equal(old.supply.quantity,1);
+  const a=assetEditorValue(old,fields);assert.equal(a.supply,undefined);assert.deepEqual(a.tags,['旅行']);
+  assert.deepEqual(a.contentTags,['票据']);assert.deepEqual(a.styleTags,['复古']);assert.deepEqual(a.materialTags,['牛皮纸']);
+  assert.equal(a.seriesID,'s');assert.equal(a.usageStatus,'unused');assert.equal(old.supply.quantity,1);
   assert.equal(physicalPlacement(draft(),[a],['a']).length,1);assert.equal(recommend({...a,id:'core'},[a]).length,1);
   assert.throws(()=>assetEditorValue(old,{...fields,width:'-2'}),/宽高/);
 });

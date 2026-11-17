@@ -1,12 +1,17 @@
 // One query contract for the whole library and an individual series. Querying
 // always precedes pagination; missing dates and duplicate titles have a stable
 // ID tie-break so a card cannot jump between pages on repeated renders.
+import {materialKindName,materialRoleName,materialKindDetails,contentCategories,layoutFits,tagGroups} from './material-taxonomy.js';
 const normalized=value=>String(value??'').normalize('NFKC').toLocaleLowerCase();
 const date=value=>{const parsed=Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;};
 export function searchableAssetText(asset){
-  return normalized([asset.title,...asset.tags||[],...asset.styleTags||[],
-    ...asset.contentTags||[],...asset.semanticTags||[],...asset.palette||[],
-    asset.kind,asset.role,asset.texture,asset.isCreativePreset?'预设':null].filter(Boolean).join(' '));
+  const label=(list,id)=>list.find(([value])=>value===id)?.[1]||id;
+  return normalized([asset.title,materialKindName(asset.kind),label(materialKindDetails,asset.kindDetail),
+    materialRoleName(asset.role),...(asset.secondaryRoles||[]).map(materialRoleName),
+    ...(asset.contentCategories||[]).map(id=>label(contentCategories,id)),
+    ...(asset.layoutFits||[]).map(id=>label(layoutFits,id)),
+    ...tagGroups.flatMap(([key])=>asset[key]||[]),...(asset.palette||[]),
+    asset.isCreativePreset?'预设':null].filter(Boolean).join(' '));
 }
 export function queryAssets(assets,{query='',kind='all',status='all',seriesID='all',
   sort='newest',recent=false,now=Date.now()}={}){

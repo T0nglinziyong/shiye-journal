@@ -1,5 +1,6 @@
 // Bundled, original digital supplies. These are catalog records, not account
 // data: stable IDs let works and GPT packages retain their source across devices.
+import {initialMaterialClassification} from './material-classification.js';
 const prefix='shiye-creative-preset-v1:';
 const common={isCreativePreset:true,usageStatus:'preset',reviewStatus:'ready',
   sourceIdentifier:'shiye-creative-preset-v1',createdAt:'2026-10-24T00:00:00.000Z',
@@ -33,12 +34,14 @@ const definitions=[
   ,{key:'ticket-seal',title:'今日入场印章',kind:'stamp',role:'annotation',texture:'印刷纸',width:40,height:25,tags:['印章','票根','活动'],colors:['砖红']}
   ,{key:'field-note-seal',title:'野外笔记印章',kind:'stamp',role:'information',texture:'印刷纸',width:39,height:26,tags:['印章','植物','观察'],colors:['橄榄绿']}
 ];
-export const creativePresetAssets=Object.freeze(definitions.map(({key,width,height,colors,tags,tape,...rest})=>Object.freeze({
-  ...common,...rest,id:prefix+key,blobId:prefix+key,
+export const creativePresetAssets=Object.freeze(definitions.map(({key,width,height,colors,tags,tape,
+  kind,role,texture,...rest})=>Object.freeze({
+  ...common,...rest,...initialMaterialClassification({kind,role:role==='divider'?'connector':
+    role==='annotation'?'marker':role}),id:prefix+key,blobId:prefix+key,
   staticPath:'/creative-presets/'+key+'.png',physicalWidthMM:width,
-  physicalHeightMM:height,tags,contentTags:tags,styleTags:['手帐预设'],
-  semanticColorNames:colors,placementHints:tape?['可裁成短段，跨接纸边或照片边缘']:
-    ['可作为视觉重点或文字附近的局部呼应'],
+  physicalHeightMM:height,tags:[],contentTags:tags,styleTags:['手帐预设'],
+  colorTags:colors,materialTags:[texture],layoutFits:tape?['strip.horizontal','combine.split']:
+    ['point.free','overlay.stack'],
   ...(tape?{tapeAxis:'x',tapeRepeatMode:'repeatablePattern',
     tapeRepeatStartMM:0,tapeRepeatEndMM:20,tapeRepeatPeriodMM:20}:{})
 })));

@@ -14,7 +14,6 @@ import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditable
 import {applySceneNodePatch,applySceneWorldPatch,applyScenePagePatch,insertSceneLayer} from './scene-edit-kernel.js';
 import {USER_SCENE_POLICY,confirmSceneCapability} from './scene-edit-policy.js';
 import {normalizeMatchingDirection} from './matching-directions.js';
-import {automaticAssetClassification} from './asset-automatic-classification.js';
 import {importDefaultTitle} from './import-default-names.js';
 // Production deployment refresh marker: 2026-10-04
 import {materialKindName} from './material-taxonomy.js';
@@ -134,7 +133,8 @@ import {samInputBlob,samInputBox,samInputSize} from './sam-input.js';
 import {mergeSamRegions} from './sam-region-merge.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionPixelOptions,recognitionMethodDetails,recognitionProfile,isComputeRecognition} from './recognition-profiles.js';
-import {classifyRecord} from './classification.js';
+import {classifyCloudAsset,classifyCloudProject} from './cloud-asset-classification.js';
+import {initialMaterialClassification} from './material-classification.js';
 import {resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
@@ -702,7 +702,7 @@ function render(){
   const onBatchAction=(mode,action,value)=>{
     const context={state,view,body,modal,db,render,route,toast,imgTag,asset,refresh,
       download,modelImage,rasterize,openSeriesEditor,flushSave,handle,
-      moveProjectsToTrash,assetOrganization,applyAssetClassification,
+      moveProjectsToTrash,assetOrganization,
       matchingSession,exportSelectedMaterials:ids=>exportMaterials({db,asset,download},ids)};
     if(mode==='asset')return runAssetBatchAction(context,parity,action,value);
     if(mode==='series')return runSeriesBatchAction(context,parity,action,value);
@@ -817,7 +817,7 @@ function render(){
       },
       format:fmt,hasAIReport:!!aiReport,onAction:handle,onInspectorChange:updateEditorInspector,
       onTitleCommit:title=>{const p=state.activeProject,next=title.trim()||'未命名手账';
-        if(p&&next!==p.title){p.title=next;saveProject();}},
+        if(p&&next!==p.title){p.title=next;p.titleEvidence={source:'user',confidence:1};saveProject();}},
       onAIAction:handleAIPanelAction,onAIOpen:openAICreation,
       onAIPromptChange:value=>{state.aiPrompt=value;}})
     :state.route==='assetDetail'&&asset(state.detailAssetID)
@@ -911,7 +911,7 @@ function render(){
     const replacement=view.querySelector('.queue-strip');
     if(replacement)replacement.scrollLeft=importQueueScroll;
   }
-  bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
+  bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
   }
@@ -2511,7 +2511,10 @@ async function startAICreation(){
 }
 async function flattenGeneratedPage(d,p=state.activeProject,persistProject=true){
  const canvas=await rasterize(d,2),blob=await new Promise((resolve,reject)=>canvas.toBlob(v=>v?resolve(v):reject(Error('整页成图失败')),'image/png')),id=uid(),blobId=uid();
- const a={id,blobId,title:p.title+' · 整页成图',kind:'photo',role:'background',tags:[],reviewStatus:'ready',isProjectInternal:true,physicalWidthMM:d.canvas.width/d.canvas.height*d.physicalPageHeightMM,physicalHeightMM:d.physicalPageHeightMM,createdAt:new Date().toISOString()};
+ const a={id,blobId,title:p.title+' · 整页成图',
+   ...initialMaterialClassification({kind:'photo',role:'background'}),reviewStatus:'ready',
+   isProjectInternal:true,physicalWidthMM:d.canvas.width/d.canvas.height*d.physicalPageHeightMM,
+   physicalHeightMM:d.physicalPageHeightMM,createdAt:new Date().toISOString()};
  const flattened=structuredClone(d);flattened.items=[itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,0,true)];flattened.textBlocks=[];flattened.primitives=[];flattened.strokes=[];flattened.directPageOutput='flattened';
  const updated={...p,directEditableSource:structuredClone(d),drafts:p.drafts.map(x=>x.id===d.id?flattened:x)};
  await db.transaction(['assets','blobs','projects'],tx=>{tx.objectStore('assets').put(a);tx.objectStore('blobs').put({id:blobId,data:blob});if(persistProject)tx.objectStore('projects').put(updated);});state.assets.push(a);urls.set(blobId,URL.createObjectURL(blob));Object.assign(p,updated);
@@ -3605,25 +3608,21 @@ async function confirmImportPhoto(){
 }
 async function organizeSavedProjects(projects){
   if(!state.preferences.autoOrganizeWorks||!projects?.length)return;
-  const config=structuredClone(state.aiSettings),account=state.accountId;
-  if(!config.key)return; // Offline projects retain their current title/tags.
+  const account=state.accountId;
   try{
-    // These works are already durably staged by the caller. The model reads
-    // their local cover while COS upload and the cloud acknowledgement run.
+    await db.flushProjects();
     const results=await Promise.allSettled(projects.map(source=>classificationQueue.schedule(async()=>{
       if(state.accountId!==account)return;
       const complete=await db.get('projects',source.id);
       if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)return;
-      let picture=null;
-      if(complete.isSnapshot&&supportsVision(config)){
-        picture=await modelImage({blobId:complete.snapshotBlobId},null,360,false);
-      }
-      const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
+      const result=await classifyCloudProject(source.id,{db,skipFlush:true});
       if(state.accountId!==account)return;
       const latest=await db.get('projects',source.id);
       if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)return;
-      const updated={...latest,autoOrganized:true,title:result.title||latest.title,
-        styleTags:(result.styleTags||result.tags||latest.styleTags||[]).slice(0,8),updatedAt:new Date().toISOString()};
+      const preserveTitle=latest.titleEvidence?.source==='user'||
+        !/^(新作品|未命名|照片\s*\d*|快照\s*\d*)$/u.test(String(latest.title||'').trim());
+      const updated={...latest,autoOrganized:true,title:preserveTitle?latest.title:result.title||latest.title,
+        styleTags:result.tags.slice(0,5),updatedAt:new Date().toISOString()};
       if(updated.isSnapshot)await db.put('projects',updated);
       else await db.stageProject(updated);
       const live=state.projects.find(p=>p.id===source.id);
@@ -3637,38 +3636,21 @@ async function organizeSavedProjects(projects){
 async function organizeSavedAssets(records,{projects=[]}={}){
   if(projects.length)void organizeSavedProjects(projects);
   if(state.preferences.autoOrganize&&records.length){
-    const cfg=structuredClone(state.aiSettings),accountID=state.accountId;
-    if(cfg.key&&supportsVision(cfg)){
-      let warned=false;
-      // saveImportBatch has already durably staged the cutouts and metadata.
-      // The model can read those pending Blobs locally; a slow cloud ACK must
-      // not fail every classification in an otherwise saved import batch.
-      await assetOrganization.run(records,{organize:async(record,isCurrent,signal)=>{
-        if(state.accountId!==accountID||!isCurrent())return;
-        const image=await modelImage(record,null,512,false);if(!image)throw Error('素材图像无法读取');
-        if(!isCurrent())return;
-        const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[],signal});
-        await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
-      },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});
-    }else if(state.route!=='import'||state.importStep!=='done')toast('未启用视觉整理，素材已保存，可稍后检查或在设置开启');
+    const accountID=state.accountId;let warned=false;
+    void (async()=>{await db.flushProjects();await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
+      if(state.accountId!==accountID||!isCurrent())return;
+      const result=await classifyCloudAsset(record.id,{db,skipFlush:true});
+      if(state.accountId!==accountID||!isCurrent())return;
+      const current=state.assets.find(asset=>asset.id===record.id);
+      if(current)Object.assign(current,result);
+      window.dispatchEvent(new Event('shiye-library-refresh'));
+      window.dispatchEvent(new Event('shiye-matching-refresh'));
+    },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});
+      if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});})().catch(error=>{
+      recordRuntimeIssue('handled',error,state.route,{phase:'ai'});
+      if(state.accountId===accountID)toast(explainUserError(error,'素材自动整理'));
+    });
   }
-}
-
-async function applyAssetClassification(record,result,{manual=false,isCurrent=()=>true}={}){
-  if(!isCurrent())return false;
-  // Persist each finished answer independently; a late answer must not
-  // overwrite a rename, deletion or series change made during inference.
-  const latest=await db.get('assets',record.id);if(!latest||!isCurrent())return false;
-  const update=manual?{...latest,autoOrganized:true}:automaticAssetClassification(latest,record,result);
-  if(manual){for(const [key,value] of Object.entries(result))if(JSON.stringify(latest[key])===JSON.stringify(record[key]))update[key]=value;update.updatedAt=new Date().toISOString();}
-  if(!isCurrent())return false;
-  await db.put('assets',update);
-  if(!isCurrent())return false;
-  const current=state.assets.find(a=>a.id===record.id);if(current)Object.assign(current,update);
-  window.dispatchEvent(new Event('shiye-library-refresh'));
-  window.dispatchEvent(new Event('shiye-matching-refresh'));
-  window.dispatchEvent(new Event('shiye-asset-refresh'));
-  return true;
 }
 
 
