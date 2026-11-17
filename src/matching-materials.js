@@ -95,8 +95,8 @@ export function diversifyRecommendations(rows,{limit=rows.length,perKind=Infinit
  return chosen;
 }
 
-export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[],excluded=[],intent='',pageSize=null,direction='全部'}={}){
- const mode=normalizeRecommendationDirection(direction),selected=assets.filter(a=>basket.includes(a.id)),excludedSet=new Set(excluded);
+export function scoreRecommendationCandidates({assets=[],basket=[],styles=[],purposes=[],excluded=[],intent='',pageSize=null}={}){
+ const selected=assets.filter(a=>basket.includes(a.id)),excludedSet=new Set(excluded);
  const hasPersonal=assets.some(a=>usableForMatching(a)&&!a.isProjectInternal&&!isCurrentBuiltinMaterial(a)&&!a.isCreativePreset);
  const desiredRoles=new Set(relevantJournalFamilies({styles,purposes,materials:selected}).flatMap(family=>family.materials));
  const selectedRoles=new Set(selected.flatMap(classifyJournalMaterial));
@@ -104,7 +104,7 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
  const purposeKindsSet=new Set(purposes.flatMap(p=>purposeKinds[p]||[]));
  const styleWords=uniq(styles.flatMap(s=>styleTerms[s]||[s])),purposeWords=uniq(purposes.flatMap(p=>purposeTerms[p]||[]));
  const basketTerms=new Set(selected.flatMap(contentTerms)),intentText=String(intent).toLowerCase(),intentMotifs=new Set(motifTerms(intentText));
- const ranked=assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&usableForMatching(a)&&!a.isProjectInternal&&a.usageStatus!=='used')
+ return assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&usableForMatching(a)&&!a.isProjectInternal&&a.usageStatus!=='used')
   .map(a=>{
    const scores=Object.fromEntries(Object.keys(recommendationWeights).map(key=>[key,0]));
    const evidence=Object.fromEntries(Object.keys(recommendationWeights).map(key=>[key,[]]));
@@ -142,14 +142,28 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
     if(!((w<=pw&&h<=ph)||(h<=pw&&w<=ph))){penalty-=6;reasons.push('整件偏大，需裁取');}}
    if(hasPersonal&&(isCurrentBuiltinMaterial(a)||a.isCreativePreset))penalty-=5;
    for(const key of Object.keys(scores))scores[key]=Math.min(10,scores[key]);
-   const score=(mode==='全部'?Object.entries(recommendationWeights).reduce((sum,[key,weight])=>sum+scores[key]*weight,0)*2:scores[mode]||0)+penalty;
+   const score=Object.entries(recommendationWeights).reduce((sum,[key,weight])=>sum+scores[key]*weight,0)*2+penalty;
    const topDirections=Object.keys(scores).sort((x,y)=>scores[y]*recommendationWeights[y]-scores[x]*recommendationWeights[x]);
-   const orderedReasons=(mode==='全部'?topDirections.flatMap(key=>evidence[key]):evidence[mode]||[]);
-   return {asset:a,score,reasons:uniq([...orderedReasons,...reasons]),directionScores:scores};
-  }).filter(row=>mode==='全部'||row.directionScores[mode]>0)
+   return {asset:a,score,reasons:uniq([...topDirections.flatMap(key=>evidence[key]),...reasons]),directionScores:scores,directionReasons:evidence,penalty,penaltyReasons:reasons};
+  });
+}
+export function rankRecommendationCandidates(scored,direction='全部'){
+ const mode=normalizeRecommendationDirection(direction);
+ if(mode==='不使用')return [];
+ const ranked=scored.filter(row=>mode==='全部'||row.directionScores[mode]>0)
+  .map(row=>mode==='全部'?row:{...row,score:row.directionScores[mode]+row.penalty,
+   reasons:uniq([...row.directionReasons[mode],...row.penaltyReasons])})
   .sort((a,b)=>b.score-a.score||String(a.asset.title||'').localeCompare(String(b.asset.title||''),'zh-CN'));
  const front=diversifyRecommendations(ranked.slice(0,96),{limit:18}),chosen=new Set(front.map(row=>row.asset.id));
  return [...front,...ranked.filter(row=>!chosen.has(row.asset.id))];
+}
+export function buildRecommendationRankings(options={}){
+ const scored=scoreRecommendationCandidates(options);
+ return Object.fromEntries(recommendationDirections.filter(direction=>direction!=='不使用')
+  .map(direction=>[direction,rankRecommendationCandidates(scored,direction)]));
+}
+export function recommendForDirection(options={}){
+ return rankRecommendationCandidates(scoreRecommendationCandidates(options),options.direction);
 }
 export function buildMaterialScope({basket=[],coreIDs=[],recommendations=[],excluded=[],autoIncludeRecommendations=false,requireAllCandidates=false,automaticPresets=[]}={}){
   const excludedSet=new Set(excluded),selected=uniq(basket).filter(id=>!excludedSet.has(id));

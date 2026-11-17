@@ -65,6 +65,24 @@ test('each recommendation direction has its own ranking and all uses the publish
  assert.equal(normalizeRecommendationDirection('尺寸层次'),'尺寸节奏');
 });
 
+test('direction switches reuse precomputed scores until recommendation inputs change',()=>{
+ const base={...make('base','photo','蓝色旅行照'),role:'focal',colorTags:['蓝色'],themeTags:['旅行']};
+ const color={...make('color','sticker','蓝色贴纸'),colorTags:['蓝色']};
+ const theme={...make('theme','card','旅行卡片'),themeTags:['旅行']};
+ const state={assets:[base,color,theme],basket:['base'],excludedAssetIDs:[],coreIDs:[],matchStyles:[],matchPurposes:[],matchIntent:'',matchRatio:'a4',recommendFilter:'全部',aiSettings:{}};
+ const all=matchingRecommendations(state),colorRanking=matchingRecommendations(state,'配色协调');
+ state.recommendFilter='配色协调';
+ assert.strictEqual(matchingRecommendations(state),all);
+ assert.strictEqual(matchingRecommendations(state,'配色协调'),colorRanking);
+ assert.strictEqual(matchingViewModel(state).filtered[0],colorRanking[0]);
+ assert.strictEqual(all.find(row=>row.asset.id==='color').directionScores,colorRanking[0].directionScores);
+ state.assets[1].colorTags=['红色'];
+ assert.notStrictEqual(matchingRecommendations(state),all);
+ const updated=matchingRecommendations(state);
+ state.excludedAssetIDs=['theme'];
+ assert.notStrictEqual(matchingRecommendations(state),updated);
+});
+
 test('personal materials retain priority over equally relevant current built-ins',()=>{
  const builtin=make('builtin','paper','蓝色书写卡',['日常']);builtin.isBuiltinMaterial=true;
  const personal=make('personal','paper','蓝色书写卡',['日常']);
