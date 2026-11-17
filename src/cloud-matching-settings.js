@@ -6,8 +6,7 @@ import {normalizeMatchingPaper,normalizeMatchingDirection,styleGroups,purposeGro
 export const CLOUD_MATCHING_SETTINGS_ID='app-matching-defaults';
 export const MATCHING_CLOUD_KEYS=Object.freeze([
   'matchCreationMode','matchMode','matchRatio','matchStyle','matchStyles','matchPurpose',
-  'matchPurposes','matchContentPolicy',
-  'recommendFilter'
+  'matchPurposes','matchContentPolicy'
 ]);
 const groups=new Set(['matchStyles','matchPurposes']);
 const valid=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);

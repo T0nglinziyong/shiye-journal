@@ -8,12 +8,13 @@ test('account cloud matching defaults retain non-content creative direction only
  const row=cloudMatchingSettingsRecord(state);
  assert.equal(row.id,CLOUD_MATCHING_SETTINGS_ID);
  const raw=JSON.stringify(row);
- for(const secret of ['私密的创作要求与内容','"basket"','"coreIDs"','apiKey','secret'])assert.ok(!raw.includes(secret));
- const next={matchIntent:'本机新内容',basket:['other'],matchMode:'single'};
+ for(const secret of ['私密的创作要求与内容','"basket"','"coreIDs"','"recommendFilter"','apiKey','secret'])assert.ok(!raw.includes(secret));
+ const next={matchIntent:'本机新内容',basket:['other'],recommendFilter:'配色协调',matchMode:'single'};
  applyMatchingDefaults(next,cloudMatchingSettingsFromMeta([row]));
  assert.equal(next.matchMode,'spread');assert.equal(next.matchRatio,'a5');assert.equal(next.matchTextPresentation,undefined);
  assert.equal(next.materialUseHints,undefined,'逐件用法不再同步');
  assert.equal(next.matchIntent,'本机新内容');assert.deepEqual(next.basket,['other']);
+ assert.equal(next.recommendFilter,'配色协调');
 });
 
 test('cloud matching defaults reject malformed and extra fields',()=>{
@@ -31,6 +32,13 @@ test('cloud controls override stale device defaults only after local matching re
  assert.equal(fresh.matchMode,'spread');assert.equal(fresh.matchRatio,'a5');
  assert.equal(fresh.matchTextPresentation,undefined);
  assert.equal(fresh.matchIntent,'仅此设备的正文');assert.deepEqual(fresh.basket,['material-1']);
+});
+
+test('recommendation filter stays in device session across reopen',()=>{
+ const saved=matchingSnapshot({recommendFilter:'结构补足',basket:[]},[]);
+ const restored={recommendFilter:'全部',basket:[]};
+ restoreMatchingSession(saved,restored);
+ assert.equal(restored.recommendFilter,'结构补足');
 });
 
 test('retired custom matching sizes do not return through local or cloud preferences',()=>{
