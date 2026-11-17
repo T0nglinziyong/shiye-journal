@@ -54,6 +54,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     return dataURL(bytes,type);
   };
   const classify=async(token,userID,assetID,{reclassify=false}={})=>{
+    const started=performance.now();
     if(!ready())throw new ServiceError(503,'CLASSIFICATION_NOT_CONFIGURED','云端素材分类模型尚未配置');
     if(!idPattern.test(assetID||''))throw new ServiceError(400,'INVALID_ASSET_ID','素材编号无效');
     const original=await record(token,userID,'assets',assetID);
@@ -61,7 +62,8 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
       throw new ServiceError(404,'ASSET_NOT_FOUND','素材不存在或尚未同步');
     const [cutout,context]=await Promise.all([
       image(token,userID,original.blobId,{preview:true}),
-      image(token,userID,original.candidateFrameBlobId,{preview:true})]);
+      image(token,userID,original.candidateFrameBlobId)]);
+    const imagesReady=performance.now();
     if(!cutout)throw new ServiceError(409,'CLASSIFICATION_IMAGE_PENDING','素材图片尚未同步，请稍后重试');
     const prompt=`分析手帐素材。第一张是透明抠图，第二张是导入时的候选原图（若有）。物件类型按实际使用形态判定，画面中的布纹不等于布片；看不出背胶或基材时降低置信度。不要把原始来源、透明度或尺寸当标签。只返回 JSON。\n`+
       `类型：${choices(materialKinds)}。具体类型：${choices(materialKindDetails)}。主要和次要作用：${choices(materialRoles)}。`+
@@ -76,11 +78,11 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
       `已知元数据：${JSON.stringify({widthMM:original.physicalWidthMM,heightMM:original.physicalHeightMM,
         source:original.sourceIdentifier,cutout:!!original.finalMaskBlobId,
         userConfirmedType:original.categoryEvidence?.kind?.source==='user'?original.kind:null})}`;
-    const contents=[{type:'text',text:prompt},{type:'image_url',image_url:{url:cutout,detail:'high'}}];
+    const contents=[{type:'text',text:prompt},{type:'image_url',image_url:{url:cutout,detail:'low'}}];
     if(context)contents.push({type:'image_url',image_url:{url:context,detail:'low'}});
     const response=await fetcher('https://api.deepseek.com/chat/completions',{method:'POST',redirect:'error',
       headers:{Authorization:'Bearer '+modelKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model,temperature:0,max_tokens:1700,response_format:{type:'json_object'},
+      body:JSON.stringify({model,thinking:{type:'disabled'},temperature:0,max_tokens:1700,response_format:{type:'json_object'},
         messages:[{role:'user',content:contents}]}),signal:AbortSignal.timeout(35000)});
     if(!response.ok)throw new ServiceError(503,'CLASSIFICATION_MODEL_UNAVAILABLE','云端素材分析暂不可用');
     const answer=await parse(response);
@@ -90,6 +92,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     if(!result?.kind||!result?.role||typeof result.kind.confidence!=='number'||
       typeof result.role.confidence!=='number')
       throw new ServiceError(502,'CLASSIFICATION_MODEL_INVALID','云端模型分类字段不完整');
+    const modelReady=performance.now();
     result.modelVersion=version;
     for(let attempt=0;attempt<2;attempt++){
       const head=await revision(token,userID),latest=await record(token,userID,'assets',assetID);
@@ -102,6 +105,8 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
         const receipt=await commit('shiye_commit_v3_guarded',token,{
           operations:[{store:'assets',action:'put',item:updated}],base_revision:head.revision,
           expected_epoch:head.account_epoch,operation_id:randomUUID(),sync_protocol_version:3});
+        console.info(JSON.stringify({type:'shiye_classification_timing',sourceMs:Math.round(imagesReady-started),
+          modelMs:Math.round(modelReady-imagesReady),commitMs:Math.round(performance.now()-modelReady)}));
         return {asset:updated,revision:receipt.revision};
       }catch(error){if(error.code!=='STALE_INPUT'||attempt===1)throw error;}
     }

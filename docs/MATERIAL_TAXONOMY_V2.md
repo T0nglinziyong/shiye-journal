@@ -9,9 +9,11 @@
 
 字典与版本在 `src/material-taxonomy.js`。七个开放标签组分别是 `contentTags`、`themeTags`、`styleTags`、`colorTags`、`materialTags`、`moodTags` 和 `tags`（其他标签）。组名固定，标签内容不从字典挑选；不可把画面里看见的布纹写成“布片”类型或把视觉纹理当成已确认的物理材质。
 
-`categoryEvidence`、`tagEvidence`、`tagGroupEvidence`、`titleEvidence` 记录人工、AI 或旧数据转换的来源。用户改过或勾选确认的类别、标签组和标题不会被云端 AI 覆盖。模型返回每项置信度；小于 0.7 的候选不写入。物理尺寸、来源、Mask、图片 Hash、`systemAttributes` 和向量索引保留在分类与标签之外。
+`categoryEvidence`、`tagEvidence`、`tagGroupEvidence`、`titleEvidence` 记录人工、AI 或旧数据转换的来源。用户改过的类别、标签组和标题不会被云端 AI 覆盖。模型返回每项置信度；小于 0.7 的候选不写入。物理尺寸、来源、Mask、图片 Hash、`systemAttributes` 和向量索引保留在分类与标签之外。
 
 导入先可靠暂存并同步图片。CloudBase `POST /api/classify-asset` 只接受素材 ID；云函数用当前登录用户 Token 读取其素材记录、透明图及候选原图，向服务端配置的视觉模型请求结构化分类，用 `shiye_commit_v3_guarded` 原子写入并返回更新后的素材。并发修改会重新读取最新记录；用户人工字段优先。作品自动整理也走云函数 `/api/classify-project`。客户端模型设置只用于创作。
+
+素材分类使用 `deepseek-flash` 的非思考模式和低细节图像输入。云函数只记录读取图像、模型响应、提交三段耗时，不记录图片、标签、密钥或用户身份。候选原图在导入时不生成云端预览，因此直接读取原图，避免先查询不存在的预览。
 
 云函数需在受保护环境变量中配置 `SHIYE_CLASSIFICATION_API_KEY`，可选 `SHIYE_CLASSIFICATION_MODEL`（默认 `deepseek-flash`）与 `SHIYE_CLASSIFICATION_MODEL_VERSION`。密钥不得进入前端、Git 或诊断。`/api/platform-health` 的 `classification.configured` 用于检查是否配置。云函数读取的是 CloudBase 私有云存储（底层由 COS 承载），不会把文件改成公开读权限。
 

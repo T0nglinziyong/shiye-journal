@@ -33,11 +33,11 @@
 .material-editor-dialog .asset-edit-head>button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:7px 13px;border-radius:20px;border:1px solid #dbe2d8;font-size:14px;white-space:nowrap}
 .material-editor-dialog .asset-edit-head>#save-asset{background:#52634b;color:white;border-color:#52634b}
 .material-editor-dialog>.material-editor{flex:1;min-height:0;gap:9px}
-.material-editor-dialog .material-editor-preview{flex:none;width:min(100%,36dvh,360px);height:auto;min-height:0;aspect-ratio:1}
+.material-editor-dialog .material-editor-preview{flex:none;width:min(100%,28dvh,280px);height:auto;min-height:0;aspect-ratio:1}
 .material-editor-dialog .material-editor-controls{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:8px}
 /* Cutout steps follow the fixed preview on both mobile and desktop. */
 @media(min-width:700px){#modal.cutout-dialog .cutout-modal{grid-template-areas:"header header" "compare controls" "preview controls" "steps controls" "hint controls"}}
-@media(max-width:699px){.cloud-admin-panel.material-editor-dialog{max-height:min(92dvh,850px)}.material-editor-dialog .material-editor-preview{width:min(100%,34dvh,300px);height:auto}}
+@media(max-width:699px){.cloud-admin-panel.material-editor-dialog{max-height:min(92dvh,850px)}.material-editor-dialog .material-editor-preview{width:min(100%,24dvh,210px);height:auto}}
 /* Other React dialogs use the same title / right action alignment. */
 .cloud-admin-panel .dialog-head:not(.asset-edit-head),
 #modal .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:38px;margin-bottom:12px}
@@ -67,6 +67,18 @@
 .material-editor-dialog .asset-editor-tabs button.selected{background:#fffefa;color:#284b36;font-weight:700;box-shadow:0 1px 4px #203c2c22}
 .material-editor-dialog .material-editor-controls{display:block}
 .material-editor-dialog .material-info-panel{min-height:0}
+.material-editor-dialog .material-taxonomy-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.material-editor-dialog .material-taxonomy-pair>label{min-width:0}
+.material-editor-dialog .material-multi-field,.material-editor-dialog .material-tag-fields{min-width:0;margin:0;border:1px solid #dce3d8;border-radius:11px;background:#fffefa;overflow:hidden}
+.material-editor-dialog .material-multi-field>summary,.material-editor-dialog .material-tag-fields>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:42px;padding:8px 11px;color:#354b39;font-size:14px;font-weight:600;cursor:pointer;list-style:none}
+.material-editor-dialog .material-multi-field>summary::-webkit-details-marker,.material-editor-dialog .material-tag-fields>summary::-webkit-details-marker{display:none}
+.material-editor-dialog .material-multi-field>summary>span,.material-editor-dialog .material-tag-fields>summary>span{font-size:12px;color:#748276;font-weight:400;white-space:nowrap}
+.material-editor-dialog .material-multi-field[open]>summary,.material-editor-dialog .material-tag-fields[open]>summary{border-bottom:1px solid #e6ebe3}
+.material-editor-dialog .material-multi-field>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:8px}
+.material-editor-dialog .material-multi-field>div>label{display:flex;flex-direction:row;align-items:center;gap:6px;min-height:36px;margin:0;padding:5px 7px;border:1px solid #e2e8dd;border-radius:8px;font-size:12px;line-height:1.3}
+.material-editor-dialog .material-multi-field>div>label:has(input:checked){background:#e8f0e6;border-color:#a7bea8;color:#35583b}
+.material-editor-dialog .material-multi-field input[type=checkbox]{flex:none;width:16px;height:16px;margin:0}
+.material-editor-dialog .material-tag-fields>div{display:grid;gap:9px;padding:10px}
 /* Series context is a label beside the back action, never a floating heading. */
 #view .detail-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px}
 #view .detail-topline .detail-back{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0}
