@@ -7,7 +7,7 @@ export function registerMatchingActions(store,{addMatchingFromRecommendation}){
       result,payload:{...payload,regions,syncDefaults}};
   });
   emit('matching/filter',({value},state)=>{state.recommendFilter=value;},
-    ['.match-chips','.match-rec-grid'],true);
+    ['.match-chips','.match-rec-grid']);
   emit('matching/exclude',({id},state)=>{
     state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];
   },['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);

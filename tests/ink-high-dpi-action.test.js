@@ -71,7 +71,7 @@ test('matching commands update scoped state without DOM or duplicated subscriber
  assert.deepEqual(state.basket,['a','b']);
  assert.equal(notices.length,4);
  assert.equal(regions.length,4);
- assert.equal(saved.length,1);
+ assert.equal(saved.length,0,'view-only filter and basket actions do not update cloud defaults');
  assert.ok(regions[0].includes('.match-chips'));
  cleanups.forEach(fn=>fn());
  await store.dispatch({type:'matching/include',payload:{id:'b'}});
