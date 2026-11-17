@@ -7,6 +7,8 @@ const routes=new Map([['/api/cos','POST'],['/api/platform-health','GET'],
   ['/api/realtime-notify','POST'],['/api/realtime-session','GET'],
   ['/api/job-submit','POST'],['/api/worker-notify','POST'],
   ['/api/telemetry','POST'],['/api/account-reset','POST'],['/api/account-gc','POST']]);
+routes.set('/api/classify-asset','POST');
+routes.set('/api/classify-project','POST');
 const eventCodes=new Set(['sync-failed','cos-ticket-failed','cos-put-failed',
   'image-decode-failed','app-start','api-failed']);
 const safeBuild=value=>/^[a-f0-9]{7,40}$/.test(value||'')?value:null;
@@ -23,13 +25,13 @@ export function sanitizeTelemetry(input){
   });
 }
 export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searchService,
-  inventory,garbageCollect,realtimePublish,realtimeCredentials,jobLookup,workerToken,
+  inventory,garbageCollect,classifyAsset,realtimePublish,realtimeCredentials,jobLookup,workerToken,
   realtimeReady=false,build=null,logger=console.log,clock=Date.now,windows=new Map()}={}){
   if(typeof verifyUser!=='function')throw TypeError('CloudBase 身份验证器未配置');
   // Instance-local limits absorb bursts. Paid embedding limits are additionally
   // enforced in PostgreSQL by createSearchService; these are not a global quota.
   function accept(identity,route){
-    const now=clock(),key=identity.userID+':'+route,limit=route==='/api/telemetry'?4:route==='/api/realtime-notify'?10:120;
+    const now=clock(),key=identity.userID+':'+route,limit=route==='/api/telemetry'?4:route==='/api/realtime-notify'?10:['/api/classify-asset','/api/classify-project'].includes(route)?30:120;
     let window=windows.get(key);
     if(!window||window.until<=now){window={until:now+60000,count:0};windows.set(key,window);}
     if(++window.count>limit)throw new ServiceError(429,'RATE_LIMITED','请求过于频繁，请稍后重试');
@@ -83,7 +85,9 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
         }catch(error){if(error.code!=='MIGRATION_REQUIRED')throw error;}
         status=200;code='OK';body={platform:'cloudbase',apiVersion:1,build:safeBuild(build),
           authentication:'verified',cos:{configured:cosReady},capabilities,
-          realtime:{configured:realtimeReady,transport:'emqx-http'},images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:maintenance};
+          realtime:{configured:realtimeReady,transport:'emqx-http'},
+          classification:{configured:classifyAsset?.configured===true},
+          images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:maintenance};
       }else if(route==='/api/realtime-notify'){
         const input=event.body;
         if(input.type!=='sync_changed'||!['journal','materials','works','settings','all'].includes(input.scope)||
@@ -128,6 +132,21 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
         body=await searchService.search(token,event.body);status=200;code='OK';
       }else if(route==='/api/search-index'){
         body=await searchService.index(token,event.body);status=200;code='OK';
+      }else if(route==='/api/classify-asset'){
+        if(Object.keys(event.body).some(key=>!['assetId','reclassify'].includes(key))||
+          !event.body.assetId||event.body.reclassify!==undefined&&typeof event.body.reclassify!=='boolean'||
+          typeof classifyAsset!=='function')
+          throw new ServiceError(400,'INVALID_CLASSIFICATION_REQUEST','素材分类请求格式无效');
+        body=await classifyAsset(token,identity.userID,event.body.assetId,{reclassify:event.body.reclassify===true});
+        status=200;code='OK';
+        if(realtimeReady)try{await realtimePublish('shiye/users/'+encodeURIComponent(identity.userID)+'/sync',
+          {type:'sync_changed',scope:'materials',revision:body.revision,eventId:requestId});}catch{/* CloudBase write is authoritative. */}
+      }else if(route==='/api/classify-project'){
+        if(Object.keys(event.body).some(key=>key!=='projectId')||!event.body.projectId||
+          typeof classifyAsset?.project!=='function')
+          throw new ServiceError(400,'INVALID_CLASSIFICATION_REQUEST','作品整理请求格式无效');
+        body=await classifyAsset.project(token,identity.userID,event.body.projectId);
+        status=200;code='OK';
       }else if(route==='/api/account-reset'){
         const input=event.body;
         if(input.confirmation!=='清空账号'||

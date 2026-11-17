@@ -1,6 +1,8 @@
 // Explicitly loaded ONLY after tapping "转换旧数据格式". The current app never
 // interprets legacy payloads on its normal read/write/render/AI paths.
 import {migrateLegacyProject} from './scene-v1-to-v2.js';
+import {migrateMaterialV1} from './material-v1-to-v2.js';
+import {validateMaterialClassification} from '../material-classification.js';
 import {validateSceneExtensions} from '../scene-v2.js';
 
 export const STORAGE_MIGRATION_STORES=Object.freeze(['assets','series','projects','blobs','meta','trash']);
@@ -21,6 +23,11 @@ export function classifyStoredRecord(store,record){
   return 'review';
  }
  if(store==='trash'){
+  if(record.kind==='asset'){
+   if(!isObject(record.item))return 'review';
+   if(record.item.classificationVersion!==2)return 'migrate';
+   try{validateMaterialClassification(record.item);return 'current';}catch{return 'review';}
+  }
   if(record.kind!=='project'||record.item?.isSnapshot)return 'current';
   const item=record.item;
   if(!isObject(item)||!Array.isArray(item.drafts)||!item.drafts.length)return 'review';
@@ -29,10 +36,14 @@ export function classifyStoredRecord(store,record){
   return 'review';
  }
  if(store==='blobs')return typeof record.storageProvider==='string'&&typeof record.storagePath==='string'?'current':'review';
+ if(store==='assets'){
+  if(record.classificationVersion!==2)return 'migrate';
+  try{validateMaterialClassification(record);return 'current';}catch{return 'review';}
+ }
  // Asset metadata and series, user preferences, tombstones, AI settings and
  // "matching-session-v1" are in use in the current application: an ID ending
  // in v1 is NOT evidence that their schema is obsolete. Do not rewrite them.
- if(['assets','series','meta'].includes(store))return 'current';
+ if(['series','meta'].includes(store))return 'current';
  return 'review';
 }
 
@@ -52,6 +63,12 @@ export async function prepareStorageMigration(collections,{resolveProject=async 
     continue;
    }
    try{
+    if(store==='assets'||store==='trash'&&record.kind==='asset'){
+      changes.push({store,id:record.id,original:clone(record),originalDocument:null,
+        converted:store==='assets'?migrateMaterialV1(record):
+          {...clone(record),item:migrateMaterialV1(record.item)}});
+      count.migratable++;continue;
+    }
     const full=store==='projects'&&record.projectDocumentPath?await resolveProject(record):record;
     if(full?.id!==record?.id)throw Error('云端完整作品与摘要 ID 不一致');
     if(store==='projects'&&record.projectDocumentPath&&!(full?.drafts||[]).every(fullLegacy))

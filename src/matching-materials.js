@@ -1,9 +1,12 @@
 import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 import {classifyJournalMaterial,relevantJournalFamilies} from './journal-case-study.js';
 const purposeKinds={
-  日常记录:['paper','photo','sticker','tape','text'],旅途记录:['photo','paper','tape','sticker'],
-  图文收藏:['photo','sticker','paper','reference'],清单计划:['paper','text','sticker','tape'],
-  影像故事:['photo','paper','tape'],主题封面:['photo','sticker','paper','text']
+  日常记录:['paper','note','photo','sticker','tape','text'],
+  旅途记录:['photo','ticket','card','paper','tape','sticker'],
+  图文收藏:['photo','sticker','paper','card','frame'],
+  清单计划:['note','paper','text','sticker','tape'],
+  影像故事:['photo','card','paper','tape'],
+  主题封面:['photo','sticker','paper','text','frame']
 };
 const styleTerms={
   随材而定:[],自动安排:[],清新淡雅:['清新','轻盈','淡雅'],童趣可爱:['童趣','可爱','卡通'],杂志排版:['标题','印刷','排版','杂志'],疏朗留白:['素','简'],均衡编排:[],丰富层叠:['拼贴','纸','胶带'],
@@ -19,19 +22,30 @@ const uniq=items=>[...new Set(items.filter(Boolean))];
 // Existing automatically organized materials were left pending by older builds.
 // Permit them in suggestions without silently changing the user's review flag.
 const usableForMatching=a=>a?.reviewStatus==='ready'||a?.autoOrganized===true&&a?.reviewStatus==='pendingReview';
-const descriptors=a=>uniq([a.title,a.kind,a.role,a.texture,...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[]),...(a.semanticTags||[]),...(a.placementHints||[]),...(a.semanticColorNames||[])]);
+const descriptors=a=>uniq([a.title,a.kind,a.kindDetail,a.role,...(a.secondaryRoles||[]),
+  ...(a.contentCategories||[]),...(a.layoutFits||[]),...(a.tags||[]),...(a.contentTags||[]),
+  ...(a.themeTags||[]),...(a.styleTags||[]),...(a.colorTags||[]),
+  ...(a.materialTags||[]),...(a.moodTags||[])]);
 
 // Content similarity must not be inflated by generic kind/role/material labels.
 const generic=new Set(['素材','纸','纸张','纸片','paper','photo','sticker','tape','stamp','focal','accent','connector','divider','information','annotation','background','和纸','贴纸纸','印刷纸','手帐预设','照片','贴纸','胶带','印章']);
 const motifs=[['猫',/猫|cat/i],['植物',/植物|枝叶|叶片|花朵|花束|雏菊|红莓|botanical/i],['旅行',/旅行|旅途|出门|出发|远方|地图|邮戳|travel/i],['夜晚',/夜晚|月亮|晚安|night/i],['咖啡',/咖啡|coffee/i],['阅读',/阅读|读书|书本|library/i],['蝴蝶',/蝴蝶|butterfly/i]];
 const motifTerms=text=>motifs.filter(([,re])=>re.test(text)).map(([key])=>key);
 const segmenter=new Intl.Segmenter('zh',{granularity:'word'});
-const contentTerms=a=>uniq([...motifTerms([a.title,...(a.tags||[]),...(a.contentTags||[])].join(' ')),a.title,...(a.tags||[]),...(a.contentTags||[]),...(a.semanticTags||[])]
+const contentTerms=a=>uniq([...motifTerms([a.title,...(a.tags||[]),...(a.contentTags||[])].join(' ')),a.title,...(a.tags||[]),...(a.contentTags||[]),...(a.themeTags||[])]
  .flatMap(t=>[String(t),...Array.from(segmenter.segment(String(t)),s=>s.segment)])
  .map(t=>t.toLowerCase().trim()).filter(t=>(t.length>=2||t==='猫')&&!generic.has(t)&&!/^\d+$/.test(t)));
 const colorFamily=c=>{const text=String(c).toLowerCase();for(const [key,re] of [['green',/绿|green/],['blue',/蓝|blue/],['red',/红|red|coral/],['pink',/粉|pink|rose/],['purple',/紫|purple|lavender/],['brown',/棕|褐|牛皮|咖啡|焦糖|brown|ochre/],['yellow',/黄|金|yellow|gold/],['neutral',/灰|白|黑|grey|gray|white|black/]])if(re.test(text))return key;return text;};
-const colorsOf=a=>new Set([...(a.semanticColorNames||[]),...(a.palette||[])].map(colorFamily));
+const colorsOf=a=>new Set([...(a.colorTags||[]),...(a.palette||[])].map(colorFamily));
 const intersects=(a,b)=>a.some(value=>b.has(value));
+const rolesOf=a=>uniq([a.role,...(a.secondaryRoles||[])]);
+const layoutComplements=(a,b)=>{
+  const left=new Set(a.layoutFits||[]),right=new Set(b.layoutFits||[]);
+  return (left.has('frame.photo')&&b.kind==='photo'||right.has('frame.photo')&&a.kind==='photo'||
+    left.has('frame.text')&&rolesOf(b).includes('marker')||
+    right.has('frame.text')&&rolesOf(a).includes('marker')||
+    left.has('strip.edge')&&right.has('page.full')||right.has('strip.edge')&&left.has('page.full'));
+};
 // Greedy marginal ranking keeps near-identical items from monopolising the
 // first screen; selection remains deterministic for the same task.
 export function diversifyRecommendations(rows,{limit=rows.length,perKind=Infinity}={}){
@@ -43,7 +57,7 @@ export function diversifyRecommendations(rows,{limit=rows.length,perKind=Infinit
    const row=remaining[i],a=row.asset;if((kindCounts.get(a.kind)||0)>=perKind)continue;
    const {terms,colors}=info(a);
    const similarity=chosen.reduce((max,b)=>Math.max(max,
-    (a.kind===b.asset.kind?2:0)+(a.role&&a.role===b.asset.role?2:0)+
+    (a.kind===b.asset.kind?2:0)+(intersects(rolesOf(a),new Set(rolesOf(b.asset)))?2:0)+
     (intersects(terms,new Set(info(b.asset).terms))?3:0)+
     (intersects([...colors],info(b.asset).colors)?1:0)),0);
    const score=row.score-similarity-(kindCounts.get(a.kind)||0)*1.5;
@@ -71,14 +85,22 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
       const purposeMatches=purposeWords.filter(t=>words.includes(t.toLowerCase()));if(purposeMatches.length){score+=Math.min(purposeMatches.length,2)*5;reasons.push('呼应页面用途');}
       const styleMatches=styleWords.filter(t=>words.includes(t.toLowerCase()));if(styleMatches.length){score+=Math.min(styleMatches.length,2)*2;reasons.push('呼应所选风格');}
       const shared=contentTerms(a).filter(t=>basketTags.has(t));if(shared.length){score+=Math.min(shared.length,3)*3;reasons.push('呼应已选素材');}
+      if(selected.some(b=>(a.contentCategories||[]).some(id=>(b.contentCategories||[]).includes(id)))){
+        score+=2;reasons.push('内容类别呼应');
+      }
       const intentMotifs=new Set(motifTerms(String(intent)));const intentHits=contentTerms(a).filter(t=>String(intent).toLowerCase().includes(t)||intentMotifs.has(t));if(intentHits.length){score+=Math.min(intentHits.length,2)*5;reasons.push('呼应补充想法');}
       if(selected.some(b=>b.seriesID&&b.seriesID===a.seriesID)){score+=2;reasons.push('同系列');}
-      if(selected.length&&!selected.some(b=>b.role===a.role)){score+=2;reasons.push('结构补足');}
+      if(selected.length&&rolesOf(a).includes('structure')&&!selected.some(b=>rolesOf(b).includes('structure'))){
+        score+=2;reasons.push('结构补足');
+      }
+      if(selected.some(b=>layoutComplements(a,b))){score+=4;reasons.push('版面可组合');}
       const colors=colorsOf(a);
       if(selected.some(b=>intersects([...colors],colorsOf(b)))){score+=3;reasons.push('配色关系');}
       const area=a.physicalWidthMM*a.physicalHeightMM;
       if(area&&selected.some(b=>{const other=b.physicalWidthMM*b.physicalHeightMM;return other&&Math.max(area,other)/Math.min(area,other)>=2;})){score+=2;reasons.push('尺寸层次');}
-      if(selected.length&&a.role&&selected.some(b=>b.role!==a.role)&&!selected.some(b=>b.role===a.role)){score+=2;reasons.push('功能互补');}
+      if(selected.length&&rolesOf(a).some(role=>!selected.some(b=>rolesOf(b).includes(role)))){
+        score+=2;reasons.push('功能互补');
+      }
       const usefulRoles=classifyJournalMaterial(a).filter(role=>desiredRoles.has(role)&&!selectedRoles.has(role));
       if(usefulRoles.length){score+=Math.min(2,usefulRoles.length)*3;reasons.push('补足图文结构');}
       if(a.physicalWidthMM&&a.physicalHeightMM)score++;

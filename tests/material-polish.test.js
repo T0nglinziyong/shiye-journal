@@ -6,7 +6,7 @@ import {renderSceneCanvas} from '../src/scene-renderer.js';
 import {seriesCoverLayout,paintSeriesCover,SERIES_COVER_SIZE} from '../src/series-cover-layout.js';
 import {seriesCoverSignature} from '../src/series-cover-snapshot.js';
 import {seriesCovers} from '../src/library-model.js';
-import {materialKinds,materialRoles,materialTextures,materialKindGroups,materialRoleGroups,materialTextureGroups} from '../src/material-taxonomy.js';
+import {materialKinds,materialRoles,materialKindDetails,materialKindGroups,materialRoleGroups} from '../src/material-taxonomy.js';
 import {textBlock,project} from '../src/domain.js';
 import {textFontFamily} from '../src/editor-tools-model.js';
 import {journalFontCandidates,configureJournalFontLoader,prepareJournalFont} from '../src/journal-fonts.js';
@@ -53,10 +53,11 @@ test('tape uses path geometry and end caps in thumbnail, leaving corners transpa
  const before=globalThis.document;globalThis.document={createElement:()=>createCanvas(1,1)};
  try{const c=thumb(item),data=pixels(c);assert.ok(data.some((v,i)=>i%4===3&&v>0));assert.equal(pixel(c,1,1)[3],0);}finally{if(before)globalThis.document=before;else delete globalThis.document;}
 });
-test('taxonomy groups cover each existing value exactly once without changing inventory data',()=>{
- for(const [defs,groups] of [[materialKinds,materialKindGroups],[materialRoles,materialRoleGroups],[materialTextures.map(v=>[v,v]),materialTextureGroups]]){
+test('taxonomy groups cover each primary type and role exactly once',()=>{
+ for(const [defs,groups] of [[materialKinds,materialKindGroups],[materialRoles,materialRoleGroups]]){
   const ids=groups.flatMap(g=>g.options.map(([id])=>id));assert.equal(new Set(ids).size,ids.length);assert.deepEqual(ids.sort(),defs.map(([id])=>id).sort());
  }
+ assert.ok(materialKindDetails.every(([id,,kind])=>id.startsWith(kind+'.')));
 });
 test('series layout chooses fan, nine-cell grid, then unrestricted pile',()=>{
  assert.equal(seriesCoverLayout(2).kind,'fan');assert.equal(seriesCoverLayout(3).kind,'fan');assert.equal(seriesCoverLayout(4).kind,'grid');assert.equal(seriesCoverLayout(5).kind,'grid');

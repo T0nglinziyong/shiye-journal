@@ -33,9 +33,9 @@ test('matching model excludes rejected materials from recommendations and AI inp
  assert.ok(!model.scope.candidateAssetIDs.includes('flower'));
 });
 test('recommendations use all semantic tags and selected basket context',()=>{
- const selected=make('base','photo','旅行照片',['旅途']);selected.semanticColorNames=['蓝色'];selected.materialTags=['光面'];
- const related=make('related','tape','浅蓝胶带');related.semanticColorNames=['蓝色'];related.placementHints=['旅途'];related.materialTags=['光面'];
- const unrelated=make('unrelated','tape','纯红胶带');unrelated.semanticColorNames=['红色'];
+ const selected=make('base','photo','旅行照片',['旅途']);selected.colorTags=['蓝色'];selected.materialTags=['光面'];
+ const related=make('related','tape','浅蓝胶带');related.colorTags=['蓝色'];related.themeTags=['旅途'];related.materialTags=['光面'];
+ const unrelated=make('unrelated','tape','纯红胶带');unrelated.colorTags=['红色'];
  const result=recommendForDirection({assets:[selected,related,unrelated],basket:['base'],purposes:['旅途记录']});
  assert.equal(result[0].asset.id,'related');assert.ok(result[0].reasons.includes('配色关系'));
 });

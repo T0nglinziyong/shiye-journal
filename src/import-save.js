@@ -7,6 +7,8 @@ import {extractAlphaMask} from './alpha-mask-blob.js';
 import {materialStorageBlobs} from './material-storage-resolution.js';
 import {sha256Hex} from './task-fingerprint.js';
 import {importDefaultTitle} from './import-default-names.js';
+import {initialMaterialClassification,defaultKindDetail} from './material-classification.js';
+import {materialImageAttributes} from './material-image-attributes.js';
 import {boundedMap} from './bounded-map.js';
 
 export function importPaperDimensions(record) {
@@ -23,7 +25,14 @@ export function importPaperDimensions(record) {
 export function candidateMetadata(c,record,batchSeriesID) {
   if(c.width!=null&&(!Number.isFinite(c.width)||c.width<=0)||c.height!=null&&(!Number.isFinite(c.height)||c.height<=0))throw Error('素材宽高必须是正数或留空');
   const choice=c.seriesID??record.seriesID??batchSeriesID;
-  return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
+  const classification=initialMaterialClassification({kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[]});
+  if(c.kindDetail)classification.kindDetail=c.kindDetail;
+  else classification.kindDetail=defaultKindDetail(classification.kind);
+  if(c.kindSource==='user')classification.categoryEvidence.kind={source:'user',confidence:1};
+  if(c.roleSource==='user')classification.categoryEvidence.role={source:'user',confidence:1};
+  return {title:c.title?.trim()||'新素材',...classification,
+    titleEvidence:c.titleSource==='user'?{source:'user',confidence:1}:undefined,
+    palette:[],physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
     dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
 export async function saveImportBatch({state,db,urls,render,onSaved,resolveCandidate=async(_record,c)=>c}) {
@@ -82,12 +91,14 @@ export async function saveImportBatch({state,db,urls,render,onSaved,resolveCandi
       for(const [sourceCandidateIndex,c] of elements.entries()) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid(),region=c.region;
         const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
+        const systemAttributes=await materialImageAttributes(stored.cutout).catch(()=>({fileSizeBytes:stored.cutout.size,
+          cutoutState:'mask_applied',imageState:'derived'}));
         const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
         const encodedMask=await extractAlphaMask(stored.cutout,{
           maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
             ?Number(state.preferences.recognitionPixels):900
         });
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,systemAttributes,
           initialMaskBlobId:maskId,finalMaskBlobId:maskId,candidateFrameBlobId,
           isProjectInternal:!copyToLibrary,
           usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,
@@ -113,12 +124,14 @@ export async function saveImportBatch({state,db,urls,render,onSaved,resolveCandi
       for(const [sourceCandidateIndex,c] of chosen.entries()) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid();
         const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
+        const systemAttributes=await materialImageAttributes(stored.cutout).catch(()=>({fileSizeBytes:stored.cutout.size,
+          cutoutState:'mask_applied',imageState:'derived'}));
         const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
         const encodedMask=await extractAlphaMask(stored.cutout,{
           maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
             ?Number(state.preferences.recognitionPixels):900
         });
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,systemAttributes,
           candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,
           createdAt:now,importBatchID,sourcePageID,sourcePageIndex,sourceCandidateIndex});
         blobs.push({id:maskId,data:encodedMask},

@@ -6,6 +6,8 @@ export const CLOUD_API_ROUTES=Object.freeze({
   '/api/storage-usage':'GET',
   '/api/search':'POST',
   '/api/search-index':'POST',
+  '/api/classify-asset':'POST',
+  '/api/classify-project':'POST',
   '/api/realtime-notify':'POST',
   '/api/realtime-session':'GET',
   '/api/job-submit':'POST',
@@ -99,6 +101,6 @@ export function createCloudFunctionTransport({invoke,getSession,network=(...args
         outputHeaders['X-Shiye-Request-Id']=result.requestId;
       return new Response([204,205,304].includes(result.status)?null:JSON.stringify(result.body),
         {status:result.status,headers:outputHeaders});
-    },{signal,timeoutMs});
+    },{signal,timeoutMs:['/api/classify-asset','/api/classify-project'].includes(url)?55000:timeoutMs});
   };
 }

@@ -8,7 +8,8 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
   const [editing,setEditing]=useState(false);
   const [draft,setDraft]=useState(()=>({title:candidate.title||'',
     width:candidate.width??'',height:candidate.height??'',kind:candidate.kind||'sticker',
-    role:candidate.role||'focal',
+    role:candidate.role||'focal',titleSource:candidate.titleSource||'default',kindSource:candidate.kindSource||'default',
+    roleSource:candidate.roleSource||'default',
     reviewStatus:candidate.reviewStatus||'pendingReview'}));
   const initial=useRef(JSON.stringify(draft));
   useUnsavedInput('导入素材信息',editing&&JSON.stringify(draft)!==initial.current);
@@ -38,17 +39,17 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
       <button type="button" className="btn" onClick={onClose}>取消</button></div>
     <form className="stack" onSubmit={save}>
       <label>名称<input id="candidate-edit-name" value={draft.title}
-        onChange={event=>change('title',event.target.value)}/></label>
+        onChange={event=>setDraft(previous=>({...previous,title:event.target.value,titleSource:'user'}))}/></label>
       <div className="form-grid"><label>宽 mm<input id="candidate-edit-width" type="number" step="any"
         value={draft.width} onChange={event=>change('width',event.target.value)}/></label>
         <label>高 mm<input id="candidate-edit-height" type="number" step="any"
           value={draft.height} onChange={event=>change('height',event.target.value)}/></label></div>
       <label>类型<select id="candidate-edit-kind" value={draft.kind}
-        onChange={event=>change('kind',event.target.value)}>
+        onChange={event=>setDraft(previous=>({...previous,kind:event.target.value,kindSource:'user'}))}>
         {materialKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>作用<select id="candidate-edit-role" value={draft.role}
-        onChange={event=>change('role',event.target.value)}>
+        onChange={event=>setDraft(previous=>({...previous,role:event.target.value,roleSource:'user'}))}>
         {materialRoles.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>状态<select id="candidate-edit-status" value={draft.reviewStatus}

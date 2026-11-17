@@ -18,7 +18,9 @@ const expected={
   // titles now use the shared readable-name helper before metadata is saved.
   // SAM preview cutouts are resolved against the high-resolution source before
   // this file stores them; the established import transaction stays atomic.
-  'import-save.js':'5ba3d91ba2f9736dcf5988a374d51a6bd89d72a8',
+  // Material metadata now records taxonomy v2 and field provenance; image
+  // processing, mask bytes, and commit behavior remain unchanged.
+  'import-save.js':'4780428b966815cfce78ab472d8625b8eeab5366',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){

@@ -6,6 +6,7 @@ import {createPostgresRPC} from './postgres.mjs';
 import {embeddingConfiguration,createEmbeddingClient} from './embeddings.mjs';
 import {createSearchService} from './search.mjs';
 import {createStorageGarbageCollector} from './storage-gc.mjs';
+import {createCloudMaterialClassifier} from './classification.mjs';
 import {ServiceError} from './errors.mjs';
 
 const burstWindows=new Map();
@@ -22,12 +23,13 @@ export async function main(event,context){
   try{config=embeddingConfiguration(env);}catch(error){configurationError=error;}
   const rpc=createPostgresRPC({envId});
   const garbageCollect=createStorageGarbageCollector({envId,rpc});
+  const classifyAsset=createCloudMaterialClassifier({envId,env,commit:rpc});
   const search=createSearchService({rpc,modelKey:config?.modelKey,
     embed:async inputs=>{if(configurationError)throw configurationError;return createEmbeddingClient(config)(inputs);}});
   search.vectorEnabled=!!config;
   const handle=createCloudBaseService({
     verifyUser:token=>verifyCloudBaseUser(token,{envId}),cosReady:ready,rpc,searchService:search,
-    garbageCollect,realtimePublish:publishRealtimeEvent,realtimeReady:realtimeConfigured(env),
+    garbageCollect,classifyAsset,realtimePublish:publishRealtimeEvent,realtimeReady:realtimeConfigured(env),
     realtimeCredentials:userID=>realtimeUserCredential(userID,env),
     jobLookup:(id,token,userID)=>lookupComputeJob(id,token||env.SHIYE_CLOUDBASE_SERVICE_KEY,{envId,userID}),
     workerToken:env.SHIYE_GPU_WORKER_TOKEN,

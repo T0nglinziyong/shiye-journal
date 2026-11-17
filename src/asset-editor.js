@@ -1,19 +1,24 @@
 import {parseTags,usedAssetIDs,withUsageStatus} from './library-model.js';
-import {isMaterialKind,isMaterialRole,isMaterialTexture} from './material-taxonomy.js';
+import {isMaterialKind,isMaterialRole} from './material-taxonomy.js';
+import {userMaterialClassification} from './material-classification.js';
 import {normalizeTapeFlatCrop} from './tape-flat-crop.js';
 
 export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
-  const texture=String(values.texture||'').trim()||'未确定';
-  if(!isMaterialKind(values.kind)||!isMaterialRole(values.role)||!isMaterialTexture(texture))
-    throw Error('素材类型、画面作用或材质不在预设范围内');
+  if(!isMaterialKind(values.kind)||!isMaterialRole(values.role))
+    throw Error('素材类型或画面作用不在预设范围内');
   const dimension=value=>{if(value==='')return null;const n=Number(value);if(!Number.isFinite(n)||n<=0)throw Error('实物宽高必须是正数或留空');return n;};
   const width=dimension(values.width),height=dimension(values.height);
-  const next={...old,title:values.title.trim(),kind:values.kind,role:values.role,texture,physicalWidthMM:width,physicalHeightMM:height,
-    tags:parseTags(values.tags),contentTags:parseTags(values.contentTags),styleTags:parseTags(values.styleTags),materialTags:parseTags(values.materialTags),
-    seriesID:values.seriesID||null,reviewStatus:values.reviewStatus,updatedAt:new Date().toISOString()};
+  const changes={kind:values.kind,kindDetail:values.kindDetail||null,role:values.role,
+    secondaryRoles:values.secondaryRoles,contentCategories:values.contentCategories,layoutFits:values.layoutFits,
+    tags:parseTags(values.tags),contentTags:parseTags(values.contentTags),themeTags:parseTags(values.themeTags),
+    styleTags:parseTags(values.styleTags),colorTags:parseTags(values.colorTags),
+    materialTags:parseTags(values.materialTags),moodTags:parseTags(values.moodTags)};
+  const next={...userMaterialClassification(old,changes,{confirm:values.confirmClassification===true}),title:values.title.trim(),
+    titleEvidence:values.confirmClassification===true||old.title!==values.title.trim()?{source:'user',confidence:1}:old.titleEvidence,
+    physicalWidthMM:width,physicalHeightMM:height,
+    seriesID:values.seriesID||null,reviewStatus:values.confirmClassification===true?'ready':values.reviewStatus,updatedAt:new Date().toISOString()};
   delete next.supply;
-  next.tags=[...new Set([...next.tags,...next.contentTags,...next.styleTags,...next.materialTags])];
   if(values.usageStatus!=='used'&&values.usageStatus!=='unused')throw Error('使用状态无效');
   Object.assign(next,withUsageStatus(next,values.usageStatus==='used',next.updatedAt));
   if(width!==old.physicalWidthMM||height!==old.physicalHeightMM)next.dimensionSource=width&&height?'manual':null;

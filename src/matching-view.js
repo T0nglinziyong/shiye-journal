@@ -7,7 +7,7 @@ const matched=(item,filter,selected)=>{
   if(filter==='全部')return true;
   if(filter==='不使用')return false;
   if(filter==='同系列')return selected.some(a=>a.seriesID&&a.seriesID===item.asset.seriesID);
-  if(filter==='材质')return selected.some(a=>a.texture&&a.texture===item.asset.texture);
+  if(filter==='材质')return selected.some(a=>(a.materialTags||[]).some(tag=>(item.asset.materialTags||[]).includes(tag)));
   if(filter==='结构补足')return item.reasons.includes('结构补足');
   if(filter==='尺寸层次')return item.reasons.includes('尺寸层次');
   if(filter==='内容呼应')return item.reasons.some(r=>/主题|风格|素材|想法/.test(r));

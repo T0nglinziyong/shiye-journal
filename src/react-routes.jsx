@@ -53,7 +53,7 @@ import {ManualBoxEditor} from './react-manual-box-editor.jsx';
 import {SamRegionOverlay} from './react-sam-region-overlay.jsx';
 import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
-import {materialKinds,materialRoleName} from './material-taxonomy.js';
+import {materialKinds,materialRoleName,materialKindDetails,tagGroups} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 import {importDefaultTitle} from './import-default-names.js';
@@ -1451,13 +1451,13 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
   const [similarOpen,setSimilarOpen]=useState(false);
   const [,refresh]=useState(0);
   useEffect(()=>{const update=()=>refresh(value=>value+1);window.addEventListener('shiye-asset-refresh',update);return ()=>window.removeEventListener('shiye-asset-refresh',update);},[]);
-  const similarTags=new Set([...(asset.tags||[]),...(asset.contentTags||[]),...(asset.styleTags||[])]);
+  const similarTags=new Set(tagGroups.flatMap(([key])=>asset[key]||[]));
   const similar=assets.filter(entry=>entry.id!==asset.id&&!entry.isProjectInternal)
     .map(entry=>({asset:entry,score:(entry.kind===asset.kind?2:0)+
       (entry.seriesID&&entry.seriesID===asset.seriesID?2:0)+(entry.role===asset.role?1:0)+
-      (entry.tags||[]).filter(tag=>similarTags.has(tag)).length}))
+      tagGroups.flatMap(([key])=>entry[key]||[]).filter(tag=>similarTags.has(tag)).length}))
     .filter(entry=>entry.score>0).sort((left,right)=>right.score-left.score).slice(0,24);
-  const tags=[...(asset.tags||[]),...(asset.contentTags||[]),...(asset.styleTags||[]),...(asset.materialTags||[])]
+  const tags=tagGroups.flatMap(([key])=>asset[key]||[])
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
   const act=name=>()=>onAction(name);
   return <div className="detail-page" data-react-page="assetDetail">
@@ -1470,9 +1470,9 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
         aria-pressed={!!asset.isFavorite} onClick={act('detail-favorite')}>{asset.isFavorite?'♥':'♡'}</button>:null}
       <h1>{asset.title}</h1><div className="detail-facts">
         <div><small>{asset.isCreativePreset?'设计尺寸':'真实尺寸'}</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
-        <div><small>素材类型</small><span>{kindName(asset.kind)}</span></div>
+        <div><small>素材类型</small><span>{kindName(asset.kind)} · {materialKindDetails.find(([id])=>id===asset.kindDetail)?.[1]||'待细分'}</span></div>
         <div><small>主要作用</small><span>{materialRoleName(asset.role)||'待记录'}</span></div>
-        <div><small>材质</small><span>{asset.texture||'待记录'}</span></div>
+        <div><small>材质与质感</small><span>{(asset.materialTags||[]).join('、')||'待记录'}</span></div>
       </div><div className="detail-tags">{tags.map(tag=><span key={tag}>{tag}</span>)}</div>
       <div className="detail-dots">● ● ● ●</div><hr/><p>{asset.isCreativePreset?'预设使用方式':'实物可用操作'}</p><p>✓ 整件使用　 ✓ 旋转摆放{asset.isCreativePreset?'　 ✓ 重复使用':''}</p>
       <button className="btn primary detail-add" data-act="detail-add" data-react-action="true" onClick={act('detail-add')}>＋　加入本次创作</button>
@@ -1682,11 +1682,11 @@ export function SettingsRecognitionPage({preferences,onAction}){
         choices={[["auto","自动校正 A4 光照与色偏"],["original","保留照片颜色"]]}
         help="优先保留印刷与纸张原色；纸面参考不可靠时不校正。"/>
     </SettingsGroup>
-    <SettingsGroup title="6 · 自动整理" description="保存成功后在后台整理标题与标签，不阻塞导入或创作。">
-      <SettingsToggle id="setting-auto-organize" label="自动整理名称和标签" checked={p.autoOrganize}
-        help="不会覆盖已手动修改的信息。"/>
+    <SettingsGroup title="6 · 自动整理" description="素材同步到 CloudBase 后由云函数分析分类、内容和标签。">
+      <SettingsToggle id="setting-auto-organize" label="云端自动整理素材" checked={p.autoOrganize}
+        help="分析透明素材和候选原图；低置信度不写入，人工确认优先。"/>
       <SettingsToggle id="setting-auto-organize-works" label="自动整理作品" checked={p.autoOrganizeWorks!==false}
-        help="导入作品和保存快照后自动整理标题、标签；无模型密钥时保留原信息。"/>
+        help="导入作品和保存快照后由云函数整理标题、标签；不会使用创作模型设置。"/>
     </SettingsGroup>
   </SettingsDetailShell>;
 }
@@ -1867,13 +1867,12 @@ export function ImportSimplePage({state,onAction}){
   const isDone=state.importStep==='done';
   const kind=state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材';
   const destination=state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库';
-  const needsManualCheck=state.importMode==='material'&&state.preferences.autoOrganize&&
-    !(state.aiSettings?.key&&supportsVision(state.aiSettings));
+  const cloudClassificationPending=state.importMode==='material'&&state.preferences.autoOrganize;
   return <><ImportNavigation state={state} onAction={onAction}/>{isDone?<section className="import-done" aria-labelledby="import-done-title"><div className="import-done-card">
     <div className="import-done-icon" aria-hidden="true">✓</div><h1 id="import-done-title">导入完成</h1>
     <p className="import-done-count">已导入 <strong>{state.importSavedCount||0}</strong> 个{kind}</p>
     <p className="import-done-message">{state.importPending?'内容已安全暂存。云端同步将在后台完成，可以放心返回继续使用。':'内容已经保存。你可以返回查看，也可以继续添加下一批照片。'}</p>
-    {needsManualCheck?<p className="import-done-helper">视觉自动整理尚未启用，素材已保留待检查。稍后可在设置中开启。</p>:null}
+    {cloudClassificationPending?<p className="import-done-helper">素材同步后会在云端自动分类；结果到达前仍可继续使用。</p>:null}
     <div className="review-actions import-done-actions">{button('import-exit',`返回${destination}`)}{button('import-continue','继续导入',null,'btn primary')}</div>
   </div></section>:<section className="import-intro"><div className="eyebrow">FROM YOUR DESK TO YOUR PAGES</div>
     <h1>{state.importMode==='work'?'收进完成的作品':'先认出纸，再留住喜欢的'}</h1>
