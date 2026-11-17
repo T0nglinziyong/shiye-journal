@@ -142,7 +142,8 @@ def main():
                 nonlocal fast_hybrid
                 if fast_hybrid is None:
                     fast_hybrid = FastSamHybrid(root / "checkpoints" / "FastSAM-s.pt")
-                masks, background_masks, subregion_masks = fast_hybrid.segment(model_image, model, device)
+                masks, background_masks, subregion_masks = fast_hybrid.segment(
+                    image, model, device, refinement_image=model_image)
                 groups = [[{"segmentation": mask}] for mask in masks]
             else:
                 points = int(job["pointsPerSide"])

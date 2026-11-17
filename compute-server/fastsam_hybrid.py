@@ -62,23 +62,26 @@ def _merge_aligned_photograph_fragments(items, width):
     return merged
 
 
-def _proposals(result, image):
+def _proposals(result, image, extra_result=None):
     height, width = image.shape[:2]
     if result.masks is None:
         return [], [], []
-    masks = result.masks.data.cpu().numpy() > .5
-    confidences = result.boxes.conf.cpu().numpy()
     all_items = []
-    for index, mask in enumerate(masks):
-        area = int(mask.sum())
-        if area < 64 or area > .8 * width * height:
+    for prediction in (result, extra_result):
+        if prediction is None or prediction.masks is None:
             continue
-        box = mask_box(mask)
-        if box is None:
-            continue
-        all_items.append({"segmentation": mask, "bbox_xyxy": box,
-                          "bbox": [box[0], box[1], box[2]-box[0], box[3]-box[1]],
-                          "area": area, "predicted_iou": float(confidences[index])})
+        masks = prediction.masks.data.cpu().numpy() > .5
+        confidences = prediction.boxes.conf.cpu().numpy()
+        for index, mask in enumerate(masks):
+            area = int(mask.sum())
+            if area < 64 or area > .8 * width * height:
+                continue
+            box = mask_box(mask)
+            if box is None:
+                continue
+            all_items.append({"segmentation": mask, "bbox_xyxy": box,
+                              "bbox": [box[0], box[1], box[2]-box[0], box[3]-box[1]],
+                              "area": area, "predicted_iou": float(confidences[index])})
     carriers = find_composite_carriers(all_items, image)
     has_composite_carrier = bool(carriers)
     cap = .12 if has_composite_carrier else .20
@@ -106,10 +109,9 @@ def _proposals(result, image):
                    and not (item["bbox_xyxy"][2] >= width-2
                             and item["bbox_xyxy"][2]-item["bbox_xyxy"][0] > .45*width)]
         outside = _merge_aligned_photograph_fragments(outside, width)
-    # These masks were already produced by FastSAM. Keep a small, genuinely
-    # contained subset so the client can change grouping without another pass.
-    subregions = []
-    for parent in outside:
+    # These masks were already produced by FastSAM. Keep genuinely contained
+    # alternatives so the client can change grouping without another pass.
+    def nested_proposals(parent):
         pb = parent["bbox_xyxy"]
         def contained_box(item):
             b = item["bbox_xyxy"]
@@ -130,8 +132,46 @@ def _proposals(result, image):
             unique.append(item)
             if len(unique) == 12:
                 break
-        subregions.append([item["segmentation"] for item in unique])
-    return outside, [carrier["segmentation"] for carrier, _ in carriers[:12]], subregions
+        return unique
+
+    backgrounds = [carrier["segmentation"] for carrier, _ in carriers[:12]]
+    expanded = []
+    for parent in outside:
+        # An intermediate mask covering much of a validated container can
+        # join several separate printed pieces. Prefer its substantial,
+        # disjoint child proposals when together they explain most of it;
+        # retain the intermediate mask as a mergeable background.
+        carrier = next((item for item, _ in carriers if inside(parent, item) >= .7), None)
+        pb = parent["bbox_xyxy"]
+        spatial = []
+        if carrier is not None and parent["area"] >= carrier["area"] * .35:
+            for item in sorted(pool, key=lambda candidate: -candidate["area"]):
+                b = item["bbox_xyxy"]
+                overlap = max(0, min(b[2], pb[2]) - max(b[0], pb[0])) * max(
+                    0, min(b[3], pb[3]) - max(b[1], pb[1]))
+                if (item["area"] < parent["area"] * .04 or
+                        item["area"] >= parent["area"] * .85 or
+                        overlap < (b[2]-b[0]) * (b[3]-b[1]) * .9):
+                    continue
+                if any(np.count_nonzero(item["segmentation"] & previous["segmentation"])
+                       / max(1, min(item["area"], previous["area"])) >= .75
+                       for previous in spatial):
+                    continue
+                spatial.append(item)
+                if len(spatial) == 12:
+                    break
+        covered = np.count_nonzero(np.logical_or.reduce(
+            [item["segmentation"] for item in spatial])) if spatial else 0
+        if (carrier is not None and parent["area"] >= carrier["area"] * .35
+                and len(spatial) >= 3 and covered >= parent["area"] * .5):
+            expanded.extend(spatial)
+            backgrounds.append(parent["segmentation"])
+        else:
+            expanded.append(parent)
+    outside = expanded
+    subregions = [[item["segmentation"] for item in nested_proposals(parent)]
+                  for parent in outside]
+    return outside, backgrounds[:16], subregions
 
 
 def smooth_mask(mask):
@@ -188,14 +228,27 @@ class FastSamHybrid:
     def __init__(self, checkpoint):
         self.fast = FastSAM(str(checkpoint))
 
-    def segment(self, image, sam_model, device):
+    def segment(self, image, sam_model, device, refinement_image=None):
+        # FastSAM proposes physical pieces from the corrected camera image.
+        # CLAHE/denoising may erase a pale card's outer edge while amplifying
+        # its printed details; use it only for the SAM boundary refinement.
+        if refinement_image is None:
+            refinement_image = image
         # FastSAM's small-object proposals change in BF16; run its forward pass
         # in original FP32 even though the surrounding SAM inference uses BF16.
-        with torch.autocast("cuda", enabled=False) if device == "cuda" else torch.no_grad():
-            result = self.fast.predict(cv2.cvtColor(image,cv2.COLOR_RGB2BGR),
-                device=0 if device == "cuda" else "cpu", imgsz=1024, conf=.25,
-                iou=.9, max_det=500, retina_masks=True, verbose=False)[0]
+        def predict(source):
+            with torch.autocast("cuda", enabled=False) if device == "cuda" else torch.no_grad():
+                return self.fast.predict(cv2.cvtColor(source,cv2.COLOR_RGB2BGR),
+                    device=0 if device == "cuda" else "cpu", imgsz=1024, conf=.25,
+                    iou=.9, max_det=500, retina_masks=True, verbose=False)[0]
+        result = predict(image)
         items, backgrounds, subregions = _proposals(result, image)
+        # A structured collage can benefit from the enhanced image's extra
+        # small proposals. Keep the original pass as the anchor and combine
+        # both only when an interior multi-object carrier was observed.
+        if backgrounds and refinement_image is not image:
+            enhanced = predict(refinement_image)
+            items, backgrounds, subregions = _proposals(result, image, enhanced)
         if not items:
             return [], backgrounds, []
         height,width = image.shape[:2]
@@ -207,7 +260,7 @@ class FastSamHybrid:
             boxes.append([max(0,x0-margin_x),max(0,y0-margin_y),
                           min(width,x1+margin_x),min(height,y1+margin_y)])
         predictor = SAM2ImagePredictor(sam_model)
-        predictor.set_image(image)
+        predictor.set_image(refinement_image)
         masks, _, _ = predictor.predict(box=np.asarray(boxes,dtype=np.float32),
                                          multimask_output=False)
         for index,item in enumerate(items):

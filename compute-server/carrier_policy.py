@@ -20,12 +20,21 @@ def inside(inner, outer):
 
 
 def find_composite_carriers(candidates, color_image):
-    """Find large masks that contain many smaller candidates, regardless of color."""
+    """Find interior containers with many children, regardless of color.
+
+    A mask that reaches the corrected page boundary has no observed outer
+    edge. FastSAM often proposes part of the A4 background in that form; it
+    cannot establish a physical carrier for the enclosed objects.
+    """
     height, width = color_image.shape[:2]
     page_area = width * height
     carriers = []
     for candidate in candidates:
         if not 0.16 * page_area <= candidate["area"] <= 0.65 * page_area:
+            continue
+        x0, y0, x1, y1 = candidate["bbox_xyxy"]
+        border_x, border_y = max(3, round(width * .01)), max(3, round(height * .01))
+        if x0 <= border_x or y0 <= border_y or x1 >= width - border_x or y1 >= height - border_y:
             continue
         children = sum(
             other is not candidate
@@ -35,7 +44,9 @@ def find_composite_carriers(candidates, color_image):
         )
         if children >= 8:
             carriers.append((candidate, children))
-    carriers.sort(key=lambda pair: -pair[0]["area"])
+    # Prefer the model's strongest complete carrier over a larger mask that
+    # includes a strip of the surrounding page.
+    carriers.sort(key=lambda pair: (-float(pair[0].get("predicted_iou", 0)), -pair[0]["area"]))
     unique = []
     for candidate, children in carriers:
         if not any(inside(candidate, existing[0]) >= 0.75 for existing in unique):
