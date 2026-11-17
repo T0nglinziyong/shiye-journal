@@ -56,6 +56,19 @@ try{
     [['sam2-small','fastsam-sam2'],['sam2-small','fastsam-sam2']]);
   assert.ok(initial.inputs.every(item=>item.type==='image/png'&&item.size<200000));
   const recognitionMs=Math.round(performance.now()-recognitionStart);
+  await waitImportIdle();
+  const painted=await evaluate(`(()=>{const canvas=document.querySelector('.sam-region-overlay');
+    return {width:canvas?.width,style:canvas?.getAttribute('style')};})()`);
+  assert.ok(painted.width>300&&painted.style?.includes('width:'),
+    'initial candidates must paint without toggling the view');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await click('.queue-item[data-id="1"]','.sam-region-overlay');await waitImportIdle();
+  const switched=await evaluate(`(()=>{const canvas=document.querySelector('.sam-region-overlay');
+    return {width:canvas?.width,style:canvas?.getAttribute('style')};})()`);
+  assert.ok(switched.width>300&&switched.style?.includes('width:'),
+    'prefetched candidates must paint on first photo switch at phone width');
+  await click('.queue-item[data-id="0"]','.sam-region-overlay');await waitImportIdle();
+  await command('Emulation.clearDeviceMetricsOverride');
 
   if(process.env.SHIYE_CAPTURE){
     await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
@@ -98,13 +111,16 @@ try{
   assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),jobsBeforePost,
     'changing postprocess switches must reuse the cached SAM result');
 
+  await click('[data-act="preview-crop"]','.paper-handle');
+  assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),4,
+    'first correction action must expose all four editable paper corners');
   await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
   assert.ok(await evaluate(`document.querySelector('.photo-preparation-content h3')?.textContent.includes('校正结果')`));
   await click('[data-act="apply-paper-preview"]','.import-primary-tools');
   assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),jobsBeforePost,
     'previewing an already applied correction must not run SAM');
   await evaluate('window.confirm=()=>true');
-  await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
+  await click('[data-act="preview-crop"]','.paper-handle');await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
   await click('[data-act="readjust-paper"]','.paper-handle');
   const corner=await evaluate(`(()=>{const r=document.querySelector('.paper-handle').getBoundingClientRect();
     return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);

@@ -2,9 +2,14 @@
 // It is never copied to public/ or uploaded. Screenshots stay under /tmp.
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import {build} from 'esbuild';
 import {browserHarness} from './browser-harness.mjs';
 const directory=process.env.SHIYE_IMPORT_SCREENSHOTS||'/tmp/shiye-import-acceptance';await mkdir(directory,{recursive:true});
-const b=await browserHarness('shiye-import-test',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173');
+const fixture=await build({entryPoints:['tests/fixtures/ui-cloudbase-harness.mjs'],bundle:true,
+  platform:'browser',format:'iife',globalName:'ShiyeUiFixture',write:false});
+const b=await browserHarness('shiye-import-test',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173',
+  async({command})=>command('Page.addScriptToEvaluateOnNewDocument',
+    {source:fixture.outputFiles[0].text+'\nShiyeUiFixture.installUiCloudBase(window);'}));
 const {evaluate,command,click,wait,sleep}=b,report=[];
 async function screenshot(name,w,h){await sleep(100);const r=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(directory+'/'+w+'x'+h+'-'+name+'.png',Buffer.from(r.data,'base64'));const layout=await evaluate('({overflow:document.documentElement.scrollWidth-innerWidth,modalOpen:document.querySelector("#modal").open})');assert.ok(layout.overflow<=1,JSON.stringify(layout));report.push({name,width:w,height:h,...layout});}
 try {
@@ -24,10 +29,10 @@ try {
     assert.equal(await evaluate('document.querySelectorAll(".paper-correction").length'),0);
     assert.ok(await evaluate('!!document.querySelector(".sam-region-overlay")||document.querySelectorAll(".paper-handle").length===4'));
     if(w>=820){const rect=await evaluate('(()=>{const p=document.querySelector(".import-preparation").getBoundingClientRect(),i=document.querySelector(".import-inspector").getBoundingClientRect(),buttons=[document.querySelector(".import-photo-tools .btn"),document.querySelector(".confirm-photo")].map(e=>e.getBoundingClientRect().height);return {bottom:p.bottom-i.bottom,buttons};})()');assert.ok(Math.abs(rect.bottom)<1);assert.ok(Math.abs(rect.buttons[0]-rect.buttons[1])<1);}
-    const before=await evaluate('document.querySelectorAll(".import-candidate-tile").length');await click('[data-act="preview-crop"]','[data-act="readjust-paper"]');await screenshot('correction-preview',w,h);assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),before);assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),0);await click('[data-act="readjust-paper"]','.paper-handle');assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),4);
+    const before=await evaluate('document.querySelectorAll(".import-candidate-tile").length');await click('[data-act="preview-crop"]','.paper-handle');assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),4);await screenshot('correction-corners',w,h);await click('[data-act="preview-crop"]','[data-act="readjust-paper"]');await screenshot('correction-preview',w,h);assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),before);assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),0);await click('[data-act="readjust-paper"]','.paper-handle');await click('[data-act="cancel-paper-adjust"]','[data-act="preview-crop"]');
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
+  await click('[data-act="preview-crop"]','.paper-handle');await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
   await click('[data-act="apply-paper-preview"]','[data-act="manual-import-box"]');
   await click('[data-act="manual-import-box"]','.multi-box-editor');
   for(const [w,h] of [[390,844],[1024,768],[390,844]]){

@@ -1347,7 +1347,7 @@ async function runAppAction(action,id,value){try{
     route('works',{replaceHistory:true});
     break;
   }
-  case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':{
+  case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':if(state.editingPaperCorners)await previewCorrection();else{state.editingPaperCorners=true;render();}break;case 'confirm-import':{
     const highRes=createHighResCandidateResolver();
     try{await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets,resolveCandidate:highRes.resolve});}
     finally{highRes.dispose();}
@@ -1355,7 +1355,7 @@ async function runAppAction(action,id,value){try{
   case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';await switchImportRecord(state.importIndex,true);}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-continue':if(state.importStep==='done'){resetImportBatch();render();}break;
-  case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;state.editingPaperCorners=true;discardPaperPreview();render();break;case 'apply-paper-preview':await applyPaperPreview();break;
+  case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;state.editingPaperCorners=true;discardPaperPreview();render();break;case 'cancel-paper-adjust':state.editingPaperCorners=false;render();break;case 'apply-paper-preview':await applyPaperPreview();break;
   case 'rotate-photo':await rotateImportPhoto();break;
   case 'import-toggle-candidate':await actionStore.dispatch({type:'import/candidate/toggle',payload:{index:Number(id)}});break;
   case 'import-confirm-photo':await confirmImportPhoto();break;
@@ -3800,7 +3800,7 @@ window.addEventListener('shiye-sync-project-committed',event=>{
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{const recovered=!!lastSyncError&&!error;if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');if(recovered)privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
-const CLOUD_POLL_MS=300000,REALTIME_FALLBACK_MS=300000;
+const CLOUD_POLL_MS=300000,REALTIME_FALLBACK_MS=15*60_000;
 let revisionRealtimeReady=false;
 let stopRevisionRealtime=()=>{};
 function subscribeAccountRevision(userID){

@@ -62,7 +62,7 @@ try{
     await sleep(100);
   }
   assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),beforeMerge-1);
-  await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
+  await click('[data-act="preview-crop"]','.paper-handle');await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
   assert.equal(await evaluate(`document.querySelectorAll('.import-primary-tools button').length`),2);
   await click('[data-act="apply-paper-preview"]');
   await click('[data-act="manual-import-box"]','.multi-box-editor');
