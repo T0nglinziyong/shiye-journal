@@ -5,8 +5,9 @@ const color=index=>{
   return `hsl(${hue} 78% 46%)`;
 };
 
-export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick}){
+export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick,onRegionBox}){
   const canvasRef=useRef(null);
+  const dragRef=useRef(null),ignoreClickRef=useRef(false);
   const selectionKey=[...(selected||[])].sort((a,b)=>a-b).join(',');
   useLayoutEffect(()=>{
     const canvas=canvasRef.current,host=canvas?.parentElement;
@@ -52,6 +53,7 @@ export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick}
     return ()=>observer.disconnect();
   },[regions,frameSize,mode,selectionKey]);
   const click=event=>{
+    if(ignoreClickRef.current){ignoreClickRef.current=false;return;}
     const rect=event.currentTarget.getBoundingClientRect();
     const x=(event.clientX-rect.left)*event.currentTarget.width/rect.width;
     const y=(event.clientY-rect.top)*event.currentTarget.height/rect.height;
@@ -63,11 +65,47 @@ export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick}
         const my=Math.floor((ry-region.y)/region.h*region.mask.height);
         if(region.mask.alpha[my*region.mask.width+mx]<20)continue;
       }
-      onRegionClick(index);return;
+      onRegionClick(index,{x:x/event.currentTarget.width,y:y/event.currentTarget.height});return;
     }
   };
-  return <canvas ref={canvasRef} className="sam-region-overlay" onClick={click}
-    role="img" aria-label={mode==='regions'?'彩色分割区域，可点选':'候选框，可点选'}/>;
+  const point=event=>{
+    const rect=event.currentTarget.getBoundingClientRect();
+    return {x:Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),
+      y:Math.max(0,Math.min(1,(event.clientY-rect.top)/rect.height))};
+  };
+  const down=event=>{
+    if(!onRegionBox)return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current={start:point(event)};
+  };
+  const move=event=>{
+    if(!dragRef.current)return;
+    const canvas=event.currentTarget,box=canvas.parentElement?.querySelector('.sam-region-drag-box');
+    if(!box)return;
+    const {start}=dragRef.current,current=point(event);
+    Object.assign(box.style,{display:'block',left:`${canvas.offsetLeft+Math.min(start.x,current.x)*canvas.clientWidth}px`,
+      top:`${canvas.offsetTop+Math.min(start.y,current.y)*canvas.clientHeight}px`,
+      width:`${Math.abs(current.x-start.x)*canvas.clientWidth}px`,
+      height:`${Math.abs(current.y-start.y)*canvas.clientHeight}px`});
+  };
+  const up=event=>{
+    if(!dragRef.current)return;
+    const {start}=dragRef.current,current=point(event);dragRef.current=null;
+    const box=event.currentTarget.parentElement?.querySelector('.sam-region-drag-box');
+    if(box)box.style.display='none';
+    const selection={x:Math.min(start.x,current.x),y:Math.min(start.y,current.y),
+      w:Math.abs(start.x-current.x),h:Math.abs(start.y-current.y)};
+    if(selection.w>.015&&selection.h>.015){ignoreClickRef.current=true;onRegionBox(selection);}
+  };
+  const cancel=event=>{
+    dragRef.current=null;
+    const box=event.currentTarget.parentElement?.querySelector('.sam-region-drag-box');
+    if(box)box.style.display='none';
+  };
+  return <><canvas ref={canvasRef} className={`sam-region-overlay ${onRegionBox?'drawing':''}`} onClick={click}
+    onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}
+    role="img" aria-label={mode==='regions'?'彩色分割区域，可点选':'候选框，可点选'}/>
+    {onRegionBox?<div className="sam-region-drag-box" aria-hidden="true"/>:null}</>;
 }
 
 function hslToRgb(h,s,l){

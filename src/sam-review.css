@@ -1,4 +1,6 @@
 .sam-region-overlay{position:absolute;z-index:5;max-width:none!important;max-height:none!important;touch-action:manipulation;cursor:pointer}
+.sam-region-overlay.drawing{touch-action:none;cursor:crosshair}
+.sam-region-drag-box{position:absolute;z-index:6;display:none;border:2px dashed #52634b;background:#9bb79545;pointer-events:none}
 .import-preparation-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;min-width:0}
 .import-preparation-heading h3{min-width:0;margin:8px 0!important}
 .import-view-actions,.import-view-switch{display:flex;align-items:center;gap:5px}
@@ -9,6 +11,7 @@
 .import-view-actions button:disabled{opacity:.45;cursor:default}
 .import-primary-tools{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px!important}
 .import-primary-tools.import-mode-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
+.import-primary-tools.import-mode-tools:has(> .btn:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
 .import-primary-tools .btn{min-width:0;width:100%;padding:10px 6px!important;white-space:nowrap}
 .import-primary-tools .btn:last-child{background:#e0e5dc!important;color:#303b32!important}
 .import-primary-tools .btn.active{background:#52634b!important;color:#fff!important}

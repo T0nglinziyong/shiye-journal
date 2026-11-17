@@ -24,7 +24,7 @@ try{
     recognitionDefaultsVersion:4,recognition:'fastsam-sam2-small',paperSize:'a4',orientation:'landscape',
     samPointsPerSide:24,samCropNLayers:1,samGranularity:'balanced'}))`);
   await command('Page.reload');await wait('.series-grid');
-  await evaluate('window.__SHIYE_UI_CLOUD__.state.samExtraCandidate=true');
+  await evaluate('window.__SHIYE_UI_CLOUD__.state.samExtraCandidate=true;window.__SHIYE_UI_CLOUD__.state.samSubregions=true');
   await click('.swift-tabs button:nth-child(2)','.asset-grid');
   await click('[data-act="import"]','.import-nav');
   const recognitionStart=performance.now();
@@ -61,6 +61,13 @@ try{
     return {width:canvas?.width,style:canvas?.getAttribute('style')};})()`);
   assert.ok(painted.width>300&&painted.style?.includes('width:'),
     'initial candidates must paint without toggling the view');
+  await click('#import-merge-carrier');await waitImportIdle();
+  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),4,
+    'disabling carrier grouping restores the two saved FastSAM subregions');
+  assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),2,
+    'changing carrier grouping must not rerun SAM');
+  await click('#import-merge-carrier');await waitImportIdle();
+  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),3);
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await click('.queue-item[data-id="1"]','.sam-region-overlay');await waitImportIdle();
   const switched=await evaluate(`(()=>{const canvas=document.querySelector('.sam-region-overlay');
@@ -92,6 +99,32 @@ try{
     'two printed regions on the same paper become one material while the separate material remains');
   assert.equal(await evaluate(`document.querySelector('.import-candidate-tile img').src`),untouchedPreview,
     'merging must retain the unchanged material preview');
+
+  const beforeSplitJobs=await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length');
+  await click('.import-primary-tools button:nth-child(3)');
+  await click('.candidate-choice:last-child .import-candidate-tile');
+  await click('.import-primary-tools button:nth-child(3)');
+  assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('原始区域')`));
+  const sourcePoint=await evaluate(`(()=>{const canvas=document.querySelector('.sam-region-overlay');
+    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    for(let y=15;y<canvas.height-15;y+=4)for(let x=15;x<canvas.width-15;x+=4){
+      const alpha=pixels[(y*canvas.width+x)*4+3];
+      if(alpha>80&&alpha<130){const rect=canvas.getBoundingClientRect();
+        return {x:rect.left+x*rect.width/canvas.width,y:rect.top+y*rect.height/canvas.height};}
+    }return null;})()`);
+  assert.ok(sourcePoint,'a saved child mask should be visible for point splitting');
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',x:sourcePoint.x,y:sourcePoint.y,button:'left',clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:sourcePoint.x,y:sourcePoint.y,button:'left',clickCount:1});
+  for(let attempt=0;attempt<100;attempt++){
+    if(await evaluate(`document.querySelectorAll('.import-candidate-tile').length===3`))break;
+    await sleep(100);
+  }
+  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),3,
+    'saved child masks should split a merged material without a new model job');
+  assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),beforeSplitJobs);
+  await click('[data-act="recognition-diagnostics"]');
+  assert.ok(await evaluate(`document.querySelector('#toast')?.textContent.includes('已导出')`),
+    'server segmentation must export diagnostics after recognition');
 
   await click('[data-act="manual-import-box"]','.multi-box-editor');
   const box=await evaluate(`(()=>{const r=document.querySelector('.multi-box-editor .import-region').getBoundingClientRect();

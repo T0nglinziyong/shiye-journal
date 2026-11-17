@@ -65,7 +65,7 @@ def _merge_aligned_photograph_fragments(items, width):
 def _proposals(result, image):
     height, width = image.shape[:2]
     if result.masks is None:
-        return [], []
+        return [], [], []
     masks = result.masks.data.cpu().numpy() > .5
     confidences = result.boxes.conf.cpu().numpy()
     all_items = []
@@ -106,7 +106,32 @@ def _proposals(result, image):
                    and not (item["bbox_xyxy"][2] >= width-2
                             and item["bbox_xyxy"][2]-item["bbox_xyxy"][0] > .45*width)]
         outside = _merge_aligned_photograph_fragments(outside, width)
-    return outside, [carrier["segmentation"] for carrier, _ in carriers[:12]]
+    # These masks were already produced by FastSAM. Keep a small, genuinely
+    # contained subset so the client can change grouping without another pass.
+    subregions = []
+    for parent in outside:
+        pb = parent["bbox_xyxy"]
+        def contained_box(item):
+            b = item["bbox_xyxy"]
+            overlap = max(0,min(b[2],pb[2])-max(b[0],pb[0])) * max(0,min(b[3],pb[3])-max(b[1],pb[1]))
+            return overlap / max(1,(b[2]-b[0])*(b[3]-b[1])) >= .82
+        children = [item for item in pool if item is not parent
+                    and item["area"] >= width*height*.001
+                    and item["area"] < parent["area"]*.85
+                    and contained_box(item)
+                    and np.count_nonzero(item["segmentation"] & parent["segmentation"])
+                    / max(1,item["area"]) >= .8]
+        children.sort(key=lambda item: item["area"], reverse=True)
+        unique = []
+        for item in children:
+            if any(np.count_nonzero(item["segmentation"] & previous["segmentation"])
+                   / max(1,min(item["area"],previous["area"])) >= .75 for previous in unique):
+                continue
+            unique.append(item)
+            if len(unique) == 12:
+                break
+        subregions.append([item["segmentation"] for item in unique])
+    return outside, [carrier["segmentation"] for carrier, _ in carriers[:12]], subregions
 
 
 def smooth_mask(mask):
@@ -170,9 +195,9 @@ class FastSamHybrid:
             result = self.fast.predict(cv2.cvtColor(image,cv2.COLOR_RGB2BGR),
                 device=0 if device == "cuda" else "cpu", imgsz=1024, conf=.25,
                 iou=.9, max_det=500, retina_masks=True, verbose=False)[0]
-        items, backgrounds = _proposals(result, image)
+        items, backgrounds, subregions = _proposals(result, image)
         if not items:
-            return [], backgrounds
+            return [], backgrounds, []
         height,width = image.shape[:2]
         boxes=[]
         for item in items:
@@ -203,4 +228,4 @@ class FastSamHybrid:
                 item["segmentation"] = refined
             continuous, _, _ = largest_connected_component(item["segmentation"])
             item["segmentation"] = smooth_mask(continuous)
-        return [item["segmentation"] for item in items], backgrounds
+        return [item["segmentation"] for item in items], backgrounds, subregions

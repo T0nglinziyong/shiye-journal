@@ -1,7 +1,19 @@
 import {visionTask} from './vision-runtime.js';
 import {sourcePixels} from './recognition-raster.js';
 import {mergeSamRegions} from './sam-region-merge.js';
+import {splitSources,splitBySource} from './sam-region-split.js';
 import {detectRemovedPhysicalInterior} from './material-physical-mask-guard.js';
+
+export function expandSavedRegions(region,depth=0){
+  if(depth>4)return [region];
+  const sources=splitSources(region);
+  if(sources.length>1)return sources.flatMap(source=>expandSavedRegions(source,depth+1));
+  if(sources.length===1){
+    try{return splitBySource(region,0).flatMap(part=>expandSavedRegions(part,depth+1));}
+    catch{/* The single child covers its parent. */}
+  }
+  return [region];
+}
 
 // These operations consume saved SAM masks and the already corrected page.
 // The caller retains `raw` so toggling an option off restores the original.
@@ -21,7 +33,8 @@ export async function postprocessSamCandidates(raw,source,{
     context.imageSmoothingQuality='high';context.drawImage(source,0,0,width,height);
   }
   const pixels=sourcePixels(frame);
-  let regions=mergeSharedCarrier?mergeLightCarriers(raw,backgrounds,pixels,width,height):raw;
+  let regions=mergeSharedCarrier?mergeLightCarriers(raw,backgrounds,pixels,width,height):
+    raw.flatMap(region=>expandSavedRegions(region));
   if(shapeRegularization){
     const shaped=await visionTask('material-boundary-refine',{
       pixels,width,height,candidates:regions,mode:'postprocess',
@@ -33,15 +46,17 @@ export async function postprocessSamCandidates(raw,source,{
       const loss=after.pixels&&before.pixels?after.pixels/before.pixels:1;
       const interior=detectRemovedPhysicalInterior(before,after);
       return loss<.9||interior.sampled&&interior.removed>Math.max(5,interior.sampled*.01)
-        ?before:after;
+        ?before:{...after,splitSources:before.splitSources};
     });
   }
   if(apertures){
-    regions=await visionTask('restore-repeated-apertures',{
+    const before=regions;
+    const restored=await visionTask('restore-repeated-apertures',{
       pixels,width,height,candidates:regions,paperWidthMM,paperHeightMM
     });
+    regions=restored.map((region,index)=>({...region,splitSources:region.splitSources||before[index]?.splitSources}));
   }
-  return regions;
+  return regions.map(region=>({...region,maskAntialias:!!shapeRegularization}));
 }
 
 export function mergeLightCarriers(raw,backgrounds,pixels,width,height){

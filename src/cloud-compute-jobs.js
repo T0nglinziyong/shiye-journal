@@ -42,7 +42,7 @@ export async function submitSegmentationJob(correctedBlob,{model,pointsPerSide=2
     p_parameters:parameters,p_input_path:inputPath
   });
   unwrap(result,'识别任务提交');
-  // If this hint is lost, the worker's reconnect/periodic queue scan recovers.
+  // The active client re-sends a lost MQTT hint while waiting for this job.
   try{const hint=await cloudApiRequest('/api/job-submit',{method:'POST',body:JSON.stringify({jobId:id})});
     if(!hint.ok)throw Error('唤醒请求未被接收');}
   catch(error){console.warn('识别任务已保存，实时唤醒暂不可用',error?.message);}
@@ -92,7 +92,7 @@ export async function waitForSegmentationJob(jobId,{signal,onStatus=()=>{}}={}){
       if(job.status==='failed')throw Error('模型识别失败：'+(job.error_code||'请稍后重试'));
       // Re-send a queued job's hint promptly. For an interrupted worker, start
       // re-sending near the 15-minute lease expiry so the client can recover
-      // without waiting for the worker's infrequent idle scan.
+      // without an idle database scan on the GPU host.
       if((job.status==='queued'||job.status==='running'&&Date.now()>=deadline-16*60_000)&&
         Date.now()-lastHintRetry>=10000){
         lastHintRetry=Date.now();
@@ -125,16 +125,26 @@ async function loadSegmentationResult(job){
   if(![1,2].includes(manifest.version)||!Array.isArray(manifest.objects)||manifest.objects.length>250||
     !Number.isInteger(manifest.width)||!Number.isInteger(manifest.height))
     throw Error('识别结果格式无效');
+  const decodePacked=object=>{
+    const [x0,y0,x1,y1]=object.bbox_xyxy||[];
+    if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
+      throw Error('识别结果区域无效');
+    const width=x1-x0,height=y1-y0,alpha=decodeSamMaskBits(object.maskBits,width,height);
+    return {x:x0/manifest.width,y:y0/manifest.height,w:width/manifest.width,h:height/manifest.height,
+      pixels:object.area,segmentationMethod:manifest.model,segmentationFailed:false,
+      segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
+      mask:{width,height,alpha,topologyPreserved:true}};
+  };
   const regions=await boundedMap(manifest.objects,4,async object=>{
     const [x0,y0,x1,y1]=object.bbox_xyxy||[];
     if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
       throw Error('识别结果区域无效');
     if(manifest.version===2){
-      const width=x1-x0,height=y1-y0,alpha=decodeSamMaskBits(object.maskBits,width,height);
-      return {x:x0/manifest.width,y:y0/manifest.height,w:width/manifest.width,h:height/manifest.height,
-        pixels:object.area,segmentationMethod:manifest.model,segmentationFailed:false,
-        segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
-        mask:{width,height,alpha,topologyPreserved:true}};
+      if(object.subregions!==undefined&&(!Array.isArray(object.subregions)||object.subregions.length>12))
+        throw Error('原始子区域数据无效');
+      const region=decodePacked(object);
+      if(object.subregions?.length)region.splitSources=object.subregions.map(decodePacked);
+      return region;
     }
     if(!/^material-\d{3}\.png$/.test(object.file||''))throw Error('识别结果区域无效');
     const maskBlob=unwrap(await bucket().download(prefix+object.file),'分割 Mask 下载');

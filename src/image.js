@@ -121,6 +121,8 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
     const modelMask=/^(sam2-|fastsam|yoloe)/.test(region.segmentationMethod||'');
     // SAM masks are already the model's final topology. Smoothing their
     // 1024px boundary here and then scaling it to 4K made a wide fuzzy edge.
+    // Keep the model-resolution mask exact. Antialias at the export raster's
+    // resolution below; blurring the 1024px mask before 4K scaling is fuzzy.
     const outputAlpha=region.shapeModel||modelMask?m.alpha:softenOutputAlpha(m.alpha,m.width,m.height);
     for(let i=0;i<outputAlpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=outputAlpha[i];}
     mc.putImageData(frame,0,0);
@@ -133,7 +135,7 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
     // The authoritative segmented mask, contour, identity and dimensions stay
     // byte-for-byte intact. In particular, no morphological shape edits run.
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-    ctx.filter=modelMask?'none':'blur(0.45px)';
+    ctx.filter=modelMask&&!region.maskAntialias?'none':'blur(0.45px)';
     ctx.drawImage(mask,0,0,w,h);
     ctx.filter='none';ctx.globalCompositeOperation='source-over';
   }

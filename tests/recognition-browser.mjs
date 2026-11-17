@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import {build} from 'esbuild';
 import {browserHarness} from './browser-harness.mjs';
 
-const b=await browserHarness('shiye-recognition-settings',process.env.SHIYE_TEST_URL||'http://localhost:5175');
+const fixture=await build({entryPoints:['tests/fixtures/ui-cloudbase-harness.mjs'],bundle:true,
+  platform:'browser',format:'iife',globalName:'ShiyeUiFixture',write:false});
+const b=await browserHarness('shiye-recognition-settings',process.env.SHIYE_TEST_URL||'http://localhost:5175',
+  async({command})=>command('Page.addScriptToEvaluateOnNewDocument',{
+    source:fixture.outputFiles[0].text+'\nShiyeUiFixture.installUiCloudBase(window);'}));
 const {click,evaluate,wait}=b;
 const switches=['setting-postprocess-shapes','setting-postprocess-apertures'];
 try{
@@ -11,8 +16,20 @@ try{
   assert.ok(await evaluate('!!document.querySelector("#setting-recognition-pixels")'));
   assert.ok(await evaluate('!!document.querySelector("#setting-candidate-discovery")'));
   const defaults=await evaluate('({method:document.querySelector("#setting-recognition").value,pixels:Number(document.querySelector("#setting-recognition-pixels").value),light:document.querySelector("#setting-preprocess-light").checked,denoise:document.querySelector("#setting-preprocess-denoise").checked,contrast:document.querySelector("#setting-preprocess-contrast").checked,chroma:document.querySelector("#setting-preprocess-chroma").checked,oldEdge:!!document.querySelector("#setting-postprocess-edge"),oldCurve:!!document.querySelector("#setting-postprocess-curves"),methods:[...document.querySelector("#setting-recognition").options].map(x=>x.value),discoveries:[...document.querySelector("#setting-candidate-discovery").options].map(x=>x.value),discovery:document.querySelector("#setting-candidate-discovery").value})');
-  assert.deepEqual(defaults.methods,['auto','morphgac','physical','grabcut','hybrid',
-    'fastsam-sam2-small','sam2-tiny','sam2-small','sam2-large']);
+  assert.deepEqual(defaults.methods,['auto','morphgac','physical','grabcut','hybrid']);
+  assert.equal(await evaluate('document.querySelector("#setting-method-category").value'),'local');
+  await evaluate(`(()=>{const select=document.querySelector('#setting-method-category');select.value='server';
+    select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  assert.deepEqual(await evaluate(`[...document.querySelector('#setting-recognition').options].map(x=>x.value)`),
+    ['fastsam-sam2-small','sam2-tiny','sam2-small','sam2-large']);
+  assert.ok(await evaluate(`!!document.querySelector('#setting-merge-carrier')&&
+    !!document.querySelector('#setting-postprocess-shapes')`));
+  await evaluate(`(()=>{const select=document.querySelector('#setting-method-category');select.value='api';
+    select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  assert.ok(await evaluate(`document.querySelector('.settings-recognition')?.textContent.includes('尚未接入')||
+    document.body.textContent.includes('尚未接入当前应用')`));
+  await evaluate(`(()=>{const select=document.querySelector('#setting-method-category');select.value='local';
+    select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   assert.deepEqual(defaults.discoveries,['legacy','physical','unified']);assert.equal(defaults.discovery,'unified');
   assert.equal(defaults.method,'auto');assert.equal(defaults.pixels,900);
   assert.equal(defaults.light,false);assert.equal(defaults.denoise,false);assert.equal(defaults.contrast,false);assert.equal(defaults.chroma,true);
@@ -29,6 +46,7 @@ try{
     document.querySelector('#setting-postprocess-apertures').checked=false;
   })()`);
   await click('[data-act="settings-save"]');
+  await wait('.series-grid');
   const prefs=await evaluate('JSON.parse(localStorage.getItem("shiye-ui-preferences-v1"))');
   assert.equal(prefs.recognition,'hybrid');
   assert.equal(prefs.candidateDiscovery,'physical');
