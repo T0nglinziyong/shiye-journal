@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recommendForDirection,buildMaterialScope} from '../src/matching-materials.js';
+import {recommendForDirection,buildMaterialScope,recommendationWeights,normalizeRecommendationDirection} from '../src/matching-materials.js';
 import {matchingRecommendations,matchingViewModel} from '../src/matching-view.js';
 const make=(id,kind,title,tags=[])=>({id,kind,title,tags,reviewStatus:'ready',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}});
 const assets=[make('paper','paper','浅绿方格纸',['清单']),make('photo','photo','旅途照片',['旅行']),make('ticket','paper','车票',['旅途']),make('flower','sticker','花朵贴纸',['植物']),make('hidden','photo','私人照片')];
@@ -37,7 +37,32 @@ test('recommendations use all semantic tags and selected basket context',()=>{
  const related=make('related','tape','浅蓝胶带');related.colorTags=['蓝色'];related.themeTags=['旅途'];related.materialTags=['光面'];
  const unrelated=make('unrelated','tape','纯红胶带');unrelated.colorTags=['红色'];
  const result=recommendForDirection({assets:[selected,related,unrelated],basket:['base'],purposes:['旅途记录']});
- assert.equal(result[0].asset.id,'related');assert.ok(result[0].reasons.includes('配色关系'));
+ assert.equal(result[0].asset.id,'related');assert.ok(result[0].reasons.includes('同色呼应'));
+});
+
+test('each recommendation direction has its own ranking and all uses the published weights',()=>{
+ const base={...make('base','photo','原始照片'),role:'focal',physicalWidthMM:60,physicalHeightMM:80,colorTags:['蓝色'],themeTags:['旅行'],materialTags:['光面']};
+ const common={reviewStatus:'ready',physicalWidthMM:60,physicalHeightMM:80};
+ const candidates=[
+  {...common,id:'structure',kind:'frame',title:'照片框',role:'structure',layoutFits:['frame.photo']},
+  {...common,id:'color',kind:'photo',title:'蓝色照片',role:'focal',colorTags:['蓝色']},
+  {...common,id:'theme',kind:'photo',title:'旅行记录',role:'focal',themeTags:['旅行']},
+  {...common,id:'style',kind:'photo',title:'复古照片',role:'focal',styleTags:['复古'],materialTags:['毛面']},
+  {...common,id:'size',kind:'photo',title:'小幅照片',role:'focal',physicalWidthMM:30,physicalHeightMM:40}
+ ];
+ const input={assets:[base,...candidates],basket:['base'],styles:['复古旧物'],intent:'旅行'};
+ for(const [direction,id] of [['结构补足','structure'],['配色协调','color'],['主题呼应','theme'],['风格材质','style'],['尺寸节奏','size']]){
+  const rows=recommendForDirection({...input,direction});
+  assert.equal(rows[0].asset.id,id,`${direction} should lead with ${id}`);
+  assert.ok(rows[0].reasons.length);
+  const view=matchingViewModel({...input,coreIDs:[],excludedAssetIDs:[],matchStyles:['复古旧物'],matchPurposes:[],matchIntent:'旅行',matchRatio:'a4',aiSettings:{},recommendFilter:direction});
+  assert.equal(view.filtered[0].asset.id,id,`${direction} must rerank the visible cards`);
+ }
+ const all=recommendForDirection(input);
+ for(const row of all){const weighted=Object.entries(recommendationWeights).reduce((total,[key,weight])=>total+row.directionScores[key]*weight,0)*2;
+  assert.ok(Math.abs(row.score-weighted)<1e-9);}
+ assert.equal(normalizeRecommendationDirection('配色关系'),'配色协调');
+ assert.equal(normalizeRecommendationDirection('尺寸层次'),'尺寸节奏');
 });
 
 test('personal materials retain priority over equally relevant current built-ins',()=>{
