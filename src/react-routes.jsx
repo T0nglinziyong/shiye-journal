@@ -1931,7 +1931,7 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
   return <><ImportNavigation state={state} onAction={onAction}/>
     <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
       {!snapshot?<div className="eyebrow">FROM YOUR DESK TO YOUR PAGES</div>:null}<h1>检查这一批</h1>
-      {!snapshot?<p>逐张确认，最后一起归类。</p>:null}<p className="import-processing" role="status">{state.importProcessing||''}</p>
+      {!snapshot?<p>逐张确认，最后一起归类。</p>:null}<p className="import-processing" role="status">{state.importProcessing||(snapshot?state.correctedURL?'已完成页面校正':'等待页面校正':candidates.length?`已完成分割 · ${candidates.length} 件候选素材`:'等待素材识别')}</p>
       <div className="import-queue"><div><strong>{state.importRecords.length} 张照片</strong> <small>{state.importRecords.filter(record=>record.confirmed).length} 张已确认</small></div>
         <button className="btn" data-act="select-file" data-val="gallery" data-react-action="true" onClick={()=>onAction("select-file",null,"gallery")} disabled={state.importRecords.length>=12}>＋ 添加照片</button></div>
       <div className="queue-strip">{state.importRecords.map((record,index)=><div key={index} className="queue-card"><button className={`queue-item ${index===state.importIndex?'active':''}`}
@@ -1950,8 +1950,8 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
         <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showRegions?<SamRegionOverlay regions={splitActive&&!state.importSamSplitPrompt&&splitSources.length?splitSources:candidates}
           frameSize={state.correctedBitmap||state.importBitmap}
-          mode={splitActive?'regions':state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
-          onRegionClick={busy?()=>{}:onSamRegionClick} onRegionBox={splitActive&&!busy?onSamRegionBox:null}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
+          mode={splitActive?'regions':state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:null}
+          onRegionClick={state.importSamMerging&&!busy?onSamRegionClick:null} onRegionBox={splitActive&&!busy?onSamRegionBox:null}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<>
           {state.importSamMerging?<small className="import-action-hint">{splitActive?state.importSamSplitPrompt?'请点选或框出要分离的部分，使用局部 SAM 精修。':'点选或框出其中一块，恢复这件素材的所有原始区域。':'点选区域后可合并或拆分；合并时包含区域间的底色。'}</small>:null}
