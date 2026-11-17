@@ -1386,8 +1386,18 @@ async function cloudMigrationCommit({expectedRevision,changes}){
  if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0||!Array.isArray(changes)||changes.length>200)
   throw Error('迁移计划不合法');
  if(!changes.length)return {updated:0,revision:expectedRevision};
- if(changes.some(change=>!['projects','trash'].includes(change.store)||
+ if(changes.some(change=>!['assets','projects','trash'].includes(change.store)||
+   !change.original||change.original.id!==change.id||
    !change.converted||change.id!==change.converted.id))throw Error('迁移写入目标不安全');
+ const assetChanges=changes.filter(change=>change.store==='assets');
+ if(assetChanges.length){
+  const {migrateMaterialV1}=await import('./data-migrations/material-v1-to-v2.js');
+  for(const change of assetChanges){
+   if(change.original.classificationVersion===2||
+     JSON.stringify(migrateMaterialV1(change.original))!==JSON.stringify(change.converted))
+    throw Error('迁移写入目标不安全');
+  }
+ }
  await identity();await queue;
  const [pendingProjects,pendingImports]=await Promise.all([projectSync.pending(),importSync.pending()]);
  // A queued phone edit to work A must not block migration of unrelated work
