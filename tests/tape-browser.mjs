@@ -114,6 +114,13 @@ try{
   await click('[data-act="detail-edit"]','[aria-label="编辑素材"]');
   assert.ok(await evaluate('!!document.querySelector("#asset-usageStatus")'),
     'Tape can be marked used or unused in the ordinary asset editor');
+  assert.equal(await evaluate('document.querySelector("#asset-kind").querySelectorAll("optgroup").length'),0,
+    'Material types must not repeat as select group headings');
+  assert.ok(await evaluate('document.querySelector("#asset-usageStatus").closest(".material-info-panel").hidden'),
+    'Usage status belongs to Classification and Tags');
+  await click('.asset-editor-tabs button:nth-child(3)');
+  assert.ok(await evaluate('!document.querySelector("#asset-usageStatus").closest(".material-info-panel").hidden'));
+  await click('.asset-editor-tabs button:nth-child(1)');
   assert.ok(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'),
     'Tape detail previews use a disposable flat view of the original PNG');
   assert.equal(await evaluate('document.querySelector(".material-editor-preview img[data-asset-image-id]")?.style.opacity'),'0',

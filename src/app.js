@@ -3639,14 +3639,16 @@ async function organizeSavedAssets(records,{projects=[]}={}){
     const accountID=state.accountId;let warned=false;
     void (async()=>{await db.flushProjects();await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
       if(state.accountId!==accountID||!isCurrent())return;
-      const result=await classifyCloudAsset(record.id,{db,skipFlush:true});
+      const result=await classifyCloudAsset(record.id,{db,skipFlush:true,skipRefresh:true});
       if(state.accountId!==accountID||!isCurrent())return;
       const current=state.assets.find(asset=>asset.id===record.id);
       if(current)Object.assign(current,result);
       window.dispatchEvent(new Event('shiye-library-refresh'));
       window.dispatchEvent(new Event('shiye-matching-refresh'));
     },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});
-      if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});})().catch(error=>{
+      if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});
+    if(state.accountId===accountID)try{await db.refreshCloud();}
+    catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'sync'});}})().catch(error=>{
       recordRuntimeIssue('handled',error,state.route,{phase:'ai'});
       if(state.accountId===accountID)toast(explainUserError(error,'素材自动整理'));
     });

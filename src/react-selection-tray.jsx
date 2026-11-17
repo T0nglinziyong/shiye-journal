@@ -66,11 +66,11 @@ export function ReactSelectionTray({selection,mode,visibleIDs=[],onAction,onErro
   },[menuOpen,submenu,parentBox,viewport,series.length]);
   if(!active)return null;
   const count=selection.selected.size;
-  const execute=async(action,value,{keepMenu=false}={})=>{
+  const execute=async(action,value)=>{
     if(busy)return;
+    setMenuOpen(false);setSubmenu('');
     setBusy(true);
     try{await onAction(mode,action,value);
-      if(!keepMenu){setMenuOpen(false);setSubmenu('');}
       refresh();
     }catch(error){onError?.(error);}finally{setBusy(false);}
   };

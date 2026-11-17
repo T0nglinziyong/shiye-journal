@@ -41,10 +41,12 @@ const intersects=(a,b)=>a.some(value=>b.has(value));
 const rolesOf=a=>uniq([a.role,...(a.secondaryRoles||[])]);
 const layoutComplements=(a,b)=>{
   const left=new Set(a.layoutFits||[]),right=new Set(b.layoutFits||[]);
-  return (left.has('frame.photo')&&b.kind==='photo'||right.has('frame.photo')&&a.kind==='photo'||
-    left.has('frame.text')&&rolesOf(b).includes('marker')||
-    right.has('frame.text')&&rolesOf(a).includes('marker')||
-    left.has('strip.edge')&&right.has('page.full')||right.has('strip.edge')&&left.has('page.full'));
+  return ((left.has('frame.photo')||left.has('frame'))&&b.kind==='photo'||
+    (right.has('frame.photo')||right.has('frame'))&&a.kind==='photo'||
+    (left.has('frame.text')||left.has('frame'))&&rolesOf(b).includes('marker')||
+    (right.has('frame.text')||right.has('frame'))&&rolesOf(a).includes('marker')||
+    (left.has('strip.edge')||left.has('strip'))&&(right.has('page.full')||right.has('page'))||
+    (right.has('strip.edge')||right.has('strip'))&&(left.has('page.full')||left.has('page')));
 };
 // Greedy marginal ranking keeps near-identical items from monopolising the
 // first screen; selection remains deterministic for the same task.
