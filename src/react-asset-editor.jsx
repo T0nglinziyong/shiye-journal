@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {materialRoles,materialKindDetails,contentCategories,layoutFits,
-  materialKindGroups,materialRoleGroups} from './material-taxonomy.js';
+  materialKindGroups} from './material-taxonomy.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {tapeFlatCanvas} from './tape-flat-crop.js';
@@ -58,7 +58,6 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   },[tab,src,form.kind,form.tapeAxis,sourceLoaded]);
   const set=(key,value)=>setForm(old=>key==='kind'?{...old,kind:value,
     kindDetail:value==='other'?'other.unclassified':''}:
-    key==='role'?{...old,role:value,secondaryRoles:old.secondaryRoles.filter(id=>id!==value)}:
     key==='repeatable'&&value&&old.repeatEnd===''?
     {...old,[key]:value,repeatEnd:old.tapeAxis==='y'?old.height:old.width}:
     key==='flatCropMode'&&value==='manual'&&autoCrop?
@@ -78,11 +77,18 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
     value={form[key]} onChange={event=>set(key,event.target.value)}>
     {choices.map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label>;
   const taxonomy=(label,key,groups)=><label key={key}>{label}<select id={`asset-${key}`} value={form[key]} onChange={event=>set(key,event.target.value)}>{groups.map(group=><optgroup key={group.label} label={group.label}>{group.options.map(([value,name])=><option key={value} value={value}>{name}</option>)}</optgroup>)}</select></label>;
-  const multiple=(label,key,options)=><details className="material-multi-field" key={key}><summary>{label}<span>{form[key].length?`${form[key].length} 项`:'未选择'}</span></summary><div>
-    {options.map(([id,name])=><label key={id}><input type="checkbox" checked={form[key].includes(id)}
-      disabled={key==='secondaryRoles'&&id===form.role}
-      onChange={event=>set(key,event.target.checked?[...form[key],id]:form[key].filter(value=>value!==id))}/>{name}</label>)}
+  const multiple=(label,key,options)=>{
+    const selected=key==='roles'?[...new Set([form.role,...form.secondaryRoles].filter(Boolean))]:form[key];
+    return <details className="material-multi-field" key={key}><summary>{label}<span>{selected.length?`${selected.length} 项`:'未选择'}</span></summary><div>
+      {options.map(([id,name])=><label key={id}><input type="checkbox" checked={selected.includes(id)}
+        disabled={key==='roles'&&selected.length===1&&selected.includes(id)}
+        onChange={event=>key==='roles'?setForm(old=>{
+          const current=[...new Set([old.role,...old.secondaryRoles].filter(Boolean))];
+          const next=event.target.checked?[...current,id]:current.filter(value=>value!==id);
+          return next.length?{...old,role:next[0],secondaryRoles:next.slice(1)}:old;
+        }):set(key,event.target.checked?[...form[key],id]:form[key].filter(value=>value!==id))}/>{name}</label>)}
     </div></details>;
+  };
   const lengthMM=Number(form.tapeAxis==='y'?form.height:form.width);
   const number=(value,fallback=0)=>Number.isFinite(Number(value))&&value!==''?Number(value):fallback;
   const slider=(label,key,{min=0,max=100,step=1,suffix='%' }={})=><label
@@ -146,9 +152,12 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
       </div><div className="material-editor-controls">
         <div className="stack material-info-panel" hidden={tab!==0}>
           {field('名称','title')}
-          {select('所属系列','seriesID',[['','不归入系列'],...series.map(item=>[item.id,item.title])])}
+          {taxonomy('素材类型','kind',materialKindGroups)}
+          {select('具体类型','kindDetail',[['','待细分'],...materialKindDetails.filter(([, ,parent])=>parent===form.kind)])}
+          {multiple('画面作用','roles',materialRoles)}
+          {multiple('内容类别','contentCategories',contentCategories)}
+          {multiple('版面适配','layoutFits',layoutFits)}
           {select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']])}
-          {select('整理状态','reviewStatus',[['ready','已整理'],['pendingReview','待检查']])}
         </div>
         <div className="stack material-info-panel" hidden={tab!==1}>
           <div className="form-grid">{field('实物宽 mm','width','number')}
@@ -171,18 +180,14 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           </section>
         </div>
         <div className="stack material-info-panel" hidden={tab!==2}>
-          <div className="material-taxonomy-pair">{taxonomy('素材类型','kind',materialKindGroups)}
-            {select('具体类型','kindDetail',[['','待细分'],...materialKindDetails.filter(([, ,parent])=>parent===form.kind)])}</div>
-          {taxonomy('主要画面作用','role',materialRoleGroups)}
-          {multiple('次要画面作用','secondaryRoles',materialRoles)}
-          {multiple('内容类别','contentCategories',contentCategories)}
-          {multiple('版面适配','layoutFits',layoutFits)}
-          <details className="material-tag-fields"><summary>开放标签<span>{['contentTags','themeTags','styleTags','colorTags','materialTags','moodTags','tags'].filter(key=>form[key].trim()).length} 组</span></summary><div>
+          <div className="material-tag-fields">
             {field('内容标签','contentTags')}{field('主题与场景','themeTags')}
             {field('风格表现','styleTags')}{field('色彩标签','colorTags')}
             {field('材质与质感','materialTags')}{field('情绪与氛围','moodTags')}
             {field('其他标签','tags')}
-          </div></details>
+          </div>
+          {select('所属系列','seriesID',[['','不归入系列'],...series.map(item=>[item.id,item.title])])}
+          {select('整理状态','reviewStatus',[['ready','已整理'],['pendingReview','待检查']])}
         </div>
         <p id="asset-save-error" role="alert">{error}</p>
       </div></div>
