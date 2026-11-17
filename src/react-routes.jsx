@@ -23,6 +23,7 @@ import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails,isComputeRecognition} from './recognition-profiles.js';
 import {matchingViewModel} from './matching-view.js';
+import {normalizeRecommendationDirection} from './matching-materials.js';
 import {styleGroups,purposeGroups,matchingContentOptions,matchingIntentPlaceholder} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
@@ -926,7 +927,8 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
 }
 
 const matchingPurposes=purposeGroups.flatMap(group=>group.options);
-const recommendationFilters=['全部','结构补足','配色关系','尺寸层次','内容呼应','材质','同系列','不使用'];
+const recommendationFilters=['全部','结构补足','配色协调','主题呼应','风格材质','尺寸节奏','不使用'];
+const recommendationDescriptions={全部:'综合五个方向的加权评分',结构补足:'补充画面作用与版面承载关系',配色协调:'寻找同色、邻近色或对比色',主题呼应:'呼应已选素材、页面用途与补充想法',风格材质:'搭配相近风格与不同材质',尺寸节奏:'形成大小和横竖层次',不使用:'查看已排除的素材'};
 function DirectionGroup({groups,values,type,onChange}){
   return groups.map(group=><label key={group.id}>{group.label}<select className="match-direction-choice"
     data-direction={type} data-group={group.id} aria-label={group.label}
@@ -1001,7 +1003,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   },[]);
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
-  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes,guidance}=matchingViewModel(state);
+  const {selected,excluded,scope,filtered,styles,chosenPurposes,guidance}=matchingViewModel(state);
   return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
@@ -1031,14 +1033,14 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
         </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
       </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
-      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　推荐搭配</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
-        <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
+      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　推荐搭配</h3><small>{filtered.length} 件候选 · 已排除 {excluded.size} 件</small></div>
+        <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={normalizeRecommendationDirection(state.recommendFilter)===filter?'active':''} title={recommendationDescriptions[filter]} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
         <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
           return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
             {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>
             <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
-        }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
+        }):<p>{state.recommendFilter==='主题呼应'?'写下补充想法或选择有相近主题的素材，再看主题推荐。':'这一方向暂时没有候选；可以调整页面方向或继续从素材库选取。'}</p>}</div>
       </section></div>
     <section className="panel match-action"><h2>开始创作</h2>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
