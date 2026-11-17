@@ -109,6 +109,7 @@ def main():
         materials = output / "materials"
         materials.mkdir(parents=True, exist_ok=True)
         background_masks = []
+        subregion_masks = []
         with torch.inference_mode(), context:
             if job.get("box") is not None:
                 box = job["box"]
@@ -141,7 +142,7 @@ def main():
                 nonlocal fast_hybrid
                 if fast_hybrid is None:
                     fast_hybrid = FastSamHybrid(root / "checkpoints" / "FastSAM-s.pt")
-                masks, background_masks = fast_hybrid.segment(model_image, model, device)
+                masks, background_masks, subregion_masks = fast_hybrid.segment(model_image, model, device)
                 groups = [[{"segmentation": mask}] for mask in masks]
             else:
                 points = int(job["pointsPerSide"])
@@ -205,12 +206,18 @@ def main():
                 return {"bbox_xyxy": [x0, y0, x1, y1], "area": int(mask.sum()),
                         "maskBits": base64.b64encode(packed.tobytes()).decode("ascii")}
             objects = []
-            for group in groups:
+            for group_index, group in enumerate(groups):
                 mask = np.zeros((height, width), dtype=bool)
                 for member in group:
                     mask |= member["segmentation"]
                 item = packed_object(mask)
                 if item:
+                    if hybrid and group_index < len(subregion_masks):
+                        item["subregions"] = [packed for child in subregion_masks[group_index]
+                            if (packed := packed_object(child))]
+                    elif not hybrid and 1 < len(group) <= 12:
+                        item["subregions"] = [packed for member in group
+                            if (packed := packed_object(member["segmentation"]))]
                     objects.append(item)
             backgrounds = [item for mask in background_masks if (item := packed_object(mask))]
         if len(objects) > 250:

@@ -18,7 +18,7 @@ export function mergeSamRegions(regions,indices,backgrounds=[],frame=null){
       segmentationMethod:chosen[0].segmentationMethod,segmentationFailed:false,
       segmentationFrameWidth:fw,segmentationFrameHeight:fh,
       mask:{width:outWidth,height:outHeight,alpha,topologyPreserved:true},
-      absorbedIndices:selected,mergeBasis:'enclosing-background',manuallyMerged:true};
+      absorbedIndices:selected,splitSources:chosen,mergeBasis:'enclosing-background',manuallyMerged:true};
   }
   if(chosen.some(region=>
     region.segmentationFrameWidth!==width||region.segmentationFrameHeight!==height))
@@ -60,5 +60,6 @@ export function mergeSamRegions(regions,indices,backgrounds=[],frame=null){
     segmentationMethod:chosen[0].segmentationMethod,segmentationFailed:false,
     segmentationFrameWidth:width,segmentationFrameHeight:height,
     mask:{width:outWidth,height:outHeight,alpha,topologyPreserved:true},
-    absorbedIndices,mergeBasis:carrier?'sam-background':'enclosing-background',manuallyMerged:true};
+    absorbedIndices,splitSources:absorbedIndices.map(index=>regions[index]),
+    mergeBasis:carrier?'sam-background':'enclosing-background',manuallyMerged:true};
 }

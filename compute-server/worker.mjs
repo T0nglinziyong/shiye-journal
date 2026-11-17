@@ -13,10 +13,8 @@ const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',
   'SHIYE_EMQX_GPU_USERNAME','SHIYE_EMQX_GPU_PASSWORD','SHIYE_GPU_WORKER_TOKEN'];
 for(const key of required)if(!env[key])throw Error('Missing worker configuration: '+key);
 const workerID='shiye-compute-01',topic='shiye-job';
-// MQTT wakes the worker immediately. This scan only recovers a lost publish or
-// a job enqueued while the worker was offline; frequent idle SQL requests keep
-// CloudBase's metered PostgreSQL instance active for every five-minute slot.
-const durableScanMS=30*60_000;
+// MQTT wakes the worker. An active client retries a lost publish; idle GPU
+// operation never claims or scans the metered CloudBase database.
 const gateway=`https://${env.SHIYE_CLOUDBASE_ENV_ID}.api.tcloudbasegateway.com`;
 const root=path.dirname(fileURLToPath(import.meta.url));
 const samRoot=env.SHIYE_SAM_ROOT||path.resolve(root,'../../sam2.1-local');
@@ -177,7 +175,7 @@ const client=mqtt.connect('mqtts://g9eb1e1c.ala.cn-hangzhou.emqxsl.cn:8883',{
 });
 client.on('connect',()=>client.subscribe(topic,{qos:1},error=>{
   if(error)console.error('MQTT subscribe failed:',error.message);
-  else{console.log('拾页计算服务器 connected');void drain();}
+  else console.log('拾页计算服务器 connected; waiting for MQTT jobs');
 }));
 client.on('message',(incoming,bytes)=>{
   if(incoming!==topic||bytes.length>4096)return;
@@ -186,7 +184,5 @@ client.on('message',(incoming,bytes)=>{
   catch{/* Invalid notifications do not affect authoritative database state. */}
 });
 client.on('error',error=>console.error('MQTT connection unavailable:',error.message));
-// Keep the durable queue scan alive even if broker authentication or the
-// connection fails. MQTT is only a low-latency wake-up hint.
-setInterval(()=>void drain(),durableScanMS);
-void drain();
+// The client re-publishes queued job IDs while it waits. No idle database
+// scan runs on this GPU host; every claim is triggered by an MQTT message.

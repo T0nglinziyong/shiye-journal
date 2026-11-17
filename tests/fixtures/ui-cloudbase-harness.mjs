@@ -69,6 +69,10 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
         const objects=args.p_kind==='material-segmentation'
           ?[pack(...args.p_parameters.box)]:[pack(x,y,x+w,y+h),pack(x+w+24,y,x+w*2+24,y+h),
             ...(state.samExtraCandidate?[pack(Math.floor(width*.76),y,Math.floor(width*.86),y+h)]:[])];
+        if(state.samSubregions&&args.p_kind==='material-recognition'){
+          objects[0].subregions=[pack(x,y,x+w,y+Math.floor(h*.42)),
+            pack(x,y+Math.floor(h*.58),x+w,y+h)];
+        }
         const backgrounds=args.p_kind==='material-segmentation'?[]:
           [pack(Math.max(0,x-12),Math.max(0,y-12),Math.min(width,x+w*2+36),Math.min(height,y+h+12))];
         const resultPath=args.p_input_path.replace(/input\.png$/,'result.json');
