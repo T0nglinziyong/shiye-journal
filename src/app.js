@@ -3800,7 +3800,7 @@ window.addEventListener('shiye-sync-project-committed',event=>{
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{const recovered=!!lastSyncError&&!error;if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');if(recovered)privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
-const CLOUD_POLL_MS=300000,REALTIME_FALLBACK_MS=300000;
+const CLOUD_POLL_MS=300000,REALTIME_FALLBACK_MS=15*60_000;
 let revisionRealtimeReady=false;
 let stopRevisionRealtime=()=>{};
 function subscribeAccountRevision(userID){
