@@ -16,6 +16,20 @@ export function classificationResult(value, kind) {
   }else result.styleTags=result.tags;
   return result;
 }
+// Chat JSON mode guarantees syntax, not enum membership. Accept the display
+// names shown in our editor, then use the taxonomy's explicit unknown choices
+// for any invented value. Never persist a model-created enum.
+export function constrainMaterialClassification(value){
+  const code=(input,options,fallback)=>{
+    const exact=String(input??'').trim();
+    return options.find(([id,name])=>id===exact||name===exact)?.[0]||fallback;
+  };
+  const texture=String(value?.texture??'').trim();
+  return {...value,
+    kind:code(value?.kind,materialKinds,'other'),
+    role:code(value?.role,materialRoles,'other'),
+    texture:isMaterialTexture(texture)&&texture!=='待记录'?texture:'未确定'};
+}
 export async function classifyRecord({kind,record,settings,image,assets,request=fetch,onProgress,signal}) {
   if(!settings.key)throw Error('请先在设置中填写 API 密钥');
   if(kind==='asset'&&!supportsVision(settings))throw Error('请先选择支持图片输入的模型');
@@ -36,5 +50,5 @@ export async function classifyRecord({kind,record,settings,image,assets,request=
   if(typeof text!=='string')throw Error('模型没有返回可用的整理结果');
   const start=text.indexOf('{'),end=text.lastIndexOf('}');
   let value;try{value=JSON.parse(text.slice(start,end+1));}catch{throw Error('模型没有返回有效 JSON');}
-  return classificationResult(value,kind);
+  return classificationResult(kind==='asset'?constrainMaterialClassification(value):value,kind);
 }

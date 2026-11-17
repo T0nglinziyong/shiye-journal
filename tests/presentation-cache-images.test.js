@@ -85,6 +85,32 @@ test('catalog source remains COS thumbnail even after the original has been load
  }finally{loader.dispose();env.close();}
 });
 
+test('new import derives a compact cover from its local cutout before cloud upload',async()=>{
+ const env=environment(),root=document.createElement('div'),calls=[];document.body.append(root);
+ const beforeBitmap=Object.getOwnPropertyDescriptor(globalThis,'createImageBitmap');
+ const canvas=env.win.HTMLCanvasElement.prototype;
+ const beforeContext=Object.getOwnPropertyDescriptor(canvas,'getContext');
+ const beforeBlob=Object.getOwnPropertyDescriptor(canvas,'toBlob');
+ Object.defineProperty(globalThis,'createImageBitmap',{configurable:true,value:async()=>({width:1200,height:600,close(){}})});
+ Object.defineProperty(canvas,'getContext',{configurable:true,value:()=>({drawImage(){}})});
+ Object.defineProperty(canvas,'toBlob',{configurable:true,value:function(done){calls.push([this.width,this.height]);done(new Blob(['small-cover'],{type:'image/webp'}));}});
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   previewBlob:async()=>{throw Error('cloud preview must not be requested');}
+ }});
+ try{
+   await loader.primeLocal('new-asset',new Blob(['local-cutout']));
+   assert.deepEqual(calls,[[480,240]]);
+   assert.ok(imagePlaceholder('new-asset').startsWith('blob:'));
+   assert.equal(loader.stats().previews,1);
+ }finally{
+   loader.dispose();
+   for(const [object,key,value] of [[globalThis,'createImageBitmap',beforeBitmap],[canvas,'getContext',beforeContext],[canvas,'toBlob',beforeBlob]]){
+     if(value)Object.defineProperty(object,key,value);else delete object[key];
+   }
+   env.close();
+ }
+});
+
 
 test('a cached higher variant satisfies all smaller tiers without network and survives viewport downsizing',async()=>{
  const env=environment(),root=document.createElement('div'),requests=[];document.body.append(root);
