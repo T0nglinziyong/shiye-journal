@@ -43,7 +43,7 @@ try{
     for(let attempt=0;attempt<400&&await evaluate('!!document.querySelector(".selection-more-menu")');attempt++)await sleep(25);
     assert.equal(await evaluate('!!document.querySelector(".selection-more-menu")'),false,'PNG 导出应完成并关闭菜单');
     assert.ok(await evaluate('document.querySelector(".library-management-tray:not([hidden]) strong").textContent.includes("2")'));
-    await named('.library-management-tray:not([hidden])','更多操作');await wait('.selection-more-menu');
+    await wait('.library-management-tray [data-selection-more]:not(:disabled)');await named('.library-management-tray:not([hidden])','更多操作');await wait('.selection-more-menu');
     await named('.selection-more-menu','导出素材 ›');await wait('.selection-submenu button');
     await named('.selection-submenu','白底 JPEG');
     for(let attempt=0;attempt<400&&await evaluate('!!document.querySelector(".selection-more-menu")');attempt++)await sleep(25);
