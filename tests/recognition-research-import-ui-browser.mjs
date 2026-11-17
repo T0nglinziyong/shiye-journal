@@ -28,8 +28,7 @@ for(const row of rows){
       await b.sleep(50);
     }
     assert.equal(await b.evaluate('document.querySelector(".import-inspect")?.getAttribute("aria-busy")'),'false');
-    await b.click('[data-act="preview-crop"]','[data-act="readjust-paper"]');
-    await b.click('[data-act="readjust-paper"]','.paper-handle');
+    await b.click('[data-act="preview-crop"]','.paper-handle');
     const automatic=await b.evaluate(`(()=>{
       const overlay=document.querySelector('.paper-corner-overlay');
       return {count:document.querySelectorAll('.import-candidate-tile').length,

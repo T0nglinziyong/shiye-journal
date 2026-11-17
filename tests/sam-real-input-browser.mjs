@@ -64,7 +64,7 @@ try{
       if(await b.evaluate(`window.__SHIYE_UI_CLOUD__.state.jobRequests.length>=2&&document.querySelector('.import-inspect')?.getAttribute('aria-busy')==='false'`))break;
       await b.sleep(100);
     }
-    await b.click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
+    await b.click('[data-act="preview-crop"]','.paper-handle');await b.click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
     const rotated=await b.evaluate(`({jobs:window.__SHIYE_UI_CLOUD__.state.jobRequests.length,
       loaded:document.querySelector('#crop-preview img')?.naturalWidth>0,
       preview:document.querySelector('.photo-preparation-content h3')?.textContent})`);

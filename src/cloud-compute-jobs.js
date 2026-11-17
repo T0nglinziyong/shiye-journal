@@ -57,7 +57,7 @@ async function readJob(jobId){
 
 export async function waitForSegmentationJob(jobId,{signal,onStatus=()=>{}}={}){
   if(!uuid.test(jobId||''))throw Error('任务编号无效');
-  let wake=()=>{},timer;
+  let wake=()=>{},timer,lastHintRetry=Date.now();
   const pause=ms=>new Promise((resolve,reject)=>{
     let done=false;
     const finish=error=>{if(done)return;done=true;clearTimeout(timer);wake=()=>{};
@@ -90,6 +90,15 @@ export async function waitForSegmentationJob(jobId,{signal,onStatus=()=>{}}={}){
       onStatus(job.status);
       if(job.status==='completed')return loadSegmentationResult(job);
       if(job.status==='failed')throw Error('模型识别失败：'+(job.error_code||'请稍后重试'));
+      // Re-send a queued job's hint promptly. For an interrupted worker, start
+      // re-sending near the 15-minute lease expiry so the client can recover
+      // without waiting for the worker's infrequent idle scan.
+      if((job.status==='queued'||job.status==='running'&&Date.now()>=deadline-16*60_000)&&
+        Date.now()-lastHintRetry>=10000){
+        lastHintRetry=Date.now();
+        try{await cloudApiRequest('/api/job-submit',{method:'POST',body:JSON.stringify({jobId})});}
+        catch(error){console.warn('识别唤醒重试暂不可用',error?.message);}
+      }
       // Long backoff is only a lost-notice safety net, not the source of truth.
       // MQTT is the primary wake-up path. A short bounded fallback prevents a
       // missed notification from adding 30–60 seconds to a manual correction.

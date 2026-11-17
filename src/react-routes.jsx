@@ -1929,15 +1929,16 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
             </div>:null}
           </div></div>
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
-        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showRegions?<SamRegionOverlay previewRef={previewRef} regions={candidates}
+        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showRegions?<SamRegionOverlay regions={candidates}
           frameSize={state.correctedBitmap||state.importBitmap}
           mode={state.importSamDisplayMode||'boxes'} selected={state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection}
           onRegionClick={busy?()=>{}:onSamRegionClick}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<>
           {state.importSamMerging?<small className="import-action-hint">点选同一纸片上的区域，合并时包含区域间的底色。</small>:null}
-          <div className={`import-photo-tools import-primary-tools ${previewing||state.importSamMerging||snapshot?'import-mode-tools':''}`}>
+          <div className={`import-photo-tools import-primary-tools ${previewing||state.editingPaperCorners||state.importSamMerging||snapshot?'import-mode-tools':''}`}>
             {previewing?<>{button('readjust-paper','返回调整')}{button('apply-paper-preview',state.paperPreviewApplied?'返回识别结果':'使用校正结果')}</>:
+              state.editingPaperCorners?<>{button('preview-crop','查看矫正结果')}{button('cancel-paper-adjust','返回识别结果')}</>:
               state.importSamMerging?<><button type="button" className="btn" disabled={busy} onClick={onSamMergeToggle}>取消合并</button>
                 <button type="button" className="btn primary" disabled={busy||(state.importSamMergeSelection?.size||0)<2} onClick={onSamMerge}>合并所选 {state.importSamMergeSelection?.size||0} 区</button></>:
               <>{button('preview-crop','预览矫正')}

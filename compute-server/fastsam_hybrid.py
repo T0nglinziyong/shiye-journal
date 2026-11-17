@@ -10,7 +10,22 @@ import torch
 from ultralytics import FastSAM
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from proposal_policy import largest_connected_component, mask_box, select_proposals
-from postprocess_results import find_composite_carriers, page_edge_artifact
+from postprocess_results import find_composite_carriers, inside, page_edge_artifact
+
+
+def _printed_carrier_footer(item, carriers, height):
+    """Ignore tiny printed credits at the foot of a dark collage card."""
+    x0, y0, x1, y1 = item["bbox_xyxy"]
+    width, item_height = x1-x0, y1-y0
+    if item_height > height*.027 or width < item_height*3:
+        return False
+    for carrier, _ in carriers:
+        cx0, cy0, cx1, cy1 = carrier["bbox_xyxy"]
+        if y0 < cy0+(cy1-cy0)*.7:
+            continue
+        if inside(item, carrier) >= .7:
+            return True
+    return False
 
 
 def _merge_aligned_photograph_fragments(items, width):
@@ -82,7 +97,8 @@ def _proposals(result, image):
             continue
         outside.append(child)
     if black_card:
-        outside = [item for item in outside if item["area"] > width*height*.001]
+        outside = [item for item in outside if item["area"] > width*height*.001
+                   and not _printed_carrier_footer(item, carriers, height)]
     else:
         outside = [item for item in outside if item["area"] > width*height*.0018
                    and not (item["bbox_xyxy"][2]-item["bbox_xyxy"][0] < width*.06
