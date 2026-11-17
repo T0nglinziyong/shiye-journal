@@ -39,6 +39,17 @@ export const layoutFits=Object.freeze([
   ['combine.split','可拆分'],['combine.join','可组合'],['combine.set','多件搭配'],
   ['other','其他']
 ]);
+export const layoutFitGroups=Object.freeze([
+  ['page','页面铺底',['page.full','page.spread']],
+  ['local','局部铺底',['local.background','local.text','local.photo']],
+  ['strip','条带延展',['strip.horizontal','strip.vertical','strip.edge']],
+  ['point','单点摆放',['point.center','point.corner','point.free']],
+  ['frame','框架承载',['frame.photo','frame.text','frame.content']],
+  ['repeat','重复平铺',['repeat.tile','repeat.join','repeat.regular']],
+  ['overlay','叠加覆盖',['overlay.stack','overlay.transparent','overlay.subject']],
+  ['combine','自由组合',['combine.split','combine.join','combine.set']],
+  ['other','其他',['other']]
+]);
 export const tagGroups=Object.freeze([
   ['contentTags','内容标签'],['themeTags','主题与场景'],['styleTags','风格表现'],
   ['colorTags','色彩标签'],['materialTags','材质与质感'],['moodTags','情绪与氛围'],['tags','其他标签']
@@ -49,6 +60,6 @@ export const isMaterialKind=id=>materialKinds.some(([value])=>value===id);
 export const isMaterialKindDetail=(id,kind)=>materialKindDetails.some(([value,,parent])=>value===id&&(!kind||parent===kind));
 export const isMaterialRole=id=>materialRoles.some(([value])=>value===id);
 export const isContentCategory=id=>contentCategories.some(([value])=>value===id);
-export const isLayoutFit=id=>layoutFits.some(([value])=>value===id);
+export const isLayoutFit=id=>layoutFits.some(([value])=>value===id)||layoutFitGroups.some(([value])=>value===id);
 export const materialKindGroups=Object.freeze(materialTypes.map(([id,label])=>({label,options:[[id,label]]})));
 export const materialRoleGroups=Object.freeze([{label:'画面作用',options:materialRoles}]);

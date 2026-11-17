@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,tagGroups,
+import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,layoutFitGroups,tagGroups,
   MATERIAL_TAXONOMY_VERSION} from '../src/material-taxonomy.js';
 import {initialMaterialClassification,userMaterialClassification,applyAIClassification,
   validateMaterialClassification} from '../src/material-classification.js';
@@ -14,6 +14,13 @@ test('four fixed category dictionaries have stable unique ids and seven open tag
  assert.equal(contentCategories.length,13);assert.equal(layoutFits.length,24);assert.equal(tagGroups.length,7);
  for(const rows of [materialKinds,materialRoles,contentCategories,layoutFits])
   assert.ok(rows.some(([id])=>id==='other'));
+});
+test('compact layout choices cover every stored fit without changing stable ids',()=>{
+ assert.equal(layoutFitGroups.length,9);
+ assert.deepEqual(layoutFitGroups.flatMap(([, ,members])=>members).sort(),layoutFits.map(([id])=>id).sort());
+ assert.equal(new Set(layoutFitGroups.flatMap(([, ,members])=>members)).size,layoutFits.length);
+ const record=initialMaterialClassification({kind:'sticker'});
+ assert.deepEqual(validateMaterialClassification({...record,layoutFits:['point','overlay']}).layoutFits,['point','overlay']);
 });
 test('user-confirmed type survives AI content and material guesses',()=>{
  const base={...initialMaterialClassification({kind:'sticker',role:'accent'}),title:'布纹贴纸',

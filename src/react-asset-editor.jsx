@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {materialRoles,materialKindDetails,contentCategories,layoutFits,
-  materialKindGroups} from './material-taxonomy.js';
+import {materialRoles,materialKindDetails,materialKinds,contentCategories,
+  layoutFitGroups} from './material-taxonomy.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {tapeFlatCanvas} from './tape-flat-crop.js';
@@ -76,9 +76,10 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const select=(label,key,choices)=><label key={key}>{label}<select id={`asset-${key}`}
     value={form[key]} onChange={event=>set(key,event.target.value)}>
     {choices.map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label>;
-  const taxonomy=(label,key,groups)=><label key={key}>{label}<select id={`asset-${key}`} value={form[key]} onChange={event=>set(key,event.target.value)}>{groups.map(group=><optgroup key={group.label} label={group.label}>{group.options.map(([value,name])=><option key={value} value={value}>{name}</option>)}</optgroup>)}</select></label>;
   const multiple=(label,key,options)=>{
-    const selected=key==='roles'?[...new Set([form.role,...form.secondaryRoles].filter(Boolean))]:form[key];
+    const selected=key==='roles'?[...new Set([form.role,...form.secondaryRoles].filter(Boolean))]:
+      key==='layoutFits'?layoutFitGroups.filter(([id, ,members])=>
+        form.layoutFits.includes(id)||members.some(value=>form.layoutFits.includes(value))).map(([id])=>id):form[key];
     return <details className="material-multi-field" key={key}><summary>{label}<span>{selected.length?`${selected.length} 项`:'未选择'}</span></summary><div>
       {options.map(([id,name])=><label key={id}><input type="checkbox" checked={selected.includes(id)}
         disabled={key==='roles'&&selected.length===1&&selected.includes(id)}
@@ -86,6 +87,10 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           const current=[...new Set([old.role,...old.secondaryRoles].filter(Boolean))];
           const next=event.target.checked?[...current,id]:current.filter(value=>value!==id);
           return next.length?{...old,role:next[0],secondaryRoles:next.slice(1)}:old;
+        }):key==='layoutFits'?setForm(old=>{
+          const members=layoutFitGroups.find(([group])=>group===id)?.[2]||[];
+          const kept=old.layoutFits.filter(value=>value!==id&&!members.includes(value));
+          return {...old,layoutFits:event.target.checked?[...kept,id]:kept};
         }):set(key,event.target.checked?[...form[key],id]:form[key].filter(value=>value!==id))}/>{name}</label>)}
     </div></details>;
   };
@@ -152,12 +157,11 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
       </div><div className="material-editor-controls">
         <div className="stack material-info-panel" hidden={tab!==0}>
           {field('名称','title')}
-          {taxonomy('素材类型','kind',materialKindGroups)}
+          {select('素材类型','kind',materialKinds)}
           {select('具体类型','kindDetail',[['','待细分'],...materialKindDetails.filter(([, ,parent])=>parent===form.kind)])}
           {multiple('画面作用','roles',materialRoles)}
           {multiple('内容类别','contentCategories',contentCategories)}
-          {multiple('版面适配','layoutFits',layoutFits)}
-          {select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']])}
+          {multiple('版面适配','layoutFits',layoutFitGroups)}
         </div>
         <div className="stack material-info-panel" hidden={tab!==1}>
           <div className="form-grid">{field('实物宽 mm','width','number')}
@@ -188,6 +192,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           </div>
           {select('所属系列','seriesID',[['','不归入系列'],...series.map(item=>[item.id,item.title])])}
           {select('整理状态','reviewStatus',[['ready','已整理'],['pendingReview','待检查']])}
+          {select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']])}
         </div>
         <p id="asset-save-error" role="alert">{error}</p>
       </div></div>

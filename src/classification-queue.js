@@ -33,4 +33,4 @@ export function createClassificationQueue(limit=3) {
   };
 }
 
-export const classificationQueue=createClassificationQueue(3);
+export const classificationQueue=createClassificationQueue(4);

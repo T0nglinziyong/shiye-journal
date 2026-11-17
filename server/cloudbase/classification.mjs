@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {ServiceError} from './errors.mjs';
 import {cloudBaseGateway} from './postgres.mjs';
-import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,tagGroups} from '../../src/material-taxonomy.js';
+import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFitGroups,tagGroups} from '../../src/material-taxonomy.js';
 import {applyAIClassification} from '../../src/material-classification.js';
 
 const idPattern=/^[A-Za-z0-9_-]{1,100}$/;
@@ -67,7 +67,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     if(!cutout)throw new ServiceError(409,'CLASSIFICATION_IMAGE_PENDING','素材图片尚未同步，请稍后重试');
     const prompt=`分析手帐素材。第一张是透明抠图，第二张是导入时的候选原图（若有）。物件类型按实际使用形态判定，画面中的布纹不等于布片；看不出背胶或基材时降低置信度。不要把原始来源、透明度或尺寸当标签。只返回 JSON。\n`+
       `类型：${choices(materialKinds)}。具体类型：${choices(materialKindDetails)}。主要和次要作用：${choices(materialRoles)}。`+
-      `内容类别：${choices(contentCategories)}。版面适配：${choices(layoutFits)}。`+
+      `内容类别：${choices(contentCategories)}。版面适配：${choices(layoutFitGroups)}。`+
       `开放标签分组：${choices(tagGroups)}。每个类别输出 {"id":"字典ID","confidence":0到1}；多选类别输出数组。`+
       `标签各组输出 [{"value":"确实可见的标签","confidence":0到1}]。`+
       `完整 JSON 结构示例：{"title":"花朵贴纸","titleConfidence":0.9,"kind":{"id":"sticker","confidence":0.8},`+
@@ -82,7 +82,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     if(context)contents.push({type:'image_url',image_url:{url:context,detail:'low'}});
     const response=await fetcher('https://api.deepseek.com/chat/completions',{method:'POST',redirect:'error',
       headers:{Authorization:'Bearer '+modelKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model,thinking:{type:'disabled'},temperature:0,max_tokens:1700,response_format:{type:'json_object'},
+      body:JSON.stringify({model,thinking:{type:'disabled'},temperature:0,max_tokens:1000,response_format:{type:'json_object'},
         messages:[{role:'user',content:contents}]}),signal:AbortSignal.timeout(35000)});
     if(!response.ok)throw new ServiceError(503,'CLASSIFICATION_MODEL_UNAVAILABLE','云端素材分析暂不可用');
     const answer=await parse(response);

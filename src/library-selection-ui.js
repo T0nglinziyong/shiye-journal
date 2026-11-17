@@ -56,7 +56,7 @@ export async function runAssetBatchAction(c,selection,action,value){
       await db.flushProjects();
       await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
         if(state.accountId!==accountID||!isCurrent())return;
-        const result=await classifyCloudAsset(record.id,{db,reclassify:true,skipFlush:true});
+        const result=await classifyCloudAsset(record.id,{db,reclassify:true,skipFlush:true,skipRefresh:true});
         if(state.accountId===accountID&&isCurrent()){
           const current=state.assets.find(asset=>asset.id===record.id);
           if(current)Object.assign(current,result);
@@ -65,6 +65,8 @@ export async function runAssetBatchAction(c,selection,action,value){
         }
       },onError:error=>{failed++;firstError||=error;
         recordRuntimeIssue('handled',error,state.route,{phase:'ai'});}});
+      if(state.accountId===accountID)try{await db.refreshCloud();}
+      catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'sync'});}
       if(state.accountId===accountID)c.toast(failed?
         `已整理 ${completed} 件，${failed} 件未完成。${explainUserError(firstError,'素材整理')}`:
         `已整理 ${completed} 件`);
