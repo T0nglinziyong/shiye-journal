@@ -10,8 +10,10 @@ test('four fixed category dictionaries have stable unique ids and seven open tag
  assert.equal(MATERIAL_TAXONOMY_VERSION,2);
  for(const rows of [materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,tagGroups])
   assert.equal(new Set(rows.map(([id])=>id)).size,rows.length);
- assert.equal(materialKinds.length,14);assert.equal(materialRoles.length,9);
- assert.equal(contentCategories.length,12);assert.equal(tagGroups.length,7);
+ assert.equal(materialKinds.length,14);assert.equal(materialRoles.length,10);
+ assert.equal(contentCategories.length,13);assert.equal(layoutFits.length,24);assert.equal(tagGroups.length,7);
+ for(const rows of [materialKinds,materialRoles,contentCategories,layoutFits])
+  assert.ok(rows.some(([id])=>id==='other'));
 });
 test('user-confirmed type survives AI content and material guesses',()=>{
  const base={...initialMaterialClassification({kind:'sticker',role:'accent'}),title:'布纹贴纸',
@@ -37,6 +39,18 @@ test('legacy migration preserves custom tags and does not invent a subtype',()=>
  assert.equal(converted.role,'marker');assert.deepEqual(converted.tags,['用户标签','角落放置']);
  assert.deepEqual(converted.materialTags,['贴纸纸']);assert.deepEqual(converted.colorTags,['蓝色']);
  assert.equal(Object.hasOwn(converted,'texture'),false);
+});
+test('unmapped legacy categories become other without losing original ids or user tags',()=>{
+ const converted=migrateMaterialV1({id:'legacy',kind:'unknown-paper-craft',role:'other',
+  tags:['用户自定义'],contentTags:['蝴蝶']});
+ assert.equal(converted.kind,'other');assert.equal(converted.role,'other');
+ assert.equal(converted.kindDetail,'other.unclassified');
+ assert.deepEqual(converted.tags,['用户自定义']);
+ assert.deepEqual(converted.contentTags,['蝴蝶']);
+ assert.equal(converted.categoryEvidence.kind.originalId,'unknown-paper-craft');
+ assert.equal(converted.categoryEvidence.role.originalId,'other');
+ assert.deepEqual(converted.contentCategories,[]);
+ assert.deepEqual(converted.layoutFits,[]);
 });
 test('explicit confirmation protects unchanged categories and all open tag groups',()=>{
  const prior={...initialMaterialClassification({kind:'sticker',role:'accent',tags:['自定义']}),

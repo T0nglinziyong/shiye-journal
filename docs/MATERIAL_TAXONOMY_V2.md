@@ -15,6 +15,6 @@
 
 云函数需在受保护环境变量中配置 `SHIYE_CLASSIFICATION_API_KEY`，可选 `SHIYE_CLASSIFICATION_MODEL`（默认 `deepseek-flash`）与 `SHIYE_CLASSIFICATION_MODEL_VERSION`。密钥不得进入前端、Git 或诊断。`/api/platform-health` 的 `classification.configured` 用于检查是否配置。云函数读取的是 CloudBase 私有云存储（底层由 COS 承载），不会把文件改成公开读权限。
 
-旧素材只由设置中的“转换旧数据格式”入口迁移。先扫描、导出受影响记录的备份，再按账号修订原子提交；不能判断的类型映射为“其他”，二级类型留空，全部旧自定义标签保留。旧字段 `texture`、`semanticColorNames`、`placementHints`、`semanticTags` 只在转换器中读取，不在现行素材结构双写。旧的人工修改没有逐字段来源记录，转换后默认保护原分类；用户主动选择重新分类时才允许 AI 更新未明确人工确认的旧类别。
+旧素材只由设置中的“转换旧数据格式”入口迁移。先扫描、导出受影响记录的备份，再按账号修订原子提交；不能对应的必填类型和画面作用映射为“其他”，可选的内容类别和版面适配留空，全部旧自定义标签保留。旧字段 `texture`、`semanticColorNames`、`placementHints`、`semanticTags` 只在转换器中读取，不在现行素材结构双写。旧的人工修改没有逐字段来源记录，转换后默认保护原分类；用户主动选择重新分类时才允许 AI 更新未明确人工确认的旧类别。
 
 部署顺序：先备份并在测试账号验证转换，再部署云函数与配置密钥，最后发布前端并在实体手机上核对导入、编辑、重新分类、离线恢复、跨账号隔离和推荐。未完成转换的线上账号不得直接切换到只写 v2 的前端。

@@ -12,10 +12,8 @@ export function migrateMaterialV1(record){
   if(record?.classificationVersion===2)return validateMaterialClassification(record);
   if(!record||typeof record.id!=='string'||!record.id||typeof record.kind!=='string'||
     typeof record.role!=='string'||!Array.isArray(record.tags))throw Error('旧素材缺少可验证的类型、作用或标签');
-  const kind=kindMap[record.kind];
-  if(!kind)throw Error('旧素材类型未登记转换：'+record.kind);
-  const role=roleMap[record.role];
-  if(!role)throw Error('旧素材画面作用未登记转换：'+record.role);
+  const kind=Object.hasOwn(kindMap,record.kind)?kindMap[record.kind]:'other';
+  const role=Object.hasOwn(roleMap,record.role)?roleMap[record.role]:'other';
   const converted={...record,...initialMaterialClassification({kind,role,tags:list(record.tags)}),
     contentTags:list(record.contentTags),themeTags:list(record.themeTags),
     styleTags:list(record.styleTags),moodTags:list(record.moodTags),

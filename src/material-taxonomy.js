@@ -20,12 +20,13 @@ export const materialKindDetails=Object.freeze(materialTypes.flatMap(([kind,,det
 export const materialRoles=Object.freeze([
   ['focal','主视觉'],['support','次级视觉'],['background','背景'],['information','信息承载'],
   ['marker','信息标记'],['connector','连接与分隔'],['accent','装饰点缀'],
-  ['emphasis','强调突出'],['structure','结构组织']
+  ['emphasis','强调突出'],['structure','结构组织'],['other','其他']
 ]);
 export const contentCategories=Object.freeze([
   ['people','人物'],['animals','动物'],['plants','植物'],['nature','自然'],
   ['places','地点建筑'],['food','食物饮品'],['objects','日常物品'],['transport','交通工具'],
-  ['culture','文化艺术'],['written','文字信息'],['abstract','抽象图形'],['none','无具体内容']
+  ['culture','文化艺术'],['written','文字信息'],['abstract','抽象图形'],['none','无具体内容'],
+  ['other','其他']
 ]);
 export const layoutFits=Object.freeze([
   ['page.full','全页铺底'],['page.spread','跨页铺底'],
@@ -35,7 +36,8 @@ export const layoutFits=Object.freeze([
   ['frame.photo','照片承载'],['frame.text','文字承载'],['frame.content','内容框选'],
   ['repeat.tile','可重复'],['repeat.join','连续拼接'],['repeat.regular','规律排列'],
   ['overlay.stack','可叠放'],['overlay.transparent','半透明覆盖'],['overlay.subject','主体覆盖'],
-  ['combine.split','可拆分'],['combine.join','可组合'],['combine.set','多件搭配']
+  ['combine.split','可拆分'],['combine.join','可组合'],['combine.set','多件搭配'],
+  ['other','其他']
 ]);
 export const tagGroups=Object.freeze([
   ['contentTags','内容标签'],['themeTags','主题与场景'],['styleTags','风格表现'],
