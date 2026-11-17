@@ -33,7 +33,7 @@ export async function postprocessSamCandidates(raw,source,{
     context.imageSmoothingQuality='high';context.drawImage(source,0,0,width,height);
   }
   const pixels=sourcePixels(frame);
-  let regions=mergeSharedCarrier?mergeLightCarriers(raw,backgrounds,pixels,width,height):
+  let regions=mergeSharedCarrier?mergeSharedCarriers(raw,backgrounds):
     raw.flatMap(region=>expandSavedRegions(region));
   if(shapeRegularization){
     const shaped=await visionTask('material-boundary-refine',{
@@ -59,23 +59,17 @@ export async function postprocessSamCandidates(raw,source,{
   return regions.map(region=>({...region,maskAntialias:!!shapeRegularization}));
 }
 
-export function mergeLightCarriers(raw,backgrounds,pixels,width,height){
+function maskPixels(region){
+  if(Number.isFinite(region?.pixels))return region.pixels;
+  let count=0;
+  for(const alpha of region?.mask?.alpha||[])if(alpha>=128)count++;
+  return count;
+}
+
+export function mergeSharedCarriers(raw,backgrounds){
   const candidates=(backgrounds||[]).filter(background=>background?.mask?.alpha&&
     background.w*background.h<.35&&background.w*background.h>.002)
-    .filter(background=>{
-      const {x,y,w,h,mask}=background,light=[];
-      for(let row=1;row<=5;row++)for(let col=1;col<=5;col++){
-        const mx=Math.min(mask.width-1,Math.floor(col*mask.width/6));
-        const my=Math.min(mask.height-1,Math.floor(row*mask.height/6));
-        if(mask.alpha[my*mask.width+mx]<128)continue;
-        const px=Math.min(width-1,Math.max(0,Math.floor((x+w*col/6)*width)));
-        const py=Math.min(height-1,Math.max(0,Math.floor((y+h*row/6)*height)));
-        const at=(py*width+px)*4;
-        light.push((pixels[at]+pixels[at+1]+pixels[at+2])/3);
-      }
-      light.sort((a,b)=>a-b);
-      return light.length>=5&&light[Math.floor(light.length/2)]>=180;
-    }).sort((a,b)=>a.w*a.h-b.w*b.h);
+    .sort((a,b)=>a.w*a.h-b.w*b.h);
   const used=new Set(),merged=[];
   for(const background of candidates){
     const group=raw.flatMap((region,index)=>{
@@ -87,6 +81,14 @@ export function mergeLightCarriers(raw,backgrounds,pixels,width,height){
       return coverage>.9&&region.w*region.h<background.w*background.h*.75?[index]:[];
     });
     if(group.length<2)continue;
+    // A collage with several physical pieces covers much of its carrier.
+    // Small printed fragments occupy little area, regardless of ink or paper
+    // color. Prefer keeping distinct pieces over accidentally joining them.
+    const backgroundPixels=maskPixels(background);
+    if(!backgroundPixels)continue;
+    const childPixels=group.map(index=>maskPixels(raw[index]));
+    if(Math.max(...childPixels)>backgroundPixels*.18||
+       childPixels.reduce((sum,value)=>sum+value,0)>backgroundPixels*.35)continue;
     const result=mergeSamRegions(raw,group,[background]);
     for(const index of result.absorbedIndices||group)used.add(index);
     merged.push(result);
