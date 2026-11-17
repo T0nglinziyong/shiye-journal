@@ -14,10 +14,10 @@ export function assetEditorValue(old,values) {
     tags:parseTags(values.tags),contentTags:parseTags(values.contentTags),themeTags:parseTags(values.themeTags),
     styleTags:parseTags(values.styleTags),colorTags:parseTags(values.colorTags),
     materialTags:parseTags(values.materialTags),moodTags:parseTags(values.moodTags)};
-  const next={...userMaterialClassification(old,changes,{confirm:values.confirmClassification===true}),title:values.title.trim(),
-    titleEvidence:values.confirmClassification===true||old.title!==values.title.trim()?{source:'user',confidence:1}:old.titleEvidence,
+  const next={...userMaterialClassification(old,changes),title:values.title.trim(),
+    titleEvidence:old.title!==values.title.trim()?{source:'user',confidence:1}:old.titleEvidence,
     physicalWidthMM:width,physicalHeightMM:height,
-    seriesID:values.seriesID||null,reviewStatus:values.confirmClassification===true?'ready':values.reviewStatus,updatedAt:new Date().toISOString()};
+    seriesID:values.seriesID||null,reviewStatus:values.reviewStatus,updatedAt:new Date().toISOString()};
   delete next.supply;
   if(values.usageStatus!=='used'&&values.usageStatus!=='unused')throw Error('使用状态无效');
   Object.assign(next,withUsageStatus(next,values.usageStatus==='used',next.updatedAt));

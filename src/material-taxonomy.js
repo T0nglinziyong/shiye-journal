@@ -52,9 +52,3 @@ export const isContentCategory=id=>contentCategories.some(([value])=>value===id)
 export const isLayoutFit=id=>layoutFits.some(([value])=>value===id);
 export const materialKindGroups=Object.freeze(materialTypes.map(([id,label])=>({label,options:[[id,label]]})));
 export const materialRoleGroups=Object.freeze([{label:'画面作用',options:materialRoles}]);
-export const materialFieldGuide=Object.freeze({
-  kind:'按实际使用的物件形态分类；画面中表现的内容写入内容类别和标签。',
-  role:'主要作用必选，其他可能承担的作用可另选为次要作用。',
-  contentCategories:'只选画面明确表现的内容，具体对象写入开放标签。',
-  layoutFits:'描述如何放置或组合，不等同于画面作用。'
-});

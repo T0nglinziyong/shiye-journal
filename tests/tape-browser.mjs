@@ -138,7 +138,11 @@ try{
   assert.equal(await evaluate('document.querySelector(".tape-guide-crop")?.style.left'),'25%',
     'Moving a crop slider updates the dashed guide without saving the asset');
   assert.equal(await evaluate('document.querySelectorAll(".material-editor-preview canvas").length'),0);
-  await click('.asset-editor-tabs button:nth-child(1)');
+  await click('.asset-editor-tabs button:nth-child(3)');
+  assert.equal(await evaluate('document.querySelectorAll(".material-multi-field[open]").length'),0);
+  assert.equal(await evaluate('document.querySelector("#asset-confirm-classification")'),null);
+  await click('.material-multi-field summary');
+  assert.equal(await evaluate('document.querySelectorAll(".material-multi-field[open] input[type=checkbox]").length'),10);
   await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
     select.value='sticker';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   assert.equal(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'),false,

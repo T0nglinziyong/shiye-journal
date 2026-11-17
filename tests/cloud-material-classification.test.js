@@ -10,11 +10,16 @@ test('cloud classification reads account-owned images and commits a user-safe re
   categoryEvidence:{kind:{source:'user',confidence:1}},titleEvidence:{source:'user',confidence:1}};
  const seen=[],fetcher=async(url,options)=>{
   const address=new URL(String(url));seen.push(address.href);
-  if(address.hostname==='api.deepseek.com')return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
+  if(address.hostname==='api.deepseek.com'){
+   const payload=JSON.parse(options.body);
+   assert.deepEqual(payload.thinking,{type:'disabled'});
+   assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low']);
+   return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
     title:'布片',titleConfidence:.99,kind:{id:'paper',confidence:.99},
     kindDetail:{id:'paper.textured',confidence:.99},role:{id:'accent',confidence:.95},
     contentTags:[{value:'布纹',confidence:.96}],materialTags:[{value:'布料',confidence:.4}]
-  })}}]}),{headers:{'content-type':'application/json'}});
+   })}}]}),{headers:{'content-type':'application/json'}});
+  }
   assert.equal(options.headers.Authorization,'Bearer test-token');
   if(address.pathname.endsWith('/shiye_revisions'))return Response.json([{revision:12,account_epoch:'epoch-1'}]);
   if(address.pathname.endsWith('/shiye_records')){
@@ -40,6 +45,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
  assert.equal(committed.kind,'sticker');assert.equal(committed.title,'我的布纹贴纸');
  assert.deepEqual(committed.contentTags,['布纹']);assert.deepEqual(committed.materialTags,[]);
  assert.ok(seen.some(url=>url.includes('/v1/storages/object/')));
+ assert.equal(seen.some(url=>url.includes('frame-1-preview480.webp')),false);
 });
 test('cloud classification rejects a cross-account image path before download or model call',async()=>{
  const asset={id:'asset-2',blobId:'blob-2',title:'测试',...initialMaterialClassification({kind:'sticker'})};
