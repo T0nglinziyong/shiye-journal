@@ -78,16 +78,15 @@ test('automatic supplies are bounded, optional, persistent choices win, and UI/e
  const {creativePresetAssets}=await import('../src/creative-presets.js');
  const {matchingScopeForState}=await import('../src/matching-view.js');
  const {normalizeMatchingDefaults}=await import('../src/cloud-matching-settings.js');
- const state={assets:[...assets,...creativePresetAssets],basket:['photo'],coreIDs:[],excludedAssetIDs:[creativePresetAssets[0].id],matchAutoUsePresets:true,matchIntent:'咖啡',matchStyles:[],matchPurposes:[],aiSettings:{autoIncludeRecommendations:false,requireAllCandidates:true}};
+ const state={assets:[...assets,...creativePresetAssets],basket:['photo'],coreIDs:[],excludedAssetIDs:[creativePresetAssets[0].id],matchIntent:'咖啡',matchStyles:[],matchPurposes:[],aiSettings:{autoIncludeRecommendations:false,autoUsePresets:true,requireAllCandidates:true}};
  const scope=matchingScopeForState(state);
  assert.deepEqual(scope.required,['photo']);assert.equal(scope.available.length,6);
  assert.ok(!scope.candidateAssetIDs.includes(creativePresetAssets[0].id));
  const byKind=scope.available.map(id=>state.assets.find(a=>a.id===id).kind);
  for(const kind of new Set(byKind))assert.ok(byKind.filter(k=>k===kind).length<=2);
  assert.deepEqual(matchingViewModel(state).scope,scope);
- assert.equal(normalizeMatchingDefaults(state).matchAutoUsePresets,true);
- assert.equal(normalizeMatchingDefaults({matchAutoUsePresets:'true'}).matchAutoUsePresets,undefined);
- const off=matchingScopeForState({...state,matchAutoUsePresets:false});assert.deepEqual(off.candidateAssetIDs,['photo']);
+ assert.equal(normalizeMatchingDefaults(state).matchAutoUsePresets,undefined);
+ const off=matchingScopeForState({...state,aiSettings:{...state.aiSettings,autoUsePresets:false}});assert.deepEqual(off.candidateAssetIDs,['photo']);
  const pinned=matchingScopeForState({...state,basket:['photo',scope.available[0]]});assert.ok(pinned.required.includes(scope.available[0]));
 });
 test('automatic recommendations use the same finite 18 rows in view and export',async()=>{

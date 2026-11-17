@@ -46,7 +46,8 @@ export async function postprocessSamCandidates(raw,source,{
       const loss=after.pixels&&before.pixels?after.pixels/before.pixels:1;
       const interior=detectRemovedPhysicalInterior(before,after);
       return loss<.9||interior.sampled&&interior.removed>Math.max(5,interior.sampled*.01)
-        ?before:{...after,splitSources:before.splitSources};
+        ?before:{...before,...after,segmentationMethod:before.segmentationMethod,
+          splitSources:before.splitSources};
     });
   }
   if(apertures){
@@ -54,7 +55,9 @@ export async function postprocessSamCandidates(raw,source,{
     const restored=await visionTask('restore-repeated-apertures',{
       pixels,width,height,candidates:regions,paperWidthMM,paperHeightMM
     });
-    regions=restored.map((region,index)=>({...region,splitSources:region.splitSources||before[index]?.splitSources}));
+    regions=restored.map((region,index)=>({...before[index],...region,
+      segmentationMethod:before[index]?.segmentationMethod,
+      splitSources:region.splitSources||before[index]?.splitSources}));
   }
   return regions.map(region=>({...region,maskAntialias:!!shapeRegularization}));
 }

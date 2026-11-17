@@ -109,6 +109,64 @@ export function candidateCropBounds(bitmapWidth,bitmapHeight,paper,region){
   const bottom=Math.max(top+1,Math.min(bitmapHeight,Math.round(bitmapHeight*(paper.y+(region.y+region.h)*paper.h))));
   return {x:left,y:top,w:right-left,h:bottom-top};
 }
+// Smooth the enlarged export alpha and restore a narrow edge. The stored mask stays editable.
+export function outputMaskBlurPx(region,outputWidth,outputHeight){
+  const mask=region?.mask;
+  if(!mask?.width||!mask?.height)return 0;
+  const modelMask=/^(sam2-|fastsam|yoloe)/.test(region.segmentationMethod||'');
+  if(!modelMask)return .45;
+  const scale=Math.max(outputWidth/mask.width,outputHeight/mask.height);
+  return Math.round(Math.min(region.maskAntialias?3.5:3,
+    Math.max(.7,scale*(region.maskAntialias ? .85 : .72)))*100)/100;
+}
+export function sharpenExportAlpha(alpha){
+  const t=Math.max(0,Math.min(1,(alpha/255-.32)/.36));
+  return Math.round((t*t*(3-2*t))*255);
+}
+export function enclosedMaskHoles(mask){
+  const {width,height,alpha}=mask,total=width*height;
+  const seen=new Uint8Array(total),queue=new Uint32Array(total);let tail=0;
+  const add=i=>{if(!seen[i]&&alpha[i]<128){seen[i]=1;queue[tail++]=i;}};
+  for(let x=0;x<width;x++){add(x);add((height-1)*width+x);}
+  for(let y=0;y<height;y++){add(y*width);add(y*width+width-1);}
+  for(let head=0;head<tail;head++){
+    const i=queue[head],x=i%width,y=(i-x)/width;
+    if(x)add(i-1);if(x+1<width)add(i+1);
+    if(y)add(i-width);if(y+1<height)add(i+width);
+  }
+  const holes=new Uint8Array(total);
+  for(let i=0;i<total;i++)if(alpha[i]<128&&!seen[i])holes[i]=1;
+  return holes;
+}
+export function polishProjectedMask(pixels,width,height,radius,mask=null){
+  const data=pixels.data,r=Math.max(1,Math.min(4,Math.round(radius))),span=r*2+1;
+  const horizontal=new Uint8Array(width*height);
+  const holes=mask?enclosedMaskHoles(mask):null;
+  for(let y=0;y<height;y++){
+    const row=y*width;
+    let sum=data[row*4+3]*r;
+    for(let x=0;x<=r;x++)sum+=data[(row+Math.min(x,width-1))*4+3];
+    for(let x=0;x<width;x++){
+      horizontal[row+x]=Math.round(sum/span);
+      sum+=data[(row+Math.min(width-1,x+r+1))*4+3]
+        -data[(row+Math.max(0,x-r))*4+3];
+    }
+  }
+  for(let x=0;x<width;x++){
+    let sum=horizontal[x]*r;
+    for(let y=0;y<=r;y++)sum+=horizontal[Math.min(y,height-1)*width+x];
+    for(let y=0;y<height;y++){
+      const i=(y*width+x)*4+3;
+      const hole=holes?.[Math.min(mask.height-1,Math.floor((y+.5)*mask.height/height))*mask.width+
+        Math.min(mask.width-1,Math.floor((x+.5)*mask.width/width))];
+      const alpha=sharpenExportAlpha(Math.round(sum/span));
+      data[i]=hole?Math.min(alpha,data[i]):alpha;
+      sum+=horizontal[Math.min(height-1,y+r+1)*width+x]
+        -horizontal[Math.max(0,y-r)*width+x];
+    }
+  }
+  return pixels;
+}
 export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={}){
   const {x,y,w,h}=candidateCropBounds(bitmap.width,bitmap.height,paper,region);
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
@@ -119,25 +177,24 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
     const m=region.mask,mask=document.createElement('canvas');mask.width=m.width;mask.height=m.height;
     const mc=mask.getContext('2d'),frame=mc.createImageData(m.width,m.height);
     const modelMask=/^(sam2-|fastsam|yoloe)/.test(region.segmentationMethod||'');
-    // SAM masks are already the model's final topology. Smoothing their
-    // 1024px boundary here and then scaling it to 4K made a wide fuzzy edge.
-    // Keep the model-resolution mask exact. Antialias at the export raster's
-    // resolution below; blurring the 1024px mask before 4K scaling is fuzzy.
     const outputAlpha=region.shapeModel||modelMask?m.alpha:softenOutputAlpha(m.alpha,m.width,m.height);
     for(let i=0;i<outputAlpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=outputAlpha[i];}
     mc.putImageData(frame,0,0);
-    // The pixel alpha is authoritative. Rebuilding the cutout from only the
-    // outer polygon destroys arbitrary topology (binder holes, windows,
-    // die-cuts) and also discards graph-cut detail. Scale the actual mask
-    // instead; polygons remain geometry metadata for editing/debugging.
     ctx.globalCompositeOperation='destination-in';
-    // This is only sub-pixel raster antialiasing of the *exported* alpha.
-    // The authoritative segmented mask, contour, identity and dimensions stay
-    // byte-for-byte intact. In particular, no morphological shape edits run.
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-    ctx.filter=modelMask&&!region.maskAntialias?'none':'blur(0.45px)';
-    ctx.drawImage(mask,0,0,w,h);
-    ctx.filter='none';ctx.globalCompositeOperation='source-over';
+    if(modelMask){
+      const projected=document.createElement('canvas');projected.width=w;projected.height=h;
+      const pc=projected.getContext('2d',{willReadFrequently:true});
+      pc.imageSmoothingEnabled=true;pc.imageSmoothingQuality='high';
+      pc.drawImage(mask,0,0,w,h);
+      pc.putImageData(polishProjectedMask(pc.getImageData(0,0,w,h),w,h,
+        outputMaskBlurPx(region,w,h),m),0,0);
+      ctx.drawImage(projected,0,0);
+    }else{
+      ctx.filter=`blur(${outputMaskBlurPx(region,w,h)}px)`;
+      ctx.drawImage(mask,0,0,w,h);ctx.filter='none';
+    }
+    ctx.globalCompositeOperation='source-over';
   }
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('素材裁图失败')),'image/png'));
 }

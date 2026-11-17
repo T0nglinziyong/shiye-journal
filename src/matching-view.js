@@ -17,7 +17,7 @@ export function matchingRecommendations(state){return recommendForDirection({ass
 // One bounded scope for UI, API creation and exported ZIPs.
 export function matchingScopeForState(state,ranked=matchingRecommendations(state)){
  const recommendations=ranked.slice(0,18);
- const automaticPresets=state.matchAutoUsePresets===true?diversifyRecommendations(
+ const automaticPresets=state.aiSettings.autoUsePresets===true?diversifyRecommendations(
   ranked.filter(row=>row.asset.isCreativePreset),{limit:6,perKind:2}):[];
  const automaticIDs=new Set(automaticPresets.map(row=>row.asset.id));
  return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,

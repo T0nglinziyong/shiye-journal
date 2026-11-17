@@ -6,7 +6,6 @@ import {EditorLayoutPanel} from './react-editor-layout.jsx';
 import {editorActionPosition} from './editor-action-position.js';
 import {creativeSourceIDs} from './creation-sources.js';
 import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js';
-import {CreationModePicker} from './react-creation-mode.jsx';
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
@@ -1008,7 +1007,6 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
     <section className="panel match-direction"><h2>先定这一页的方向</h2><p>从素材出发，写一点自己的想法。保持默认也可以开始。</p>
       <div className="match-creative-controls">
-        <CreationModePicker value={state.matchCreationMode} onChange={value=>change('matchCreationMode',value)}/>
         <DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/>
         <label>文字内容<select id="match-content-policy" value={Object.hasOwn(matchingContentOptions,state.matchContentPolicy)?state.matchContentPolicy:'original'} onChange={event=>change('matchContentPolicy',event.target.value)}>
           {Object.entries(matchingContentOptions).map(([value,label])=><option key={value} value={value}>{label}</option>)}
@@ -1023,8 +1021,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
-      <label className="match-preset-toggle"><input type="checkbox" checked={state.matchAutoUsePresets===true} onChange={event=>change('matchAutoUsePresets',event.target.checked)}/><span>AI 自选预设<small>按本次素材与想法补充少量胶带、贴纸、印章；可选用，不必全用。</small></span></label>
-      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:!canStartCreation(state.matchCreationMode,0)?'当前模式需要真实素材作为图像参考；先选择素材，或切换到纯编辑进行文字与图形创作。':'没有选素材也可以创作：用文字、手绘和图形完成这一页；胶带、贴纸和印章可按需从素材库加入。'}</p>
+      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:'没有选素材也可以创作：用文字、手绘和图形完成这一页；胶带、贴纸和印章可按需从素材库加入。'}</p>
 
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
@@ -1033,8 +1030,8 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
         </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
-      </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.matchAutoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
-      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
+      </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
+      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　根据本页方向和素材篮推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
         <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
         <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
@@ -1043,7 +1040,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
-    <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'手动选入与普通推荐候选为必用；如无法容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}{state.matchAutoUsePresets?'AI 自动补充的预设始终可选，不必全部使用。':''}不使用的素材不会发送给 AI。</p>
+    <section className="panel match-action"><h2>开始创作</h2><p data-creation-mode-summary>{creationModeDescription(state.matchCreationMode)}</p><p>{state.aiSettings.requireAllCandidates?'手动选入与普通推荐候选为必用；如无法容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}{state.aiSettings.autoUsePresets?'AI 自动补充的预设始终可选，不必全部使用。':''}不使用的素材不会发送给 AI。</p>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
     <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>
@@ -1780,7 +1777,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
       </SettingsGroup>
       <SettingsGroup title="账号安全清空"><p>清空当前账号的素材、作品、设置、最近删除与本机待同步修改；登录身份保留。旧云端图片会在独立存储代际中逐批回收；此操作无法撤销。</p>
         {button('reset-all-account-data','清空账号资料','btn danger')}</SettingsGroup>
-      <SettingsGroup title="语义检索 · pgvector（预留）"><p>等待接入 Embedding 模型及索引。当前不会上传素材内容至模型或产生向量费用。</p><button type="button" className="btn" disabled aria-disabled="true">语义检索 · 尚未启用</button></SettingsGroup>
+      <SettingsGroup title="语义检索 · pgvector（预留）"><p>数据库已准备向量索引，等待接入 Embedding 模型。当前不会上传素材内容至模型或产生向量费用。</p><button type="button" className="btn" disabled aria-disabled="true">语义检索 · 尚未启用</button></SettingsGroup>
     </>:<>
       <SettingsGroup title="离线资料"><p id="storage-location">未配置 CloudBase 时仅提供本浏览器的本地资料；不会连接其他服务器。</p><p>{counts}</p></SettingsGroup>
       {backup}{trash}
@@ -1837,6 +1834,8 @@ export function SettingsAIPage({settings,preferences,onAction}){
       <p>AI 生成可继续编辑的作品；网页任务包同时交付作品数据和预览图片。</p>
       <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
       <AIToggle id="auto-recommendations" label="把建议搭配加入候选素材" checked={cfg.autoIncludeRecommendations}/>
+      <AIToggle id="auto-presets" label="AI 自选预设" checked={cfg.autoUsePresets}/>
+      <p>开启后按本页方向与已选素材补充少量胶带、贴纸和印章；预设始终可选。</p>
       <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
       <AIToggle id="final-visual-review" label="完成前让视觉模型检查最终画面" checked={cfg.finalVisualReview}/>
       <p>支持图片输入的模型会在最终渲染后检查画面；无图片能力或请求预算不足时，会如实标记未完成复核。</p>

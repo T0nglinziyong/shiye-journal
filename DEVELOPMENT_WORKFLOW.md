@@ -15,7 +15,7 @@
 - 客户端首屏可读缓存，离线编辑先进入账号隔离的 IndexedDB 唯一待同步队列；服务端依旧以数据库事务和操作收据确认提交。
 - 原图、候选框、Mask 和大型作品文件放在 CloudBase 私有云存储，不放到 PostgreSQL 里。
 - 服务端密钥仅存在 CloudBase 云函数受保护配置，前端不可持有；启用新增数据库迁移前先备份并隔离测试。
-- `pgvector` 暂不启用；用户 UI 仅显示预留入口。
+- 测试环境已启用 `pgvector` 数据库扩展和受账号隔离的向量表；尚未配置 Embedding 模型，用户 UI 仍显示预留入口。
 
 ## 验收
 每次完整迁移必须执行 `npm test`、`npm run build`、`npm run test:ui` 和 `node scripts/audit-cloudbase-platform.mjs`。测试失败或 CI 没有执行步骤都不是成功。图片和编辑器回归须检查实际设备，尤其 iOS Safari。结果分别注明“代码已提交、函数已部署、SQL 已执行、真机已验收”，不可混为一谈。

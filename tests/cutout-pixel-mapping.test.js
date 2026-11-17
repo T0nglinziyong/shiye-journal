@@ -4,7 +4,8 @@ import {rectifiedPixelSize} from '../src/perspective.js';
 import {fittedSize,resampleMask,scaleFramePlacement} from '../src/cutout-edit-resolution.js';
 import {fullResolutionPlacement} from '../src/cutout-full-resolution.js';
 import {imageTier} from '../src/image-variants.js';
-import {candidateCropBounds,cropBitmap} from '../src/image.js';
+import {candidateCropBounds,cropBitmap,outputMaskBlurPx,sharpenExportAlpha,
+ polishProjectedMask,enclosedMaskHoles} from '../src/image.js';
 import {createCanvas,loadImage} from 'canvas';
 
 test('A4 correction never exceeds the longest-edge 4096px limit',()=>{
@@ -60,6 +61,20 @@ test('SAM candidate crop uses matching high-resolution endpoints',()=>{
  assert.equal(bounds.w,497);
 });
 
+test('export automatically antialiases model masks without changing stored mask',()=>{
+ const mask={width:250,height:100,alpha:new Uint8Array(25000)};
+ const region={segmentationMethod:'sam2-small',mask};
+ const automatic=outputMaskBlurPx(region,1000,400);
+ const regularized=outputMaskBlurPx({...region,maskAntialias:true},1000,400);
+ assert.ok(automatic>2&&automatic<=3);
+ assert.ok(regularized>automatic&&regularized<=3.5);
+ assert.equal(outputMaskBlurPx({...region,segmentationMethod:'browser-morphgac'},1000,400),.45);
+ assert.equal(outputMaskBlurPx(region,250,100),.72);
+ assert.equal(sharpenExportAlpha(0),0);
+ assert.ok(Math.abs(sharpenExportAlpha(128)-128)<=3);
+ assert.equal(sharpenExportAlpha(255),255);
+});
+
 test('SAM export does not soften its low-resolution mask before projection',async()=>{
  const before=globalThis.document;
  globalThis.document={createElement:()=>{
@@ -79,4 +94,21 @@ test('SAM export does not soften its low-resolution mask before projection',asyn
    assert.equal(rgba[(4*8+4)*4+3],255);
    assert.equal(mask.alpha[0],255);
  }finally{globalThis.document=before;}
+});
+
+test('export edge polish rounds a model stair while retaining an enclosed transparent hole',()=>{
+ const mask={width:8,height:8,alpha:new Uint8Array(64).fill(255)};
+ mask.alpha[3*8+3]=0;
+ const holes=enclosedMaskHoles(mask);
+ assert.equal(holes[3*8+3],1);
+ const width=32,height=32,data=new Uint8ClampedArray(width*height*4);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   data[(y*width+x)*4+3]=x>=12&&x<16&&y>=12&&y<16?0:x<16+Math.floor(y/4)?255:0;
+ }
+ const before=new Uint8ClampedArray(data);
+ polishProjectedMask({data},width,height,3,mask);
+ assert.equal(data[(14*width+14)*4+3],0);
+ assert.ok(data.some((value,index)=>index%4===3&&value>0&&value<255));
+ assert.equal(mask.alpha[3*8+3],0);
+ assert.ok(before.some((value,index)=>index%4===3&&value===255));
 });
