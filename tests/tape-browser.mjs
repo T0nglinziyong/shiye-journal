@@ -99,7 +99,7 @@ try{
       request.onsuccess=()=>resolve(request.result)});
     await new Promise((resolve,reject)=>{const tx=db.transaction(['assets','blobs'],'readwrite');
       tx.objectStore('assets').put({id:'demo-repeat-tape',blobId:'demo-repeat-tape',
-        title:'连续花纹胶带示例',kind:'tape',physicalWidthMM:120,physicalHeightMM:16,
+        title:'连续花纹胶带示例',kind:'tape',role:'support',physicalWidthMM:120,physicalHeightMM:16,
         tapeAxis:'x',tapeRepeatMode:'repeatablePattern',tapeRepeatPeriodMM:20,
         createdAt:new Date().toISOString()});
       tx.objectStore('blobs').put({id:'demo-repeat-tape',data:image});
@@ -138,11 +138,15 @@ try{
   assert.equal(await evaluate('document.querySelector(".tape-guide-crop")?.style.left'),'25%',
     'Moving a crop slider updates the dashed guide without saving the asset');
   assert.equal(await evaluate('document.querySelectorAll(".material-editor-preview canvas").length'),0);
-  await click('.asset-editor-tabs button:nth-child(3)');
+  await click('.asset-editor-tabs button:nth-child(1)');
   assert.equal(await evaluate('document.querySelectorAll(".material-multi-field[open]").length'),0);
-  assert.equal(await evaluate('document.querySelector("#asset-confirm-classification")'),null);
   await click('.material-multi-field summary');
   assert.equal(await evaluate('document.querySelectorAll(".material-multi-field[open] input[type=checkbox]").length'),10);
+  assert.equal(await evaluate('document.querySelector("#asset-role")'),null);
+  await click('.material-multi-field[open] input:not(:checked)');
+  assert.equal(await evaluate('document.querySelectorAll(".material-multi-field[open] input:checked").length'),2);
+  await click('.material-multi-field[open] input:checked:not(:disabled)');
+  assert.equal(await evaluate('document.querySelectorAll(".material-multi-field[open] input:checked").length'),1);
   await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
     select.value='sticker';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   assert.equal(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'),false,
@@ -150,6 +154,9 @@ try{
   await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
     select.value='tape';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   assert.ok(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'));
+  await click('.asset-editor-tabs button:nth-child(3)');
+  assert.equal(await evaluate('document.querySelectorAll(".material-info-panel:not([hidden]) .material-tag-fields input").length'),7);
+  assert.equal(await evaluate('document.querySelector("#asset-confirm-classification")'),null);
   assert.equal(await evaluate('document.querySelector(".material-info-panel:not([hidden])")?.textContent.includes("普通素材在同一创作方案")'),false);
   await click('#asset-dialog-close');
   await click('[data-route="works"]','.works-grid');
