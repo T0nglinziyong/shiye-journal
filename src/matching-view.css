@@ -6,8 +6,7 @@
 .matching-page .match-content-details textarea{box-sizing:border-box;width:100%;min-height:64px;resize:vertical}
 .matching-page .matching-layout{margin-bottom:12px}
 .matching-page .match-action{padding:16px 18px}
-.matching-page .match-action h2{font-size:20px;margin:0 0 4px}
-.matching-page .match-action p{font-size:13px;color:#78877a;margin:0 0 12px}
+.matching-page .match-action h2{font-size:20px;margin:0}
 .matching-page .match-action .match-generate{flex-wrap:wrap}
 .matching-page .match-action .match-generate>.btn{display:inline-flex;align-items:center;justify-content:flex-start;text-align:left}
 .matching-page .match-priority{font-size:11px;color:#667963}
