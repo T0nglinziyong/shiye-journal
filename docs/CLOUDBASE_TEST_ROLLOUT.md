@@ -16,8 +16,8 @@
 前端已经直接通过 CloudBase SDK 的 `callFunction` 调用 `shiye-api`。静态部署不包含云函数，不能把静态站点下 `/api/cos` 的 HTTP 成功与否当作新事件函数健康检查。
 
 1. 合入 `test` 后在现有 CloudBase App `shiye-journal-test` 上手动触发 Git 构建，保留 `test` 分支、安装/构建命令及原前端公开变量，并设置本次 `SHIYE_BUILD_SHA`。核对新构建及实站 `/version.json`；`commit` 必须与 GitHub `test` HEAD 一致，且网站实际可打开。
-2. 函数代码发生变更时运行 `node scripts/build-cloudbase-functions.mjs`，再运行 `node scripts/prepare-cloudbase-function-deployment.mjs`，将 Linux 原生依赖随代码一起打包。
-3. 对现有函数运行 `tcb fn code update shiye-api --cwd .cloudbase-build --dir .cloudbase-build/functions/shiye-api`。入口 `index.main`、事件函数、Node.js 20.19；不要只上传仓库中未打包的 index.js。
+2. 函数代码发生变更时运行 `node scripts/build-cloudbase-functions.mjs`。
+3. 对现有函数运行 `tcb fn code update shiye-api --cwd .cloudbase-build --dir .cloudbase-build/functions/shiye-api --deployMode zip`。入口 `index.main`、事件函数、Node.js 20.19；不要只上传仓库中未打包的 index.js。
 4. 在函数的服务端配置 `SHIYE_CLOUDBASE_ENV_ID=shiye-pg-test-d1gg723f7fb356ccc`，以及原来的 `SHIYE_COS_BUCKET`、`SHIYE_COS_REGION`。前端的 `VITE_` 环境变量不会自动成为函数配置。
 5. 配置具有所需 COS 权限的执行角色；代码支持运行时临时凭据。若使用显式 COS 凭据，限定存储桶和所需操作，只放在受保护服务端配置，不发到聊天或提交仓库。不要混合不同来源的临时 Token 和长期 Key。
 6. 检查当前 CloudBase 环境的 FunctionsHttpApiAllow 调用策略允许已登录用户访问该函数。函数内部仍重新核验用户和账号权限；不要仅凭浏览器提交的 owner 字段授权。

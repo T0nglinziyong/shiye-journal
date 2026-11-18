@@ -80,7 +80,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     if(!original||original.id!==assetID||original.isProjectInternal)
       throw new ServiceError(404,'ASSET_NOT_FOUND','素材不存在或尚未同步');
     const [cutout,context]=await Promise.all([
-      image(token,userID,original.blobId,{preview:true}),
+      image(token,userID,original.blobId),
       image(token,userID,original.candidateFrameBlobId)]);
     const imagesReady=performance.now();
     if(!cutout)throw new ServiceError(409,'CLASSIFICATION_IMAGE_PENDING','素材图片尚未同步，请稍后重试');
