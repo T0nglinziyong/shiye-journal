@@ -34,6 +34,7 @@
 .material-editor-dialog .asset-edit-head>#save-asset{background:#52634b;color:white;border-color:#52634b}
 .material-editor-dialog>.material-editor{flex:1;min-height:0;gap:9px}
 .material-editor-dialog .material-editor-preview{flex:none;width:min(100%,28dvh,280px);height:auto;min-height:0;aspect-ratio:1}
+.material-editor-dialog .material-editor-preview>img:not([style]),.material-editor-dialog .material-editor-preview>.tape-flat-preview{transform:rotate(var(--asset-edit-rotation,0deg))}
 .material-editor-dialog .material-editor-controls{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:8px}
 /* Cutout steps follow the fixed preview on both mobile and desktop. */
 @media(min-width:700px){#modal.cutout-dialog .cutout-modal{grid-template-areas:"header header" "compare controls" "preview controls" "steps controls" "hint controls"}}

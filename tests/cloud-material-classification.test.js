@@ -18,7 +18,8 @@ test('cloud classification reads account-owned images and commits a user-safe re
    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
     title:'布片',titleConfidence:.99,kind:{id:'paper',confidence:.99},
     kindDetail:{id:'paper.textured',confidence:.99},role:{id:'accent',confidence:.95},
-    contentTags:[{value:'布纹',confidence:.96}],materialTags:[{value:'布料',confidence:.4}]
+    contentTags:[{value:'布纹',confidence:.96}],materialTags:[{value:'布料',confidence:.4}],
+    orientation:{deltaDegrees:90,confidence:.9}
    })}}]}),{headers:{'content-type':'application/json'}});
   }
   assert.equal(options.headers.Authorization,'Bearer test-token');
@@ -45,6 +46,8 @@ test('cloud classification reads account-owned images and commits a user-safe re
  assert.equal(classify.configured,true);assert.equal(result.revision,13);
  assert.equal(committed.kind,'sticker');assert.equal(committed.title,'我的布纹贴纸');
  assert.deepEqual(committed.contentTags,['布纹']);assert.deepEqual(committed.materialTags,[]);
+ assert.deepEqual(result.orientation,{deltaDegrees:90,confidence:.9});
+ assert.equal(committed.processingRecord?.displayRotationDegrees,undefined);
  assert.ok(seen.some(url=>url.includes('/v1/storages/object/')));
  assert.equal(seen.some(url=>url.includes('frame-1-preview480.webp')),false);
 });

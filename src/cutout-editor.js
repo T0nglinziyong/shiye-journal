@@ -373,6 +373,7 @@ export async function showCutoutEditor({
       await new Promise(resolve=>requestAnimationFrame(resolve));
       await onApply(blob,{
         appearance,intensity,displayRotationDegrees:rotation,autoStraighten,
+        displayRotationSource:autoStraighten?'geometry':'user',
         recognitionRotationDegrees:processing.recognitionRotationDegrees||0,
         sourcePixelWidth:w,sourcePixelHeight:h,recognitionPixels:editPixels,
         candidateFramePlacement:processing.candidateFramePlacement||null,
