@@ -154,12 +154,12 @@ try{
     await verifyImportGeometry(width);
     report.push({width,height,selection:true,import:true,navigation:true});
   }
-  // Basket order must remain stable after restoring the matching route.
-  assert.equal(await evaluate('!!(document.querySelector(".basket").compareDocumentPosition(document.querySelector(".match-recommendations")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
+  // Material stage order must remain stable after restoring the matching route.
+  assert.equal(await evaluate('!!(document.querySelector(".match-stage-section").compareDocumentPosition(document.querySelector(".match-recommendations")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
   await sleep(200);
   await command('Page.reload');
-  await wait('.matching-page .basket');
-  assert.equal(await evaluate('!!(document.querySelector(".basket").compareDocumentPosition(document.querySelector(".match-recommendations")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
+  await wait('.matching-page .match-stage-section');
+  assert.equal(await evaluate('!!(document.querySelector(".match-stage-section").compareDocumentPosition(document.querySelector(".match-recommendations")) & Node.DOCUMENT_POSITION_FOLLOWING)'),true);
   await writeFile(directory+'/report.json',JSON.stringify(report,null,2));
   console.log('Responsive visual regression: '+report.length+' viewports passed');
 }catch(error){
