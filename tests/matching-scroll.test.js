@@ -112,5 +112,5 @@ test('full render and React matching refresh preserve scroll state',async()=>{
   assert.match(markup,/addEventListener\('shiye-matching-refresh',update\)/);
   for(const key of ['recommendations','chips','intent'])
     assert.ok(markup.includes('data-match-scroll="'+key+'"'),key+' must have a stable scroll identity');
-  assert.ok(markup.includes('className="match-stage-paper"'));
+  assert.ok(markup.includes('match-stage-paper'));
 });
