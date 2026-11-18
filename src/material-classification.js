@@ -6,6 +6,14 @@ export const TAG_FIELDS=Object.freeze(tagGroups.map(([id])=>id));
 const unique=values=>[...new Set(values)];
 const validTags=value=>Array.isArray(value)&&value.every(tag=>typeof tag==='string'&&tag.trim().length>0&&tag.length<=80);
 const boundedTags=value=>unique(value.map(tag=>tag.trim()));
+export function directMaterialDescription(value){
+  let description=value.trim().replace(/(?:位于)?画面中央/g,'居中')
+    .replace(/画面左侧/g,'左侧').replace(/画面右侧/g,'右侧')
+    .replace(/画面上方/g,'上方').replace(/画面下方/g,'下方');
+  description=description.replace(/^(?:(?:在)?(?:这张|这幅)?(?:画面|图片|图像|照片|图)(?:中|里|上)?|(?:这件)?素材(?:中|上)?)\s*(?:可以看到|可见|展示了|呈现了|描绘了|有|是)?[，,:：\s]*/u,'');
+  description=description.replace(/^(?:可以看到|可见|这是一?[张幅个件]?|有|是|展示了|呈现了|描绘了|整体来看|总体来看)[，,:：\s]*/u,'');
+  return description.replace(/(^|[。；;])\s*(?:此外|同时|并且|另外|而且|其中)[，,\s]*/gu,'$1').trim();
+}
 export function defaultKindDetail(kind){return kind==='other'?'other.unclassified':null;}
 export function validateMaterialClassification(record){
   if(!record||record.classificationVersion!==MATERIAL_TAXONOMY_VERSION||
@@ -85,10 +93,11 @@ export function applyAIClassification(old,result,{minConfidence=.7,allowMigratio
     result.titleConfidence>=minConfidence&&old.titleEvidence?.source!=='user'){
     next.title=result.title.trim();next.titleEvidence={source:'ai',confidence:result.titleConfidence,modelVersion:result.modelVersion};
   }
-  if(typeof result.description==='string'&&result.description.trim()&&result.description.length<=500&&
+  const description=typeof result.description==='string'?directMaterialDescription(result.description):'';
+  if(description&&result.description.length<=500&&
     Number.isFinite(result.descriptionConfidence)&&result.descriptionConfidence>=minConfidence&&
     result.descriptionConfidence<=1&&old.descriptionEvidence?.source!=='user'){
-    next.description=result.description.trim();
+    next.description=description;
     next.descriptionEvidence={source:'ai',confidence:result.descriptionConfidence,modelVersion:result.modelVersion};
   }
   next.categoryEvidence=categoryEvidence;next.tagEvidence=tagEvidence;

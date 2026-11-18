@@ -13,12 +13,6 @@ export function rotatedPhysicalSize(width,height,angle){
     height:Math.round((Math.abs(h*Math.cos(r))+Math.abs(w*Math.sin(r)))*10)/10};
 }
 
-export function acceptedOrientationDelta(value){
-  if(!value||![-90,0,90,180].includes(value.deltaDegrees)||
-    !Number.isFinite(value.confidence)||value.confidence<.85||value.confidence>1)return null;
-  return value.deltaDegrees;
-}
-
 export async function rotateMaterialPNG(blob,delta){
   const image=await decodeImageBlob(blob);
   try{

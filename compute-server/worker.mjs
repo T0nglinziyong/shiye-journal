@@ -143,7 +143,7 @@ async function processJob(job){
       await upload(prefix+item.file,await readFile(path.join(materials,item.file)),'image/png');
     });
     await upload(prefix+'result.json',Buffer.from(JSON.stringify(manifest)),'application/json');
-    stages.uploadMs=Math.round(performance.now()-started-stages.downloadMs-stages.modelMs);
+    stages.uploadMs=Math.round(performance.now()-started-stages.downloadMs-stages.modelMs-(stages.orientationMs||0));
     const finished=await rpc('shiye_finish_compute_job_v1',{
       p_id:job.id,p_worker_id:workerID,p_attempt:job.attempts,p_result_path:prefix+'result.json'});
     if(finished?.status!=='completed')throw Error('Job completion not committed');

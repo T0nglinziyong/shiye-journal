@@ -17,12 +17,13 @@ test('batch classification uses returned assets and defers cloud refresh',async(
   await db.refreshCloud();
   assert.equal(refreshes,1);
 });
-test('cloud classification applies only a returned additional orientation',async()=>{
+test('cloud classification ignores obsolete orientation suggestions',async()=>{
   const db={flushProjects:async()=>{},refreshCloud:async()=>{}};
+  let rotated=false;
   const result=await classifyCloudAsset('material',{db,skipFlush:true,skipRefresh:true,
     request:async()=>Response.json({asset:{id:'material',title:'已分类'},
       orientation:{deltaDegrees:90,confidence:.93}}),
-    onOrientation:async(asset,orientation)=>({...asset,
-      rotation:23+orientation.deltaDegrees})});
-  assert.equal(result.rotation,113);
+    onOrientation:async()=>{rotated=true;}});
+  assert.equal(result.title,'已分类');
+  assert.equal(rotated,false);
 });

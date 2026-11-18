@@ -2,25 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PNG} from 'pngjs';
 import {createCloudMaterialClassifier,materialClassificationPrompt} from '../server/cloudbase/classification.mjs';
-import {orientationSheet} from '../server/cloudbase/orientation-sheet.mjs';
 import {initialMaterialClassification} from '../src/material-classification.js';
-
-test('orientation sheet B rotates the current image counterclockwise by 90 degrees',async()=>{
- const source=new PNG({width:2,height:2});
- const colors=[[255,0,0],[0,255,0],[0,0,255],[255,255,0]];
- colors.forEach((color,index)=>source.data.set([...color,255],index*4));
- const url=await orientationSheet('data:image/png;base64,'+PNG.sync.write(source).toString('base64'));
- const sheet=PNG.sync.read(Buffer.from(url.slice(url.indexOf(',')+1),'base64'));
- const at=(60*sheet.width+410)*4;
- assert.deepEqual([...sheet.data.subarray(at,at+3)],[0,255,0]);
-});
 
 test('classification prompt uses physical form, current multi-select roles and leaf layout IDs',()=>{
  const prompt=materialClassificationPrompt({physicalWidthMM:30,physicalHeightMM:40,
   sourceIdentifier:'sample',finalMaskBlobId:'mask-1'});
  assert.match(prompt,/只分类这件素材，不分类它画着的物品/);
- assert.match(prompt,/判断第一张图需要顺时针旋转多少度才正立/);
- assert.match(prompt,/优先比较第三张图的四种方向/);
+ assert.match(prompt,/不判断方向，不输出旋转角度/);
  assert.match(prompt,/有留白、横线、格子或填写区供书写记录的是便签/);
  assert.match(prompt,/已有完整标题、信息或独立版式且主要供阅读展示的是卡片/);
  assert.match(prompt,/只有独立文字或字形而没有承载卡面的是文字素材/);
@@ -28,9 +16,9 @@ test('classification prompt uses physical form, current multi-select roles and l
  assert.match(prompt,/paper\.patterned=花纹纸/);
  assert.match(prompt,/point\.free=自由摆放/);
  assert.match(prompt,/整片以纯色、纹理或重复花纹为主且无明确书写功能的是纸张/);
- assert.match(prompt,/相对当前展示方向还需顺时针旋转/);
  assert.match(prompt,/descriptionConfidence/);
- assert.match(prompt,/第二张图与第一张图方向一致并不能证明方向正确/);
+ assert.match(prompt,/浅粉色花朵居中/);
+ assert.doesNotMatch(prompt,/orientation\.deltaDegrees/);
  assert.doesNotMatch(prompt,/版面适配.*page=页面铺底/);
 });
 
@@ -46,16 +34,11 @@ test('cloud classification reads account-owned images and commits a user-safe re
   if(address.hostname==='api.deepseek.com'){
    const payload=JSON.parse(options.body);
    assert.deepEqual(payload.thinking,{type:'disabled'});
-   if(payload.max_tokens===240){
-    assert.equal(payload.messages[0].content.filter(part=>part.type==='image_url').length,1);
-    return Response.json({choices:[{message:{content:JSON.stringify({choice:'B',confidence:.95,evidence:'桌面水平',
-      description:'桌面上平铺一块浅色格纹布。',descriptionConfidence:.93})}}]});
-   }
    assert.equal(payload.max_tokens,1000);
-   assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low','low']);
+   assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low']);
    assert.match(payload.messages[0].content[0].text,/paper\.patterned=花纹纸/);
    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
-    title:'布片',titleConfidence:.99,description:'一张方形纸片上有浅色格纹。',descriptionConfidence:.91,kind:{id:'paper',confidence:.99},
+    title:'布片',titleConfidence:.99,description:'画面中有一张方形纸片，纸片上有浅色格纹。',descriptionConfidence:.91,kind:{id:'paper',confidence:.99},
     kindDetail:{id:'paper.textured',confidence:.99},role:{id:'accent',confidence:.95},
     contentTags:[{value:'布纹',confidence:.96}],materialTags:[{value:'布料',confidence:.4}],
     orientation:{deltaDegrees:90,confidence:.9}
@@ -84,13 +67,13 @@ test('cloud classification reads account-owned images and commits a user-safe re
  const result=await classify('test-token',userID,asset.id);
  assert.equal(classify.configured,true);assert.equal(result.revision,13);
  assert.equal(committed.kind,'sticker');assert.equal(committed.title,'我的布纹贴纸');
- assert.equal(committed.description,'桌面上平铺一块浅色格纹布。');
+ assert.equal(committed.description,'一张方形纸片，纸片上有浅色格纹。');
  assert.equal(committed.descriptionEvidence.source,'ai');
  assert.deepEqual(committed.contentTags,['布纹']);assert.deepEqual(committed.materialTags,[]);
- assert.deepEqual(result.orientation,{deltaDegrees:-90,confidence:.95});
+ assert.equal(Object.hasOwn(result,'orientation'),false);
  assert.equal(committed.processingRecord?.displayRotationDegrees,undefined);
  assert.ok(seen.some(url=>url.includes('/v1/storages/object/')));
- assert.equal(seen.filter(url=>url.startsWith('https://api.deepseek.com/')).length,2);
+ assert.equal(seen.filter(url=>url.startsWith('https://api.deepseek.com/')).length,1);
  assert.equal(seen.some(url=>url.includes('frame-1-preview480.webp')),false);
 });
 test('cloud classification rejects a cross-account image path before download or model call',async()=>{

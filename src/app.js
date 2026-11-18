@@ -101,7 +101,6 @@ import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {recordImageLoading,imageLoadingSnapshot} from './image-loading-diagnostics.js';
 import {assetEditorValue} from './asset-editor.js';
 import {applyMaterialDisplayRotation} from './material-display-apply.js';
-import {acceptedOrientationDelta,wrapDisplayRotation} from './material-display-rotation.js';
 import {AssetEditorDialog} from './react-asset-editor.jsx';
 import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
@@ -232,22 +231,6 @@ function refreshRotatedMaterial(id,blob){
   privateImages.invalidate([id]);
   urls.set(id,URL.createObjectURL(blob));
   void privateImages.primeLocal(id,blob).catch(console.warn);
-}
-async function applyAIOrientation(result,suggestion,isCurrent=()=>true){
-  const delta=acceptedOrientationDelta(suggestion);
-  if(delta===null||delta===0||!isCurrent())return result;
-  const current=state.assets.find(item=>item.id===result.id),
-    processing=result.processingRecord||current?.processingRecord||{};
-  if(!current||processing.displayRotationSource==='user'||processing.autoStraighten===false&&
-    processing.displayRotationSource!=='ai'||current.processingRecord?.displayRotationSource==='user')return result;
-  const angle=wrapDisplayRotation((Number(processing.displayRotationDegrees)||0)+delta),
-    next={...result,processingRecord:{...processing,
-      sourceWidthMM:processing.sourceWidthMM||current.physicalWidthMM,
-      sourceHeightMM:processing.sourceHeightMM||current.physicalHeightMM,
-      displayRotationDegrees:angle,displayRotationSource:'ai',autoStraighten:false}};
-  const rotated=await applyMaterialDisplayRotation(db,current,next,{canCommit:isCurrent});
-  if(rotated.blob)refreshRotatedMaterial(current.blobId,rotated.blob);
-  return rotated.asset;
 }
 function openLibraryAsset(id){state.detailAssetID=id;const selected=asset(id);if(selected?.blobId)privateImages.focus(selected.blobId);route('assetDetail');}
 function libraryBack(){navigateBack('library');}
@@ -726,7 +709,7 @@ function render(){
   const onBatchAction=(mode,action,value)=>{
     const context={state,view,body,modal,db,render,route,toast,imgTag,asset,refresh,
       download,modelImage,rasterize,openSeriesEditor,flushSave,handle,
-      moveProjectsToTrash,assetOrganization,applyAIOrientation,
+      moveProjectsToTrash,assetOrganization,
       matchingSession,exportSelectedMaterials:ids=>exportMaterials({db,asset,download},ids)};
     if(mode==='asset')return runAssetBatchAction(context,parity,action,value);
     if(mode==='series')return runSeriesBatchAction(context,parity,action,value);
@@ -3687,9 +3670,7 @@ async function organizeSavedAssets(records,{projects=[]}={}){
     const accountID=state.accountId;let warned=false;
     void (async()=>{await db.flushProjects();await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
       if(state.accountId!==accountID||!isCurrent())return;
-      const result=await classifyCloudAsset(record.id,{db,skipFlush:true,skipRefresh:true,
-        onOrientation:(asset,suggestion)=>applyAIOrientation(asset,suggestion,
-          ()=>state.accountId===accountID&&isCurrent())});
+      const result=await classifyCloudAsset(record.id,{db,skipFlush:true,skipRefresh:true});
       if(state.accountId!==accountID||!isCurrent())return;
       const current=state.assets.find(asset=>asset.id===record.id);
       if(current)Object.assign(current,result);
