@@ -50,6 +50,15 @@ try{
   await sleep(400);
   assert.ok(await evaluate('document.activeElement?.tagName==="TEXTAREA"'),
     'Tapping the mobile canvas with the text tool must create and focus a text box');
+  const pageWidthBeforeTyping=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().width');
+  await command('Emulation.setDeviceMetricsOverride',
+    {width:390,height:540,deviceScaleFactor:3,mobile:true});
+  await sleep(180);
+  const pageWidthWhileTyping=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().width');
+  assert.ok(Math.abs(pageWidthWhileTyping-pageWidthBeforeTyping)<2,
+    `The keyboard must not shrink the page: ${pageWidthBeforeTyping} → ${pageWidthWhileTyping}`);
+  await command('Emulation.setDeviceMetricsOverride',
+    {width:390,height:844,deviceScaleFactor:3,mobile:true});
   await command('Input.insertText',{text:'触屏文字'});
   await sleep(600);
   assert.ok(await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});

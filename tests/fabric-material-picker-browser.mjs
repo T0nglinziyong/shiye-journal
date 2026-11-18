@@ -49,10 +49,22 @@ try{
     'The full tall cover needs a large, contained preview: '+JSON.stringify(preview));
   await click('[data-material-id="picker-used"]','.fabric-selected-actions');
   await click('[data-val="material"]','.swift-material-picker');
+  const usedPreview=await evaluate(`(()=>{const card=document.querySelector('[data-material-id="picker-used"]');
+    return {image:card.querySelector('.material-piece-image img')?.getBoundingClientRect().toJSON(),
+      canvas:!!card.querySelector('.material-piece-thumbnail'),label:card.textContent};})()`);
+  assert.equal(usedPreview.canvas,false,'An unchanged used asset must keep the same source preview as all assets');
+  assert.ok(usedPreview.label.includes('30 × 30 mm'),usedPreview.label);
   await click('.swift-material-picker .swift-segments button:last-child');
   assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-used]")'),true,
     'All materials must include assets already used in the draft');
   assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-tall]")'),true);
+  const allPreview=await evaluate(`(()=>{const card=document.querySelector('[data-material-id="picker-used"]');
+    return {image:card.querySelector('.material-piece-image img')?.getBoundingClientRect().toJSON(),
+      canvas:!!card.querySelector('.material-piece-thumbnail'),label:card.textContent};})()`);
+  assert.equal(allPreview.canvas,false);
+  assert.ok(Math.abs(usedPreview.image.width-allPreview.image.width)<1&&
+    Math.abs(usedPreview.image.height-allPreview.image.height)<1,
+    'Used and all material thumbnails must have the same displayed size');
   await click('[data-val="material"]');
   await click('[data-act="park"]');
   await click('[data-val="layers"]','.scene-layer-tree');

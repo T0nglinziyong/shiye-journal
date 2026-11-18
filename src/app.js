@@ -4074,7 +4074,9 @@ const editorPointers=new Set();
 document.addEventListener('pointerdown',e=>{if(state.route==='editor'&&e.target.closest?.('#canvas-page'))editorPointers.add(e.pointerId);},true);
 for(const event of ['pointerup','pointercancel'])document.addEventListener(event,e=>editorPointers.delete(e.pointerId),true);
 window.addEventListener('blur',()=>editorPointers.clear());
-const refitEditor=()=>{if(state.route!=='editor'||document.activeElement?.isContentEditable||state.editingTextID)return;clearTimeout(viewportTimer);viewportTimer=setTimeout(()=>{if(state.route!=='editor'||state.editingTextID)return;if(editorPointers.size){refitEditor();return;}view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};render();},120);};
+const editorTyping=()=>state.editingTextID||document.activeElement?.isContentEditable||
+  document.activeElement?.matches?.('textarea[data-fabric="textarea"], .canvas-inline-text');
+const refitEditor=()=>{if(state.route!=='editor'||editorTyping())return;clearTimeout(viewportTimer);viewportTimer=setTimeout(()=>{if(state.route!=='editor'||editorTyping())return;if(editorPointers.size){refitEditor();return;}view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};render();},120);};
 window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 // Desktop file drop is equivalent to the regular import path; no drag

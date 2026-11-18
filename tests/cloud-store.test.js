@@ -84,6 +84,25 @@ test('cloud reads all pages, not just the server default first 1000 records',asy
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
   assert.equal((await db.cloudAll('assets')).length,1001);
 });
+test('oversized deleted work uploads its full document and restores from compact trash metadata',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  const work=v2({id:'deleted-work',title:'可恢复作品',notes:'x'.repeat(530000),
+    activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:700,height:1000},
+      paperColor:'#fff',items:[],textBlocks:[],primitives:[],strokes:[]}]});
+  const trash={id:'deleted-work-trash',kind:'project',item:work,date:'2026-11-18T00:00:00Z'};
+  await db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').put(trash));
+  await db.cloudFlushProjects();
+  const uploaded=state.calls.flatMap(call=>call.operations)
+    .find(op=>op.store==='trash'&&op.action==='put')?.item;
+  assert.ok(uploaded?.item.projectDocumentPath);
+  assert.ok(JSON.stringify(uploaded).length<512000);
+  assert.equal(uploaded.item.notes,undefined);
+  state.rows=[uploaded];
+  const restored=(await db.cloudAll('trash'))[0];
+  assert.equal(restored.item.notes.length,530000);
+  assert.equal(restored.item.drafts[0].sceneVersion,2);
+  assert.equal(trash.item.notes.length,530000);
+});
 test('queue rebuild batches receipt checks and retains unconfirmed local changes',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
   await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'already',title:'已到云端'}));

@@ -1049,6 +1049,8 @@ async function makeThumbnail(data,edge=480){
   }finally{bitmap.close?.();}
 }
 async function decode(store,record){
+  if(store==='trash'&&record.kind==='project'&&record.item?.projectDocumentPath)
+    return {...record,item:await cloudProjectDocument(record.item)};
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
   supportedProvider(storageProvider);
@@ -1078,6 +1080,21 @@ function auxiliaryBlobIDs(operations){
 async function encode(store,record,{makePreview=true}={}){
   // Sanitize the CloudBase RPC representation without touching its durable
   // IndexedDB original.
+  if(store==='trash'&&record.kind==='project'&&record.item){
+    const project=await encode('projects',record.item,{makePreview:false});
+    record={...record,item:project.projectDocumentPath?{
+      id:project.id,title:project.title,isDraft:project.isDraft,isSnapshot:project.isSnapshot,
+      createdAt:project.createdAt,updatedAt:project.updatedAt,
+      activeDraftID:project.activeDraftID,snapshotBlobId:project.snapshotBlobId,
+      projectDocumentPath:project.projectDocumentPath,
+      projectDocumentProvider:project.projectDocumentProvider,
+      projectDocumentEncoding:project.projectDocumentEncoding,
+      sceneAssetIDs:project.sceneAssetIDs,sceneBlobIDs:project.sceneBlobIDs,
+      drafts:project.drafts.map(draft=>({id:draft.id,canvas:draft.canvas,
+        paperColor:draft.paperColor,coverImageID:draft.coverImageID,
+        coverSceneHash:draft.coverSceneHash}))
+    }:project};
+  }
   if(store!=='blobs')record=cloudMetadataRecord(store,record);
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
@@ -1101,7 +1118,7 @@ async function encode(store,record,{makePreview=true}={}){
     // The scene digest avoids re-rendering when only metadata changes.
     const active=record.drafts?.find(d=>d.id===record.activeDraftID)||record.drafts?.[0];
     const cover=summary.drafts?.find(d=>d.id===record.activeDraftID)||summary.drafts?.[0];
-    if(active&&cover&&!record.isSnapshot){
+    if(makePreview&&active&&cover&&!record.isSnapshot){
       const {coverImageID,coverSceneHash,...scene}=active;
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(scene)));
       const sceneHash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
