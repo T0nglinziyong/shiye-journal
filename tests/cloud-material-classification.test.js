@@ -1,7 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCloudMaterialClassifier} from '../server/cloudbase/classification.mjs';
+import {createCloudMaterialClassifier,materialClassificationPrompt} from '../server/cloudbase/classification.mjs';
 import {initialMaterialClassification} from '../src/material-classification.js';
+
+test('classification prompt uses physical form, current multi-select roles and leaf layout IDs',()=>{
+ const prompt=materialClassificationPrompt({physicalWidthMM:30,physicalHeightMM:40,
+  sourceIdentifier:'sample',finalMaskBlobId:'mask-1'});
+ assert.match(prompt,/只分类这件实物，不分类它画着的物品/);
+ assert.match(prompt,/role，其他确实适用的放 secondaryRoles/);
+ assert.match(prompt,/paper\.patterned=花纹纸/);
+ assert.match(prompt,/point\.free=自由摆放/);
+ assert.match(prompt,/重复图案覆盖整片的独立纸片按花纹纸分类/);
+ assert.match(prompt,/相对当前展示方向还需顺时针旋转/);
+ assert.doesNotMatch(prompt,/版面适配.*page=页面铺底/);
+});
 
 test('cloud classification reads account-owned images and commits a user-safe result',async()=>{
  const userID='owner-1',asset={id:'asset-1',title:'我的布纹贴纸',blobId:'blob-1',
@@ -15,6 +27,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
    assert.deepEqual(payload.thinking,{type:'disabled'});
    assert.equal(payload.max_tokens,1000);
    assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low']);
+   assert.match(payload.messages[0].content[0].text,/paper\.patterned=花纹纸/);
    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
     title:'布片',titleConfidence:.99,kind:{id:'paper',confidence:.99},
     kindDetail:{id:'paper.textured',confidence:.99},role:{id:'accent',confidence:.95},
