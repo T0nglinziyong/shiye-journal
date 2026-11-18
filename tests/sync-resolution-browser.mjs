@@ -5,7 +5,8 @@ const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const browser=await browserHarness('shiye-sync-resolution',url+'/');
 const {command,evaluate,wait,click}=browser;
 try{
-  await wait('body');
+  await wait('#view[data-rendered-route]');
+  await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
   for(const width of [320,390,768,1024]){
     await command('Emulation.setDeviceMetricsOverride',
       {width,height:844,deviceScaleFactor:2,mobile:width<600});
