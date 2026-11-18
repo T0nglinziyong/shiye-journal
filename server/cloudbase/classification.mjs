@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {ServiceError} from './errors.mjs';
 import {cloudBaseGateway} from './postgres.mjs';
-import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFitGroups,tagGroups} from '../../src/material-taxonomy.js';
+import {materialKinds,materialKindDetails,materialRoles,contentCategories,layoutFits,tagGroups} from '../../src/material-taxonomy.js';
 import {applyAIClassification} from '../../src/material-classification.js';
 
 const idPattern=/^[A-Za-z0-9_-]{1,100}$/;
@@ -13,6 +13,21 @@ const parse=async response=>{
 };
 const choices=rows=>rows.map(([id,label])=>`${id}=${label}`).join('、');
 const dataURL=(bytes,type)=>`data:${type};base64,${bytes.toString('base64')}`;
+export function materialClassificationPrompt(original){
+  const metadata={widthMM:original.physicalWidthMM,heightMM:original.physicalHeightMM,
+    source:original.sourceIdentifier,cutout:!!original.finalMaskBlobId,
+    userConfirmedType:original.categoryEvidence?.kind?.source==='user'?original.kind:null};
+  return `你是手帐实物素材编目员。第一张图是当前展示方向的素材抠图；第二张图（如果有）是同一件素材未抠图的局部原图，可用于观察外边缘和承载物，不是另一件素材。只分类这件实物，不分类它画着的物品。输出一个 JSON 对象，不要解释。\n`+
+    `先判断外轮廓、纸片或物件形态，再判断画面内容。透明背景、矩形裁切、白色描边、印有布纹或金属纹，都不能单独证明背胶、真实材质或制造工艺。重复图案覆盖整片的独立纸片按花纹纸分类，除非看见贴纸的模切边界或背胶证据；相机拍摄内容的独立纸片按照片分类，只有明显的拍立得相纸版式才选拍立得。依据可见形态选择最合适的类型；只有分类字典确实没有对应项才选 other。不要根据画上的图案臆造材质。\n`+
+    `素材类型（必选单选）：${choices(materialKinds)}。具体类型（仅选所选素材类型下的 ID；不确定填 null）：${choices(materialKindDetails)}。\n`+
+    `画面作用（选最合适的 1 项放 role，其他确实适用的放 secondaryRoles；这两处合起来是多选）：${choices(materialRoles)}。\n`+
+    `内容类别（可多选；无具体内容与其他内容不并列）：${choices(contentCategories)}。版面适配（可多选，只选具体适配项）：${choices(layoutFits)}。\n`+
+    `开放标签分组：${choices(tagGroups)}。仅写有图像证据的简短词，每组最多 3 个；不要在不同组重复同一词，不要把类型、尺寸、透明度、文件来源或未证实的材质写成标签。\n`+
+    `分类字段用 {"id":"上列 ID","confidence":0到1}，多选字段用此对象的数组，标签字段用 {"value":"词","confidence":0到1} 的数组。缺少证据填 null 或 []，不要编造 ID。title 用“可见内容＋实物类型”写简短中文名；不确定时用中性名称。\n`+
+    `JSON 格式：{"title":"花朵贴纸","titleConfidence":0.9,"kind":{"id":"sticker","confidence":0.9},"kindDetail":{"id":"sticker.subject","confidence":0.8},"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],"colorTags":[],"materialTags":[],"moodTags":[],"tags":[],"orientation":{"deltaDegrees":0,"confidence":1}}。\n`+
+    `方向仅按第一张图判断。orientation.deltaDegrees 是相对当前展示方向还需顺时针旋转的角度，只能是 0、90、-90、180；只有文字、人物或明确主体的正立方向足够确定时才给非零角度和高置信度；方向自由或模糊时填 0。\n`+
+    `已知元数据（只作辅助，不优先于图像）：${JSON.stringify(metadata)}`;
+}
 export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fetch,commit}={}){
   const gateway=cloudBaseGateway(envId);
   const modelKey=env.SHIYE_CLASSIFICATION_API_KEY;
@@ -65,21 +80,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
       image(token,userID,original.candidateFrameBlobId)]);
     const imagesReady=performance.now();
     if(!cutout)throw new ServiceError(409,'CLASSIFICATION_IMAGE_PENDING','素材图片尚未同步，请稍后重试');
-    const prompt=`分析手帐素材。第一张是透明抠图，第二张是导入时的候选原图（若有）。物件类型按实际使用形态判定，画面中的布纹不等于布片；看不出背胶或基材时降低置信度。不要把原始来源、透明度或尺寸当标签。只返回 JSON。\n`+
-      `类型：${choices(materialKinds)}。具体类型：${choices(materialKindDetails)}。主要和次要作用：${choices(materialRoles)}。`+
-      `内容类别：${choices(contentCategories)}。版面适配：${choices(layoutFitGroups)}。`+
-      `开放标签分组：${choices(tagGroups)}。每个类别输出 {"id":"字典ID","confidence":0到1}；多选类别输出数组。`+
-      `标签各组输出 [{"value":"确实可见的标签","confidence":0到1}]。`+
-      `完整 JSON 结构示例：{"title":"花朵贴纸","titleConfidence":0.9,"kind":{"id":"sticker","confidence":0.8},`+
-      `"kindDetail":null,"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],`+
-      `"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],`+
-      `"colorTags":[],"materialTags":[],"moodTags":[],"tags":[],`+
-      `"orientation":{"deltaDegrees":0,"confidence":1}}。`+
-      `还需 title 和 titleConfidence。任何信息无法判断时用空数组或低置信度。`+
-      `第一张图已经按当前自动摆正角度显示；只看这张图判断方向，无需知道或推算原角度。orientation.deltaDegrees 表示相对第一张图还需顺时针旋转的角度，只能为 0、90、-90、180；confidence 为 0 到 1。让可辨文字、人物或明确主体正立；纯纹理、对称图案或方向不确定时填 0。`+
-      `已知元数据：${JSON.stringify({widthMM:original.physicalWidthMM,heightMM:original.physicalHeightMM,
-        source:original.sourceIdentifier,cutout:!!original.finalMaskBlobId,
-        userConfirmedType:original.categoryEvidence?.kind?.source==='user'?original.kind:null})}`;
+    const prompt=materialClassificationPrompt(original);
     const contents=[{type:'text',text:prompt},{type:'image_url',image_url:{url:cutout,detail:'low'}}];
     if(context)contents.push({type:'image_url',image_url:{url:context,detail:'low'}});
     const response=await fetcher('https://api.deepseek.com/chat/completions',{method:'POST',redirect:'error',
