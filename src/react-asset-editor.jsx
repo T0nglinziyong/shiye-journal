@@ -17,6 +17,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const [form,setForm]=useState({title:asset.title,kind:asset.kind,kindDetail:asset.kindDetail||'',
     role:asset.role,secondaryRoles:asset.secondaryRoles||[],contentCategories:asset.contentCategories||[],
     layoutFits:asset.layoutFits||[],width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
+    rotation:asset.processingRecord?.displayRotationDegrees??0,
     contentTags:(asset.contentTags||[]).join('、'),themeTags:(asset.themeTags||[]).join('、'),
     styleTags:(asset.styleTags||[]).join('、'),colorTags:(asset.colorTags||[]).join('、'),
     materialTags:(asset.materialTags||[]).join('、'),moodTags:(asset.moodTags||[]).join('、'),
@@ -71,6 +72,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
     tapeFlatCrop:previewCrop&&Object.values(previewCrop).every(Number.isFinite)&&
       previewCrop.right-previewCrop.left>=.02&&previewCrop.bottom-previewCrop.top>=.02?
       previewCrop:null};
+  const previewRotation=Number(form.rotation)-(Number(asset.processingRecord?.displayRotationDegrees)||0);
   const field=(label,key,type='text')=><label key={key}>{label}<input id={`asset-${key}`} type={type}
     value={form[key]} onChange={event=>set(key,event.target.value)}/></label>;
   const select=(label,key,choices)=><label key={key}>{label}<select id={`asset-${key}`}
@@ -126,7 +128,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
         <button type="button" className="btn primary" id="save-asset" disabled={busy}
           onClick={()=>void submit()}>应用</button>
       </div>
-      <div className="material-editor"><div className="material-editor-preview" ref={previewRef}>
+      <div className="material-editor"><div className="material-editor-preview" ref={previewRef}
+        style={{'--asset-edit-rotation':`${Number.isFinite(previewRotation)?previewRotation:0}deg`}}>
         {src&&!(form.kind==='tape'&&tab===1)?<TapeAssetImage asset={previewAsset} src={src} alt={asset.title} priority
           onFlatCrop={crop=>{if(form.flatCropMode==='auto')setAutoCrop(old=>
             JSON.stringify(old)===JSON.stringify(crop)?old:crop);}}/>:!src?<span>无预览</span>:null}
@@ -166,6 +169,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
         <div className="stack material-info-panel" hidden={tab!==1}>
           <div className="form-grid">{field('实物宽 mm','width','number')}
             {field('实物高 mm','height','number')}</div>
+          {field('显示角度 °','rotation','number')}
           <section id="tape-pattern" hidden={form.kind!=='tape'}><h3>胶带图案</h3>
             {select('胶带长度方向','tapeAxis',[['x','图片横向'],['y','图片纵向']])}
             {select('端边修平','flatCropMode',[['auto','根据原图自动修平'],['manual','手动调整原图取样区域']])}

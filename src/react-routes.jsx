@@ -1001,6 +1001,8 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   const [shelfTab,setShelfTab]=useState('recommend');
   const [shelfQuery,setShelfQuery]=useState('');
   const [shelfLimit,setShelfLimit]=useState(80);
+  const [shelfSeries,setShelfSeries]=useState('all');
+  const [shelfKind,setShelfKind]=useState('all');
   const [activeMaterial,setActiveMaterial]=useState(null);
   const stageRef=useRef(null),dragRef=useRef(null);
   useEffect(()=>{
@@ -1015,8 +1017,10 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   const stageItems=matchingStageItems(selected,state.matchPlacements,state.matchRatio);
   const activeAsset=selected.find(asset=>asset.id===activeMaterial);
   const query=shelfQuery.trim().toLocaleLowerCase();
+  const shelfKinds=[...new Set(state.assets.filter(asset=>!asset.isProjectInternal).map(asset=>asset.kind).filter(Boolean))].sort((a,b)=>kindName(a).localeCompare(kindName(b),'zh-CN'));
   const shelfRows=(shelfTab==='recommend'?filtered:shelfTab==='used'?selected.map(asset=>({asset,reasons:[]})):
     state.assets.filter(asset=>!asset.isProjectInternal).map(asset=>({asset,reasons:[]})))
+    .filter(({asset})=>shelfTab!=='all'||(shelfSeries==='all'||(shelfSeries==='none'?!asset.seriesID:asset.seriesID===shelfSeries))&&(shelfKind==='all'||asset.kind===shelfKind))
     .filter(({asset})=>!query||[asset.title,asset.kind,asset.kindDetail,...(asset.tags||[]),...(asset.contentTags||[]),...(asset.themeTags||[])].join(' ').toLocaleLowerCase().includes(query));
   const pointerDown=(event,item)=>{
     if(event.button!==0&&event.pointerType==='mouse')return;
@@ -1090,14 +1094,18 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <section className="panel match-recommendations"><div className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></div>
         <div className="match-shelf-tabs" role="tablist" aria-label="素材来源">{[['recommend','智能搭配'],['all','全部素材'],['used','已使用素材']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={shelfTab===id} onClick={()=>{setShelfTab(id);setShelfLimit(80);}}>{label}</button>)}</div>
         <input className="match-shelf-search" type="search" value={shelfQuery} onChange={event=>{setShelfQuery(event.target.value);setShelfLimit(80);}} placeholder="搜索名称、标签或类型" aria-label="搜索素材"/>
+        {shelfTab==='all'?<div className="match-shelf-filters"><select aria-label="筛选系列" value={shelfSeries} onChange={event=>{setShelfSeries(event.target.value);setShelfLimit(80);}}><option value="all">全部系列</option><option value="none">系列外</option>{state.series.map(series=><option key={series.id} value={series.id}>{series.title}</option>)}</select>
+          <select aria-label="筛选类型" value={shelfKind} onChange={event=>{setShelfKind(event.target.value);setShelfLimit(80);}}><option value="all">全部类型</option>{shelfKinds.map(kind=><option key={kind} value={kind}>{kindName(kind)}</option>)}</select></div>:null}
         {shelfTab==='recommend'?<div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={normalizeRecommendationDirection(state.recommendFilter)===filter?'active':''} title={recommendationDescriptions[filter]} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>:null}
         <div className="match-rec-grid" data-match-scroll="recommendations">{shelfRows.length?shelfRows.slice(0,shelfLimit).map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
           const isUsed=state.basket.includes(asset.id);
-          return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
+          return <div key={asset.id} className={`match-rec ${shelfTab==='used'?'selectable':''} ${shelfTab==='used'&&activeMaterial===asset.id?'active':''}`} data-match-asset={asset.id}>
+            {shelfTab==='used'?<button className="match-rec-select" type="button" aria-label={`在画布选中${asset.title}`} onClick={()=>setActiveMaterial(asset.id)}/>:null}
+            <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
             {materialSizeLabel(asset)?<small className="match-material-size">{materialSizeLabel(asset)}</small>:null}
             {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}{shelfTab==='recommend'?<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>:null}
-            <div className="match-rec-actions"><button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>{isUsed?'移出本页':'加入本页'}</button>{shelfTab==='recommend'?<button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button>:null}</div></div></div>;
+            <div className="match-rec-actions"><button data-act="basket" data-id={asset.id} data-react-action="true" onClick={()=>{if(isUsed&&activeMaterial===asset.id)setActiveMaterial(null);onAction('basket',asset.id);}}>{isUsed?'移出本页':'加入本页'}</button>{shelfTab==='recommend'?<button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button>:null}{shelfTab==='used'?<button data-act="match-core" data-id={asset.id} data-react-action="true" aria-pressed={state.coreIDs.includes(asset.id)} onClick={action('match-core',asset.id)}>{state.coreIDs.includes(asset.id)?'★ 已标星':'☆ 标星'}</button>:null}</div></div></div>;
         }):<p className="match-shelf-empty">{query?'没有匹配的素材':shelfTab==='used'?'本页尚未选择素材':'这一方向暂时没有候选'}</p>}</div>
         {shelfRows.length>shelfLimit?<button className="btn match-shelf-more" type="button" onClick={()=>setShelfLimit(value=>value+80)}>继续显示</button>:null}
       </section></div>

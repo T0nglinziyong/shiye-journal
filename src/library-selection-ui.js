@@ -56,7 +56,9 @@ export async function runAssetBatchAction(c,selection,action,value){
       await db.flushProjects();
       await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
         if(state.accountId!==accountID||!isCurrent())return;
-        const result=await classifyCloudAsset(record.id,{db,reclassify:true,skipFlush:true,skipRefresh:true});
+        const result=await classifyCloudAsset(record.id,{db,reclassify:true,skipFlush:true,skipRefresh:true,
+          onOrientation:c.applyAIOrientation?(asset,suggestion)=>c.applyAIOrientation(asset,suggestion,
+            ()=>state.accountId===accountID&&isCurrent()):undefined});
         if(state.accountId===accountID&&isCurrent()){
           const current=state.assets.find(asset=>asset.id===record.id);
           if(current)Object.assign(current,result);

@@ -58,8 +58,8 @@ export async function renderHighResolutionCutout(candidateRGB,editorMask,process
    const angle=Number(processing.displayRotationDegrees)||0;
    if(Math.abs(angle)>1e-8){
      const rad=angle*Math.PI/180,rotated=document.createElement('canvas');
-     rotated.width=Math.ceil(Math.abs(width*Math.cos(rad))+Math.abs(height*Math.sin(rad)));
-     rotated.height=Math.ceil(Math.abs(height*Math.cos(rad))+Math.abs(width*Math.sin(rad)));
+     rotated.width=Math.max(1,Math.ceil(Math.abs(width*Math.cos(rad))+Math.abs(height*Math.sin(rad))-1e-7));
+     rotated.height=Math.max(1,Math.ceil(Math.abs(height*Math.cos(rad))+Math.abs(width*Math.sin(rad))-1e-7));
      if(rotated.width*rotated.height>MAX_PIXELS)throw Error('高清旋转超出安全像素预算');
      const rc=rotated.getContext('2d');
      rc.translate(rotated.width/2,rotated.height/2);

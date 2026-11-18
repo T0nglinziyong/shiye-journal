@@ -2,6 +2,7 @@ import {parseTags,usedAssetIDs,withUsageStatus} from './library-model.js';
 import {isMaterialKind,isMaterialRole} from './material-taxonomy.js';
 import {userMaterialClassification} from './material-classification.js';
 import {normalizeTapeFlatCrop} from './tape-flat-crop.js';
+import {wrapDisplayRotation} from './material-display-rotation.js';
 
 export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
@@ -18,6 +19,14 @@ export function assetEditorValue(old,values) {
     titleEvidence:old.title!==values.title.trim()?{source:'user',confidence:1}:old.titleEvidence,
     physicalWidthMM:width,physicalHeightMM:height,
     seriesID:values.seriesID||null,reviewStatus:values.reviewStatus,updatedAt:new Date().toISOString()};
+  const previousAngle=Number(old.processingRecord?.displayRotationDegrees)||0;
+  const angle=values.rotation===undefined?previousAngle:values.rotation===''?NaN:Number(values.rotation);
+  if(!Number.isFinite(angle)||Math.abs(angle)>180)throw Error('显示角度须在 -180° 到 180° 之间');
+  const normalizedAngle=wrapDisplayRotation(angle);
+  if(normalizedAngle!==wrapDisplayRotation(previousAngle))next.processingRecord={...old.processingRecord,
+    sourceWidthMM:old.processingRecord?.sourceWidthMM||old.physicalWidthMM||null,
+    sourceHeightMM:old.processingRecord?.sourceHeightMM||old.physicalHeightMM||null,
+    displayRotationDegrees:normalizedAngle,autoStraighten:false,displayRotationSource:'user'};
   delete next.supply;
   if(values.usageStatus!=='used'&&values.usageStatus!=='unused')throw Error('使用状态无效');
   Object.assign(next,withUsageStatus(next,values.usageStatus==='used',next.updatedAt));

@@ -73,8 +73,10 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
       `完整 JSON 结构示例：{"title":"花朵贴纸","titleConfidence":0.9,"kind":{"id":"sticker","confidence":0.8},`+
       `"kindDetail":null,"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],`+
       `"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],`+
-      `"colorTags":[],"materialTags":[],"moodTags":[],"tags":[]}。`+
+      `"colorTags":[],"materialTags":[],"moodTags":[],"tags":[],`+
+      `"orientation":{"deltaDegrees":0,"confidence":1}}。`+
       `还需 title 和 titleConfidence。任何信息无法判断时用空数组或低置信度。`+
+      `第一张图已经按当前自动摆正角度显示；只看这张图判断方向，无需知道或推算原角度。orientation.deltaDegrees 表示相对第一张图还需顺时针旋转的角度，只能为 0、90、-90、180；confidence 为 0 到 1。让可辨文字、人物或明确主体正立；纯纹理、对称图案或方向不确定时填 0。`+
       `已知元数据：${JSON.stringify({widthMM:original.physicalWidthMM,heightMM:original.physicalHeightMM,
         source:original.sourceIdentifier,cutout:!!original.finalMaskBlobId,
         userConfirmedType:original.categoryEvidence?.kind?.source==='user'?original.kind:null})}`;
@@ -92,6 +94,10 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     if(!result?.kind||!result?.role||typeof result.kind.confidence!=='number'||
       typeof result.role.confidence!=='number')
       throw new ServiceError(502,'CLASSIFICATION_MODEL_INVALID','云端模型分类字段不完整');
+    const orientation=result.orientation;
+    const acceptedOrientation=orientation&&[-90,0,90,180].includes(orientation.deltaDegrees)&&
+      Number.isFinite(orientation.confidence)&&orientation.confidence>=.85&&orientation.confidence<=1
+      ?{deltaDegrees:orientation.deltaDegrees,confidence:orientation.confidence}:null;
     const modelReady=performance.now();
     result.modelVersion=version;
     for(let attempt=0;attempt<2;attempt++){
@@ -107,7 +113,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
           expected_epoch:head.account_epoch,operation_id:randomUUID(),sync_protocol_version:3});
         console.info(JSON.stringify({type:'shiye_classification_timing',sourceMs:Math.round(imagesReady-started),
           modelMs:Math.round(modelReady-imagesReady),commitMs:Math.round(performance.now()-modelReady)}));
-        return {asset:updated,revision:receipt.revision};
+        return {asset:updated,revision:receipt.revision,orientation:acceptedOrientation};
       }catch(error){if(error.code!=='STALE_INPUT'||attempt===1)throw error;}
     }
   };
