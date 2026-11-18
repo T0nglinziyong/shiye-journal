@@ -16,6 +16,11 @@ class OrientationPolicyTest(unittest.TestCase):
     def test_uncertain_falls_back_to_geometry(self):
         self.assertIsNone(choose_orientation(1, 180, .4, 11, .3, True))
 
+    def test_half_turn_requires_stronger_evidence(self):
+        self.assertIsNone(choose_orientation(0, 0, 0, 181.6, .89, False))
+        self.assertEqual(choose_orientation(0, 0, 0, 181.6, .94, False)["source"],
+                         "rightwayup")
+
 
 if __name__ == "__main__":
     unittest.main()
