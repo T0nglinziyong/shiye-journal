@@ -127,7 +127,7 @@ import {cloudAISettingsRecord,cloudAISettingsFromMeta} from './cloud-ai-settings
 import {cloudMatchingSettingsRecord,cloudMatchingSettingsFromMeta,applyMatchingDefaults} from './cloud-matching-settings.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
 import {applyMatchingStage} from './matching-stage.js';
-import {detectPaperCandidates,reprocessPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
+import {detectPaperCandidates,reprocessPaperCandidates,cropBitmap,alignMaterialPreview,initialMaterialRotation} from './image.js';
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
 import {estimatePageLighting} from './material-color-restoration.js';
 import {extractEditableCandidateRGB} from './import-candidate-color.js';
@@ -2793,7 +2793,8 @@ async function openCutoutCheck(id,candidate=null){
     onPostprocess:request=>refineCandidateFrame(candidateFrame,request,{postprocessOnly:true}),
     onApply:async(blob,record,originalRecognition,maskBlob)=>{
     const rad=record.displayRotationDegrees*Math.PI/180,width=baseWidth&&baseHeight?Math.abs(baseWidth*Math.cos(rad))+Math.abs(baseHeight*Math.sin(rad)):null,height=baseWidth&&baseHeight?Math.abs(baseHeight*Math.cos(rad))+Math.abs(baseWidth*Math.sin(rad)):null;
-    const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight};
+    const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight,
+      segmentationMethod:candidate?.region?.segmentationMethod||processing.segmentationMethod||null};
     // Only on deliberate Apply fetch the original high-resolution candidate.
     // Opening the editor never downloads a large RGB PNG and never uploads
     // a high-resolution mask. The 900/1200/1600px alpha is mapped back here.
@@ -2963,13 +2964,14 @@ async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,c
   // originalBlob is the editable full-colour source, not the raw camera RGB.
   const aligned=mode==='work'
     ?{blob:cutout,originalBlob:fullColor,candidateFrameBlob:fullColor,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}
-    :await alignMaterialPreview(cutout,fullColor,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
+    :await alignMaterialPreview(cutout,fullColor,initialMaterialRotation(region));
   const width=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.width:region.w))*widthMM*10)/10:null,
     height=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.height:region.h))*heightMM*10)/10:null;
   return {blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,
     url:URL.createObjectURL(aligned.blob),title:importDefaultTitle(sourceName,'material',{sourceIndex,candidateIndex:index}),width,height,alignment:aligned.degrees,
     widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,
     processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,
+      segmentationMethod:region.segmentationMethod||null,
       recognitionPixels:[900,1200,1600].includes(Number(state.preferences.recognitionPixels))
         ?Number(state.preferences.recognitionPixels):900,
       candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true};

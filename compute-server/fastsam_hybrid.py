@@ -262,7 +262,7 @@ class FastSamHybrid:
         predictor = SAM2ImagePredictor(sam_model)
         predictor.set_image(refinement_image)
         masks, _, _ = predictor.predict(box=np.asarray(boxes,dtype=np.float32),
-                                         multimask_output=False)
+                                         multimask_output=False, return_logits=True)
         for index,item in enumerate(items):
             original = item["segmentation"]
             refined = masks[index,0] > 0
@@ -279,6 +279,7 @@ class FastSamHybrid:
                     keep=False
             if keep:
                 item["segmentation"] = refined
+                item["soft_logits"] = masks[index,0]
             continuous, _, _ = largest_connected_component(item["segmentation"])
             item["segmentation"] = smooth_mask(continuous)
-        return [item["segmentation"] for item in items], backgrounds, subregions
+        return items, backgrounds, subregions

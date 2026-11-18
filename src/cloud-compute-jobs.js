@@ -1,7 +1,7 @@
 import {cloudClient,cloudStorage,requireCloudUser} from './cloud-session.js';
 import {cloudApiRequest} from './cloud-api-origin.js';
 import {boundedMap} from './bounded-map.js';
-import {decodeSamMaskBits} from './sam-mask-bits.js';
+import {decodeSamMaskAlpha,decodeSamMaskBits} from './sam-mask-bits.js';
 
 const bucket=()=>cloudStorage().from('shiye-private');
 const uuid=/^[a-f0-9-]{36}$/i;
@@ -137,7 +137,10 @@ async function loadSegmentationResult(job){
     const [x0,y0,x1,y1]=object.bbox_xyxy||[];
     if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
       throw Error('识别结果区域无效');
-    const width=x1-x0,height=y1-y0,alpha=decodeSamMaskBits(object.maskBits,width,height);
+    const width=x1-x0,height=y1-y0,
+      alpha=object.maskAlphaZlib
+        ?decodeSamMaskAlpha(object.maskAlphaZlib,width,height)
+        :decodeSamMaskBits(object.maskBits,width,height);
     return {x:x0/manifest.width,y:y0/manifest.height,w:width/manifest.width,h:height/manifest.height,
       pixels:object.area,segmentationMethod:manifest.model,segmentationFailed:false,
       segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
@@ -177,7 +180,9 @@ async function loadSegmentationResult(job){
       const width=x1-x0,height=y1-y0;
       return {x:x0/manifest.width,y:y0/manifest.height,w:width/manifest.width,h:height/manifest.height,
         pixels:object.area,segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
-        mask:{width,height,alpha:decodeSamMaskBits(object.maskBits,width,height),topologyPreserved:true}};
+        mask:{width,height,alpha:object.maskAlphaZlib
+          ?decodeSamMaskAlpha(object.maskAlphaZlib,width,height)
+          :decodeSamMaskBits(object.maskBits,width,height),topologyPreserved:true}};
     });
   }
   return regions;

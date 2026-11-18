@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {rectifiedPixelSize} from '../src/perspective.js';
 import {fittedSize,resampleMask,scaleFramePlacement} from '../src/cutout-edit-resolution.js';
-import {fullResolutionPlacement} from '../src/cutout-full-resolution.js';
+import {fullResolutionPlacement,renderHighResolutionCutout} from '../src/cutout-full-resolution.js';
+import {encodeAlphaMask} from '../src/alpha-mask-blob.js';
 import {imageTier} from '../src/image-variants.js';
-import {candidateCropBounds,cropBitmap,outputMaskBlurPx,sharpenExportAlpha,
+import {candidateCropBounds,cropBitmap,outputMaskBlurPx,sharpenExportAlpha,initialMaterialRotation,
  polishProjectedMask,enclosedMaskHoles} from '../src/image.js';
 import {createCanvas,loadImage} from 'canvas';
 
@@ -61,6 +62,14 @@ test('SAM candidate crop uses matching high-resolution endpoints',()=>{
  assert.equal(bounds.w,497);
 });
 
+test('model cutouts keep the corrected page direction instead of following mask teeth',()=>{
+ assert.equal(initialMaterialRotation({segmentationMethod:'fastsam-sam2-small'}),0);
+ assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small'}),0);
+ assert.equal(initialMaterialRotation({segmentationMethod:'physical'}),null);
+ assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small',
+   orientedBox:{autoDeskew:true,rotation:17}}),-17);
+});
+
 test('export automatically antialiases model masks without changing stored mask',()=>{
  const mask={width:250,height:100,alpha:new Uint8Array(25000)};
  const region={segmentationMethod:'sam2-small',mask};
@@ -111,4 +120,35 @@ test('export edge polish rounds a model stair while retaining an enclosed transp
  assert.ok(data.some((value,index)=>index%4===3&&value>0&&value<255));
  assert.equal(mask.alpha[3*8+3],0);
  assert.ok(before.some((value,index)=>index%4===3&&value===255));
+});
+
+test('edited model mask uses the same antialiased high-resolution projection',async()=>{
+ const previous={document:globalThis.document,createImageBitmap:globalThis.createImageBitmap};
+ globalThis.document={createElement:()=>{
+   const canvas=createCanvas(1,1);
+   canvas.toBlob=callback=>callback(new Blob([canvas.toBuffer('image/png')],{type:'image/png'}));
+   return canvas;
+ }};
+ globalThis.createImageBitmap=async blob=>loadImage(Buffer.from(await blob.arrayBuffer()));
+ try{
+   const source=createCanvas(64,64),ctx=source.getContext('2d');
+   ctx.fillStyle='#2277bb';ctx.fillRect(0,0,64,64);
+   const alpha=new Uint8Array(16*16);
+   for(let y=2;y<14;y++)for(let x=2;x<12+Math.floor(y/4);x++)alpha[y*16+x]=255;
+   for(let y=7;y<=9;y++)for(let x=7;x<=9;x++)alpha[y*16+x]=0;
+   const result=await renderHighResolutionCutout(
+     new Blob([source.toBuffer('image/png')],{type:'image/png'}),
+     encodeAlphaMask(alpha,16,16),{segmentationMethod:'sam2-small'});
+   const decoded=await loadImage(Buffer.from(await result.arrayBuffer()));
+   const output=createCanvas(64,64),target=output.getContext('2d');
+   target.drawImage(decoded,0,0);
+   const bytes=target.getImageData(0,0,64,64).data;
+   assert.ok(bytes.some((value,index)=>index%4===3&&value>0&&value<255));
+   assert.equal(bytes[(34*64+34)*4+3],0);
+   assert.equal(bytes[(20*64+20)*4+3],255);
+ }finally{
+   for(const [key,value] of Object.entries(previous)){
+     if(value===undefined)delete globalThis[key];else globalThis[key]=value;
+   }
+ }
 });

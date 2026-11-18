@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {createCanvas,loadImage} from 'canvas';
+import {zlibSync} from 'fflate';
+import {decodeSamMaskAlpha} from '../src/sam-mask-bits.js';
 
 const userID='2111845279800434690';
 const sourceID='11111111-1111-4111-8111-111111111111';
@@ -127,4 +129,11 @@ test('packed SAM result restores transparent holes without per-object downloads'
       if(value===undefined)delete globalThis[key];else globalThis[key]=value;
     }
   }
+});
+
+test('packed SAM soft alpha retains subpixel edges and enclosed holes',()=>{
+ const input=Uint8Array.from([0,65,194,255,255,0,255,255]);
+ const encoded=Buffer.from(zlibSync(input)).toString('base64');
+ assert.deepEqual([...decodeSamMaskAlpha(encoded,4,2)],[...input]);
+ assert.throws(()=>decodeSamMaskAlpha(encoded,5,2),/长度/);
 });

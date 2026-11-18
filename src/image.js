@@ -198,6 +198,11 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
   }
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('素材裁图失败')),'image/png'));
 }
+export function initialMaterialRotation(region){
+  if(region?.orientedBox?.autoDeskew)return -region.orientedBox.rotation;
+  if(/^(sam2-|fastsam|yoloe)/.test(region?.segmentationMethod||''))return 0;
+  return null;
+}
 export async function alignMaterialPreview(blob,originalBlob=blob,rotation=null){
   const bitmap=await createImageBitmap(blob),original=await createImageBitmap(originalBlob);
   try{const probe=document.createElement('canvas');const analysisScale=Math.min(1,800/Math.max(bitmap.width,bitmap.height));probe.width=Math.max(1,Math.round(bitmap.width*analysisScale));probe.height=Math.max(1,Math.round(bitmap.height*analysisScale));const pc=probe.getContext('2d',{willReadFrequently:true});pc.drawImage(bitmap,0,0,probe.width,probe.height);const pixels=pc.getImageData(0,0,probe.width,probe.height),alpha=new Uint8Array(probe.width*probe.height);for(let i=0;i<alpha.length;i++)alpha[i]=pixels.data[i*4+3];const degrees=rotation??(await visionTask('alignment',{alpha,width:probe.width,height:probe.height})).degrees,rad=degrees*Math.PI/180;

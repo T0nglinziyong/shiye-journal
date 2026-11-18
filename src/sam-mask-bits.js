@@ -1,3 +1,18 @@
+import {unzlibSync} from 'fflate';
+
+export function decodeSamMaskAlpha(encoded,width,height){
+  const count=width*height;
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||
+    count>20_000_000||typeof encoded!=='string'||encoded.length>Math.ceil(count*4/3)+128||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))throw Error('SAM 透明边缘数据无效');
+  const binary=atob(encoded),compressed=Uint8Array.from(binary,char=>char.charCodeAt(0));
+  let alpha;
+  try{alpha=unzlibSync(compressed);}
+  catch{throw Error('SAM 透明边缘解压失败');}
+  if(alpha.length!==count)throw Error('SAM 透明边缘长度无效');
+  return alpha;
+}
+
 export function decodeSamMaskBits(encoded,width,height){
   const count=width*height,bytes=Math.ceil(count/8);
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||count>20_000_000||
