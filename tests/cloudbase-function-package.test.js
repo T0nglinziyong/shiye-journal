@@ -12,6 +12,8 @@ test('built CloudBase bundle keeps shared classification modules loadable as ESM
   const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
   const {directory}=await buildCloudBaseFunctions({root,output:join(temporary,'build')});
   const pkg=JSON.parse(await readFile(join(directory,'functions/shiye-api/package.json'),'utf8'));
+  const config=JSON.parse(await readFile(join(directory,'cloudbaserc.json'),'utf8'));
+  assert.equal(config.functions[0].installDependency,false);
   assert.equal(pkg.dependencies['@img/sharp-linux-x64'],pkg.dependencies.sharp);
   assert.ok(pkg.dependencies['@img/sharp-libvips-linux-x64']);
   const module=await import(pathToFileURL(join(directory,'functions/shiye-api/src/material-classification.js')));
