@@ -57,6 +57,7 @@ import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName,materialKindDetails,tagGroups} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {materialSizeLabel} from './material-size-label.js';
+import {matchingStageItems,matchingPageSize,matchingItemOnPage} from './matching-stage.js';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 import {importDefaultTitle} from './import-default-names.js';
 
@@ -997,53 +998,114 @@ function MatchingSessionPanel({session,state,source,onAction}){
 }
 export function MatchingPage({state,source,kindName,session,onAction,onMatchingChange}){
   const [,refresh]=useState(0);
+  const [shelfTab,setShelfTab]=useState('recommend');
+  const [shelfQuery,setShelfQuery]=useState('');
+  const [shelfLimit,setShelfLimit]=useState(80);
+  const [activeMaterial,setActiveMaterial]=useState(null);
+  const stageRef=useRef(null),dragRef=useRef(null);
   useEffect(()=>{
     const update=()=>refresh(version=>version+1);
     window.addEventListener('shiye-matching-refresh',update);
     return ()=>window.removeEventListener('shiye-matching-refresh',update);
   },[]);
+  useEffect(()=>{
+    if(state.matchInitialAssetIDs!==null)return;
+    onMatchingChange('matchInitialAssetIDs',[...state.basket]);
+    refresh(version=>version+1);
+  },[state.accountId]);
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
   const {selected,excluded,scope,filtered,styles,chosenPurposes,guidance}=matchingViewModel(state);
+  const pageSize=matchingPageSize(state.matchRatio,state.matchMode);
+  const stageItems=matchingStageItems(selected,state.matchPlacements,state.matchRatio,state.matchMode,state.matchInitialAssetIDs);
+  const outsideDepth=Math.max(.45,...stageItems.filter(item=>!item.onPage).map(item=>item.y+item.height/2-1+.1));
+  const activeAsset=selected.find(asset=>asset.id===activeMaterial);
+  const activeItem=stageItems.find(item=>item.asset.id===activeMaterial);
+  const query=shelfQuery.trim().toLocaleLowerCase();
+  const shelfRows=(shelfTab==='recommend'?filtered:shelfTab==='used'?selected.map(asset=>({asset,reasons:[]})):
+    state.assets.filter(asset=>!asset.isProjectInternal).map(asset=>({asset,reasons:[]})))
+    .filter(({asset})=>!query||[asset.title,asset.kind,asset.kindDetail,...(asset.tags||[]),...(asset.contentTags||[]),...(asset.themeTags||[])].join(' ').toLocaleLowerCase().includes(query));
+  const pointerDown=(event,item)=>{
+    if(event.button!==0&&event.pointerType==='mouse')return;
+    setActiveMaterial(item.asset.id);
+    const rect=stageRef.current?.getBoundingClientRect();
+    if(!rect)return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current={id:item.asset.id,element:event.currentTarget,startX:event.clientX,startY:event.clientY,
+      x:item.x,y:item.y,width:item.width,height:item.height,rect};
+  };
+  const pointerMove=event=>{
+    const drag=dragRef.current;
+    if(!drag||drag.element!==event.currentTarget)return;
+    const x=Math.max(-.25,Math.min(1.25,drag.x+(event.clientX-drag.startX)/drag.rect.width));
+    const y=Math.max(-.15,Math.min(Math.max(1.6,outsideDepth+.95),drag.y+(event.clientY-drag.startY)/drag.rect.height));
+    drag.element.style.left=`${x*100}%`;drag.element.style.top=`${y*100}%`;
+  };
+  const pointerUp=event=>{
+    const drag=dragRef.current;
+    if(!drag||drag.element!==event.currentTarget)return;
+    dragRef.current=null;
+    const x=Math.max(-.25,Math.min(1.25,drag.x+(event.clientX-drag.startX)/drag.rect.width));
+    const y=Math.max(-.15,Math.min(Math.max(1.6,outsideDepth+.95),drag.y+(event.clientY-drag.startY)/drag.rect.height));
+    if(x!==drag.x||y!==drag.y){
+      change('matchPlacements',{
+        ...Object.fromEntries(stageItems.map(item=>[item.asset.id,{x:item.x,y:item.y}])),
+        [drag.id]:{x,y}});
+      if(!matchingItemOnPage(x,y,drag.width,drag.height)&&state.coreIDs.includes(drag.id))void onAction('match-core',drag.id);
+    }
+  };
   return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
-    <section className="panel match-direction"><h2>先定这一页的方向</h2><p>从素材出发，写一点自己的想法。保持默认也可以开始。</p>
+    <details className="panel match-direction"><summary><span><strong>确定方向</strong><small>{[styles.filter(name=>name!=='随材而定'&&name!=='自动安排').join(' · '),chosenPurposes.filter(name=>name!=='自由创作').join(' · ')].filter(Boolean).join(' · ')||'随素材自由创作'}</small></span><span className="match-direction-toggle">展开设置</span></summary>
+      <div className="match-direction-body">
       <div className="match-creative-controls">
         <DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/>
         <label>文字内容<select id="match-content-policy" value={Object.hasOwn(matchingContentOptions,state.matchContentPolicy)?state.matchContentPolicy:'original'} onChange={event=>change('matchContentPolicy',event.target.value)}>
           {Object.entries(matchingContentOptions).map(([value,label])=><option key={value} value={value}>{label}</option>)}
         </select></label>
         <DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose" onChange={change}/>
-        <label>页面模式<select id="match-mode" defaultValue={state.matchMode}
-        onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
-        <label>纸张规格<select id="match-ratio" value={state.matchRatio}
-          onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></label>
       </div>
       <select id="match-style" multiple hidden value={styles} onChange={()=>{}}>{visualStyles.map(([name])=><option key={name} value={name}>{name}</option>)}</select>
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
-      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:'没有选素材也可以创作：用文字、手绘和图形完成这一页；胶带、贴纸和印章可按需从素材库加入。'}</p>
-
+      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:'没有选素材也可以创作：用文字、手绘和图形完成这一页。'}</p>
+      </div>
+    </details>
+    <div className="matching-layout"><section className="panel match-stage-section"><div className="match-panel-head"><h2>本页画布</h2><small>纸面 {stageItems.filter(item=>item.onPage).length} · 备选 {stageItems.filter(item=>!item.onPage).length}</small></div>
+      <div className="match-stage-settings"><label>页面模式<select id="match-mode" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
+        <label>纸张规格<select id="match-ratio" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></label></div>
+      <div className="match-stage-board"><div className="match-stage-paper" ref={stageRef} style={{aspectRatio:`${pageSize.width}/${pageSize.height}`}}>
+        {state.matchMode==='spread'?<span className="match-stage-gutter" aria-hidden="true"/>:null}
+        {stageItems.map(item=><div key={item.asset.id} className={`match-stage-item ${item.onPage?'on-page':''} ${activeMaterial===item.asset.id?'active':''}`}
+          data-match-asset={item.asset.id} role="button" tabIndex={0} aria-label={`选择并拖动${item.asset.title}`}
+          style={{left:`${item.x*100}%`,top:`${item.y*100}%`,width:`${item.width*100}%`,height:`${item.height*100}%`}}
+          onPointerDown={event=>pointerDown(event,item)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
+          onClick={()=>setActiveMaterial(item.asset.id)}
+          onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setActiveMaterial(item.asset.id);}}}>
+          <RouteImage asset={item.asset} source={source}/>{item.onPage&&state.coreIDs.includes(item.asset.id)?<span className="match-stage-star" aria-label="必用素材">★</span>:null}
+        </div>)}
+        {!selected.length?<p className="match-stage-empty">从素材架加入素材，在页面上预览尺寸和位置</p>:null}
+      </div><div className="match-stage-standby" style={{aspectRatio:`${pageSize.width}/${pageSize.height*outsideDepth}`}}><span>纸外备选 · 拖入纸面即可使用</span></div></div>
+      {activeAsset?<div className="match-stage-selection"><span><strong>{activeAsset.title}</strong><small>{materialSizeLabel(activeAsset)||'尺寸待确认'} · {activeItem?.onPage?'纸面素材':'纸外备选'}</small></span>
+        <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={activeAsset.id} data-react-action="true" onClick={action('match-core',activeAsset.id)} aria-pressed={activeItem?.onPage&&state.coreIDs.includes(activeAsset.id)} disabled={!activeItem?.onPage}>{activeItem?.onPage?state.coreIDs.includes(activeAsset.id)?'★ 已标星':'☆ 标星':'拖入纸面后标星'}</button>
+          <button type="button" data-act="basket" data-id={activeAsset.id} data-react-action="true" onClick={()=>{setActiveMaterial(null);onAction('basket',activeAsset.id);}}>移出本页</button></div></div>:<p className="match-stage-hint">点选素材可标星或移除，拖动素材可调整位置。</p>}
+      <p className="muted match-stage-count">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'}</p>
     </section>
-    <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
-      {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>
-        <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong>{asset.kind||asset.role?<small className="match-type">{[asset.kind?kindName(asset.kind):null,asset.role?materialRoleName(asset.role):null].filter(Boolean).join(' · ')}</small>:null}
-          {materialSizeLabel(asset)?<small className="match-material-size">{materialSizeLabel(asset)}</small>:null}
-          <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
-            <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
-        </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
-      </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
-      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　推荐搭配</h3><small>{filtered.length} 件候选 · 已排除 {excluded.size} 件</small></div>
-        <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={normalizeRecommendationDirection(state.recommendFilter)===filter?'active':''} title={recommendationDescriptions[filter]} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
-        <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
+      <section className="panel match-recommendations"><div className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></div>
+        <div className="match-shelf-tabs" role="tablist" aria-label="素材来源">{[['recommend','智能搭配'],['all','全部素材'],['used','已使用素材']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={shelfTab===id} onClick={()=>{setShelfTab(id);setShelfLimit(80);}}>{label}</button>)}</div>
+        <input className="match-shelf-search" type="search" value={shelfQuery} onChange={event=>{setShelfQuery(event.target.value);setShelfLimit(80);}} placeholder="搜索名称、标签或类型" aria-label="搜索素材"/>
+        {shelfTab==='recommend'?<div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={normalizeRecommendationDirection(state.recommendFilter)===filter?'active':''} title={recommendationDescriptions[filter]} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>:null}
+        <div className="match-rec-grid" data-match-scroll="recommendations">{shelfRows.length?shelfRows.slice(0,shelfLimit).map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
+          const isUsed=state.basket.includes(asset.id);
           return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
             {materialSizeLabel(asset)?<small className="match-material-size">{materialSizeLabel(asset)}</small>:null}
-            {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>
-            <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
-        }):<p>{state.recommendFilter==='主题呼应'?'写下补充想法或选择有相近主题的素材，再看主题推荐。':'这一方向暂时没有候选；可以调整页面方向或继续从素材库选取。'}</p>}</div>
+            {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}{shelfTab==='recommend'?<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>:null}
+            <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>{isUsed?'移出本页':'加入本页'}</button>{shelfTab==='recommend'?<button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button>:null}</div></div>;
+        }):<p className="match-shelf-empty">{query?'没有匹配的素材':shelfTab==='used'?'本页尚未选择素材':'这一方向暂时没有候选'}</p>}</div>
+        {shelfRows.length>shelfLimit?<button className="btn match-shelf-more" type="button" onClick={()=>setShelfLimit(value=>value+80)}>继续显示</button>:null}
       </section></div>
     <section className="panel match-action"><h2>开始创作</h2>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
@@ -1359,7 +1421,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         <button className="btn" data-act="redo" aria-label="重做">↷</button>
         <button className="btn primary" data-act="editor-done">完成</button>
         <FabricHeaderMenu kind="export" project={project} onAction={onAction}/>
-    </div></div>
+      </div></div>
     <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
       selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
     <FabricCutPanel state={state} draft={draft} onAction={onAction}/>

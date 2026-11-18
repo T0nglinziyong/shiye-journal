@@ -93,7 +93,7 @@ assert.equal(window.document.querySelector('.matching-page').dataset.reactPage,'
 assert.ok(window.document.querySelector('.match-direction').compareDocumentPosition(
   window.document.querySelector('.match-recommendations'))&window.Node.DOCUMENT_POSITION_FOLLOWING);
 assert.ok(window.document.querySelector('#match-content-policy'));
-assert.ok(window.document.querySelector('.basket').compareDocumentPosition(
+assert.ok(window.document.querySelector('.match-stage-section').compareDocumentPosition(
   window.document.querySelector('.match-recommendations'))&window.Node.DOCUMENT_POSITION_FOLLOWING);
 window.document.querySelector('.main-nav [data-route="works"]').click();
 await waitFor(()=>!!window.document.querySelector('.works-page'));
@@ -102,17 +102,24 @@ await waitFor(()=>!!window.document.querySelector('.matching-page'));
 assert.equal(window.document.querySelector('.match-preset-toggle'),null);
 assert.equal(window.document.querySelector('#match-text-presentation'),null);
 assert.equal(window.document.querySelector('#match-processing'),null);
-assert.equal(window.document.querySelectorAll('.match-creative-controls select').length,6);
+assert.equal(window.document.querySelectorAll('.match-creative-controls select').length,4);
 assert.equal(window.document.querySelector('#match-creation-mode'),null);
 assert.ok(window.document.querySelector('#match-ratio option[value="b5-half"]'));
 assert.equal(window.document.querySelector('.match-rec .match-material-size')?.textContent,'20 × 20 mm');
 window.document.querySelector('.match-rec [data-act="basket"]').click();
+await waitFor(()=>!!window.document.querySelector('.match-stage-item'));
+window.document.querySelector('.match-stage-item').click();
 await waitFor(()=>!!window.document.querySelector('.match-basket-actions [data-act="match-core"]'));
-assert.equal(window.document.querySelector('.match-basket-item .match-material-size')?.textContent,'20 × 20 mm');
+assert.equal(window.document.querySelector('.match-stage-selection small')?.textContent,'20 × 20 mm · 纸外备选');
 const matchingStar=window.document.querySelector('.match-basket-actions [data-act="match-core"]');
-assert.equal(matchingStar.disabled,false);
-matchingStar.click();
-await waitFor(()=>window.document.querySelector('.match-basket-actions [data-act="match-core"]')?.getAttribute('aria-pressed')==='true');
+assert.equal(matchingStar.disabled,true);
+assert.equal(matchingStar.getAttribute('aria-pressed'),'false');
+window.document.querySelector('.match-shelf-tabs [role="tab"]:nth-child(2)').click();
+await waitFor(()=>window.document.querySelector('.match-shelf-tabs [aria-selected="true"]')?.textContent==='全部素材');
+assert.equal(window.document.querySelector('.match-shelf-tabs [aria-selected="true"]')?.textContent,'全部素材');
+window.document.querySelector('.match-shelf-tabs [role="tab"]:nth-child(3)').click();
+await waitFor(()=>window.document.querySelector('.match-shelf-tabs [aria-selected="true"]')?.textContent==='已使用素材');
+assert.equal(window.document.querySelector('.match-shelf-tabs [aria-selected="true"]')?.textContent,'已使用素材');
 window.document.querySelector('.match-direction-choice').value='美式拼贴';
 window.document.querySelector('.match-direction-choice').dispatchEvent(new window.Event('change',{bubbles:true}));
 window.document.querySelector('.main-nav [data-route="works"]').click();
