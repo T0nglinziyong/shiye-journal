@@ -12,6 +12,7 @@ class OrientationPolicyTest(unittest.TestCase):
         self.assertEqual(choose_orientation(0, 90, .99, 23, .82, False),
                          {"source": "rightwayup", "degrees": -23.0,
                           "confidence": .82})
+        self.assertAlmostEqual(choose_orientation(0, 0, 0, 359.5, .82, False)["degrees"], .5)
 
     def test_uncertain_falls_back_to_geometry(self):
         self.assertIsNone(choose_orientation(1, 180, .4, 11, .3, True))
