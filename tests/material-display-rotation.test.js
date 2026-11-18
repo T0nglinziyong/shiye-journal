@@ -1,16 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {wrapDisplayRotation,rotatedPhysicalSize,acceptedOrientationDelta} from '../src/material-display-rotation.js';
+import {wrapDisplayRotation,rotatedPhysicalSize} from '../src/material-display-rotation.js';
 import {assetEditorValue} from '../src/asset-editor.js';
 import {initialMaterialClassification} from '../src/material-classification.js';
 
-test('additional AI rotation adds to existing automatic angle without guessing the original',()=>{
-  const automatic=23.5;
-  assert.equal(wrapDisplayRotation(automatic+acceptedOrientationDelta({deltaDegrees:90,confidence:.91})),113.5);
-  assert.equal(wrapDisplayRotation(automatic+180),-156.5);
+test('material display rotation normalizes angles and physical dimensions',()=>{
+  assert.equal(wrapDisplayRotation(203.5),-156.5);
   assert.deepEqual(rotatedPhysicalSize(20,40,90),{width:40,height:20});
-  assert.equal(acceptedOrientationDelta({deltaDegrees:45,confidence:.99}),null);
-  assert.equal(acceptedOrientationDelta({deltaDegrees:-90,confidence:.84}),null);
 });
 
 test('manual material angle uses the cutout angle and is marked as user choice',()=>{

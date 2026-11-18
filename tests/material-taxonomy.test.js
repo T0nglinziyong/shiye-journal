@@ -50,6 +50,16 @@ test('AI description is factual metadata and a user edit cannot be overwritten',
   edited.description);
  assert.equal(applyAIClassification(base,{...suggestion,descriptionConfidence:.4}).description,undefined);
 });
+test('AI descriptions directly describe the material without scene prefaces or transitions',()=>{
+ const base={...initialMaterialClassification({kind:'sticker'}),title:'花朵贴纸'};
+ const suggestion={modelVersion:'deepseek-flash',kind:{id:'sticker',confidence:.9},
+  role:{id:'accent',confidence:.9},description:'画面中可以看到浅粉色花朵位于画面中央。此外，花瓣边缘有白色描线。',
+  descriptionConfidence:.9};
+ const analyzed=applyAIClassification(base,suggestion);
+ assert.equal(analyzed.description,'浅粉色花朵居中。花瓣边缘有白色描线。');
+ assert.equal(applyAIClassification({...base,description:'用户写的画面中有花朵',
+  descriptionEvidence:{source:'user',confidence:1}},suggestion).description,'用户写的画面中有花朵');
+});
 test('legacy migration preserves custom tags and does not invent a subtype',()=>{
  const converted=migrateMaterialV1({id:'a',title:'小纸片',kind:'sticker',role:'annotation',
   texture:'贴纸纸',tags:['用户标签'],contentTags:['猫'],semanticColorNames:['蓝色'],
