@@ -3,6 +3,7 @@ import {itemFromAsset} from './domain.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const inside=(value,size)=>size>=1?.5:clamp(value,size/2,1-size/2);
+export const keepCornerVisible=(value,size)=>clamp(value,-size/2+.01,1+size/2-.01);
 
 export function matchingPageSize(ratio){
   const paper=paperDimensions(ratio)||paperDimensions('a4');
@@ -31,7 +32,7 @@ export function matchingStageItems(assets,positions,ratio){
       }
       x=best.x;y=best.y;
     }
-    const item={asset,x:inside(x,width),y:inside(y,height),width,height};
+    const item={asset,x:stored?keepCornerVisible(x,width):inside(x,width),y:stored?keepCornerVisible(y,height):inside(y,height),width,height};
     placed.push(item);
     return item;
   });
@@ -42,8 +43,8 @@ export function applyMatchingStage(draft,assets,basket,positions){
   const stage=matchingStageItems(selected,positions,draft.pageRatio);
   draft.items=stage.map(({asset,x,y},index)=>{
     const item=itemFromAsset(asset,draft,x*draft.canvas.width,y*draft.canvas.height,10+index,true);
-    item.x=inside(x,item.width/draft.canvas.width)*draft.canvas.width;
-    item.y=inside(y,item.height/draft.canvas.height)*draft.canvas.height;
+    item.x=keepCornerVisible(x,item.width/draft.canvas.width)*draft.canvas.width;
+    item.y=keepCornerVisible(y,item.height/draft.canvas.height)*draft.canvas.height;
     item.generationBaseline={...item.generationBaseline,x:item.x,y:item.y};
     return item;
   });

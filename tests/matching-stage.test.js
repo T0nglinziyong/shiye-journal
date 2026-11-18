@@ -35,15 +35,20 @@ test('later additions enter the same page without overlap',()=>{
   assert.ok(page.items.every(item=>!item.isParked));
 });
 
-test('positions from the old outside area are brought inside the canvas',()=>{
+test('a placed material may sit outside the paper while keeping a corner on it',()=>{
   const asset={id:'large',physicalWidthMM:240,physicalHeightMM:60};
   const item=matchingStageItems([asset],{large:{x:1.3,y:2.2}},'a4')[0];
-  assert.equal(item.x,1-item.width/2);
-  assert.equal(item.y,1-item.height/2);
+  assert.equal(item.x,1+item.width/2-.01);
+  assert.equal(item.y,1+item.height/2-.01);
   const page=draft({mode:'spread',ratio:'a4'});
   applyMatchingStage(page,[asset],['large'],{large:{x:1.3,y:2.2}});
   assert.equal(page.items[0].isParked,false);
-  assert.ok(page.items[0].x+page.items[0].width/2<=page.canvas.width+1e-9);
+  assert.ok(page.items[0].x>page.canvas.width);
+  assert.ok(page.items[0].x-page.items[0].width/2<page.canvas.width);
+  assert.ok(page.items[0].y-page.items[0].height/2<page.canvas.height);
+  const opposite=matchingStageItems([asset],{large:{x:-1,y:-1}},'a4')[0];
+  assert.equal(opposite.x,-opposite.width/2+.01);
+  assert.equal(opposite.y,-opposite.height/2+.01);
 });
 
 test('single mode dims the second sheet without changing workspace dimensions',()=>{
