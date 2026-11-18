@@ -1,66 +1,62 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {draft} from '../src/domain.js';
-import {matchingStageItems,matchingItemOnPage,applyMatchingStage} from '../src/matching-stage.js';
+import {matchingStageItems,matchingPageSize,applyMatchingStage} from '../src/matching-stage.js';
+import {drawPaper} from '../src/paper-rendering.js';
+import {createCanvas} from 'canvas';
 
-test('material page keeps measured size and dragged position in the editor',()=>{
+test('both page modes use one two-sheet workspace and preserve measured size',()=>{
   const asset={id:'sticker',title:'贴纸',physicalWidthMM:42,physicalHeightMM:59};
-  const page=draft({mode:'single',ratio:'a4'});
-  const stage=matchingStageItems([asset],{sticker:{x:.7,y:.4}},'a4','single');
-  assert.equal(stage[0].width,.2);
+  assert.deepEqual(matchingPageSize('a4'),{width:420,height:297});
+  const stage=matchingStageItems([asset],{sticker:{x:.7,y:.4}},'a4');
+  assert.equal(stage[0].width,.1);
   assert.equal(stage[0].height,59/297);
+  const page=draft({mode:'spread',ratio:'a4'});
   applyMatchingStage(page,[asset],['sticker'],{sticker:{x:.7,y:.4}});
   assert.equal(page.items.length,1);
   assert.equal(page.items[0].x,page.canvas.width*.7);
   assert.equal(page.items[0].y,page.canvas.height*.4);
+  assert.equal(page.items[0].isParked,false);
   assert.ok(Math.abs(page.items[0].width-page.canvas.height*42/297)<1e-10);
 });
 
-test('single and spread pages preserve distinct physical scale',()=>{
-  const asset={id:'photo',physicalWidthMM:42,physicalHeightMM:59};
-  const single=matchingStageItems([asset],{},'a4','single')[0];
-  const spread=matchingStageItems([asset],{},'a4','spread')[0];
-  assert.equal(single.width,spread.width*2);
-  assert.equal(single.height,spread.height);
-});
-
-test('later material begins outside and becomes an editor standby item until moved onto the page',()=>{
-  const assets=[{id:'first',physicalWidthMM:40,physicalHeightMM:40},
-    {id:'later',physicalWidthMM:40,physicalHeightMM:40}];
-  const stage=matchingStageItems(assets,{},'a4','single',['first']);
-  assert.equal(stage[0].onPage,true);
-  assert.equal(stage[1].onPage,false);
-  assert.ok(stage[1].y>1);
-  const parked=draft({ratio:'a4'});
-  applyMatchingStage(parked,assets,['first','later'],{},['first']);
-  assert.equal(parked.items[0].isParked,false);
-  assert.equal(parked.items[1].isParked,true);
-  const returned=draft({ratio:'a4'});
-  applyMatchingStage(returned,assets,['first','later'],{later:{x:.7,y:.7}},['first']);
-  assert.equal(returned.items[1].isParked,false);
-});
-
-test('initial batch is placed without overlapping when its measured pieces fit',()=>{
-  const assets=Array.from({length:8},(_,index)=>({id:`asset-${index}`,physicalWidthMM:45,physicalHeightMM:45}));
-  const items=matchingStageItems(assets,{},'a4','single',assets.map(asset=>asset.id));
-  assert.ok(items.every(item=>item.onPage));
+test('later additions enter the same page without overlap',()=>{
+  const assets=Array.from({length:12},(_,index)=>({id:`asset-${index}`,physicalWidthMM:45,physicalHeightMM:45}));
+  const items=matchingStageItems(assets,{},'a4');
+  assert.ok(items.every(item=>item.x>=item.width/2&&item.x<=1-item.width/2&&item.y>=item.height/2&&item.y<=1-item.height/2));
   for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){
     const left=items[i],right=items[j];
     assert.ok(Math.abs(left.x-right.x)>=(left.width+right.width)/2||
       Math.abs(left.y-right.y)>=(left.height+right.height)/2);
   }
+  const page=draft({mode:'spread',ratio:'a4'});
+  applyMatchingStage(page,assets,assets.map(asset=>asset.id),{});
+  assert.equal(page.items.length,12);
+  assert.ok(page.items.every(item=>!item.isParked));
 });
 
-test('oversized and boundary-crossing material is standby',()=>{
-  const oversized={id:'large',physicalWidthMM:240,physicalHeightMM:60};
-  const item=matchingStageItems([oversized],{},'a4','single',['large'])[0];
-  assert.equal(item.x,.5);
-  assert.equal(item.y,1);
-  assert.equal(item.onPage,false);
-  assert.equal(matchingItemOnPage(.5,.5,1,.1),false);
-  assert.equal(matchingItemOnPage(.5,.5,.9,.9),true);
-  assert.equal(matchingItemOnPage(.1,.5,.2,.1),false);
-  const page=draft({ratio:'a4'});
-  applyMatchingStage(page,[oversized],['large'],{},['large']);
-  assert.equal(page.items[0].isParked,true);
+test('positions from the old outside area are brought inside the canvas',()=>{
+  const asset={id:'large',physicalWidthMM:240,physicalHeightMM:60};
+  const item=matchingStageItems([asset],{large:{x:1.3,y:2.2}},'a4')[0];
+  assert.equal(item.x,1-item.width/2);
+  assert.equal(item.y,1-item.height/2);
+  const page=draft({mode:'spread',ratio:'a4'});
+  applyMatchingStage(page,[asset],['large'],{large:{x:1.3,y:2.2}});
+  assert.equal(page.items[0].isParked,false);
+  assert.ok(page.items[0].x+page.items[0].width/2<=page.canvas.width+1e-9);
+});
+
+test('single mode dims the second sheet without changing workspace dimensions',()=>{
+  const page=draft({mode:'spread',ratio:'a4'});
+  page.matchingTwoPageWorkspace=true;
+  page.inactivePageDimmed=true;
+  const canvas=createCanvas(page.canvas.width,page.canvas.height);
+  drawPaper(canvas.getContext('2d'),page);
+  const ctx=canvas.getContext('2d');
+  const left=[...ctx.getImageData(100,500,1,1).data];
+  const right=[...ctx.getImageData(page.canvas.width-100,500,1,1).data];
+  assert.notDeepEqual(right,left);
+  page.inactivePageDimmed=false;
+  drawPaper(ctx,page);
+  assert.deepEqual([...ctx.getImageData(page.canvas.width-100,500,1,1).data],left);
 });

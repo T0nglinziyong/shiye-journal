@@ -57,7 +57,7 @@ import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName,materialKindDetails,tagGroups} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {materialSizeLabel} from './material-size-label.js';
-import {matchingStageItems,matchingPageSize,matchingItemOnPage} from './matching-stage.js';
+import {matchingStageItems,matchingPageSize} from './matching-stage.js';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 import {importDefaultTitle} from './import-default-names.js';
 
@@ -1008,19 +1008,12 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
     window.addEventListener('shiye-matching-refresh',update);
     return ()=>window.removeEventListener('shiye-matching-refresh',update);
   },[]);
-  useEffect(()=>{
-    if(state.matchInitialAssetIDs!==null)return;
-    onMatchingChange('matchInitialAssetIDs',[...state.basket]);
-    refresh(version=>version+1);
-  },[state.accountId]);
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
   const {selected,excluded,scope,filtered,styles,chosenPurposes,guidance}=matchingViewModel(state);
-  const pageSize=matchingPageSize(state.matchRatio,state.matchMode);
-  const stageItems=matchingStageItems(selected,state.matchPlacements,state.matchRatio,state.matchMode,state.matchInitialAssetIDs);
-  const outsideDepth=Math.max(.45,...stageItems.filter(item=>!item.onPage).map(item=>item.y+item.height/2-1+.1));
+  const pageSize=matchingPageSize(state.matchRatio);
+  const stageItems=matchingStageItems(selected,state.matchPlacements,state.matchRatio);
   const activeAsset=selected.find(asset=>asset.id===activeMaterial);
-  const activeItem=stageItems.find(item=>item.asset.id===activeMaterial);
   const query=shelfQuery.trim().toLocaleLowerCase();
   const shelfRows=(shelfTab==='recommend'?filtered:shelfTab==='used'?selected.map(asset=>({asset,reasons:[]})):
     state.assets.filter(asset=>!asset.isProjectInternal).map(asset=>({asset,reasons:[]})))
@@ -1034,24 +1027,26 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
     dragRef.current={id:item.asset.id,element:event.currentTarget,startX:event.clientX,startY:event.clientY,
       x:item.x,y:item.y,width:item.width,height:item.height,rect};
   };
+  const draggedPosition=(drag,event)=>{
+    const limit=(value,size)=>size>=1?.5:Math.max(size/2,Math.min(1-size/2,value));
+    return {x:limit(drag.x+(event.clientX-drag.startX)/drag.rect.width,drag.width),
+      y:limit(drag.y+(event.clientY-drag.startY)/drag.rect.height,drag.height)};
+  };
   const pointerMove=event=>{
     const drag=dragRef.current;
     if(!drag||drag.element!==event.currentTarget)return;
-    const x=Math.max(-.25,Math.min(1.25,drag.x+(event.clientX-drag.startX)/drag.rect.width));
-    const y=Math.max(-.15,Math.min(Math.max(1.6,outsideDepth+.95),drag.y+(event.clientY-drag.startY)/drag.rect.height));
+    const {x,y}=draggedPosition(drag,event);
     drag.element.style.left=`${x*100}%`;drag.element.style.top=`${y*100}%`;
   };
   const pointerUp=event=>{
     const drag=dragRef.current;
     if(!drag||drag.element!==event.currentTarget)return;
     dragRef.current=null;
-    const x=Math.max(-.25,Math.min(1.25,drag.x+(event.clientX-drag.startX)/drag.rect.width));
-    const y=Math.max(-.15,Math.min(Math.max(1.6,outsideDepth+.95),drag.y+(event.clientY-drag.startY)/drag.rect.height));
+    const {x,y}=draggedPosition(drag,event);
     if(x!==drag.x||y!==drag.y){
       change('matchPlacements',{
         ...Object.fromEntries(stageItems.map(item=>[item.asset.id,{x:item.x,y:item.y}])),
         [drag.id]:{x,y}});
-      if(!matchingItemOnPage(x,y,drag.width,drag.height)&&state.coreIDs.includes(drag.id))void onAction('match-core',drag.id);
     }
   };
   return <div className="matching-page" data-react-page="matching">
@@ -1070,28 +1065,28 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
-      <p className="muted" data-creation-guidance>{scope.candidateAssetIDs.length?guidance.summary:'没有选素材也可以创作：用文字、手绘和图形完成这一页。'}</p>
+      {scope.candidateAssetIDs.length&&guidance.summary?<p className="muted" data-creation-guidance>{guidance.summary}</p>:null}
       </div>
     </details>
-    <div className="matching-layout"><section className="panel match-stage-section"><div className="match-panel-head"><h2>本页画布</h2><small>纸面 {stageItems.filter(item=>item.onPage).length} · 备选 {stageItems.filter(item=>!item.onPage).length}</small></div>
+    <div className="matching-layout"><section className="panel match-stage-section"><div className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small></div>
       <div className="match-stage-settings"><label>页面模式<select id="match-mode" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
         <label>纸张规格<select id="match-ratio" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></label></div>
-      <div className="match-stage-board"><div className="match-stage-paper" ref={stageRef} style={{aspectRatio:`${pageSize.width}/${pageSize.height}`}}>
-        {state.matchMode==='spread'?<span className="match-stage-gutter" aria-hidden="true"/>:null}
-        {stageItems.map(item=><div key={item.asset.id} className={`match-stage-item ${item.onPage?'on-page':''} ${activeMaterial===item.asset.id?'active':''}`}
+      <div className="match-stage-board" style={{'--match-page-ratio':pageSize.width/pageSize.height}}><div className={`match-stage-paper ${state.matchMode==='single'?'single':''}`} ref={stageRef} onPointerDown={event=>{if(event.target===event.currentTarget)setActiveMaterial(null);}}>
+        <span className="match-stage-gutter" aria-hidden="true"/>
+        {stageItems.map(item=><div key={item.asset.id} className={`match-stage-item ${activeMaterial===item.asset.id?'active':''}`}
           data-match-asset={item.asset.id} role="button" tabIndex={0} aria-label={`选择并拖动${item.asset.title}`}
           style={{left:`${item.x*100}%`,top:`${item.y*100}%`,width:`${item.width*100}%`,height:`${item.height*100}%`}}
           onPointerDown={event=>pointerDown(event,item)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
           onClick={()=>setActiveMaterial(item.asset.id)}
           onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setActiveMaterial(item.asset.id);}}}>
-          <RouteImage asset={item.asset} source={source}/>{item.onPage&&state.coreIDs.includes(item.asset.id)?<span className="match-stage-star" aria-label="必用素材">★</span>:null}
+          <RouteImage asset={item.asset} source={source}/>{state.coreIDs.includes(item.asset.id)?<span className="match-stage-star" aria-label="必用素材">★</span>:null}
         </div>)}
         {!selected.length?<p className="match-stage-empty">从素材架加入素材，在页面上预览尺寸和位置</p>:null}
-      </div><div className="match-stage-standby" style={{aspectRatio:`${pageSize.width}/${pageSize.height*outsideDepth}`}}><span>纸外备选 · 拖入纸面即可使用</span></div></div>
-      {activeAsset?<div className="match-stage-selection"><span><strong>{activeAsset.title}</strong><small>{materialSizeLabel(activeAsset)||'尺寸待确认'} · {activeItem?.onPage?'纸面素材':'纸外备选'}</small></span>
-        <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={activeAsset.id} data-react-action="true" onClick={action('match-core',activeAsset.id)} aria-pressed={activeItem?.onPage&&state.coreIDs.includes(activeAsset.id)} disabled={!activeItem?.onPage}>{activeItem?.onPage?state.coreIDs.includes(activeAsset.id)?'★ 已标星':'☆ 标星':'拖入纸面后标星'}</button>
+      </div></div>
+      {activeAsset?<div className="match-stage-selection"><span><strong>{activeAsset.title}</strong><small>{materialSizeLabel(activeAsset)||'尺寸待确认'}</small></span>
+        <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={activeAsset.id} data-react-action="true" onClick={action('match-core',activeAsset.id)} aria-pressed={state.coreIDs.includes(activeAsset.id)}>{state.coreIDs.includes(activeAsset.id)?'★ 已标星':'☆ 标星'}</button>
           <button type="button" data-act="basket" data-id={activeAsset.id} data-react-action="true" onClick={()=>{setActiveMaterial(null);onAction('basket',activeAsset.id);}}>移出本页</button></div></div>:<p className="match-stage-hint">点选素材可标星或移除，拖动素材可调整位置。</p>}
-      <p className="muted match-stage-count">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'AI 备选 '+scope.available.length:'AI 备选未开启'}</p>
+      <p className="muted match-stage-count">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'可选推荐 '+scope.available.length:'可选推荐未开启'}</p>
     </section>
       <section className="panel match-recommendations"><div className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></div>
         <div className="match-shelf-tabs" role="tablist" aria-label="素材来源">{[['recommend','智能搭配'],['all','全部素材'],['used','已使用素材']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={shelfTab===id} onClick={()=>{setShelfTab(id);setShelfLimit(80);}}>{label}</button>)}</div>
@@ -1141,7 +1136,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       {['portrait','square','landscape'].map(id=><option key={id} value={id}>旧版比例 · {id.toUpperCase()}</option>)}
       {draft.pageRatio?.startsWith('custom:')?<option value={draft.pageRatio}>自定义 {draft.pageRatio.slice(7)} mm</option>:null}
     </select></label>
-    <label>页面模式<select id="page-mode" defaultValue={draft.pageMode||'single'}
+    <label>页面模式<select id="page-mode" defaultValue={draft.matchingTwoPageWorkspace?(draft.inactivePageDimmed?'single':'spread'):draft.pageMode||'single'}
       onChange={event=>onChange('page-mode',event.target.value)}>
       <option value="single">单页</option><option value="spread">双页</option>
     </select></label>

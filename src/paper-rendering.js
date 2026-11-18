@@ -3,7 +3,7 @@ export function paperColumnPositions(pageMode='single'){
   const perPage=[.08,.48,.52,.92];
   return pageMode==='spread'?[0,.5].flatMap(offset=>perPage.map(x=>offset+x*.5)):perPage;
 }
-export function drawPaper(ctx,d){const {width:w,height:h}=d.canvas;ctx.save();ctx.fillStyle=d.paperColor||'#fcfaf0';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=1;const segment=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
+export function drawPaper(ctx,d){const {width:w,height:h}=d.canvas;ctx.save();ctx.fillStyle=d.paperColor||'#fcfaf0';ctx.fillRect(0,0,w,h);if(d.matchingTwoPageWorkspace&&d.inactivePageDimmed){ctx.fillStyle='#d8ddd3';ctx.fillRect(w/2,0,w/2,h);}ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=1;const segment=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
   if(d.paperPattern==='lines'&&d.paperRuling?.rowPositions){const r=d.paperRuling;ctx.strokeStyle=r.color;ctx.lineWidth=r.relativeLineWidth*h;for(const y of r.rowPositions)for(const s of r.spans)segment(s.from*w,y*h,s.to*w,y*h);}
   else if(d.paperPattern==='dots'){ctx.fillStyle='rgba(0,0,0,.13)';for(let y=42;y<h-42;y+=42)for(let x=42;x<w-42;x+=42){ctx.beginPath();ctx.arc(x,y,1,0,Math.PI*2);ctx.fill();}}
   else if(['lines','grid'].includes(d.paperPattern)){for(let row=1;row<Math.floor(h/40);row++)segment(0,row*40,w,row*40);if(d.paperPattern==='grid')for(let col=1;col<Math.floor(w/40);col++)segment(col*40,0,col*40,h);}
