@@ -6,11 +6,16 @@ import {initialMaterialClassification} from '../src/material-classification.js';
 test('classification prompt uses physical form, current multi-select roles and leaf layout IDs',()=>{
  const prompt=materialClassificationPrompt({physicalWidthMM:30,physicalHeightMM:40,
   sourceIdentifier:'sample',finalMaskBlobId:'mask-1'});
- assert.match(prompt,/只分类这件实物，不分类它画着的物品/);
+ assert.match(prompt,/只分类这件素材，不分类它画着的物品/);
+ assert.match(prompt,/判断第一张图需要顺时针旋转多少度才正立/);
+ assert.match(prompt,/想象两张图都按此角度转正，再判断素材是什么/);
+ assert.match(prompt,/有留白、横线、格子或填写区供书写记录的是便签/);
+ assert.match(prompt,/已有完整标题、信息或独立版式且主要供阅读展示的是卡片/);
+ assert.match(prompt,/只有独立文字或字形而没有承载卡面的是文字素材/);
  assert.match(prompt,/role，其他确实适用的放 secondaryRoles/);
  assert.match(prompt,/paper\.patterned=花纹纸/);
  assert.match(prompt,/point\.free=自由摆放/);
- assert.match(prompt,/重复图案覆盖整片的独立纸片按花纹纸分类/);
+ assert.match(prompt,/整片以纯色、纹理或重复花纹为主且无明确书写功能的是纸张/);
  assert.match(prompt,/相对当前展示方向还需顺时针旋转/);
  assert.doesNotMatch(prompt,/版面适配.*page=页面铺底/);
 });
@@ -62,6 +67,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
  assert.deepEqual(result.orientation,{deltaDegrees:90,confidence:.9});
  assert.equal(committed.processingRecord?.displayRotationDegrees,undefined);
  assert.ok(seen.some(url=>url.includes('/v1/storages/object/')));
+ assert.equal(seen.filter(url=>url.startsWith('https://api.deepseek.com/')).length,1);
  assert.equal(seen.some(url=>url.includes('frame-1-preview480.webp')),false);
 });
 test('cloud classification rejects a cross-account image path before download or model call',async()=>{
