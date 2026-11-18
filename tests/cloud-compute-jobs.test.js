@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {createCanvas,loadImage} from 'canvas';
+import {zlibSync} from 'fflate';
+import {decodeSamMaskAlpha} from '../src/sam-mask-bits.js';
 
 const userID='2111845279800434690';
 const sourceID='11111111-1111-4111-8111-111111111111';
@@ -105,7 +107,8 @@ test('completed SAM masks download in bounded parallel order',async()=>{
 
 test('packed SAM result restores transparent holes without per-object downloads',async()=>{
   const manifest=new Blob([JSON.stringify({version:2,width:4,height:2,model:'sam2-small',
-    objects:[{bbox_xyxy:[0,0,4,2],area:7,maskBits:Buffer.from([0xef]).toString('base64')}],
+    objects:[{bbox_xyxy:[0,0,4,2],area:7,maskBits:Buffer.from([0xef]).toString('base64'),
+      orientation:{source:'ocr',degrees:-90,confidence:.94}}],
     backgrounds:[{bbox_xyxy:[0,0,4,2],area:8,maskBits:Buffer.from([0xff]).toString('base64')}]})]);
   let downloads=0;
   const old={window:globalThis.window,document:globalThis.document};
@@ -120,6 +123,7 @@ test('packed SAM result restores transparent holes without per-object downloads'
     const regions=await waitForSegmentationJob(jobID);
     assert.equal(downloads,1);
     assert.deepEqual([...regions[0].mask.alpha],[255,255,255,255,0,255,255,255]);
+    assert.deepEqual(regions[0].orientationProposal,{source:'ocr',degrees:-90,confidence:.94});
     assert.deepEqual([...regions.backgrounds[0].mask.alpha],Array(8).fill(255));
   }finally{
     delete globalThis.__computeMock;
@@ -127,4 +131,11 @@ test('packed SAM result restores transparent holes without per-object downloads'
       if(value===undefined)delete globalThis[key];else globalThis[key]=value;
     }
   }
+});
+
+test('packed SAM soft alpha retains subpixel edges and enclosed holes',()=>{
+ const input=Uint8Array.from([0,65,194,255,255,0,255,255]);
+ const encoded=Buffer.from(zlibSync(input)).toString('base64');
+ assert.deepEqual([...decodeSamMaskAlpha(encoded,4,2)],[...input]);
+ assert.throws(()=>decodeSamMaskAlpha(encoded,5,2),/长度/);
 });

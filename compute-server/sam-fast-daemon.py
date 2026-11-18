@@ -64,6 +64,7 @@ def main():
     from carrier_policy import (find_composite_carriers, inside,
                                 page_edge_artifact, merge_groups)
     from fastsam_hybrid import FastSamHybrid, smooth_mask
+    from mask_alpha import encode_mask_alpha
 
     models = {
         "tiny": ("sam2.1_hiera_tiny.pt", "configs/sam2.1/sam2.1_hiera_t.yaml"),
@@ -130,21 +131,22 @@ def main():
                 else:
                     prompt_cache.move_to_end(key)
                 masks, scores, _ = predictor.predict(box=np.asarray(box, dtype=np.float32),
-                                                     multimask_output=True)
+                                                     multimask_output=True, return_logits=True)
                 best = int(np.argmax(scores))
-                mask, _, _ = largest_connected_component(masks[best])
+                mask, _, _ = largest_connected_component(masks[best] > 0)
                 if hybrid:
                     mask = smooth_mask(mask)
-                candidates = [{"segmentation": mask, "predicted_iou": float(scores[best]),
+                candidates = [{"segmentation": mask, "soft_logits": masks[best],
+                               "predicted_iou": float(scores[best]),
                                "container_id": None, "source_file": "prompt"}]
                 groups = [candidates] if np.any(mask) else []
             elif hybrid:
                 nonlocal fast_hybrid
                 if fast_hybrid is None:
                     fast_hybrid = FastSamHybrid(root / "checkpoints" / "FastSAM-s.pt")
-                masks, background_masks, subregion_masks = fast_hybrid.segment(
+                items, background_masks, subregion_masks = fast_hybrid.segment(
                     image, model, device, refinement_image=model_image)
-                groups = [[{"segmentation": mask}] for mask in masks]
+                groups = [[item] for item in items]
             else:
                 points = int(job["pointsPerSide"])
                 crops = int(job["cropNLayers"])
@@ -198,20 +200,22 @@ def main():
                 groups.sort(key=lambda group: (group[0]["container_id"] or "",
                     min(item["bbox_xyxy"][1] for item in group),
                     min(item["bbox_xyxy"][0] for item in group)))
-            def packed_object(mask):
+            def packed_object(mask, logits=None):
                 ys, xs = np.nonzero(mask)
                 if not len(xs):
                     return None
                 x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
                 packed = np.packbits(mask[y0:y1, x0:x1].ravel(), bitorder="little")
                 return {"bbox_xyxy": [x0, y0, x1, y1], "area": int(mask.sum()),
-                        "maskBits": base64.b64encode(packed.tobytes()).decode("ascii")}
+                        "maskBits": base64.b64encode(packed.tobytes()).decode("ascii"),
+                        "maskAlphaZlib": encode_mask_alpha(mask[y0:y1, x0:x1],
+                            logits[y0:y1, x0:x1] if logits is not None else None)}
             objects = []
             for group_index, group in enumerate(groups):
                 mask = np.zeros((height, width), dtype=bool)
                 for member in group:
                     mask |= member["segmentation"]
-                item = packed_object(mask)
+                item = packed_object(mask, group[0].get("soft_logits") if len(group)==1 else None)
                 if item:
                     if hybrid and group_index < len(subregion_masks):
                         item["subregions"] = [packed for child in subregion_masks[group_index]

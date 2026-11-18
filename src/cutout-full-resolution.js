@@ -1,6 +1,7 @@
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {readAlphaMask} from './alpha-mask-blob.js';
 import {scaleFramePlacement} from './cutout-edit-resolution.js';
+import {outputMaskBlurPx,polishProjectedMask} from './image.js';
 
 const MAX_PIXELS=32_000_000;
 const asPNG=canvas=>new Promise((resolve,reject)=>
@@ -51,9 +52,17 @@ export async function renderHighResolutionCutout(candidateRGB,editorMask,process
      rgba.data[k+3]=mask.alpha[i];
    }
    mx.putImageData(rgba,0,0);
+   const projected=document.createElement('canvas');projected.width=width;projected.height=height;
+   const pc=projected.getContext('2d',{willReadFrequently:true});
+   pc.imageSmoothingEnabled=true;pc.imageSmoothingQuality='high';
+   pc.drawImage(low,0,0,width,height);
+   const region={mask,segmentationMethod:processing.segmentationMethod||'',
+     maskAntialias:processing.maskAntialias===true};
+   pc.putImageData(polishProjectedMask(pc.getImageData(0,0,width,height),width,height,
+     outputMaskBlurPx(region,width,height),mask),0,0);
    ctx.save();ctx.globalCompositeOperation='destination-in';
    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-   ctx.drawImage(low,0,0,width,height);ctx.restore();
+   ctx.drawImage(projected,0,0);ctx.restore();
    let output=sheet;
    const angle=Number(processing.displayRotationDegrees)||0;
    if(Math.abs(angle)>1e-8){
