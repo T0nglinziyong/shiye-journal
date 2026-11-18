@@ -38,6 +38,18 @@ test('user-confirmed type survives AI content and material guesses',()=>{
  assert.deepEqual(applyAIClassification(confirmed,result).tags,['自定义']);
  validateMaterialClassification(confirmed);
 });
+test('AI description is factual metadata and a user edit cannot be overwritten',()=>{
+ const base={...initialMaterialClassification({kind:'photo'}),title:'室内照片'};
+ const suggestion={modelVersion:'deepseek-flash',kind:{id:'photo',confidence:.9},
+  role:{id:'support',confidence:.9},description:'浅色室内画面，中间有垂挂的格纹布。',descriptionConfidence:.8};
+ const analyzed=applyAIClassification(base,suggestion);
+ assert.equal(analyzed.description,suggestion.description);
+ assert.equal(analyzed.descriptionEvidence.source,'ai');
+ const edited={...analyzed,description:'窗边的格纹窗帘。',descriptionEvidence:{source:'user',confidence:1}};
+ assert.equal(applyAIClassification(edited,{...suggestion,description:'另一段描述'}).description,
+  edited.description);
+ assert.equal(applyAIClassification(base,{...suggestion,descriptionConfidence:.4}).description,undefined);
+});
 test('legacy migration preserves custom tags and does not invent a subtype',()=>{
  const converted=migrateMaterialV1({id:'a',title:'小纸片',kind:'sticker',role:'annotation',
   texture:'贴纸纸',tags:['用户标签'],contentTags:['猫'],semanticColorNames:['蓝色'],

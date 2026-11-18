@@ -14,7 +14,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const previewRef=useRef(null),[previewSize,setPreviewSize]=useState({width:0,height:0});
   const sourceImage=useRef(null),[sourceSize,setSourceSize]=useState(null);
   const [sourceLoaded,setSourceLoaded]=useState(0);
-  const [form,setForm]=useState({title:asset.title,kind:asset.kind,kindDetail:asset.kindDetail||'',
+  const [form,setForm]=useState({title:asset.title,description:asset.description||'',kind:asset.kind,kindDetail:asset.kindDetail||'',
     role:asset.role,secondaryRoles:asset.secondaryRoles||[],contentCategories:asset.contentCategories||[],
     layoutFits:asset.layoutFits||[],width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
     rotation:asset.processingRecord?.displayRotationDegrees??0,
@@ -160,6 +160,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
       </div><div className="material-editor-controls">
         <div className="stack material-info-panel" hidden={tab!==0}>
           {field('名称','title')}
+          <label>详细描述<textarea id="asset-description" rows="3" maxLength="500"
+            value={form.description} onChange={event=>set('description',event.target.value)}/></label>
           {select('素材类型','kind',materialKinds)}
           {select('具体类型','kindDetail',[['','待细分'],...materialKindDetails.filter(([, ,parent])=>parent===form.kind)])}
           {multiple('画面作用','roles',materialRoles)}

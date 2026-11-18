@@ -1021,7 +1021,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   const shelfRows=(shelfTab==='recommend'?filtered:shelfTab==='used'?selected.map(asset=>({asset,reasons:[]})):
     state.assets.filter(asset=>!asset.isProjectInternal).map(asset=>({asset,reasons:[]})))
     .filter(({asset})=>shelfTab!=='all'||(shelfSeries==='all'||(shelfSeries==='none'?!asset.seriesID:asset.seriesID===shelfSeries))&&(shelfKind==='all'||asset.kind===shelfKind))
-    .filter(({asset})=>!query||[asset.title,asset.kind,asset.kindDetail,...(asset.tags||[]),...(asset.contentTags||[]),...(asset.themeTags||[])].join(' ').toLocaleLowerCase().includes(query));
+    .filter(({asset})=>!query||[asset.title,asset.description,asset.kind,asset.kindDetail,...(asset.tags||[]),...(asset.contentTags||[]),...(asset.themeTags||[])].join(' ').toLocaleLowerCase().includes(query));
   const pointerDown=(event,item)=>{
     if(event.button!==0&&event.pointerType==='mouse')return;
     setActiveMaterial(item.asset.id);
@@ -1541,7 +1541,7 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
     </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
       {!asset.isCreativePreset?<button className="detail-heart" data-act="detail-favorite" data-react-action="true" aria-label={asset.isFavorite?'取消收藏':'收藏'}
         aria-pressed={!!asset.isFavorite} onClick={act('detail-favorite')}>{asset.isFavorite?'♥':'♡'}</button>:null}
-      <h1>{asset.title}</h1><div className="detail-facts">
+      <h1>{asset.title}</h1>{asset.description?<p className="detail-description">{asset.description}</p>:null}<div className="detail-facts">
         <div><small>{asset.isCreativePreset?'设计尺寸':'真实尺寸'}</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
         <div><small>素材类型</small><span>{kindName(asset.kind)} · {materialKindDetails.find(([id])=>id===asset.kindDetail)?.[1]||'待细分'}</span></div>
         <div><small>主要作用</small><span>{materialRoleName(asset.role)||'待记录'}</span></div>
