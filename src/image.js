@@ -199,8 +199,12 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('素材裁图失败')),'image/png'));
 }
 export function initialMaterialRotation(region){
+  const proposal=region?.orientationProposal;
+  if(proposal&&['ocr','rightwayup'].includes(proposal.source)&&
+    Number.isFinite(proposal.degrees)&&Math.abs(proposal.degrees)<=360&&
+    Number.isFinite(proposal.confidence)&&proposal.confidence>=
+      (proposal.source==='ocr'?.9:.5))return proposal.degrees;
   if(region?.orientedBox?.autoDeskew)return -region.orientedBox.rotation;
-  if(/^(sam2-|fastsam|yoloe)/.test(region?.segmentationMethod||''))return 0;
   return null;
 }
 export async function alignMaterialPreview(blob,originalBlob=blob,rotation=null){

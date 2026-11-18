@@ -62,9 +62,14 @@ test('SAM candidate crop uses matching high-resolution endpoints',()=>{
  assert.equal(bounds.w,497);
 });
 
-test('model cutouts keep the corrected page direction instead of following mask teeth',()=>{
- assert.equal(initialMaterialRotation({segmentationMethod:'fastsam-sam2-small'}),0);
- assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small'}),0);
+test('text direction wins, image direction follows, and uncertain results use geometry',()=>{
+ assert.equal(initialMaterialRotation({segmentationMethod:'fastsam-sam2-small',
+   orientationProposal:{source:'ocr',degrees:-90,confidence:.94}}),-90);
+ assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small',
+   orientationProposal:{source:'rightwayup',degrees:12,confidence:.75}}),12);
+ assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small',
+   orientationProposal:{source:'rightwayup',degrees:12,confidence:.3}}),null);
+ assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small'}),null);
  assert.equal(initialMaterialRotation({segmentationMethod:'physical'}),null);
  assert.equal(initialMaterialRotation({segmentationMethod:'sam2-small',
    orientedBox:{autoDeskew:true,rotation:17}}),-17);

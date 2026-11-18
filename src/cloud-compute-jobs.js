@@ -154,6 +154,14 @@ async function loadSegmentationResult(job){
       if(object.subregions!==undefined&&(!Array.isArray(object.subregions)||object.subregions.length>12))
         throw Error('原始子区域数据无效');
       const region=decodePacked(object);
+      if(object.orientation!==undefined){
+        const proposal=object.orientation;
+        if(!proposal||!['ocr','rightwayup'].includes(proposal.source)||
+          !Number.isFinite(proposal.degrees)||Math.abs(proposal.degrees)>360||
+          !Number.isFinite(proposal.confidence)||proposal.confidence<0||proposal.confidence>1)
+          throw Error('识别方向数据无效');
+        region.orientationProposal=proposal;
+      }
       if(object.subregions?.length)region.splitSources=object.subregions.map(decodePacked);
       return region;
     }

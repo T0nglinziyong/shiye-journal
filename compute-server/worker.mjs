@@ -7,6 +7,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {boundedMap} from '../src/bounded-map.js';
 import {SamDaemonClient} from './sam-daemon-client.mjs';
+import {OrientationDaemonClient} from './orientation-daemon-client.mjs';
 
 const env=process.env;
 const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',
@@ -20,6 +21,9 @@ const root=path.dirname(fileURLToPath(import.meta.url));
 const samRoot=env.SHIYE_SAM_ROOT||path.resolve(root,'../../sam2.1-local');
 const samDaemon=new SamDaemonClient(samRoot);
 void samDaemon.start().catch(error=>console.warn('SAM warmup unavailable:',error.message));
+const orientationDaemon=env.SHIYE_ORIENTATION_PYTHON
+  ?new OrientationDaemonClient(env.SHIYE_ORIENTATION_PYTHON):null;
+if(orientationDaemon)void orientationDaemon.start().catch(error=>console.warn('Direction warmup unavailable:',error.message));
 const uuid=/^[a-f0-9-]{36}$/i;
 const auth={'Authorization':'Bearer '+env.SHIYE_CLOUDBASE_SERVICE_KEY};
 let running=false,rerun=false,nextHint=null;
@@ -124,7 +128,14 @@ async function processJob(job){
     await runFastOrLegacy(input,output,job);
     stages.modelMs=Math.round(performance.now()-started-stages.downloadMs);
     const materials=path.join(output,'materials');
-    const manifest=JSON.parse(await readFile(path.join(materials,'result.json'),'utf8'));
+    const manifestPath=path.join(materials,'result.json');
+    if(orientationDaemon&&job.kind==='material-recognition'){
+      const orientationStarted=performance.now();
+      try{await orientationDaemon.run(input,manifestPath);}
+      catch(error){console.warn('Direction inference unavailable; using geometric alignment:',error.message);}
+      stages.orientationMs=Math.round(performance.now()-orientationStarted);
+    }
+    const manifest=JSON.parse(await readFile(manifestPath,'utf8'));
     if(![1,2].includes(manifest.version)||!manifest.objects.length||manifest.objects.length>250)
       throw Error('Model produced no usable masks or too many objects');
     if(manifest.version===1)await boundedMap(manifest.objects,4,async item=>{
