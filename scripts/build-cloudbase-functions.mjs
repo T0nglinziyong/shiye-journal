@@ -5,7 +5,7 @@ import {createHash,randomUUID} from 'node:crypto';
 
 export const FUNCTION_FILES=Object.freeze([
  'server/cloudbase-user.mjs','server/cos-tickets.mjs',
- ...['app','credentials','errors','postgres','embeddings','search','service','storage-gc','classification'].map(name=>'server/cloudbase/'+name+'.mjs'),
+ ...['app','credentials','errors','postgres','embeddings','search','service','storage-gc','classification','orientation-sheet'].map(name=>'server/cloudbase/'+name+'.mjs'),
  'cloudfunctions/shiye-api/src/package.json',
  'src/material-taxonomy.js','src/material-classification.js'
 ]);

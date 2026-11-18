@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import sharp from 'sharp';
 import {createCloudMaterialClassifier,materialClassificationPrompt} from '../server/cloudbase/classification.mjs';
 import {initialMaterialClassification} from '../src/material-classification.js';
 
@@ -8,7 +9,7 @@ test('classification prompt uses physical form, current multi-select roles and l
   sourceIdentifier:'sample',finalMaskBlobId:'mask-1'});
  assert.match(prompt,/只分类这件素材，不分类它画着的物品/);
  assert.match(prompt,/判断第一张图需要顺时针旋转多少度才正立/);
- assert.match(prompt,/想象两张图都按此角度转正，再判断素材是什么/);
+ assert.match(prompt,/优先比较第三张图的四种方向/);
  assert.match(prompt,/有留白、横线、格子或填写区供书写记录的是便签/);
  assert.match(prompt,/已有完整标题、信息或独立版式且主要供阅读展示的是卡片/);
  assert.match(prompt,/只有独立文字或字形而没有承载卡面的是文字素材/);
@@ -23,6 +24,7 @@ test('classification prompt uses physical form, current multi-select roles and l
 });
 
 test('cloud classification reads account-owned images and commits a user-safe result',async()=>{
+ const samplePNG=await sharp({create:{width:24,height:16,channels:3,background:'#d5c9ae'}}).png().toBuffer();
  const userID='owner-1',asset={id:'asset-1',title:'我的布纹贴纸',blobId:'blob-1',
   candidateFrameBlobId:'frame-1',physicalWidthMM:30,physicalHeightMM:40,
   ...initialMaterialClassification({kind:'sticker',role:'accent'}),
@@ -32,8 +34,13 @@ test('cloud classification reads account-owned images and commits a user-safe re
   if(address.hostname==='api.deepseek.com'){
    const payload=JSON.parse(options.body);
    assert.deepEqual(payload.thinking,{type:'disabled'});
+   if(payload.max_tokens===240){
+    assert.equal(payload.messages[0].content.filter(part=>part.type==='image_url').length,1);
+    return Response.json({choices:[{message:{content:JSON.stringify({choice:'B',confidence:.95,evidence:'桌面水平',
+      description:'桌面上平铺一块浅色格纹布。',descriptionConfidence:.93})}}]});
+   }
    assert.equal(payload.max_tokens,1000);
-   assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low']);
+   assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low','low']);
    assert.match(payload.messages[0].content[0].text,/paper\.patterned=花纹纸/);
    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
     title:'布片',titleConfidence:.99,description:'一张方形纸片上有浅色格纹。',descriptionConfidence:.91,kind:{id:'paper',confidence:.99},
@@ -52,7 +59,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
   }
   if(address.pathname.includes('/v1/storages/object/')){
    if(address.pathname.endsWith('-preview480.webp'))return new Response(null,{status:404});
-   return new Response(new Uint8Array([137,80,78,71]),{headers:{'content-type':'image/png'}});
+   return new Response(samplePNG,{headers:{'content-type':'image/png'}});
   }
   throw Error('unexpected URL');
  };
@@ -65,13 +72,13 @@ test('cloud classification reads account-owned images and commits a user-safe re
  const result=await classify('test-token',userID,asset.id);
  assert.equal(classify.configured,true);assert.equal(result.revision,13);
  assert.equal(committed.kind,'sticker');assert.equal(committed.title,'我的布纹贴纸');
- assert.equal(committed.description,'一张方形纸片上有浅色格纹。');
+ assert.equal(committed.description,'桌面上平铺一块浅色格纹布。');
  assert.equal(committed.descriptionEvidence.source,'ai');
  assert.deepEqual(committed.contentTags,['布纹']);assert.deepEqual(committed.materialTags,[]);
- assert.deepEqual(result.orientation,{deltaDegrees:90,confidence:.9});
+ assert.deepEqual(result.orientation,{deltaDegrees:-90,confidence:.95});
  assert.equal(committed.processingRecord?.displayRotationDegrees,undefined);
  assert.ok(seen.some(url=>url.includes('/v1/storages/object/')));
- assert.equal(seen.filter(url=>url.startsWith('https://api.deepseek.com/')).length,1);
+ assert.equal(seen.filter(url=>url.startsWith('https://api.deepseek.com/')).length,2);
  assert.equal(seen.some(url=>url.includes('frame-1-preview480.webp')),false);
 });
 test('cloud classification rejects a cross-account image path before download or model call',async()=>{
