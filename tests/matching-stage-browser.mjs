@@ -23,9 +23,16 @@ try{
   for(const [width,height,sideBySide] of [[390,844,false],[768,1024,true],[1024,768,true],[1440,900,true]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
     await sleep(120);
-    const geometry=await evaluate('(()=>{const a=document.querySelector(".match-stage-section").getBoundingClientRect(),b=document.querySelector(".match-recommendations").getBoundingClientRect();return {a:{x:a.x,y:a.y,right:a.right,bottom:a.bottom},b:{x:b.x,y:b.y,right:b.right,bottom:b.bottom},overflow:document.documentElement.scrollWidth-innerWidth}})()');
+    const geometry=await evaluate('(()=>{const a=document.querySelector(".match-stage-section").getBoundingClientRect(),b=document.querySelector(".match-recommendations").getBoundingClientRect(),card=document.querySelector(".match-rec");return {a:{x:a.x,y:a.y,right:a.right,bottom:a.bottom,height:a.height,width:a.width},b:{x:b.x,y:b.y,right:b.right,bottom:b.bottom,height:b.height,width:b.width},cardDisplay:getComputedStyle(card).display,overflow:document.documentElement.scrollWidth-innerWidth}})()');
     assert.ok(geometry.overflow<=1,JSON.stringify(geometry));
     assert.equal(sideBySide,geometry.b.x>geometry.a.right-1,JSON.stringify(geometry));
+    if(sideBySide)assert.ok(Math.abs(geometry.a.height-geometry.b.height)<=1,JSON.stringify(geometry));
+    if(sideBySide)assert.ok(geometry.a.width>geometry.b.width,JSON.stringify(geometry));
+    assert.equal(geometry.cardDisplay,'block');
+    if(sideBySide){
+      const shelfRows=await evaluate('(()=>{const items=[...document.querySelectorAll(".match-rec")].slice(0,6).map(node=>node.getBoundingClientRect());return {firstBottom:items[0].bottom,nextTop:items[3].top}})()');
+      if(width>1100)assert.ok(shelfRows.nextTop>=shelfRows.firstBottom-1,JSON.stringify(shelfRows));
+    }
     if(!sideBySide)assert.ok(geometry.b.y>=geometry.a.bottom-1,JSON.stringify(geometry));
     const screenshot=await command('Page.captureScreenshot',{format:'png'});
     await writeFile(`${directory}/${width}x${height}.png`,Buffer.from(screenshot.data,'base64'));
