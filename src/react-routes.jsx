@@ -57,7 +57,7 @@ import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName,materialKindDetails,tagGroups} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {materialSizeLabel} from './material-size-label.js';
-import {matchingStageItems,matchingPageSize} from './matching-stage.js';
+import {matchingStageItems,matchingPageSize,keepCornerVisible} from './matching-stage.js';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 import {importDefaultTitle} from './import-default-names.js';
 
@@ -1028,9 +1028,8 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       x:item.x,y:item.y,width:item.width,height:item.height,rect};
   };
   const draggedPosition=(drag,event)=>{
-    const limit=(value,size)=>size>=1?.5:Math.max(size/2,Math.min(1-size/2,value));
-    return {x:limit(drag.x+(event.clientX-drag.startX)/drag.rect.width,drag.width),
-      y:limit(drag.y+(event.clientY-drag.startY)/drag.rect.height,drag.height)};
+    return {x:keepCornerVisible(drag.x+(event.clientX-drag.startX)/drag.rect.width,drag.width),
+      y:keepCornerVisible(drag.y+(event.clientY-drag.startY)/drag.rect.height,drag.height)};
   };
   const pointerMove=event=>{
     const drag=dragRef.current;
@@ -1069,8 +1068,8 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       </div>
     </details>
     <div className="matching-layout"><section className="panel match-stage-section"><div className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small></div>
-      <div className="match-stage-settings"><label>页面模式<select id="match-mode" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
-        <label>纸张规格<select id="match-ratio" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></label></div>
+      <div className="match-stage-settings"><select id="match-mode" aria-label="页面模式" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select>
+        <select id="match-ratio" aria-label="纸张规格" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></div>
       <div className="match-stage-board" style={{'--match-page-ratio':pageSize.width/pageSize.height}}><div className={`match-stage-paper ${state.matchMode==='single'?'single':''}`} ref={stageRef} onPointerDown={event=>{if(event.target===event.currentTarget)setActiveMaterial(null);}}>
         <span className="match-stage-gutter" aria-hidden="true"/>
         {stageItems.map(item=><div key={item.asset.id} className={`match-stage-item ${activeMaterial===item.asset.id?'active':''}`}
@@ -1083,9 +1082,9 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         </div>)}
         {!selected.length?<p className="match-stage-empty">从素材架加入素材，在页面上预览尺寸和位置</p>:null}
       </div></div>
-      {activeAsset?<div className="match-stage-selection"><span><strong>{activeAsset.title}</strong><small>{materialSizeLabel(activeAsset)||'尺寸待确认'}</small></span>
+      <div className="match-stage-feedback">{activeAsset?<div className="match-stage-selection"><span><strong>{activeAsset.title}</strong><small>{materialSizeLabel(activeAsset)||'尺寸待确认'}</small></span>
         <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={activeAsset.id} data-react-action="true" onClick={action('match-core',activeAsset.id)} aria-pressed={state.coreIDs.includes(activeAsset.id)}>{state.coreIDs.includes(activeAsset.id)?'★ 已标星':'☆ 标星'}</button>
-          <button type="button" data-act="basket" data-id={activeAsset.id} data-react-action="true" onClick={()=>{setActiveMaterial(null);onAction('basket',activeAsset.id);}}>移出本页</button></div></div>:<p className="match-stage-hint">点选素材可标星或移除，拖动素材可调整位置。</p>}
+          <button type="button" data-act="basket" data-id={activeAsset.id} data-react-action="true" onClick={()=>{setActiveMaterial(null);onAction('basket',activeAsset.id);}}>移出本页</button></div></div>:<p className="match-stage-hint">点选素材可标星或移除，拖动素材可调整位置。</p>}</div>
       <p className="muted match-stage-count">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'可选推荐 '+scope.available.length:'可选推荐未开启'}</p>
     </section>
       <section className="panel match-recommendations"><div className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></div>
@@ -1098,7 +1097,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
           return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
             {materialSizeLabel(asset)?<small className="match-material-size">{materialSizeLabel(asset)}</small>:null}
             {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}{shelfTab==='recommend'?<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>:null}
-            <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>{isUsed?'移出本页':'加入本页'}</button>{shelfTab==='recommend'?<button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button>:null}</div></div>;
+            <div className="match-rec-actions"><button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>{isUsed?'移出本页':'加入本页'}</button>{shelfTab==='recommend'?<button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button>:null}</div></div></div>;
         }):<p className="match-shelf-empty">{query?'没有匹配的素材':shelfTab==='used'?'本页尚未选择素材':'这一方向暂时没有候选'}</p>}</div>
         {shelfRows.length>shelfLimit?<button className="btn match-shelf-more" type="button" onClick={()=>setShelfLimit(value=>value+80)}>继续显示</button>:null}
       </section></div>

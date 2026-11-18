@@ -29,6 +29,8 @@ try{
     if(sideBySide)assert.ok(Math.abs(geometry.a.height-geometry.b.height)<=1,JSON.stringify(geometry));
     if(sideBySide)assert.ok(geometry.a.width>geometry.b.width,JSON.stringify(geometry));
     assert.equal(geometry.cardDisplay,'block');
+    const shelfButtons=await evaluate('(()=>{const buttons=[...document.querySelectorAll(".match-rec-actions button")].slice(0,2).map(node=>node.getBoundingClientRect());return buttons.map(rect=>rect.top)})()');
+    assert.ok(Math.abs(shelfButtons[0]-shelfButtons[1])<=1,JSON.stringify(shelfButtons));
     if(sideBySide){
       const shelfRows=await evaluate('(()=>{const items=[...document.querySelectorAll(".match-rec")].slice(0,6).map(node=>node.getBoundingClientRect());return {firstBottom:items[0].bottom,nextTop:items[3].top}})()');
       if(width>1100)assert.ok(shelfRows.nextTop>=shelfRows.firstBottom-1,JSON.stringify(shelfRows));
@@ -42,10 +44,13 @@ try{
   const initialGeometry=await evaluate('(()=>{const board=document.querySelector(".match-stage-board").getBoundingClientRect(),page=document.querySelector(".match-stage-paper").getBoundingClientRect();return {height:board.height,pageHeight:page.height,width:page.width,boardWidth:board.width}})()');
   assert.ok(initialGeometry.width>initialGeometry.boardWidth*.8,JSON.stringify(initialGeometry));
   await click('.match-stage-item','.match-stage-selection');
-  const blank=await evaluate('(()=>{const rect=document.querySelector(".match-stage-paper").getBoundingClientRect();return {x:rect.right-8,y:rect.bottom-8}})()');
+  const selectedHeight=await evaluate('document.querySelector(".match-stage-section").getBoundingClientRect().height');
+  assert.ok(await evaluate('!document.querySelector(".match-stage-settings").textContent.includes("页面模式")'));
+  const blank=await evaluate('(()=>{const page=document.querySelector(".match-stage-paper").getBoundingClientRect(),board=document.querySelector(".match-stage-board").getBoundingClientRect();return {x:Math.min(page.x+page.width*.7,board.right-10),y:Math.min(page.y+page.height*.8,board.bottom-10)}})()');
   await command('Input.dispatchMouseEvent',{type:'mousePressed',x:blank.x,y:blank.y,button:'left',clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:blank.x,y:blank.y,button:'left',clickCount:1});
   assert.ok(await evaluate('!document.querySelector(".match-stage-selection")'));
+  assert.equal(await evaluate('document.querySelector(".match-stage-section").getBoundingClientRect().height'),selectedHeight);
   await evaluate('(()=>{const mode=document.querySelector("#match-mode");mode.value="spread";mode.dispatchEvent(new Event("change",{bubbles:true}))})()');
   assert.ok(await evaluate('!document.querySelector(".match-stage-paper").classList.contains("single")'));
   assert.equal(await evaluate('document.querySelector(".match-stage-board").getBoundingClientRect().height'),initialGeometry.height);
@@ -72,6 +77,16 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:second.to.x,y:second.to.y,button:'left',clickCount:1});
   await evaluate('(()=>{const mode=document.querySelector("#match-mode");mode.value="single";mode.dispatchEvent(new Event("change",{bubbles:true}))})()');
   assert.ok(await evaluate(`document.querySelector('.match-stage-item[data-match-asset="${secondID}"]').getBoundingClientRect().x>document.querySelector('.match-stage-paper').getBoundingClientRect().x+document.querySelector('.match-stage-paper').getBoundingClientRect().width/2`));
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  await evaluate(`document.querySelector('.match-stage-item[data-match-asset="${secondID}"]').scrollIntoView({block:"center"})`);
+  const offPaper=await evaluate(`(()=>{const item=document.querySelector('.match-stage-item[data-match-asset="${secondID}"]').getBoundingClientRect(),page=document.querySelector('.match-stage-paper').getBoundingClientRect();return {from:{x:item.x+item.width/2,y:item.y+item.height/2},to:{x:page.right+item.width/2-3,y:page.bottom+item.height/2-3}}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',x:offPaper.from.x,y:offPaper.from.y,button:'left',clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:offPaper.to.x,y:offPaper.to.y,button:'left'});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:offPaper.to.x,y:offPaper.to.y,button:'left',clickCount:1});
+  const corner=await evaluate(`(()=>{const item=document.querySelector('.match-stage-item[data-match-asset="${secondID}"]').getBoundingClientRect(),page=document.querySelector('.match-stage-paper').getBoundingClientRect();return {left:item.left,top:item.top,right:item.right,bottom:item.bottom,pageRight:page.right,pageBottom:page.bottom}})()`);
+  assert.ok(corner.left<corner.pageRight&&corner.right>corner.pageRight&&corner.top<corner.pageBottom&&corner.bottom>corner.pageBottom,JSON.stringify(corner));
+  const cornerScreenshot=await command('Page.captureScreenshot',{format:'png'});
+  await writeFile(`${directory}/off-paper.png`,Buffer.from(cornerScreenshot.data,'base64'));
   await click('[data-act="create-from-basket"]','.manual-layout-dialog');
   await click('[data-manual-template="stage"]','#canvas-page');
   assert.ok(await evaluate('!!document.querySelector("#canvas-page canvas")'));
