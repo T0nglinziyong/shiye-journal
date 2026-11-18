@@ -17,8 +17,10 @@ export function materialClassificationPrompt(original){
   const metadata={widthMM:original.physicalWidthMM,heightMM:original.physicalHeightMM,
     source:original.sourceIdentifier,cutout:!!original.finalMaskBlobId,
     userConfirmedType:original.categoryEvidence?.kind?.source==='user'?original.kind:null};
-  return `你是手帐实物素材编目员。第一张图是当前展示方向的素材抠图；第二张图（如果有）是同一件素材未抠图的局部原图，可用于观察外边缘和承载物，不是另一件素材。只分类这件实物，不分类它画着的物品。输出一个 JSON 对象，不要解释。\n`+
-    `先判断外轮廓、纸片或物件形态，再判断画面内容。透明背景、矩形裁切、白色描边、印有布纹或金属纹，都不能单独证明背胶、真实材质或制造工艺。重复图案覆盖整片的独立纸片按花纹纸分类，除非看见贴纸的模切边界或背胶证据；相机拍摄内容的独立纸片按照片分类，只有明显的拍立得相纸版式才选拍立得。依据可见形态选择最合适的类型；只有分类字典确实没有对应项才选 other。不要根据画上的图案臆造材质。\n`+
+  return `你是手帐实物素材编目员。第一张图是当前展示方向的单件素材抠图；第二张图（如果有）是同一件素材未抠图的局部原图，用于判断边缘和承载物。只分类这件素材，不分类它画着的物品。输出一个 JSON 对象，不要解释。\n`+
+    `按顺序在心里完成两步：①判断第一张图需要顺时针旋转多少度才正立，方向不确定则保持原样；②想象两张图都按此角度转正，再判断素材是什么以及画面作用。只输出最终 JSON，不输出推理。\n`+
+    `类型依据：有留白、横线、格子或填写区供书写记录的是便签；整片以纯色、纹理或重复花纹为主且无明确书写功能的是纸张；已有完整标题、信息或独立版式且主要供阅读展示的是卡片；真实场景的摄影画面是照片；只有独立文字或字形而没有承载卡面的是文字素材；轮廓沿人物、动物、物件或图案裁切且呈单件装饰的是贴纸。胶带须有条带或卷状形态，票据须有票证、票根或收据特征，邮票须有邮资特征，印章须有盖印特征。包装袋、信封等字典未覆盖的独立实物选 other。\n`+
+    `透明背景、矩形裁切、白色描边、画面里的布纹或金属纹都不能单独证明背胶、真实材质或工艺。模糊时降低置信度，不要因为素材里画着饼干、布料或回形针就把实物类型改成食物、布料或装饰小物。\n`+
     `素材类型（必选单选）：${choices(materialKinds)}。具体类型（仅选所选素材类型下的 ID；不确定填 null）：${choices(materialKindDetails)}。\n`+
     `画面作用（选最合适的 1 项放 role，其他确实适用的放 secondaryRoles；这两处合起来是多选）：${choices(materialRoles)}。\n`+
     `内容类别（可多选；无具体内容与其他内容不并列）：${choices(contentCategories)}。版面适配（可多选，只选具体适配项）：${choices(layoutFits)}。\n`+
