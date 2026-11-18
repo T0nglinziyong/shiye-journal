@@ -1,8 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import sharp from 'sharp';
+import {PNG} from 'pngjs';
 import {createCloudMaterialClassifier,materialClassificationPrompt} from '../server/cloudbase/classification.mjs';
+import {orientationSheet} from '../server/cloudbase/orientation-sheet.mjs';
 import {initialMaterialClassification} from '../src/material-classification.js';
+
+test('orientation sheet B rotates the current image counterclockwise by 90 degrees',async()=>{
+ const source=new PNG({width:2,height:2});
+ const colors=[[255,0,0],[0,255,0],[0,0,255],[255,255,0]];
+ colors.forEach((color,index)=>source.data.set([...color,255],index*4));
+ const url=await orientationSheet('data:image/png;base64,'+PNG.sync.write(source).toString('base64'));
+ const sheet=PNG.sync.read(Buffer.from(url.slice(url.indexOf(',')+1),'base64'));
+ const at=(60*sheet.width+410)*4;
+ assert.deepEqual([...sheet.data.subarray(at,at+3)],[0,255,0]);
+});
 
 test('classification prompt uses physical form, current multi-select roles and leaf layout IDs',()=>{
  const prompt=materialClassificationPrompt({physicalWidthMM:30,physicalHeightMM:40,
@@ -24,7 +35,8 @@ test('classification prompt uses physical form, current multi-select roles and l
 });
 
 test('cloud classification reads account-owned images and commits a user-safe result',async()=>{
- const samplePNG=await sharp({create:{width:24,height:16,channels:3,background:'#d5c9ae'}}).png().toBuffer();
+ const source=new PNG({width:24,height:16});source.data.fill(255);
+ const samplePNG=PNG.sync.write(source);
  const userID='owner-1',asset={id:'asset-1',title:'我的布纹贴纸',blobId:'blob-1',
   candidateFrameBlobId:'frame-1',physicalWidthMM:30,physicalHeightMM:40,
   ...initialMaterialClassification({kind:'sticker',role:'accent'}),
