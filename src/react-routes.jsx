@@ -56,6 +56,7 @@ import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName,materialKindDetails,tagGroups} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
+import {materialSizeLabel} from './material-size-label.js';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 import {importDefaultTitle} from './import-default-names.js';
 
@@ -1029,6 +1030,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
       {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>
         <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong>{asset.kind||asset.role?<small className="match-type">{[asset.kind?kindName(asset.kind):null,asset.role?materialRoleName(asset.role):null].filter(Boolean).join(' · ')}</small>:null}
+          {materialSizeLabel(asset)?<small className="match-material-size">{materialSizeLabel(asset)}</small>:null}
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
         </div></div>):<p>可从右侧建议或素材库选择材料，点星号设为必用；纯编辑也可直接从空白页开始。</p>}
@@ -1038,6 +1040,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
           return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
+            {materialSizeLabel(asset)?<small className="match-material-size">{materialSizeLabel(asset)}</small>:null}
             {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>
             <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
         }):<p>{state.recommendFilter==='主题呼应'?'写下补充想法或选择有相近主题的素材，再看主题推荐。':'这一方向暂时没有候选；可以调整页面方向或继续从素材库选取。'}</p>}</div>
@@ -1308,6 +1311,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
 
 // Fabric owns the single editable canvas; React owns its surrounding controls.
 const editorFabricCanvases=new Map();
+let editorFittedViewportHeight=0;
 export function getEditorFabricCanvas(draftID){return editorFabricCanvases.get(draftID);}
 
 export function EditorPage({state,draft,editorEntry,asset,source,format,
@@ -1320,7 +1324,10 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   const selectedGroup=findSceneNode(draft,state.selected)?.type==='group';
   const selectedIDs=state.multiSelected||[];
   const canUngroup=!!selectionGroupID(draft,selectedIDs);
-  const viewportHeight=window.visualViewport?.height||window.innerHeight;
+  const visibleHeight=window.visualViewport?.height||window.innerHeight;
+  const typing=!!state.editingTextID||document.activeElement?.matches?.('textarea[data-fabric="textarea"], .canvas-inline-text');
+  if(!typing)editorFittedViewportHeight=visibleHeight;
+  const viewportHeight=typing?Math.max(visibleHeight,editorFittedViewportHeight):visibleHeight;
   const availableWidth=Math.max(180,window.innerWidth-(window.innerWidth<700?24:72));
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
   const width=Math.max(160,Math.min(availableWidth,availableHeight*draft.canvas.width/draft.canvas.height));

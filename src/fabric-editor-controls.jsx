@@ -13,6 +13,7 @@ import {adjacentFontSize} from './canvas-control-behavior.js';
 import {mountPieceThumbnail} from './material-piece-thumbnail.js';
 import {sceneLayerEntries} from './scene-v2.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
+import {materialSizeLabel} from './material-size-label.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',tape:'tape',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',tape:'胶带',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -135,15 +136,19 @@ function ShapePicker({draft,onPick}){
 }
 
 export function MaterialPieceImage({asset,item,source}){
-  const card=useRef(null),sourceID=item?.sourceBlobId||asset?.blobId;
+  const card=useRef(null),piece=!!item&&(!!item.cropRect||!!item.materialMask||!!item.vectorMask||
+    !!item.tapeStrip||!!item.splitParentId||
+    !!(item.sourceBlobId&&item.sourceBlobId!==asset?.blobId)||
+    !!(item.sourceStaticPath&&item.sourceStaticPath!==asset?.staticPath));
+  const sourceID=item?.sourceBlobId||asset?.blobId;
   const src=item?.sourceBlobId?(source(item.sourceBlobId)||item.sourceStaticPath):item?.sourceStaticPath||(sourceID&&source(sourceID))||asset?.staticPath;
-  const geometry=item?materialPreviewKey(item):'';
+  const geometry=piece?materialPreviewKey(item):'';
   useEffect(()=>{
-    if(!card.current||!src||!item)return;
+    if(!card.current||!src||!piece)return;
     return mountPieceThumbnail(card.current,item);
-  },[src,item?.id,geometry]);
+  },[src,item?.id,geometry,piece]);
   return <div ref={card} className="material-piece-image" data-piece-id={item?.id}>
-    {src?(item?<img src={src} data-asset-image-id={asset?.id} loading="lazy" decoding="async" alt="" style={{visibility:'hidden'}}/>:
+    {src?(piece?<img src={src} data-asset-image-id={asset?.id} loading="lazy" decoding="async" alt="" style={{visibility:'hidden'}}/>:
       <TapeAssetImage asset={asset} src={src} alt=""/>):<span>无预览</span>}
   </div>;
 }
@@ -187,7 +192,8 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     }}>{rows.slice(0,shown).map(({asset,item})=><button type="button" key={item?.id||asset.id}
       data-material-id={asset.id} data-picker-item={item?.id} onClick={()=>onPick(asset.id,item?.id)}>
       <MaterialPieceImage asset={asset} item={item} source={source}/>
-      <span>{asset.title}{item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):''}</span></button>)}
+      <span>{asset.title}{item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):''}
+        {materialSizeLabel(asset,item)?<small className="picker-material-size">{materialSizeLabel(asset,item)}</small>:null}</span></button>)}
     </div>{!rows.length?<p>没有符合条件的素材</p>:rows.length>shown?<small>下滑继续显示 · 共 {rows.length} 件</small>:null}</>;
 }
 
@@ -205,7 +211,8 @@ function TapePicker({materials,source,onPick}){
         setShown(count=>Math.min(rows.length,count+40));
     }}>{rows.slice(0,shown).map(asset=><button type="button" key={asset.id}
       data-tape-id={asset.id} onClick={()=>onPick(asset.id)}>
-      <MaterialPieceImage asset={asset} source={source}/><span>{asset.title}</span>
+      <MaterialPieceImage asset={asset} source={source}/><span>{asset.title}
+        {materialSizeLabel(asset)?<small className="picker-material-size">{materialSizeLabel(asset)}</small>:null}</span>
     </button>)}</div>
     {!rows.length?<p>没有符合条件的胶带</p>:rows.length>shown?<small>下滑继续显示 · 共 {rows.length} 件</small>:null}
   </>;
