@@ -27,4 +27,7 @@ test('manual material angle uses the cutout angle and is marked as user choice',
   assert.equal(changed.processingRecord.autoStraighten,false);
   assert.equal(changed.processingRecord.sourceWidthMM,40);
   assert.throws(()=>assetEditorValue(old,{...fields,rotation:'181'}),/显示角度/);
+  const described=assetEditorValue(old,{...fields,description:'画面中央是一张浅色纸片。'});
+  assert.equal(described.description,'画面中央是一张浅色纸片。');
+  assert.equal(described.descriptionEvidence.source,'user');
 });

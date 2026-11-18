@@ -25,9 +25,9 @@ export function materialClassificationPrompt(original){
     `画面作用（选最合适的 1 项放 role，其他确实适用的放 secondaryRoles；这两处合起来是多选）：${choices(materialRoles)}。\n`+
     `内容类别（可多选；无具体内容与其他内容不并列）：${choices(contentCategories)}。版面适配（可多选，只选具体适配项）：${choices(layoutFits)}。\n`+
     `开放标签分组：${choices(tagGroups)}。仅写有图像证据的简短词，每组最多 3 个；不要在不同组重复同一词，不要把类型、尺寸、透明度、文件来源或未证实的材质写成标签。\n`+
-    `分类字段用 {"id":"上列 ID","confidence":0到1}，多选字段用此对象的数组，标签字段用 {"value":"词","confidence":0到1} 的数组。缺少证据填 null 或 []，不要编造 ID。title 用“可见内容＋实物类型”写简短中文名；不确定时用中性名称。\n`+
-    `JSON 格式：{"title":"花朵贴纸","titleConfidence":0.9,"kind":{"id":"sticker","confidence":0.9},"kindDetail":{"id":"sticker.subject","confidence":0.8},"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],"colorTags":[],"materialTags":[],"moodTags":[],"tags":[],"orientation":{"deltaDegrees":0,"confidence":1}}。\n`+
-    `方向仅按第一张图判断。orientation.deltaDegrees 是相对当前展示方向还需顺时针旋转的角度，只能是 0、90、-90、180；只有文字、人物或明确主体的正立方向足够确定时才给非零角度和高置信度；方向自由或模糊时填 0。\n`+
+    `分类字段用 {"id":"上列 ID","confidence":0到1}，多选字段用此对象的数组，标签字段用 {"value":"词","confidence":0到1} 的数组。缺少证据填 null 或 []，不要编造 ID。title 用“可见内容＋实物类型”写简短中文名；不确定时用中性名称。description 用一到两句中文客观描述可见主体、色彩、图案和构图，不重复标题，不猜测看不出的材质、背胶或用途；模糊的小图案只写轮廓或装饰画，不猜具体人物或物种。\n`+
+    `JSON 格式：{"title":"花朵贴纸","titleConfidence":0.9,"description":"一朵浅粉色花位于画面中央，花瓣边缘有白色描线。","descriptionConfidence":0.9,"kind":{"id":"sticker","confidence":0.9},"kindDetail":{"id":"sticker.subject","confidence":0.8},"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],"colorTags":[],"materialTags":[],"moodTags":[],"tags":[],"orientation":{"deltaDegrees":0,"confidence":1}}。\n`+
+    `方向仅按第一张图判断。orientation.deltaDegrees 是相对当前展示方向还需顺时针旋转的角度，只能是 0、90、-90、180；第二张图与第一张图方向一致并不能证明方向正确。依据文字阅读方向、重力、人物或明确主体的正立方向判断，证据不足时填 0 并降低置信度。\n`+
     `已知元数据（只作辅助，不优先于图像）：${JSON.stringify(metadata)}`;
 }
 export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fetch,commit}={}){

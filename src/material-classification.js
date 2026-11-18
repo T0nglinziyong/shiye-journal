@@ -85,6 +85,12 @@ export function applyAIClassification(old,result,{minConfidence=.7,allowMigratio
     result.titleConfidence>=minConfidence&&old.titleEvidence?.source!=='user'){
     next.title=result.title.trim();next.titleEvidence={source:'ai',confidence:result.titleConfidence,modelVersion:result.modelVersion};
   }
+  if(typeof result.description==='string'&&result.description.trim()&&result.description.length<=500&&
+    Number.isFinite(result.descriptionConfidence)&&result.descriptionConfidence>=minConfidence&&
+    result.descriptionConfidence<=1&&old.descriptionEvidence?.source!=='user'){
+    next.description=result.description.trim();
+    next.descriptionEvidence={source:'ai',confidence:result.descriptionConfidence,modelVersion:result.modelVersion};
+  }
   next.categoryEvidence=categoryEvidence;next.tagEvidence=tagEvidence;
   next.autoOrganized=true;next.reviewStatus=old.reviewStatus==='ready'?'ready':'pendingReview';
   return validateMaterialClassification(next);

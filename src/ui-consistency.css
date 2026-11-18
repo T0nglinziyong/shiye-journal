@@ -36,6 +36,8 @@
 .material-editor-dialog .material-editor-preview{flex:none;width:min(100%,28dvh,280px);height:auto;min-height:0;aspect-ratio:1}
 .material-editor-dialog .material-editor-preview>img:not([style]),.material-editor-dialog .material-editor-preview>.tape-flat-preview{transform:rotate(var(--asset-edit-rotation,0deg))}
 .material-editor-dialog .material-editor-controls{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+.material-editor-dialog #asset-description{width:100%;min-height:72px;resize:vertical}
+#view .detail-description{margin:-8px 0 20px;color:#52634b;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
 /* Cutout steps follow the fixed preview on both mobile and desktop. */
 @media(min-width:700px){#modal.cutout-dialog .cutout-modal{grid-template-areas:"header header" "compare controls" "preview controls" "steps controls" "hint controls"}}
 @media(max-width:699px){.cloud-admin-panel.material-editor-dialog{height:min(92dvh,850px);max-height:min(92dvh,850px)}.material-editor-dialog .material-editor-preview{width:min(100%,24dvh,210px);height:auto}}
