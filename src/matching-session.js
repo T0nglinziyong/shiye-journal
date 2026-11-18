@@ -7,8 +7,10 @@ import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-r
 import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
+import {matchingStageItems} from './matching-stage.js';
+import {itemFromAsset} from './domain.js';
 const ID='matching-session-v1';
-const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose','recommendFilter'];
+const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchPlacements','matchInitialAssetIDs','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose','recommendFilter'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
@@ -98,6 +100,8 @@ export function createMatchingSession(c){
    if(mode!=='draw'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥；导出给网页 GPT 不需要 Key');
    if(mode==='hybrid'&&!c.supportsVision(cfg))throw Error('混合模式的重建需要可看图模型；可改为导出给网页版 GPT');
    const assetsSnapshot=structuredClone(c.state.assets),p=referenceSnapshot?projectForReconstruction(referenceSnapshot,assetsSnapshot):c.createProject(),ids=[...p.candidateAssetIDs],findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+   const parkedCandidates=referenceSnapshot?[]:matchingStageItems((c.state.basket||[]).map(findAsset).filter(Boolean),
+    c.state.matchPlacements,c.state.matchRatio,c.state.matchMode,c.state.matchInitialAssetIDs).filter(item=>!item.onPage);
    p.creationMode=mode;let referenceImage=null;
 
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder,checkpointFailed=false;
@@ -141,6 +145,14 @@ export function createMatchingSession(c){
     });
     ensureAccount();
     if(mode==='hybrid'&&!output.draft?.layers?.length)throw Error('重建未产生可编辑图层；原始成图已保留，未保存空候选');
+    if(parkedCandidates.length){
+     const used=new Set(output.draft.items.map(item=>item.assetID));
+     for(const {asset} of parkedCandidates){
+      if(used.has(asset.id))continue;
+      const item=itemFromAsset(asset,output.draft,output.draft.canvas.width/2,output.draft.canvas.height/2,10+output.draft.items.length);
+      item.isParked=true;output.draft.items.push(item);
+     }
+    }
     await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode='tools';
     if(mode==='hybrid'){v.project=p;v.linkedProjectID=null;v.progress+='\n已生成可编辑候选；原始成图独立保留，细节仍需核对。';}
     {v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}

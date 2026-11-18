@@ -124,6 +124,7 @@ import {cloudPreferencesRecord,cloudPreferencesFromMeta} from './cloud-preferenc
 import {cloudAISettingsRecord,cloudAISettingsFromMeta} from './cloud-ai-settings.js';
 import {cloudMatchingSettingsRecord,cloudMatchingSettingsFromMeta,applyMatchingDefaults} from './cloud-matching-settings.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
+import {applyMatchingStage,matchingStageItems} from './matching-stage.js';
 import {detectPaperCandidates,reprocessPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
 import {estimatePageLighting} from './material-color-restoration.js';
@@ -190,7 +191,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchCreationMode:'edit',matchRatio:'a4',matchMode:'single',matchPlacements:{},matchInitialAssetIDs:null,matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -1002,13 +1003,13 @@ function updateMatchingFromReact(key,value,options){
     state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
     normalizeMatchingDirection(state);
   }else if(['matchContentPolicy','matchMode',
-    'matchRatio','matchIntent'].includes(key))state[key]=value;
+    'matchRatio','matchIntent','matchPlacements','matchInitialAssetIDs'].includes(key))state[key]=value;
   else return;
   void matchingSession.persist().catch(error=>{
     console.warn('本机搭配状态未保存；不影响云端作品同步',error);
     toast('本机搭配状态保存失败：'+error.message);
   });
-  if(key!=='matchIntent')queueMatchingDefaultsSync();
+  if(key!=='matchIntent'&&key!=='matchPlacements'&&key!=='matchInitialAssetIDs')queueMatchingDefaultsSync();
 }
 function bindPage({partial=false}={}){
   // Pagination only inserts cards. Rebinding all form, editor and matching
@@ -1422,7 +1423,7 @@ async function runAppAction(action,id,value){try{
   case 'snapshot-export-rebuild':await exportOfflineCreation({snapshot:state.projects.find(p=>p.id===state.previewProjectID)});break;
   case 'match-import-gpt':openOfflineImportDialog();break;
   case 'basket':await actionStore.dispatch({type:'matching/basket',payload:{id}});break;
-  case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];});render();break;
+  case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];state.matchPlacements={};state.matchInitialAssetIDs=[];});render();break;
   case 'create-from-basket':openManualCreationDialog();break;
   case 'new-project':{
     openOverlay(createElement(BlankProjectDialog,{defaultSize:state.preferences.paperSize||'a4',
@@ -2308,7 +2309,24 @@ function captureMatchingDirection(){
   state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;
   state.matchRatio=view.querySelector('#match-ratio')?.value||'a4';normalizeMatchingDirection(state);
 }
-function createMatchingProject(automatic=true){const scope=matchingScope();if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';return p;}
+function createMatchingProject(automatic=true){
+  const scope=matchingScope();
+  if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!state.basket.length)throw Error('请先选择素材');
+  const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];
+  const selected=state.basket.map(id=>state.assets.find(asset=>asset.id===id)).filter(Boolean);
+  const parked=new Set(matchingStageItems(selected,state.matchPlacements,state.matchRatio,state.matchMode,state.matchInitialAssetIDs)
+    .filter(item=>!item.onPage).map(item=>item.asset.id));
+  const active=list=>list.filter(id=>!parked.has(id));
+  const activeScope={...scope,required:active(scope.required),preferred:active(scope.preferred),
+    available:active(scope.available),candidateAssetIDs:active(scope.candidateAssetIDs)};
+  d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));
+  p.candidateAssetIDs=automatic?activeScope.candidateAssetIDs:[...state.basket];
+  p.materialPriority=automatic?activeScope:{...scope,available:[],candidateAssetIDs:[...state.basket]};
+  p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;
+  p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];
+  p.requiredAssetIDs=[...(automatic?activeScope:scope).required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';
+  return p;
+}
 async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
   if(!rebuildSnapshot&&!canStartCreation(state.matchCreationMode,matchingScope().candidateAssetIDs.length)){toast('请先选择素材');return;}
   captureMatchingDirection();
@@ -2405,7 +2423,8 @@ async function createFromBasket(templateID=null){
   await flushSave();
   const p=createMatchingProject(false),draft=p.drafts[0];
   let result=null;
-  if(templateID)result=applyManualLayout(draft,state.assets,state.basket,templateID);
+  if(templateID==='stage')result=applyMatchingStage(draft,state.assets,state.basket,state.matchPlacements,state.matchInitialAssetIDs);
+  else if(templateID)result=applyManualLayout(draft,state.assets,state.basket,templateID);
   else draft.items=[];
   await db.stageProject(p);
   state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool='select';
@@ -2414,7 +2433,8 @@ async function createFromBasket(templateID=null){
 }
 function openManualCreationDialog(){
   captureMatchingDirection();
-  const choices=manualLayoutChoices({assets:state.assets,basket:state.basket,styles:state.matchStyles,purposes:state.matchPurposes});
+  const choices=[{id:'stage',title:'沿用本页摆放',description:'按照本页画布的位置和真实尺寸创建可编辑素材。',reason:'保留刚才的拖动结果'},
+    ...manualLayoutChoices({assets:state.assets,basket:state.basket,styles:state.matchStyles,purposes:state.matchPurposes})];
   openOverlay(createElement(ManualLayoutDialog,{choices,onClose:closeOverlay,onChoose:id=>createFromBasket(id)}));
 }
 function openMaterialPicker(){
