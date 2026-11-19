@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyCloudAsset} from '../src/cloud-asset-classification.js';
+import {applyFreshClassification,classifyCloudAsset} from '../src/cloud-asset-classification.js';
+
+test('late classification cannot overwrite a user review change',()=>{
+  const requested={id:'a',updatedAt:'before',reviewStatus:'ready'};
+  const current={id:'a',updatedAt:'after',reviewStatus:'pendingReview',reviewStatusSource:'user'};
+  assert.equal(applyFreshClassification(current,requested,{...requested,reviewStatus:'ready'}),false);
+  assert.equal(current.reviewStatus,'pendingReview');
+  assert.equal(applyFreshClassification(requested,requested,{...requested,title:'已整理'}),true);
+  assert.equal(requested.title,'已整理');
+});
 
 test('batch classification uses returned assets and defers cloud refresh',async()=>{
   let flushes=0,refreshes=0,requests=0;

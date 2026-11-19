@@ -6,8 +6,8 @@ import {readFile} from 'node:fs/promises';
 const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
   'manual-import-recognition.js':'bc83bd2f7e0d572c9fb7c0d3acc724a238385133',
-  // Reviewed change: use the first sustained paper edge to correct a shadow-biased A4 line.
-  'perspective.js':'d5a8d6ff101fe624dfa243e6704c01f2d6b9d28e',
+  // Reviewed change: use the first sustained paper edge and antialias model-size A4 warps.
+  'perspective.js':'c26acc961d4a5e413b6aafc793558d594800cdec',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   // Reviewed change: React owns catalog controls, import queue, candidate controls and review menus;
   // recognition and segmentation code remains unchanged.

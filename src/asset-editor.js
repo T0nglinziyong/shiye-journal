@@ -21,7 +21,7 @@ export function assetEditorValue(old,values) {
     titleEvidence:old.title!==values.title.trim()?{source:'user',confidence:1}:old.titleEvidence,
     physicalWidthMM:width,physicalHeightMM:height,
     seriesID:values.seriesID||null,reviewStatus:values.reviewStatus,
-    reviewStatusSource:old.reviewStatus!==values.reviewStatus?'user':old.reviewStatusSource,
+    reviewStatusSource:old.reviewStatus!==values.reviewStatus||values.reviewStatusTouched?'user':old.reviewStatusSource,
     updatedAt:new Date().toISOString()};
   if(typeof values.description==='string'&&values.description.trim()!==(old.description||'')){
     next.description=values.description.trim();

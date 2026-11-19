@@ -6,6 +6,7 @@ import {useUnsavedInput} from './unsaved-inputs.js';
 export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onClose,onToggle,
   onSave,onCheck,onError}){
   const [editing,setEditing]=useState(false);
+  const [reviewStatusTouched,setReviewStatusTouched]=useState(false);
   const [draft,setDraft]=useState(()=>({title:candidate.title||'',
     width:candidate.width??'',height:candidate.height??'',kind:candidate.kind||'sticker',
     role:candidate.role||'focal',titleSource:candidate.titleSource||'default',kindSource:candidate.kindSource||'default',
@@ -33,7 +34,7 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
       onError('尺寸需为正数');return;
     }
     onSave(recordIndex,candidateIndex,{...draft,title:draft.title.trim(),width,height,
-      ...(draft.reviewStatus!==candidate.reviewStatus?{reviewStatusSource:'user'}:{})});
+      ...(draft.reviewStatus!==candidate.reviewStatus||reviewStatusTouched?{reviewStatusSource:'user'}:{})});
     onClose();
   };
   return createPortal(editing?<><div className="dialog-head"><h2>素材信息</h2>
@@ -54,7 +55,7 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
         {materialRoles.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>状态<select id="candidate-edit-status" value={draft.reviewStatus}
-        onChange={event=>change('reviewStatus',event.target.value)}>
+        onChange={event=>{setReviewStatusTouched(true);change('reviewStatus',event.target.value);}}>
         <option value="pendingReview">待检查</option><option value="ready">已整理</option>
       </select></label>
       <button type="submit" className="btn primary" id="candidate-edit-save">保存修改</button>

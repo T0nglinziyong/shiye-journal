@@ -26,7 +26,7 @@ export async function rectifyA4Frame(bitmap,corners,maxDimension=4096,paperRatio
   const rawHeight=(length(p[0],p[3])+length(p[1],p[2]))/2;
   if(!Number.isFinite(paperRatio)||paperRatio<=0)throw Error('纸张比例无效');
   const {width,height}=rectifiedPixelSize(rawWidth,rawHeight,maxDimension,paperRatio);
-  const processed=await visionTask('warp',{pixels:sourcePixels(bitmap),transferInput:true,sourceWidth:bitmap.width,sourceHeight:bitmap.height,corners,width,height});
+  const processed=await visionTask('warp',{pixels:sourcePixels(bitmap),transferInput:true,sourceWidth:bitmap.width,sourceHeight:bitmap.height,corners,width,height,antialias:maxDimension<=1024});
   const canvas=pixelCanvas(processed.pixels,width,height);
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('校正图像失败')),'image/png'));
   return {canvas,blob};
