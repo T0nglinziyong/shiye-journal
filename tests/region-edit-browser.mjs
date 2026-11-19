@@ -42,6 +42,8 @@ try{
   await click('.candidate-choice:nth-child(1) .import-candidate-tile');
   await click('.candidate-choice:nth-child(2) .import-candidate-tile');
   assert.ok(await evaluate(`document.querySelector('.import-region-tools button:nth-child(2)')?.classList.contains('primary')`));
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.import-region-tools button:nth-child(1)')).backgroundColor`),
+    await evaluate(`getComputedStyle(document.querySelector('.import-region-tools button:nth-child(2)')).backgroundColor`));
   await click('.import-region-tools button:nth-child(2)','button');
   assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),3);
   assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('预览')`));
@@ -76,6 +78,10 @@ try{
     document.querySelector('.import-inspect')?.getAttribute('aria-busy')==='false'`,'cached region not added');
   assert.ok(await evaluate(`!!document.querySelector('.import-region-tools')`));
   assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),jobs);
+  assert.ok(await evaluate(`document.querySelector('.import-region-tools button:nth-child(3)')?.classList.contains('is-muted')`));
+  await click('.import-region-tools button:nth-child(3)','button');
+  assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('最小对象')`));
+  await click('.import-primary-tools button:nth-child(1)','.import-region-tools');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   assert.ok(await evaluate(`(()=>{const tools=document.querySelector('.import-region-tools');
     const bounds=tools.getBoundingClientRect();return [...tools.children].every(button=>{
