@@ -33,7 +33,8 @@ export function candidateMetadata(c,record,batchSeriesID) {
   return {title:c.title?.trim()||'新素材',...classification,
     titleEvidence:c.titleSource==='user'?{source:'user',confidence:1}:undefined,
     palette:[],physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
-    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
+    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,reviewStatus:c.reviewStatus||'pendingReview',
+    reviewStatusSource:c.reviewStatusSource==='user'?'user':'import',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
 export function reviewedImportCandidates(candidates,selection){
   return candidates.map((candidate,index)=>({...candidate,selected:selection.has(index),

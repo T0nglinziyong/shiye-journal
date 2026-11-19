@@ -67,6 +67,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
  const result=await classify('test-token',userID,asset.id);
  assert.equal(classify.configured,true);assert.equal(result.revision,13);
  assert.equal(committed.kind,'sticker');assert.equal(committed.title,'我的布纹贴纸');
+ assert.equal(committed.reviewStatus,'ready');
  assert.equal(committed.description,'一张方形纸片，纸片上有浅色格纹。');
  assert.equal(committed.descriptionEvidence.source,'ai');
  assert.deepEqual(committed.contentTags,['布纹']);assert.deepEqual(committed.materialTags,[]);

@@ -22,7 +22,8 @@ const expected={
   // Material metadata now records taxonomy v2 and field provenance; image
   // processing, mask bytes, and commit behavior remain unchanged.
   // Reviewed change: a confirmed import records its selected pieces as checked.
-  'import-save.js':'c72ad44044ce4720282c201194f47f63537b1507',
+  // Keep an explicit user review choice through cloud reclassification.
+  'import-save.js':'bfdbb7041b1d7d879976796c1f3216acc68d56ad',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){

@@ -103,6 +103,7 @@ export function applyAIClassification(old,result,{minConfidence=.7,allowMigratio
     next.descriptionEvidence={source:'ai',confidence:result.descriptionConfidence,modelVersion:result.modelVersion};
   }
   next.categoryEvidence=categoryEvidence;next.tagEvidence=tagEvidence;
-  next.autoOrganized=true;next.reviewStatus=old.reviewStatus==='ready'?'ready':'pendingReview';
+  next.autoOrganized=true;
+  next.reviewStatus=old.reviewStatusSource==='user'&&old.reviewStatus==='pendingReview'?'pendingReview':'ready';
   return validateMaterialClassification(next);
 }

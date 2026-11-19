@@ -18,6 +18,7 @@ test('checking an imported photo marks selected materials reviewed while preserv
  assert.deepEqual(reviewed.map(item=>item.reviewStatus),['ready','pendingReview','ready']);
  assert.deepEqual(reviewed.map(item=>item.selected),[true,true,false]);
  assert.equal(candidateMetadata(reviewed[0],{},null).reviewStatus,'ready');
+ assert.equal(candidateMetadata(reviewed[1],{},null).reviewStatusSource,'user');
 });
 test('candidate metadata never creates stock counts for tape or ordinary material',()=>{
  assert.equal(material('tape',1).supply,undefined);

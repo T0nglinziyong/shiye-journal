@@ -106,6 +106,13 @@ test('explicit confirmation protects unchanged categories and all open tag group
  assert.deepEqual(result.contentCategories,[]);
  assert.equal(applyAIClassification({...confirmed,reviewStatus:'ready'},ai).reviewStatus,'ready');
 });
+test('successful classification clears pending review unless the user explicitly kept it pending',()=>{
+ const base={...initialMaterialClassification({kind:'sticker'}),reviewStatus:'pendingReview'};
+ const result={modelVersion:'vision',kind:{id:'sticker',confidence:.9},
+  role:{id:'accent',confidence:.9}};
+ assert.equal(applyAIClassification(base,result).reviewStatus,'ready');
+ assert.equal(applyAIClassification({...base,reviewStatusSource:'user'},result).reviewStatus,'pendingReview');
+});
 test('a user-confirmed subtype prevents AI from switching its parent type',()=>{
  const prior={...initialMaterialClassification({kind:'sticker'}),kindDetail:'sticker.subject',
   categoryEvidence:{kind:{source:'default'},kindDetail:{source:'user',confidence:1}}};
