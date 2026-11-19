@@ -395,6 +395,17 @@ export function detectPaperQuadOptimized(cv,p,own,adjusted=false){
       }
     }
   }
+  if(best&&best.score<1){
+    const light=labChannels.get(0);
+    try{
+      const corners=refineRegionLines(cv,best,light,w,h,own);
+      const candidate=corners&&assessShape(corners,area(corners),area(corners),w,h,paperRatio,'edge-refined');
+      if(candidate&&paperPolygonIoU(best.corners,corners)>.9){
+        const score=edgeEvidence(candidate,w,h,G,GX,GY);
+        if(score!=null&&score>best.score+.12)best={score,corners};
+      }
+    }finally{light.delete();}
+  }
   if(!adjusted&&(!best||best.score<.35)){
     const brighter=new Uint8ClampedArray(p.pixels);
     for(let index=0;index<brighter.length;index+=4){
