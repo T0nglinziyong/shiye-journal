@@ -74,7 +74,7 @@ function assessShape(points,coverage,contourArea,w,h,paperRatio,source){
     Math.min(contourArea/coverage,1)*.32;
   return {corners:points,geom,source,kind:'contour'};
 }
-function edgeEvidence(candidate,w,h,gray,gx,gy){
+export function edgeEvidence(candidate,w,h,gray,gx,gy){
   const corners=candidate.corners;
   const sides=[],insideMeans=[];
   const d=clamp(Math.max(w,h)*.012,3,11);
@@ -84,7 +84,7 @@ function edgeEvidence(candidate,w,h,gray,gx,gy){
     const len=Math.hypot(vx,vy);
     if(len<10)return null;
     const nx=-vy/len,ny=vx/len;
-    let count=0,contrastSum=0,edgeHits=0,insideSum=0;
+    let count=0,contrastSum=0,edgeHits=0,insideSum=0,positiveHits=0;
     for(let t=0;t<96;t++){
       const step=.05+.9*t/95;
       const x=(a.x+(b.x-a.x)*step)*w;
@@ -95,6 +95,7 @@ function edgeEvidence(candidate,w,h,gray,gx,gy){
       const contrast=bilinear(gray,w,h,x+nx*d,y+ny*d)-
         bilinear(gray,w,h,x-nx*d,y-ny*d);
       contrastSum+=clamp(contrast,0,100)/100;
+      if(contrast>5)positiveHits++;
       let bestGradient=0;
       for(const offset of [-2,0,2]){
         const sx=x+nx*offset,sy=y+ny*offset;
@@ -107,12 +108,14 @@ function edgeEvidence(candidate,w,h,gray,gx,gy){
       count++;
     }
     if(count<60)return null;
-    sides.push({contrast:contrastSum/count,edge:edgeHits/count});
+    sides.push({contrast:contrastSum/count,edge:edgeHits/count,positive:positiveHits/count});
     insideMeans.push(insideSum/count);
   }
   const sortedInside=insideMeans.slice().sort((a,b)=>a-b);
   const typicalInside=(sortedInside[1]+sortedInside[2])/2;
   if(typicalInside>125&&sortedInside[0]<typicalInside*.62)return null;
+  if(sides.filter(side=>side.positive>.75&&side.contrast>.2).length>=2&&
+    sides.some(side=>side.positive<.48&&side.contrast<.08))return null;
   const cs=sides.map(v=>v.contrast),es=sides.map(v=>v.edge);
   const avg=x=>x.reduce((a,b)=>a+b,0)/x.length;
   return .35*avg(cs)+.15*Math.min(...cs)+
@@ -223,7 +226,7 @@ function refineRegionLines(cv,candidate,light,w,h,own){
   }
   return orderPaperCorners(result.map(p=>({x:p.x/w,y:p.y/h})));
 }
-export function detectPaperQuadOptimized(cv,p,own){
+export function detectPaperQuadOptimized(cv,p,own,adjusted=false){
   if(!(p.width>0&&p.height>0)||!p.pixels?.length)return null;
   const w=p.width,h=p.height,paperRatio=p.paperRatio||210/297;
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels));
@@ -353,7 +356,6 @@ export function detectPaperQuadOptimized(cv,p,own){
   const compatible=regionCandidates.filter(r=>!standard.length||
     standard.some(c=>paperPolygonIoU(c.corners,r.corners)>=A4_REGION_OVERLAP));
   const ranked=standard.concat(compatible);
-  if(!ranked.length)return null;
   let best=null;
   for(const candidate of ranked){
     const score=edgeEvidence(candidate,w,h,G,GX,GY);
@@ -363,5 +365,36 @@ export function detectPaperQuadOptimized(cv,p,own){
     if(candidate.source==='region-refined'&&firstHull===borderHullSeed&&total<.45)continue;
     if(!best||total>best.score)best={score:total,corners:candidate.corners};
   }
-  return best?.corners||null;
+  if(borderHullSeed&&(!best||best.score<.5)){
+    const available=borderHullSeed.corners.flatMap((point,index)=>
+      point.x>.004&&point.x<.996&&point.y>.004&&point.y<.996?[index]:[]);
+    for(const base of standard.slice(0,4)){
+      for(let subset=1;subset<1<<available.length;subset++){
+        const corners=base.corners.map(point=>({...point}));
+        for(let bit=0;bit<available.length;bit++)if(subset&(1<<bit))
+          corners[available[bit]]={...borderHullSeed.corners[available[bit]]};
+        const candidate=assessShape(corners,area(corners),area(corners),w,h,paperRatio,'border-hull-repair');
+        if(!candidate)continue;
+        const score=edgeEvidence(candidate,w,h,G,GX,GY);
+        if(score!=null&&(!best||score>best.score))best={score,corners};
+      }
+    }
+  }
+  if(!adjusted&&(!best||best.score<.35)){
+    const brighter=new Uint8ClampedArray(p.pixels);
+    for(let index=0;index<brighter.length;index+=4){
+      brighter[index]=Math.min(255,brighter[index]*1.4);
+      brighter[index+1]=Math.min(255,brighter[index+1]*1.4);
+      brighter[index+2]=Math.min(255,brighter[index+2]*1.4);
+    }
+    const retry=detectPaperQuadOptimized(cv,{...p,pixels:brighter},own,true);
+    if(retry){
+      const candidate=assessShape(retry,area(retry),area(retry),w,h,paperRatio,'light-retry');
+      const score=candidate&&edgeEvidence(candidate,w,h,G,GX,GY);
+      if(score!=null&&score>.23&&(!best||
+        (score>best.score+.08&&area(retry)>area(best.corners)*1.1)))
+        return retry;
+    }
+  }
+  return best?.score>=.23?best.corners:null;
 }

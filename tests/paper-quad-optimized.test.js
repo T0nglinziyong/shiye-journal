@@ -4,7 +4,7 @@ import cvModule from '@techstark/opencv-js';
 import {readFile} from 'node:fs/promises';
 import {processVision} from '../src/opencv-worker.js';
 import {A4_DETECTION_MAX_EDGE,A4_GROUP_LIMIT,A4_CANNY_BLURS,
- A4_POLYGON_EPSILONS,A4_REGION_OVERLAP,orderPaperCorners,paperPolygonIoU
+ A4_POLYGON_EPSILONS,A4_REGION_OVERLAP,orderPaperCorners,paperPolygonIoU,edgeEvidence
 } from '../src/paper-quad-optimized.js';
 
 test('one fixed 800px detection stage; no return to 400/1200 cascade',async()=>{
@@ -52,6 +52,20 @@ test('blank page frame does not get invented as a document',async()=>{
  assert.equal(await processVision(cv,'quad',{
   pixels:pagePixels(w,h,true),width:w,height:h,paperRatio:210/297
  }),null);
+});
+test('paper candidate with edges crossing the interior is rejected',async()=>{
+ const cv=await cvModule,w=800,h=600,pixels=pagePixels(w,h);
+ const src=cv.matFromArray(h,w,cv.CV_8UC4,pixels),gray=new cv.Mat(),gx=new cv.Mat(),gy=new cv.Mat();
+ try{
+  cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+  cv.Sobel(gray,gx,cv.CV_32F,1,0,3);
+  cv.Sobel(gray,gy,cv.CV_32F,0,1,3);
+  const candidate=points=>({corners:points.map(([x,y])=>({x,y}))});
+  const outer=candidate([[.12,.10],[.88,.10],[.88,.90],[.12,.90]]);
+  const clipped=candidate([[.12,.28],[.88,.10],[.88,.75],[.12,.75]]);
+  assert.ok(edgeEvidence(outer,w,h,gray.data,gx.data32F,gy.data32F)>.5);
+  assert.equal(edgeEvidence(clipped,w,h,gray.data,gx.data32F,gy.data32F),null);
+ }finally{src.delete();gray.delete();gx.delete();gy.delete();}
 });
 test('candidate scoring reuses Sobel and limits expensive region refinement',async()=>{
  const source=await readFile(new URL('../src/paper-quad-optimized.js',import.meta.url),'utf8');

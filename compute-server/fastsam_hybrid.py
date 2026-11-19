@@ -11,7 +11,7 @@ from ultralytics import FastSAM
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from proposal_policy import largest_connected_component, mask_box, select_proposals
 from carrier_policy import (find_composite_carriers, inside, page_edge_artifact,
-                            merge_aligned_tiled_masks)
+                            merge_aligned_tiled_masks, proposal_area_cap)
 from mask_page_boundary import trim_page_edge_leak
 
 
@@ -86,8 +86,8 @@ def _proposals(result, image, extra_result=None):
                               "area": area, "predicted_iou": float(confidences[index])})
     carriers = find_composite_carriers(all_items, image)
     has_composite_carrier = bool(carriers)
-    cap = .12 if has_composite_carrier else .20
-    pool = [item for item in all_items if item["area"] / (width*height) < cap
+    pool = [item for item in all_items
+            if item["area"] / (width*height) < proposal_area_cap(item, carriers)
             and not page_edge_artifact(item, width, height)]
     selected, _ = select_proposals(pool, (width, height), "coarse", 500)
     outside = []
