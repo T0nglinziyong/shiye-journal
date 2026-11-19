@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from carrier_policy import (find_composite_carriers, merge_aligned_tiled_masks,
-                            page_edge_artifact)
+                            page_edge_artifact, proposal_area_cap)
 
 
 def candidate(mask):
@@ -16,6 +16,13 @@ def candidate(mask):
 
 
 class CarrierPolicyTests(unittest.TestCase):
+    def test_carrier_does_not_shrink_unrelated_material_limit(self):
+        carrier = {"bbox_xyxy": [80, 40, 710, 580]}
+        outside_card = {"bbox_xyxy": [275, 690, 705, 978]}
+        inside_print = {"bbox_xyxy": [410, 90, 680, 550]}
+        self.assertEqual(proposal_area_cap(outside_card, [(carrier, 8)]), .20)
+        self.assertEqual(proposal_area_cap(inside_print, [(carrier, 8)]), .12)
+
     def test_aligned_panels_restore_one_paper_without_using_color(self):
         shape = (1000, 700)
         def panel(x0, y0, x1, y1):

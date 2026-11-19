@@ -20,6 +20,17 @@ def inside(inner, outer):
     return overlap / max(1, inner["area"])
 
 
+def proposal_area_cap(item, carriers):
+    x0, y0, x1, y1 = item["bbox_xyxy"]
+    item_area = max(1, (x1-x0)*(y1-y0))
+    for carrier, _ in carriers:
+        a, b, c, d = carrier["bbox_xyxy"]
+        overlap = max(0, min(x1,c)-max(x0,a))*max(0, min(y1,d)-max(y0,b))
+        if overlap / item_area >= .85:
+            return .12
+    return .20
+
+
 def find_composite_carriers(candidates, color_image):
     """Find interior containers with many children, regardless of color.
 
