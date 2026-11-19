@@ -1083,7 +1083,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
           onPointerDown={event=>pointerDown(event,item)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
           onClick={()=>setActiveMaterial(item.asset.id)}
           onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setActiveMaterial(item.asset.id);}}}>
-          <RouteImage asset={item.asset} source={source}/>{state.coreIDs.includes(item.asset.id)?<span className="match-stage-star" aria-label="必用素材">★</span>:null}
+          <RouteImage asset={item.asset} source={source}/>
         </div>)}
         {!selected.length?<p className="match-stage-empty">从素材架加入素材，在页面上预览尺寸和位置</p>:null}
       </div></div>

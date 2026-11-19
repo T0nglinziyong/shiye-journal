@@ -143,12 +143,12 @@
 .matching-page .match-stage-paper{position:relative;z-index:1;flex:none;box-sizing:border-box;height:100%;width:auto;aspect-ratio:var(--match-page-ratio);margin:auto;background:#fffefa;box-shadow:0 8px 22px #4c584025;overflow:visible}
 .matching-page .match-stage-paper.single::before{content:'';position:absolute;inset:0 0 0 50%;background:#d8ddd3;pointer-events:none}
 .matching-page .match-stage-gutter{position:absolute;top:0;bottom:0;left:50%;border-left:1px dashed #d8dcd2;z-index:1;pointer-events:none}
-.matching-page .match-stage-item{position:absolute;box-sizing:border-box;transform:translate(-50%,-50%);display:grid;place-items:center;cursor:grab;touch-action:none;user-select:none;border:1px solid transparent;border-radius:3px;z-index:2}
-.matching-page .match-stage-item.active{border-color:#526e59;box-shadow:0 0 0 2px #526e5940;z-index:3}
+.matching-page .match-stage-item{position:absolute;box-sizing:border-box;transform:translate(-50%,-50%);cursor:grab;touch-action:none;user-select:none;border:1px solid transparent;border-radius:3px;z-index:2}
+.matching-page .match-stage-item.active{z-index:3}
 .matching-page .match-stage-item:active{cursor:grabbing}
-.matching-page .match-stage-item img,.matching-page .match-stage-item .tape-flat-preview{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;pointer-events:none}
+.matching-page .match-stage-item img,.matching-page .match-stage-item .tape-flat-preview{position:absolute;left:50%;top:50%;display:block;width:auto;height:auto;max-width:100%;max-height:100%;transform:translate(-50%,-50%);object-fit:contain;pointer-events:none}
+.matching-page .match-stage-item.active img:not([aria-hidden="true"]),.matching-page .match-stage-item.active .tape-flat-preview{outline:2px solid #526e59;box-shadow:0 0 0 4px #526e5940;border-radius:2px}
 .matching-page .match-stage-item .organization-badge{display:none}
-.matching-page .match-stage-star{position:absolute;right:-5px;top:-8px;color:#b5893f;background:#fffefa;border-radius:50%;font-size:14px;padding:0 2px}
 .matching-page .match-stage-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:18px;color:#859186;font-size:13px;pointer-events:none}
 .matching-page .match-stage-feedback{display:flex;align-items:center;height:52px;min-width:0}
 .matching-page .match-stage-selection{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}

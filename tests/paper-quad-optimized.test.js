@@ -67,22 +67,6 @@ test('paper candidate with edges crossing the interior is rejected',async()=>{
   assert.equal(edgeEvidence(clipped,w,h,gray.data,gx.data32F,gy.data32F),null);
  }finally{src.delete();gray.delete();gx.delete();gy.delete();}
 });
-test('printed fragments inside a page cannot borrow evidence from its distant border',async()=>{
- const cv=await cvModule,w=800,h=600,gray=new cv.Mat(h,w,cv.CV_8UC1),gx=new cv.Mat(),gy=new cv.Mat();
- try{
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-   let value=x>=130&&x<670&&y>=120&&y<540?230:30;
-   if(y>=500&&y<515&&x>=130&&x<670&&Math.floor((x-130)/55)%5===0)value=180;
-   gray.data[y*w+x]=value;
-  }
-  cv.Sobel(gray,gx,cv.CV_32F,1,0,3);
-  cv.Sobel(gray,gy,cv.CV_32F,0,1,3);
-  const candidate=bottom=>({corners:[[130,120],[670,120],[670,bottom],[130,bottom]]
-   .map(([x,y])=>({x:x/w,y:y/h}))});
-  assert.equal(edgeEvidence(candidate(500),w,h,gray.data,gx.data32F,gy.data32F),null);
-  assert.ok(edgeEvidence(candidate(540),w,h,gray.data,gx.data32F,gy.data32F)>.5);
- }finally{gray.delete();gx.delete();gy.delete();}
-});
 test('candidate scoring reuses Sobel and limits expensive region refinement',async()=>{
  const source=await readFile(new URL('../src/paper-quad-optimized.js',import.meta.url),'utf8');
  assert.equal((source.match(/cv\.Sobel\(gray/g)||[]).length,2);

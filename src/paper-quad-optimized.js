@@ -129,7 +129,7 @@ export function edgeEvidence(candidate,w,h,gray,gx,gy){
   const typicalInside=(sortedInside[1]+sortedInside[2])/2;
   if(typicalInside>125&&sortedInside[0]<typicalInside*.62)return null;
   if(sides.filter(side=>side.positive>.75&&side.contrast>.2).length>=2&&
-    sides.some(side=>side.positive<.48))return null;
+    sides.some(side=>side.positive<.48&&side.contrast<.08))return null;
   const cs=sides.map(v=>v.contrast),es=sides.map(v=>v.edge);
   const avg=x=>x.reduce((a,b)=>a+b,0)/x.length;
   return .35*avg(cs)+.15*Math.min(...cs)+

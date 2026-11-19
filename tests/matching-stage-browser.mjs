@@ -92,7 +92,7 @@ try{
   assert.ok(await evaluate('document.querySelector(".match-rec[data-match-asset=stage-asset-1]").classList.contains("active")'));
   await click(`.match-rec[data-match-asset="${secondID}"] [data-act="match-core"]`);
   await wait(`.match-rec[data-match-asset="${secondID}"] [data-act="match-core"][aria-pressed="true"]`);
-  assert.ok(await evaluate(`document.querySelector('.match-rec[data-match-asset="${secondID}"] [data-act="match-core"]').getAttribute('aria-pressed')==='true'&&!!document.querySelector('.match-stage-item[data-match-asset="${secondID}"] .match-stage-star')`));
+  assert.ok(await evaluate(`document.querySelector('.match-rec[data-match-asset="${secondID}"] [data-act="match-core"]').getAttribute('aria-pressed')==='true'&&!document.querySelector('.match-stage-item[data-match-asset="${secondID}"] .match-stage-star')`));
   assert.ok(await evaluate('(()=>{const card=document.querySelector(".match-rec.selectable").getBoundingClientRect(),button=document.querySelector(".match-rec.selectable [data-act=basket]").getBoundingClientRect();return button.width<card.width/2})()'));
   await click('.match-shelf-tabs [role="tab"]:nth-child(2)');
   await evaluate('(()=>{const filter=document.querySelector(".match-shelf-filters select[aria-label=筛选系列]");filter.value="stage-series-1";filter.dispatchEvent(new Event("change",{bubbles:true}))})()');
