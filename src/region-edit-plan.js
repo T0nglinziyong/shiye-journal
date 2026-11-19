@@ -1,26 +1,10 @@
 import {mergeSamRegions} from './sam-region-merge.js';
-import {splitSources,splitBySource,subtractRegion,intersectRegion,findSourceAt,findSourceInBox} from './sam-region-split.js';
+import {splitSources,splitBySource} from './sam-region-split.js';
 
-const area=region=>region?.pixels||region?.w*region?.h*(region?.segmentationFrameWidth||1)*(region?.segmentationFrameHeight||1)||0;
 const pageArea=region=>region?.pixels&&region.segmentationFrameWidth&&region.segmentationFrameHeight
   ?region.pixels/(region.segmentationFrameWidth*region.segmentationFrameHeight):region.w*region.h;
 const overlap=(a,b)=>Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*
   Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
-const sameRegion=(a,b)=>{
-  if(overlap(a,b)/Math.max(1e-8,a.w*a.h+b.w*b.h-overlap(a,b))<=.8)return false;
-  const am=a.mask,bm=b.mask;
-  if(!am?.alpha||!bm?.alpha||am.width!==bm.width||am.height!==bm.height)return true;
-  if(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)+Math.abs(a.w-b.w)+Math.abs(a.h-b.h)>.001)return true;
-  const step=Math.max(1,Math.floor(am.alpha.length/4096));
-  let intersection=0,union=0;
-  for(let index=0;index<am.alpha.length;index+=step){
-    const first=am.alpha[index]>=128,second=bm.alpha[index]>=128;
-    if(first&&second)intersection++;
-    if(first||second)union++;
-  }
-  return union===0||intersection/union>.8;
-};
-
 export function regionMergeWarning(regions,selected,backgrounds=[]){
   if(selected.length<2)return false;
   const chosen=selected.map(index=>regions[index]).filter(Boolean);
@@ -52,48 +36,4 @@ export function planRegionSplit(regions,index){
   next.push(...parts);
   return {kind:'split',regions:next,highlight:parts.map((_,at)=>first+at),
     message:`将恢复 ${parts.length} 个原始区域。请检查彩色预览。`};
-}
-
-export function findCachedRegion(regions,rawCandidates=[],point=null,box=null){
-  const matches=[];
-  const descendants=region=>{
-    const found=[],stack=[...splitSources(region)],seen=new Set();
-    while(stack.length){
-      const child=stack.pop();
-      if(!child||seen.has(child))continue;
-      seen.add(child);found.push(child);stack.push(...splitSources(child));
-    }
-    return found;
-  };
-  const hit=source=>point?findSourceAt([source],point.x,point.y)>=0:findSourceInBox([source],box)>=0;
-  for(let index=0;index<regions.length;index++){
-    const parent=regions[index];
-    descendants(parent).forEach(source=>{
-      if(!source?.mask?.alpha||sameRegion(source,parent))return;
-      if(hit(source))matches.push({region:source,parentIndex:index});
-    });
-  }
-  for(const region of rawCandidates.flatMap(source=>[source,...descendants(source)])){
-    if(!region?.mask?.alpha||regions.some(displayed=>sameRegion(region,displayed)))continue;
-    if(hit(region)){
-      const parentIndex=regions.findIndex(parent=>overlap(parent,region)>=region.w*region.h*.7&&
-        parent.segmentationFrameWidth===region.segmentationFrameWidth&&
-        parent.segmentationFrameHeight===region.segmentationFrameHeight);
-      matches.push({region,parentIndex});
-    }
-  }
-  return matches.sort((a,b)=>area(a.region)-area(b.region))[0]||null;
-}
-
-export function planRegionAdd(regions,child,parentIndex=-1){
-  if(!child?.mask?.alpha)throw Error('没有找到可新增的分割 Mask');
-  if(regions.some(region=>sameRegion(region,child)))throw Error('这个区域已经在候选结果中');
-  const next=regions.filter((_,index)=>index!==parentIndex);
-  if(parentIndex>=0){
-    const parent=regions[parentIndex];
-    const clipped=intersectRegion(parent,child);
-    const remainder=subtractRegion(parent,clipped);
-    next.push({...remainder,splitSources:undefined},clipped);
-  }else next.push(child);
-  return {kind:'add',regions:next,highlight:[next.length-1],message:'已找到未展示的分割。请检查彩色预览。'};
 }

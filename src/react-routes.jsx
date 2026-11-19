@@ -1983,7 +1983,7 @@ function ImportNavigation({state,onAction}){
 
 export function ImportInspectionPage({state,format,onAction,onSettingChange,
   onRecognitionSettingChange,onRemoveRecord,onCheckCandidate,onManualCancel,onManualDone,onManualError,onPaperChange,
-  onSamViewChange,onSamMergeToggle,onSamRegionClick,onSamRegionBox,onSamMerge,onSamSplit,onSamAdd,onSamConfirm,onSamCancel}){
+  onSamViewChange,onSamMergeToggle,onSamRegionClick,onSamMerge,onSamSplit,onSamConfirm,onSamCancel}){
   const [,setRevision]=useState(0);
   useEffect(()=>{
     const refresh=()=>setRevision(value=>value+1);
@@ -1993,7 +1993,7 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
   const previewRef=useRef(null);
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
   const candidates=state.importCandidates||[];
-  const draft=state.importRegionDraft,adding=!!state.importRegionAdding;
+  const draft=state.importRegionDraft;
   const selected=[...(state.importSamMergeSelection||[])];
   const canSplit=selected.length===1&&!!planRegionSplit(candidates,selected[0]);
   const largeMerge=selected.length>=2&&regionMergeWarning(candidates,selected,
@@ -2029,21 +2029,18 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
         <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{showRegions?<SamRegionOverlay regions={draft?.regions||candidates}
           frameSize={state.correctedBitmap||state.importBitmap}
           mode={draft?'regions':state.importSamDisplayMode||'boxes'} selected={draft?new Set(draft.highlight||[]):state.importSamMerging?state.importSamMergeSelection:null}
-          onRegionClick={state.importSamMerging&&!draft&&!busy?onSamRegionClick:null} onRegionBox={adding&&!busy?onSamRegionBox:null}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
+          onRegionClick={state.importSamMerging&&!draft&&!busy?onSamRegionClick:null}/>:!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
         {manual?<ManualBoxEditor state={state} previewRef={previewRef} allowRotation={!sam} onCancel={onManualCancel}
           onDone={onManualDone} onError={onManualError}/>:<>
-          {state.importSamMerging?<small className="import-action-hint" role="status">{draft?.message||
-            (adding?'点选或画框查找未展示的分割；有缓存时直接恢复，否则调用局部模型。':'点选区域后选择合并、拆分或新增。')}</small>:null}
-          <div className={`import-photo-tools import-primary-tools ${previewing||state.editingPaperCorners||state.importSamMerging||snapshot?'import-mode-tools':''} ${state.importSamMerging&&!draft&&!adding?'import-region-tools':''}`}>
+          {state.importSamMerging?<small className="import-action-hint" role="status">{draft?.message||'点选区域后选择合并或拆分。'}</small>:null}
+          <div className={`import-photo-tools import-primary-tools ${previewing||state.editingPaperCorners||state.importSamMerging||snapshot?'import-mode-tools':''} ${state.importSamMerging&&!draft?'import-region-tools':''}`}>
             {previewing?<>{button('readjust-paper','返回调整')}{button('cancel-paper-adjust','取消')}{button('apply-paper-preview',state.paperPreviewApplied?'返回识别结果':'使用校正结果')}</>:
               state.editingPaperCorners?<>{button('preview-crop','查看矫正结果')}{button('cancel-paper-adjust','返回识别结果')}</>:
               state.importSamMerging?draft?<><button type="button" className="btn" disabled={busy} onClick={onSamCancel}>取消</button>
-                <button type="button" className="btn primary" disabled={busy} onClick={onSamConfirm}>{draft.kind==='minimum'?'新增分割':`确认${draft.kind==='merge'?'合并':draft.kind==='split'?'拆分':'新增'}`}</button></>:
-                adding?<button type="button" className="btn" disabled={busy} onClick={onSamCancel}>取消新增</button>:
+                {draft.kind!=='minimum'?<button type="button" className="btn primary" disabled={busy} onClick={onSamConfirm}>{`确认${draft.kind==='merge'?'合并':'拆分'}`}</button>:null}</>:
                 <><button type="button" className="btn primary" disabled={busy} onClick={onSamMergeToggle}>完成编辑</button>
                   <button type="button" className={`btn ${selected.length>=2&&!largeMerge?'primary':'is-muted'}`} disabled={busy} onClick={onSamMerge}>合并所选</button>
-                  <button type="button" className={`btn ${selected.length===1&&canSplit?'primary':'is-muted'}`} disabled={busy} onClick={onSamSplit}>拆分所选</button>
-                  <button type="button" className="btn" disabled={busy} onClick={onSamAdd}>新增分割</button></>:
+                  <button type="button" className={`btn ${selected.length===1&&canSplit?'primary':'is-muted'}`} disabled={busy} onClick={onSamSplit}>拆分所选</button></>:
               <>{button('preview-crop','预览矫正')}
                 {!snapshot?button('manual-import-box','调整框选',state.editingPaperCorners):null}
                 {!snapshot?<button type="button" className="btn" disabled={busy||!canEditRegions} onClick={onSamMergeToggle}>区域编辑</button>:null}</>}
@@ -2073,11 +2070,11 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
           {button('recognition-diagnostics','导出识别诊断',false,'btn mini')}
           <div className="import-candidate-grid">{candidates.map((candidate,index)=><div key={index} className="candidate-choice"><button className={`import-candidate-tile ${(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)?'selected':''}`}
             data-act="import-toggle-candidate" data-id={index} data-react-action="true"
-            aria-pressed={!!(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)} disabled={!!draft||adding}
+            aria-pressed={!!(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)} disabled={!!draft}
             onClick={()=>state.importSamMerging?onSamRegionClick(index):onAction('import-toggle-candidate',String(index))}><span className="candidate-thumb"><img src={state.importCandidateURLs?.[index]||''} alt=""/></span>
             <span>素材 {index+1} {(state.importSamMerging?state.importSamMergeSelection:state.importCandidateSelection)?.has(index)?'✓':'○'}</span><small>{state.importCandidateData?.[index]?.width?`${format(state.importCandidateData[index].width)} × ${format(state.importCandidateData[index].height)} mm`:'尺寸待检查'}</small></button>
-            <button className="btn mini" data-import-check={index} disabled={busy||!!draft||adding} onClick={()=>onCheckCandidate(index)}>检查边缘</button></div>)}</div></>:null}</div>
-        <button className="btn primary confirm-photo" data-act="import-confirm-photo" data-react-action="true" onClick={()=>onAction("import-confirm-photo")} disabled={busy||!!draft||adding}>→ 确认</button>
+            <button className="btn mini" data-import-check={index} disabled={busy||!!draft} onClick={()=>onCheckCandidate(index)}>检查边缘</button></div>)}</div></>:null}</div>
+        <button className="btn primary confirm-photo" data-act="import-confirm-photo" data-react-action="true" onClick={()=>onAction("import-confirm-photo")} disabled={busy||!!draft}>→ 确认</button>
       </section></div>
     </section></>;
 }

@@ -42,6 +42,9 @@ try{
   await click('.candidate-choice:nth-child(1) .import-candidate-tile');
   await click('.candidate-choice:nth-child(2) .import-candidate-tile');
   assert.ok(await evaluate(`document.querySelector('.import-region-tools button:nth-child(2)')?.classList.contains('primary')`));
+  assert.equal(await evaluate(`document.querySelectorAll('.import-region-tools button').length`),3);
+  assert.ok(await evaluate(`!document.body.textContent.includes('新增分割')`));
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.import-region-tools button:nth-child(1)')).backgroundColor`),'rgb(82, 99, 75)');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('.import-region-tools button:nth-child(1)')).backgroundColor`),
     await evaluate(`getComputedStyle(document.querySelector('.import-region-tools button:nth-child(2)')).backgroundColor`));
   await click('.import-region-tools button:nth-child(2)','button');
@@ -55,6 +58,7 @@ try{
     document.querySelector('.import-inspect')?.getAttribute('aria-busy')==='false'`,'merge not confirmed');
   assert.ok(await evaluate(`!!document.querySelector('.import-region-tools')`),'edit mode must remain open');
   assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),jobs);
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.import-region-tools button:nth-child(3)')).backgroundColor`),'rgb(82, 99, 75)');
   await click('.import-region-tools button:nth-child(3)','button');
   assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),2);
   await click('.import-primary-tools button:nth-child(2)');
@@ -62,31 +66,11 @@ try{
     document.querySelector('.import-inspect')?.getAttribute('aria-busy')==='false'`,'split not confirmed');
   assert.ok(await evaluate(`!!document.querySelector('.import-region-tools')`));
   assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),jobs);
-  await click('.import-region-tools button:nth-child(4)','button');
-  assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('点选或画框')`));
-  const clickSavedChild=()=>evaluate(`(()=>{const canvas=document.querySelector('.sam-region-overlay');
-    const rect=canvas.getBoundingClientRect();canvas.dispatchEvent(new MouseEvent('click',{
-      bubbles:true,clientX:rect.left+rect.width*.21,clientY:rect.top+rect.height*.27}));})()`);
-  await clickSavedChild();
-  assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('未展示')`));
-  assert.equal(await evaluate(`document.querySelectorAll('.import-candidate-tile').length`),3);
-  await click('.import-primary-tools button:nth-child(1)','.import-region-tools');
-  await click('.import-region-tools button:nth-child(4)','button');
-  await clickSavedChild();
-  await click('.import-primary-tools button:nth-child(2)');
-  await until(`document.querySelectorAll('.import-candidate-tile').length===4&&
-    document.querySelector('.import-inspect')?.getAttribute('aria-busy')==='false'`,'cached region not added');
-  assert.ok(await evaluate(`!!document.querySelector('.import-region-tools')`));
-  assert.equal(await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length'),jobs);
-  assert.ok(await evaluate(`document.querySelector('.import-region-tools button:nth-child(3)')?.classList.contains('is-muted')`));
-  await click('.import-region-tools button:nth-child(3)','button');
-  assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('最小对象')`));
-  await click('.import-primary-tools button:nth-child(1)','.import-region-tools');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   assert.ok(await evaluate(`(()=>{const tools=document.querySelector('.import-region-tools');
     const bounds=tools.getBoundingClientRect();return [...tools.children].every(button=>{
       const rect=button.getBoundingClientRect();return rect.left>=bounds.left&&rect.right<=bounds.right+1;
-    })&&getComputedStyle(tools).gridTemplateColumns.split(' ').length===2;})()`));
+    })&&getComputedStyle(tools).gridTemplateColumns.split(' ').length===3;})()`));
   await command('Emulation.clearDeviceMetricsOverride');
   await click('.import-region-tools button:nth-child(1)');
   await click('[data-act="preview-crop"]','.paper-handle');
@@ -104,5 +88,5 @@ try{
   await click('[data-act="preview-crop"]','.paper-handle');
   assert.equal(await evaluate(`JSON.stringify([...document.querySelectorAll('.paper-handle')].map(node=>node.style.cssText))`),original);
   await click('[data-act="cancel-paper-adjust"]');
-  console.log('Region edit preview, confirmation, split, add mode and correction cancel passed');
+  console.log('Region edit button styling, confirmation, split and correction cancel passed');
 }finally{await b.close();}
