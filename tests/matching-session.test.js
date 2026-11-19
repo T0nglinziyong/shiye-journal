@@ -143,11 +143,10 @@ test('matching AI receives the selected text presentation for its editable Scene
  const p={...structuredClone(work),textPresentation:'handwritten',candidateAssetIDs:[],
    styles:['airy'],purposes:['日常记录'],title:'AI 方案',isDraft:true};
  let received;
- Object.assign(c,{createProject:()=>p,createAIRecorder:async()=>({request:()=>{},
-   response:()=>{},finish:async()=>{}}),supportsVision:()=>false,
- runCreativeAgent:async options=>{received=options;return {draft:options.draft};}});
+ Object.assign(c,{createProject:()=>p,backgroundCreation:{generate:async options=>{
+   received=options;c.state.projects.push(options.project);return {project:options.project};}}});
  const session=createMatchingSession(c);await session.restore();await session.generate();
- assert.equal(received?.textPresentation,'handwritten');
+ assert.equal(received?.project.textPresentation,'handwritten');
  assert.equal(c.state.projects[0]?.drafts[0]?.sceneVersion,2);
 });
 
@@ -164,4 +163,20 @@ test('editable matching imports and newly opened variants use one durable projec
  assert.equal(db.writes.length,2);
  assert.notEqual(db.writes[1],'p');
  assert.equal(other.state.projects.length,1);
+});
+
+test('reopening reconciles an interrupted local card with its authoritative active project task',async()=>{
+ const device=memoryDevice(),p={...structuredClone(work),creativeTask:{id:'job',status:'running'}},c=context({projects:[p]},device);
+ await device.put('test-user',matchingSnapshot({},[{id:'v',status:'running',project:structuredClone(work)}]));
+ let resumed;
+ c.backgroundCreation={resume:async project=>{resumed=project;return new Promise(()=>{});}};
+ const session=createMatchingSession(c);await session.restore();
+ assert.equal(resumed.creativeTask.id,'job');assert.equal(session.variants()[0].status,'running');assert.equal(session.variants()[0].linkedProjectID,'p');
+});
+test('opening a completed background variant selects its result while preserving the original draft',async()=>{
+ const device=memoryDevice(),p={...structuredClone(work),isDraft:true,creativeTask:{id:'job'},creativeCompletedJobs:{job:'result'}};
+ p.drafts.push({...structuredClone(draft),id:'result'});
+ await device.put('test-user',matchingSnapshot({},[{id:'v',status:'completed',cloudJobID:'job',project:p,linkedProjectID:p.id}]));
+ const c=context({projects:[p]},device),session=createMatchingSession(c);await session.restore();await session.open('v');
+ assert.equal(c.state.activeDraft,'result');assert.equal(c.state.activeProject.drafts.length,2);
 });

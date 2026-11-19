@@ -20,6 +20,10 @@
 ## 单一数据源
 CloudBase Auth 管理身份，PostgreSQL/RLS/事务 RPC 管理元数据和同步状态，CloudBase 私有云存储保存原图、Mask 和作品文档。IndexedDB 存储本机缓存和未确认写入，**不是第二个云数据库**；断网时不能降级到一个来源不明的远端。保留已有账户、图片和原始本地队列；不要重跑基础 `schema.sql`。
 
+## 后台创作
+
+先备份并隔离运行 `node scripts/test-creative-jobs-db.mjs`，再执行增量 `010-creative-jobs.sql`、`011-creative-retention.sql`，更新 `shiye-api` 代码并保留原环境变量。计算服务增加受保护的 `SHIYE_CREATIVE_API_KEY`，使用现有单一 MQTT 客户端；无需前端模型密钥。`SHIYE_CREATIVE_DNS=google-doh` 仅在主机访问模型域名的系统 DNS 异常时使用，正常情况省略。systemd 的停止超时至少 25 秒，服务退出时释放创作租约。现有每天 03:00 清理任务处理已结束超过一天的中间文件，未接回结果保留。详见 [部署与验收记录](docs/CREATIVE_HARNESS.md)。
+
 ## 发布门槛
 1. 从短期分支经 PR 合入 `test`，等待 `Verify Shiye` 和 `Deploy CloudBase test` 成功，再核对该网站 `/version.json` 的 `commit` 与 `test` 的准确 SHA 一致。CI 在构建环境变量中注入 `SHIYE_BUILD_SHA` 和 `SHIYE_BUILD_BRANCH=test`；本地/其他 CI 可由构建脚本读取 `GITHUB_SHA` 或 Git HEAD。若部署版 `commit` 为 `null` 或旧 SHA，不得宣称已核对版本。若自动发布的凭证尚未配置，可在现有 App 上手动触发 Git 构建并设置准确 SHA。
 2. `npm ci && npm test && npm run build && npm run test:ui`，且 `node scripts/audit-cloudbase-platform.mjs` 通过。CI 若失败、被阻断或没有执行步骤，不能标记全量已验收。

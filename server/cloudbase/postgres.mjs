@@ -5,6 +5,7 @@ const functions=new Set(['shiye_platform_capabilities_v1','shiye_search_assets_v
   'shiye_reset_account_v1','shiye_gc_plan_v1','shiye_gc_finish_v1',
   'shiye_account_maintenance_capabilities_v1']);
 functions.add('shiye_commit_v3_guarded');
+functions.add('shiye_cancel_creative_job_v1');
 const tokenPattern=/^[A-Za-z0-9._~-]{20,8192}$/;
 export function cloudBaseGateway(envId){
   if(typeof envId!=='string'||!/^[-a-z0-9]{1,128}$/.test(envId))

@@ -17,11 +17,15 @@ export function restoreMatchingSession(record,state){
  return (Array.isArray(record.variants)?record.variants:[])
   .filter(v=>v&&typeof v.id==='string')
   .flatMap(v=>{try{prepareProjectScene(v.project);}catch{return [];}return usableProjectSnapshot(v.project)?[v]:[];})
-  .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
+  .map(v=>v.status==='running'&&!v.project?.creativeTask?.id?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
 }
 export function variantDraftProject(variant,existing,newID){
  if(existing?.isDraft)return existing;
  const p=prepareProjectScene(structuredClone(variant.project));p.id=newID;p.isDraft=true;p.createdAt=p.updatedAt=new Date().toISOString();return p;
+}
+export function variantResultProject(variant,project=variant.project){
+ const resultID=project.creativeCompletedJobs?.[variant.cloudJobID||variant.project.creativeTask?.id];
+ return resultID&&project.drafts?.some(d=>d.id===resultID)?{...project,activeDraftID:resultID}:project;
 }
 export function createMatchingSession(c){
  let variants=[],queue=Promise.resolve(),controller=null,opening=false,lastSnapshot,ready=false;
@@ -39,12 +43,36 @@ export function createMatchingSession(c){
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
  const update=()=>{if(c.state.route==='matching')notify();};
+ const progressFor=(v,owner)=>event=>{
+   if(account()!==owner)return;
+   v.progress=event.message;
+   const first=event.jobID&&v.cloudJobID!==event.jobID;
+   if(event.jobID){v.cloudJobID=event.jobID;v.linkedProjectID=v.project.id;}
+   update();return first?save():undefined;
+ };
+ const resumeVariant=v=>{
+   const owner=account();
+   void c.backgroundCreation.resume(v.project,progressFor(v,owner)).then(async result=>{
+     if(account()!==owner||!result)return;
+     v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.progress='创作完成，点击方案继续编辑';await save();update();
+   }).catch(async error=>{if(account()!==owner)return;v.status='failed';v.progress=error.message;await save();update();});
+ };
 
  return {
   subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);},
   variants:()=>variants,
-  coverURL:variant=>covers.rasterize(variant.project),
-  async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
+  coverURL:variant=>covers.rasterize(variantResultProject(variant)),
+  previewURL:variant=>c.backgroundCreation?.previewURL(variant.project.id)||null,
+  async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;
+    for(const v of variants){
+      const saved=c.state.projects.find(p=>p.id===(v.linkedProjectID||v.project.id));
+      if(saved?.creativeTask&&(!v.cloudJobID||v.cloudJobID===saved.creativeTask.id)){
+        v.project.creativeTask=structuredClone(saved.creativeTask);v.linkedProjectID=saved.id;v.cloudJobID=saved.creativeTask.id;
+        if(!saved.creativeCompletedJobs?.[v.cloudJobID]){v.status='running';v.progress='正在恢复后台任务';}
+      }
+      if(v.status==='running'&&v.project?.creativeTask?.id&&c.backgroundCreation)resumeVariant(v);
+    }
+  },
   cacheStats:covers.stats,
   persist:save,
   async importProject(p,{alreadyStored=false}={}){
@@ -82,11 +110,11 @@ export function createMatchingSession(c){
     c.state.projects.push(recovered);
     await save();update();return true;
   },
-  stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));},
+  stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));const v=variants.find(v=>v.status==='running'&&v.project?.creativeTask?.id);if(v&&c.backgroundCreation)void c.backgroundCreation.cancel(v.project.creativeTask.id).catch(error=>c.toast(error.message));},
   async reset(clearContext=()=>{}){const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
   async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());if(!existing?.isDraft)await c.db.stageProject(p);v.linkedProjectID=p.id;
     await device.put(account(),matchingSnapshot(c.state,variants));
-    if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
+    if(!existing?.isDraft)c.state.projects.push(p);p.activeDraftID=variantResultProject(v,p).activeDraftID;c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async rebuild(id){
    const snapshot=c.state.projects.find(p=>p.id===id)||variants.find(v=>v.id===id)?.project;
    if(!snapshot?.imageCreation)throw Error('此画面缺少原始素材任务，不能自动重建');
@@ -95,7 +123,7 @@ export function createMatchingSession(c){
   async generate({snapshot:referenceSnapshot=null}={}){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
    const mode=referenceSnapshot?'hybrid':creationMethod(c.state.matchCreationMode),cfg={...structuredClone(c.state.aiSettings),...generationProfile(mode)};
-   if(mode!=='draw'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥；导出给网页 GPT 不需要 Key');
+   if(mode==='hybrid'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥；导出给网页 GPT 不需要 Key');
    if(mode==='hybrid'&&!c.supportsVision(cfg))throw Error('混合模式的重建需要可看图模型；可改为导出给网页版 GPT');
    const assetsSnapshot=structuredClone(c.state.assets),p=referenceSnapshot?projectForReconstruction(referenceSnapshot,assetsSnapshot):c.createProject(),ids=[...p.candidateAssetIDs],findAsset=id=>assetsSnapshot.find(a=>a.id===id);
    p.creationMode=mode;let referenceImage=null;
@@ -107,6 +135,10 @@ export function createMatchingSession(c){
    update();
    try {
     await save();ensureAccount();
+    if(mode==='edit'){
+      const result=await c.backgroundCreation.generate({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,prompt:p.intent||'',onProgress:progressFor(v,account()),signal:run.signal});
+      ensureAccount();v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.progress='创作完成，已保存到草稿。点击方案继续编辑。';await save();update();return;
+    }
     if(mode!=='edit'){
      let snapshot=referenceSnapshot;
      if(!snapshot){

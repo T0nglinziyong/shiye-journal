@@ -6,6 +6,7 @@ const routes=new Map([['/api/cos','POST'],['/api/platform-health','GET'],
   ['/api/storage-usage','GET'],['/api/search','POST'],['/api/search-index','POST'],
   ['/api/realtime-notify','POST'],['/api/realtime-session','GET'],
   ['/api/job-submit','POST'],['/api/worker-notify','POST'],
+  ['/api/creative-submit','POST'],['/api/creative-cancel','POST'],['/api/creative-worker-notify','POST'],
   ['/api/telemetry','POST'],['/api/account-reset','POST'],['/api/account-gc','POST']]);
 routes.set('/api/classify-asset','POST');
 routes.set('/api/classify-project','POST');
@@ -25,7 +26,7 @@ export function sanitizeTelemetry(input){
   });
 }
 export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searchService,
-  inventory,garbageCollect,classifyAsset,realtimePublish,realtimeCredentials,jobLookup,workerToken,
+  inventory,garbageCollect,classifyAsset,realtimePublish,realtimeCredentials,jobLookup,creativeJobLookup,workerToken,
   realtimeReady=false,build=null,logger=console.log,clock=Date.now,windows=new Map()}={}){
   if(typeof verifyUser!=='function')throw TypeError('CloudBase 身份验证器未配置');
   // Instance-local limits absorb bursts. Paid embedding limits are additionally
@@ -50,18 +51,19 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
       if(event.method!==routes.get(route))throw new ServiceError(405,'METHOD_NOT_ALLOWED','请求方法不允许');
       const token=/^Bearer ([A-Za-z0-9._~-]{20,8192})$/.exec(event.authorization||'')?.[1];
       if(!token)throw new ServiceError(401,'AUTH_REQUIRED','请先登录');
-      if(route==='/api/worker-notify'){
+      if(route==='/api/worker-notify'||route==='/api/creative-worker-notify'){
+        const creative=route==='/api/creative-worker-notify';
         const actual=Buffer.from(token),expected=Buffer.from(workerToken||'');
         if(!expected.length||actual.length!==expected.length||!timingSafeEqual(actual,expected))
           throw new ServiceError(403,'WORKER_AUTH','计算服务器未获授权');
         const id=event.body?.jobId;
         if(!/^[a-f0-9-]{36}$/i.test(id||'')||Object.keys(event.body).some(key=>key!=='jobId'))
           throw new ServiceError(400,'INVALID_JOB','任务编号无效');
-        const job=await jobLookup(id);
-        if(!job||!['completed','failed'].includes(job.status))
+        const job=await (creative?creativeJobLookup:jobLookup)(id);
+        if(!job||!(creative?['queued','running','completed','failed','cancelled']:['completed','failed']).includes(job.status))
           throw new ServiceError(409,'JOB_NOT_FINISHED','任务尚未完成');
         const topic='shiye/users/'+encodeURIComponent(job.user_id)+'/sync';
-        await realtimePublish(topic,{type:'job_'+job.status,jobId:id,eventId:requestId,
+        await realtimePublish(topic,{type:creative?'creative_changed':'job_'+job.status,jobId:id,eventId:requestId,
           emittedAt:new Date(clock()).toISOString()});
         status=200;code='OK';return {version:1,status,body:{accepted:true},requestId};
       }
@@ -114,6 +116,23 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
           topic:'shiye/users/'+encodeURIComponent(identity.userID)+'/sync',
           username:credential.username,password:credential.password
         };
+      }else if(route==='/api/creative-submit'||route==='/api/creative-cancel'){
+        const id=event.body?.jobId;
+        if(!/^[a-f0-9-]{36}$/i.test(id||'')||Object.keys(event.body).some(key=>key!=='jobId'))
+          throw new ServiceError(400,'INVALID_JOB','任务编号无效');
+        const job=await creativeJobLookup(id,token,identity.userID);
+        if(!job)throw new ServiceError(404,'JOB_NOT_FOUND','任务不存在');
+        if(route==='/api/creative-cancel'){
+          const cancelled=await rpc('shiye_cancel_creative_job_v1',token,{p_id:id});
+          body={id,status:cancelled.status};
+          // Cancellation is committed before sending best-effort wakeups.
+          try{await realtimePublish('shiye-job',{type:'creative_cancelled',jobId:id,eventId:requestId});}catch{}
+          try{await realtimePublish('shiye/users/'+encodeURIComponent(identity.userID)+'/sync',{type:'creative_changed',jobId:id,eventId:requestId});}catch{}
+        }else{
+          if(['queued','running'].includes(job.status))await realtimePublish('shiye-job',{type:'creative_queued',jobId:id,eventId:requestId});
+          body={id,status:job.status};
+        }
+        status=200;code='OK';
       }else if(route==='/api/job-submit'){
         const id=event.body?.jobId;
         if(!/^[a-f0-9-]{36}$/i.test(id||'')||Object.keys(event.body).some(key=>key!=='jobId'))

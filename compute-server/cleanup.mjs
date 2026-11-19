@@ -1,4 +1,5 @@
 import {sweepComputeJobs} from './retention.mjs';
+import {sweepCreativeArtifacts} from './harness/retention.mjs';
 
 const env=process.env;
 const apply=process.argv.slice(2).includes('--apply');
@@ -59,3 +60,8 @@ for(let page=0;page<100;page++){
 const summary=totals;
 console.log('Compute retention',JSON.stringify({...summary,mode:apply?'apply':'dry-run'}));
 if(summary.failed)process.exitCode=1;
+
+const creative=await sweepCreativeArtifacts({apply,removeObject,rpc:async(name,args)=>{
+  const response=await request(gateway+'/v1/rdb/rest/rpc/'+name,{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(args)});return response.json();
+}});
+console.log('Creative retention',JSON.stringify(creative));

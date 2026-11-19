@@ -1,7 +1,7 @@
 export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=[],trash=[],blobs=[]}={}){
   const user={id:'ui-test-user'},account={user_id:user.id,username:'ui-test',is_admin:false};
   const state={revision:0,epoch:'00000000-0000-4000-8000-000000000001',
-    records:new Map(),changes:[],receipts:new Map(),objects:new Map(),jobs:new Map(),jobRequests:[]};
+    records:new Map(),changes:[],receipts:new Map(),objects:new Map(),jobs:new Map(),creativeJobs:new Map(),jobRequests:[]};
   for(const [store,rows] of Object.entries({assets,series,projects,meta,trash,blobs}))
     for(const record of rows)state.records.set(store+':'+record.id,structuredClone(record));
   const selectRows=(table,filters,columns)=>{
@@ -15,6 +15,7 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
     else if(table==='shiye_commit_receipts_v3')rows=[...state.receipts].map(([operation_id,result])=>({operation_id,result}));
     else if(table==='shiye_commits')rows=[];
     else if(table==='shiye_compute_jobs')rows=[...state.jobs.values()];
+    else if(table==='shiye_creative_jobs')rows=[...state.creativeJobs.values()];
     else throw Error('UI fixture table not registered: '+table);
     rows=rows.filter(row=>filters.every(([op,key,value])=>{
       if(op==='eq')return row[key]===value;

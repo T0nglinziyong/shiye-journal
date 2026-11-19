@@ -32,6 +32,7 @@ export async function main(event,context){
     garbageCollect,classifyAsset,realtimePublish:publishRealtimeEvent,realtimeReady:realtimeConfigured(env),
     realtimeCredentials:userID=>realtimeUserCredential(userID,env),
     jobLookup:(id,token,userID)=>lookupComputeJob(id,token||env.SHIYE_CLOUDBASE_SERVICE_KEY,{envId,userID}),
+    creativeJobLookup:(id,token,userID)=>lookupCreativeJob(id,token||env.SHIYE_CLOUDBASE_SERVICE_KEY,{envId,userID}),
     workerToken:env.SHIYE_GPU_WORKER_TOKEN,
     build:env.SHIYE_BUILD_SHA,windows:burstWindows,
     sign:async({path,method,headers,variant})=>{
@@ -86,9 +87,11 @@ export function realtimeUserCredential(userID,env=process.env){
     typeof entry.password==='string'&&entry.password.length>=20
     ?{username:entry.username,password:entry.password}:null;
 }
-export async function lookupComputeJob(id,token,{envId,userID,fetcher=fetch}={}){
+export const lookupComputeJob=(id,token,options)=>lookupJob('shiye_compute_jobs',id,token,options);
+export const lookupCreativeJob=(id,token,options)=>lookupJob('shiye_creative_jobs',id,token,options);
+async function lookupJob(table,id,token,{envId,userID,fetcher=fetch}={}){
   if(!/^[a-f0-9-]{36}$/i.test(id||'')||!token||!envId)return null;
-  const url=new URL(`https://${envId}.api.tcloudbasegateway.com/v1/rdb/rest/shiye_compute_jobs`);
+  const url=new URL(`https://${envId}.api.tcloudbasegateway.com/v1/rdb/rest/${table}`);
   url.searchParams.set('select','id,user_id,status');
   url.searchParams.set('id','eq.'+id);
   if(userID)url.searchParams.set('user_id','eq.'+userID);

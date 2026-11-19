@@ -30,3 +30,10 @@ test('A-05: removed target fails instead of resurrecting or writing another draf
  assert.throws(()=>commitAIDraft(project,{targetDraftID:'a',expectedDraft:draft('a'),generatedDraft:draft('a'),newDraftID:'candidate'}),/不存在/);
  assert.deepEqual(project.drafts.map(d=>d.id),['b']);
 });
+test('cloud object key ordering and generated covers do not create a false manual-edit conflict',()=>{
+ const base=draft('a'),current=JSON.parse(JSON.stringify(base));
+ const reorder=v=>Array.isArray(v)?v.map(reorder):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).reverse().map(k=>[k,reorder(v[k])])):v;
+ const project={drafts:[{...reorder(current),coverImageID:'preview',coverSceneHash:'hash'}],activeDraftID:'a'};
+ const result=commitAIDraft(project,{targetDraftID:'a',expectedDraft:base,generatedDraft:withText(base,'后台作品'),newDraftID:'candidate'});
+ assert.equal(result.candidate,false);assert.equal(project.drafts.length,1);
+});
