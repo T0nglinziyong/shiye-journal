@@ -2,6 +2,8 @@ import {mergeSamRegions} from './sam-region-merge.js';
 import {splitSources,splitBySource,subtractRegion,intersectRegion,findSourceAt,findSourceInBox} from './sam-region-split.js';
 
 const area=region=>region?.pixels||region?.w*region?.h*(region?.segmentationFrameWidth||1)*(region?.segmentationFrameHeight||1)||0;
+const pageArea=region=>region?.pixels&&region.segmentationFrameWidth&&region.segmentationFrameHeight
+  ?region.pixels/(region.segmentationFrameWidth*region.segmentationFrameHeight):region.w*region.h;
 const overlap=(a,b)=>Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*
   Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
 const sameRegion=(a,b)=>{
@@ -23,12 +25,12 @@ export function regionMergeWarning(regions,selected,backgrounds=[]){
   if(selected.length<2)return false;
   const chosen=selected.map(index=>regions[index]).filter(Boolean);
   if(chosen.length!==selected.length)return false;
-  const selectedArea=chosen.reduce((sum,item)=>sum+item.w*item.h,0);
+  const selectedArea=chosen.reduce((sum,item)=>sum+pageArea(item),0);
   const carrier=backgrounds.filter(item=>chosen.every(child=>overlap(item,child)>=child.w*child.h*.9))
     .sort((a,b)=>a.w*a.h-b.w*b.h)[0];
   const x0=Math.min(...chosen.map(item=>item.x)),y0=Math.min(...chosen.map(item=>item.y));
   const x1=Math.max(...chosen.map(item=>item.x+item.w)),y1=Math.max(...chosen.map(item=>item.y+item.h));
-  return (carrier?carrier.w*carrier.h:(x1-x0)*(y1-y0))>selectedArea*2.5;
+  return (carrier?pageArea(carrier):(x1-x0)*(y1-y0))>selectedArea*2.5;
 }
 
 export function planRegionMerge(regions,selected,backgrounds,frame){
