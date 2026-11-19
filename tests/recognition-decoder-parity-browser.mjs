@@ -10,7 +10,7 @@ const wasm=fs.readFileSync(new URL('../node_modules/@jsquash/jpeg/codec/dec/mozj
 initJpeg(await WebAssembly.compile(wasm));
 const browser=await browserHarness('shiye-jpeg-parity',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173');
 try{
-  await browser.wait('.series-grid');
+  await browser.wait('body');
   for(const row of rows){
     const bytes=fs.readFileSync(root+'/'+row.raw);
     const input=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);

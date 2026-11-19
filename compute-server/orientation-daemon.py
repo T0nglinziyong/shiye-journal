@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import traceback
+import math
 from pathlib import Path
 
 os.environ.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
@@ -50,7 +51,14 @@ def run(job):
     objects = manifest["objects"]
     if not isinstance(objects, list) or len(objects) > 250:
         raise ValueError("Invalid orientation object count")
-    locations = text_locations(image)
+    locations = job.get("locations")
+    if locations is None:
+        locations = text_locations(image)
+    elif (not isinstance(locations, list) or len(locations) > 2000 or
+          any(not isinstance(point, list) or len(point) != 2 or
+              any(not isinstance(value, (int, float)) or not math.isfinite(value)
+                  for value in point) for point in locations)):
+        raise ValueError("Invalid prepared OCR locations")
     for item in objects:
         x0, y0, x1, y1 = item["bbox_xyxy"]
         if not (0 <= x0 < x1 <= image.shape[1] and 0 <= y0 < y1 <= image.shape[0]):
@@ -78,7 +86,12 @@ for line in sys.stdin:
     request = None
     try:
         request = json.loads(line)
-        response = {"id": request["id"], "ok": True, **run(request)}
+        if request.get("stage") == "prepare":
+            image = np.asarray(Image.open(request["input"]).convert("RGB"))
+            locations = text_locations(image)
+            response = {"id": request["id"], "ok": True, "locations": locations}
+        else:
+            response = {"id": request["id"], "ok": True, **run(request)}
     except Exception as error:
         traceback.print_exc(file=sys.stderr)
         response = {"id": request.get("id") if isinstance(request, dict) else None,

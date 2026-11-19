@@ -3,6 +3,7 @@
 // the same pixels; display and export may still use the platform renderer.
 import {decode} from './vendor/jpeg-decoder.js';
 import {visionTask} from './vision-runtime.js';
+import {decodeJpegOffThread} from './recognition-jpeg-decode.js';
 const decodedPixels=new WeakMap();
 
 export function pixelCanvas(pixels,width,height){
@@ -23,19 +24,26 @@ function mozJpegDecoder(){
     return decode;
   })().catch(error=>{mozJpegInitPromise=null;throw error;});
 }
-export async function decodeRecognitionImage(blob,{research=false}={}){
+export async function decodeRecognitionImage(blob,{research=false,onPhase=()=>{}}={}){
   const jpeg=blob.type==='image/jpeg'||blob.type==='image/jpg'||
     (!blob.type&&/\.jpe?g$/i.test(blob.name||''));
   if(research&&jpeg){
     // The research reference uses libjpeg's encoded samples without applying
     // display ICC. Decode with one pinned codec so Safari/Chromium and devices
     // feed identical pixels into paper correction and material discovery.
-    const [decodeMozJpeg,bytes]=await Promise.all([mozJpegDecoder(),blob.arrayBuffer()]);
-    const image=await decodeMozJpeg(bytes,{preserveOrientation:true});
+    let image;
+    try{image=await decodeJpegOffThread(blob,onPhase);}
+    catch{
+      onPhase('decode');
+      const [decodeMozJpeg,bytes]=await Promise.all([mozJpegDecoder(),blob.arrayBuffer()]);
+      image=await decodeMozJpeg(bytes,{preserveOrientation:true});
+    }
     return pixelCanvas(image.data,image.width,image.height);
   }
   if(jpeg){
+    onPhase('read');
     const bytes=new Uint8Array(await blob.arrayBuffer());
+    onPhase('decode');
     const image=decode(bytes,{useTArray:true,maxResolutionInMP:60,maxMemoryUsageInMB:512});
     // Orientation is applied explicitly to raw pixels. Neither EXIF handling
     // nor colour conversion is delegated to the browser image decoder.
@@ -43,6 +51,7 @@ export async function decodeRecognitionImage(blob,{research=false}={}){
     if(hasDisplayP3Profile(bytes))displayP3ToSrgb(data);
     return pixelCanvas(data,width,height);
   }
+  onPhase('decode');
   return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'none'});
 }
 // The pinned JPEG decoder yields profile-encoded samples. iPhone photos often

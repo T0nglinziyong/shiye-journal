@@ -2188,6 +2188,7 @@ async function runAppAction(action,id,value){try{
       appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
       correctedPixelSize:corrected?[corrected.width,corrected.height]:null,
       paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',
+      processingTimings:rec.processingTimings||null,
       ...(trace||{}),visibleCount:state.importCandidates?.length||rec.candidates?.length||0,
       candidateMaskAudit:(state.importCandidateData||[]).map(item=>({
         segmentationMethod:item.region?.segmentationMethod||null,
@@ -2931,6 +2932,7 @@ function saveActiveImportRecord(){
 }
 const importPrefetchJobs=new WeakMap();
 const importPrefetchControllers=new Set();
+const importPrefetchWaiters=new WeakSet();
 let importPrefetchRunning=0;
 let importBatchRevision=0;
 async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index,sourceName='',sourceIndex=0,lighting=null}){
@@ -2997,23 +2999,39 @@ function importPrefetchSettings(rec){
 }
 function updateImportPrefetchLabel(rec){
   const index=state.importRecords.indexOf(rec),label=index>=0?view.querySelector(`.queue-item[data-id="${index}"] small`):null;
-  if(label&&!rec.confirmed)label.textContent=rec.prefetchStatus==='ready'?`${rec.candidates.length} 件已预识别`:rec.prefetchStatus==='running'?'后台识别中':'待识别';
+  if(label&&!rec.confirmed)label.textContent=rec.prefetchStatus==='ready'?`${rec.candidates.length} 件已预识别`:rec.prefetchStatus==='running'?rec.prefetchLabel||'后台识别中':'待识别';
+  if(importPrefetchWaiters.has(rec)&&state.importRecords[state.importIndex]===rec&&rec.prefetchPhase){
+    state.importProcessing=rec.prefetchPhase;
+    const status=view.querySelector('.import-processing');if(status)status.textContent=rec.prefetchPhase;
+  }
 }
+function setImportPrefetchPhase(rec,phase,label=phase){rec.prefetchPhase=phase;rec.prefetchLabel=label;updateImportPrefetchLabel(rec);}
 async function prefetchImportRecord(rec,settings,revision,signal){
   let bitmap,correctedBitmap,correctedURL,correctedTransportBlob,candidateURLs=[];
+  let tick=performance.now();
+  const timings={source:'background'};
+  const mark=phase=>{const now=performance.now();timings[phase]=Math.round(now-tick);tick=now;rec.processingTimings=timings;};
   const valid=()=>!signal.aborted&&revision===importBatchRevision&&state.importRecords.includes(rec)&&state.route==='import';
   try{
-    bitmap=await decodeRecognitionImage(rec.file,{research:settings.candidateDiscovery==='unified'});if(!valid())return;
+    bitmap=await decodeRecognitionImage(rec.file,{research:settings.candidateDiscovery==='unified',
+      onPhase:phase=>{if(valid())setImportPrefetchPhase(rec,phase==='decode'?'正在解码照片…':'正在读取照片…',phase==='decode'?'解码中':'读取中');}});if(!valid())return;
+    mark('readAndDecodeMs');
+    setImportPrefetchPhase(rec,'正在寻找纸张四角…','找纸角中');
     const initial=importPaperDimensions({...settings,bitmap,corners:null});
     const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
+    mark('paperCornersMs');
     const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
     if(corners&&settings.paperSize!=='none'){
       // Background SAM work only needs a compact page. Full-resolution
       // correction is deferred until the selected materials are saved.
-      const corrected=await rectifyA4Frame(bitmap,corners,isComputeRecognition(settings.recognition)?1024:4096,pw/ph);
+      setImportPrefetchPhase(rec,'正在校正纸张…','校正中');
+      const correction=rectifyA4Frame(bitmap,corners,isComputeRecognition(settings.recognition)?1024:4096,pw/ph);
+      queueMicrotask(scheduleImportPrefetch);
+      const corrected=await correction;
       correctedBitmap=corrected.canvas;correctedTransportBlob=corrected.blob;
       correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
     }
+    mark('rectifyMs');
     const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
     let candidates;
     if(isComputeRecognition(settings.recognition)){
@@ -3027,7 +3045,9 @@ async function prefetchImportRecord(rec,settings,revision,signal){
       const options={model:settings.recognition,pointsPerSide:settings.samPointsPerSide,
         cropNLayers:settings.samCropNLayers,granularity:settings.samGranularity,
         preprocessing:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast}};
+      setImportPrefetchPhase(rec,'正在上传矫正图…','上传中');
       const jobId=await submitSegmentationJob(correctedBlob,options);
+      mark('submitMs');
       rec.computeJobId=jobId;rec.computeJobSignature=JSON.stringify(options);
       rec.computeJobBitmap=source;rec.computeSourceJobId=jobId;rec.computeSourceBitmap=source;
       rec.computeSourceSignature=JSON.stringify(corners)+'|'+source.width+'x'+source.height;
@@ -3036,17 +3056,29 @@ async function prefetchImportRecord(rec,settings,revision,signal){
       bitmap?.close?.();if(bitmap instanceof HTMLCanvasElement){bitmap.width=0;bitmap.height=0;}
       bitmap=null;
       queueMicrotask(scheduleImportPrefetch);
-      candidates=await waitForSegmentationJob(jobId,{signal});
+      setImportPrefetchPhase(rec,'拾页计算服务器正在分割…','分割中');
+      candidates=await waitForSegmentationJob(jobId,{signal,onStatus:status=>{
+        if(!valid())return;
+        const phase=status==='queued'?['任务已提交，等待计算服务器…','排队中']:
+          status==='running'?['拾页计算服务器正在分割…','分割中']:
+          status==='completed'?['正在下载分割结果…','下载结果中']:
+          status==='waiting-for-network'?['网络中断，等待恢复…','等待网络']:null;
+        if(phase&&rec.prefetchPhase!==phase[0])setImportPrefetchPhase(rec,...phase);
+      }});
+      mark('serverAndResultMs');
       rec.computeBackgrounds=candidates.backgrounds||[];
       if(!valid())return;
+      setImportPrefetchPhase(rec,'正在整理分割区域…','整理中');
       rec.computeRawCandidates=[...candidates];rec.computeHiddenCandidates=[...candidates];
       candidates=await postprocessSamCandidates(rec.computeRawCandidates,correctedBitmap,{
         mergeSharedCarrier:settings.mergeSharedCarrier,fillMaskHoles:settings.fillMaskHoles,shapeRegularization:settings.shapeRegularization,
         apertures:settings.apertures,backgrounds:rec.computeBackgrounds,
         paperWidthMM:pw,paperHeightMM:ph});
       if(!valid())return;
+      mark('postprocessMs');
       rec.computeJobId=null;
     }else{
+      setImportPrefetchPhase(rec,'正在识别素材…','识别中');
       candidates=await detectPaperCandidates(source,box,6,{balanceLight:settings.balanceLight,paperRectified:!!correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,
         recognition:settings.recognition,candidateDiscovery:settings.candidateDiscovery,recognitionPixels:settings.pixels,
         recognitionSource:correctedBitmap&&corners?{bitmap,corners}:null,
@@ -3054,6 +3086,7 @@ async function prefetchImportRecord(rec,settings,revision,signal){
         recognitionPostprocess:{fillMaskHoles:settings.fillMaskHoles,shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
         onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;},
         onAnalysis:analysis=>{if(valid())rec.recognitionAnalysis=analysis;}});if(!valid())return;
+      mark('recognitionMs');
     }
     // The hybrid model already applies its own proposal policy. A second
     // physical-size cutoff here silently hid narrow black-card materials.
@@ -3064,6 +3097,7 @@ async function prefetchImportRecord(rec,settings,revision,signal){
     // more seconds to inspect on the live site. Final save still re-extracts
     // SAM materials from the original photo at full resolution.
     const sam=isComputeRecognition(settings.recognition);
+    setImportPrefetchPhase(rec,'正在生成素材预览…','生成预览中');
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
@@ -3075,11 +3109,12 @@ async function prefetchImportRecord(rec,settings,revision,signal){
       return candidate;
     });
     if(!valid())return;
+    mark('previewsMs');
     const keepBitmap=!sam;
     Object.assign(rec,{bitmap:keepBitmap?bitmap:null,recognitionDecodeMode:settings.candidateDiscovery==='unified'?'research':'legacy',autoPaperCorners:corners&&!rec.corners?structuredClone(corners):null,correctedBitmap,correctedURL,
       appliedCorners:correctedBitmap?JSON.stringify(corners):null,
       appliedPaperRatio:correctedBitmap?pw/ph:null,backgroundDetected:!!correctedBitmap,
-      candidates,candidateData,candidateURLs,selection:candidates.map((_,i)=>i),prefetchStatus:'ready'});
+      candidates,candidateData,candidateURLs,selection:candidates.map((_,i)=>i),prefetchStatus:'ready',prefetchPhase:null,prefetchLabel:null});
     if(keepBitmap)bitmap=null;
     correctedBitmap=correctedURL=null;candidateURLs=[];updateImportPrefetchLabel(rec);
   }finally{
@@ -3100,6 +3135,7 @@ function scheduleImportPrefetch(){
   const controller=new AbortController();
   importPrefetchControllers.add(controller);importPrefetchRunning++;
   rec.prefetchStatus='running';updateImportPrefetchLabel(rec);
+  setImportPrefetchPhase(rec,'正在读取照片…','读取中');
   const promise=prefetchImportRecord(rec,settings,revision,controller.signal).catch(error=>{if(revision===importBatchRevision&&!controller.signal.aborted){rec.prefetchStatus='failed';updateImportPrefetchLabel(rec);console.warn('下一张照片后台识别失败，切换时重试',error);}}).finally(()=>{
     importPrefetchControllers.delete(controller);importPrefetchRunning--;
     if(revision===importBatchRevision)queueMicrotask(scheduleImportPrefetch);
@@ -3133,12 +3169,21 @@ async function switchImportRecord(index,skipSave=false){
   state.importSamMergeSelection=new Set();state.importSamMerging=false;
   state.importRegionDraft=null;state.paperAdjustmentOriginalCorners=null;
   const progress=message=>{state.importProcessing=message;const status=view.querySelector('.import-processing');if(status)status.textContent=message;};
+  let tick=performance.now();
+  const timings={source:'foreground'};
+  const mark=phase=>{const now=performance.now();timings[phase]=Math.round(now-tick);tick=now;rec.processingTimings=timings;};
   state.importProcessing=state.importMode==='snapshot'?'正在读取页面…':isComputeRecognition(state.importRecognition)?'正在读取照片…':'正在读取照片并加载本机识别引擎…';render();
   // Paint the selected photo before decoding, engine initialization or warp.
   await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+  tick=performance.now();
   try{
   const job=importPrefetchJobs.get(rec);
-  if(job){await job.promise;if(!isCurrent())return;
+  if(job){
+    importPrefetchWaiters.add(rec);
+    progress(rec.prefetchPhase||'正在等待后台识别…');
+    try{await job.promise;}finally{importPrefetchWaiters.delete(rec);}
+    if(rec.processingTimings?.source==='background')rec.processingTimings.switchWaitMs=Math.round(performance.now()-tick);
+    if(!isCurrent())return;
     if(job.signature!==JSON.stringify(importPrefetchSettings(rec))){
       rec.bitmap?.close?.();rec.correctedBitmap?.close?.();if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
       for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
@@ -3157,19 +3202,27 @@ async function switchImportRecord(index,skipSave=false){
     Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null,recognitionAnalysis:null});
     Object.assign(state,{importBitmap:null,correctedBitmap:null,correctedURL:null,importCandidates:[],importCandidateData:[],importCandidateURLs:[],importCandidateSelection:new Set()});
   }
-  const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file,{research:researchDecode});rec.bitmap=bitmap;
+  const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file,{research:researchDecode,
+    onPhase:phase=>{if(isCurrent())progress(phase==='decode'?'正在解码照片…':'正在读取照片…');}});rec.bitmap=bitmap;
+  if(rec.processingTimings?.source==='background')rec.processingTimings.switchDecodeMs=Math.round(performance.now()-tick);
+  else mark('readAndDecodeMs');
   rec.recognitionDecodeMode=decodeMode;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
+  if(rec.processingTimings?.source!=='background')mark('paperCornersMs');
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
-    const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,
+    const [pw,ph]=paperDimensions();
+    const correction=rectifyA4Frame(state.importBitmap,state.paperCorners,
       isComputeRecognition(state.importRecognition)?1024:4096,pw/ph);
+    queueMicrotask(scheduleImportPrefetch);
+    const {canvas,blob}=await correction;
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.appliedPaperRatio=pw/ph;rec.backgroundDetected=true;
     rec.computeInputBlob=blob;rec.computeInputBitmap=canvas;
   }
+  if(rec.processingTimings?.source!=='background')mark('rectifyMs');
   if(!isCurrent())return;
   if(state.importMode==='snapshot'){
     state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];
@@ -3180,6 +3233,7 @@ async function switchImportRecord(index,skipSave=false){
     if(rec.prefetchStatus==='ready'&&state.importCandidates.length&&!state.importCandidateData.length&&state.importStep==='inspect')
       await refreshImportCandidates(state.importCandidates);
     else if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
+    if(rec.processingTimings?.source!=='background')mark('recognitionAndPreviewsMs');
   }
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
@@ -3419,7 +3473,17 @@ async function previewCrop(){
     record.computeSourceSignature=JSON.stringify(state.paperCorners)+'|'+source.width+'x'+source.height;
     queueMicrotask(scheduleImportPrefetch);
     state.importProcessing='拾页计算服务器正在分割整页素材…';render();
-    regions=await waitForSegmentationJob(jobId);
+    regions=await waitForSegmentationJob(jobId,{onStatus:status=>{
+      if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
+      const message=status==='queued'?'任务已提交，等待计算服务器…':
+        status==='running'?'拾页计算服务器正在分割整页素材…':
+        status==='completed'?'正在下载分割结果…':
+        status==='waiting-for-network'?'网络中断，等待恢复…':null;
+      if(message&&state.importProcessing!==message){
+        state.importProcessing=message;
+        const label=view.querySelector('.import-processing');if(label)label.textContent=message;
+      }
+    }});
     record.computeBackgrounds=regions.backgrounds||[];
     record.computeJobId=null;
     record.computeRawCandidates=[...regions];record.computeHiddenCandidates=[...regions];
