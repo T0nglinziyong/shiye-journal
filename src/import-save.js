@@ -35,6 +35,10 @@ export function candidateMetadata(c,record,batchSeriesID) {
     palette:[],physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
     dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
+export function reviewedImportCandidates(candidates,selection){
+  return candidates.map((candidate,index)=>({...candidate,selected:selection.has(index),
+    reviewStatus:candidate.reviewStatusSource==='user'?candidate.reviewStatus:'ready'}));
+}
 export async function saveImportBatch({state,db,urls,render,onSaved,resolveCandidate=async(_record,c)=>c}) {
   if(state.importSaving||state.importStep==='done')return;
   state.importSaving=true;

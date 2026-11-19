@@ -253,6 +253,8 @@ class FastSamHybrid:
         if not items:
             return [], backgrounds, []
         height,width = image.shape[:2]
+        original_subregions = {id(item): children for item, children in zip(items, subregions)}
+        items = merge_aligned_tiled_masks(items, width, height)
         boxes=[]
         for item in items:
             x0,y0,x1,y1 = item["bbox_xyxy"]
@@ -286,11 +288,13 @@ class FastSamHybrid:
             item["bbox_xyxy"] = mask_box(item["segmentation"])
             item["area"] = int(item["segmentation"].sum())
         joined = merge_aligned_tiled_masks(items, width, height)
-        original_subregions = {id(item): children for item, children in zip(items, subregions)}
+        def leaves(item):
+            return [leaf for member in item.get("tile_members", [item])
+                    for leaf in (leaves(member) if member is not item and member.get("tile_members") else [member])]
         return joined, backgrounds, [
             [{"segmentation": member["segmentation"],
-              "subregions": [{"segmentation": mask} for mask in original_subregions[id(member)]]}
-             for member in item["tile_members"]]
+              "subregions": [{"segmentation": mask} for mask in original_subregions.get(id(member), [])]}
+             for member in leaves(item)]
             if item.get("tile_members") else
-            [{"segmentation": mask} for mask in original_subregions[id(item)]]
+            [{"segmentation": mask} for mask in original_subregions.get(id(item), [])]
             for item in joined]

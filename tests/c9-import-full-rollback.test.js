@@ -6,7 +6,8 @@ import {readFile} from 'node:fs/promises';
 const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
   'manual-import-recognition.js':'bc83bd2f7e0d572c9fb7c0d3acc724a238385133',
-  'perspective.js':'1339e08b3b23603d1a41c779792c6a0327c676a8',
+  // Reviewed change: use the first sustained paper edge to correct a shadow-biased A4 line.
+  'perspective.js':'d5a8d6ff101fe624dfa243e6704c01f2d6b9d28e',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   // Reviewed change: React owns catalog controls, import queue, candidate controls and review menus;
   // recognition and segmentation code remains unchanged.
@@ -20,7 +21,8 @@ const expected={
   // this file stores them; the established import transaction stays atomic.
   // Material metadata now records taxonomy v2 and field provenance; image
   // processing, mask bytes, and commit behavior remain unchanged.
-  'import-save.js':'4780428b966815cfce78ab472d8625b8eeab5366',
+  // Reviewed change: a confirmed import records its selected pieces as checked.
+  'import-save.js':'c72ad44044ce4720282c201194f47f63537b1507',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){
