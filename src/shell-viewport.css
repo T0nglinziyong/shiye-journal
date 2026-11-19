@@ -2,6 +2,7 @@
    scrolls beneath it; the mobile navigation is fixed outside that header. */
 @media(max-width:699px){
   #app>.topbar { position:sticky; top:0; }
-  body>.main-nav { position:fixed; top:auto; bottom:0; transform:none; }
+  body>.main-nav { position:fixed; top:auto; bottom:calc(0px - var(--shiye-mobile-nav-gap, 0px)); transform:none; }
+  #view .settings-page { min-height:0; padding-bottom:0; }
 }
 body:has(#app[hidden])>.main-nav { display:none; }
