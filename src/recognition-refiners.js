@@ -1,5 +1,6 @@
 import {visionTask,visionParallelTasks,visionParallelism} from './vision-runtime.js';
 import {keepPhysicalBeforeUnsafeRegularization} from './material-physical-mask-guard.js';
+import {fillCandidateMaskHoles} from './mask-hole-fill.js';
 
 const chunks=(items,count)=>{
   const out=Array.from({length:Math.min(count,items.length)},()=>[]);
@@ -19,6 +20,10 @@ export async function finalizeCandidates({
     out=await visionTask('separate-shared-carrier',{
       candidates:out,pixels:sourceFrame.data,width,height
     });
+  }
+  if(postprocess.fillMaskHoles!==false){
+    onProgress({status:'boundary-postprocess',engine:'fill-mask-holes',total:out.length});
+    out=out.map(fillCandidateMaskHoles);
   }
   if(postprocess.shapeRegularization!==false){
     onProgress({status:'boundary-postprocess',engine:'shape-regularization',total:out.length});

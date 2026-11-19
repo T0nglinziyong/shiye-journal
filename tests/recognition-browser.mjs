@@ -8,7 +8,7 @@ const b=await browserHarness('shiye-recognition-settings',process.env.SHIYE_TEST
   async({command})=>command('Page.addScriptToEvaluateOnNewDocument',{
     source:fixture.outputFiles[0].text+'\nShiyeUiFixture.installUiCloudBase(window);'}));
 const {click,evaluate,wait}=b;
-const switches=['setting-postprocess-shapes','setting-postprocess-apertures'];
+const switches=['setting-postprocess-fill-holes','setting-postprocess-shapes','setting-postprocess-apertures'];
 try{
   await wait('.series-grid');
   await click('#top-settings','.settings-page');
@@ -42,6 +42,7 @@ try{
     document.querySelector('#setting-recognition-pixels').value='1600';
     document.querySelector('#setting-preprocess-light').checked=true;
     document.querySelector('#setting-preprocess-denoise').checked=true;
+    document.querySelector('#setting-postprocess-fill-holes').checked=false;
     document.querySelector('#setting-postprocess-shapes').checked=false;
     document.querySelector('#setting-postprocess-apertures').checked=false;
   })()`);
@@ -53,6 +54,7 @@ try{
   assert.equal(prefs.recognitionPixels,1600);
   assert.equal(prefs.balanceLight,true);
   assert.equal(prefs.recognitionDenoise,true);
+  assert.equal(prefs.recognitionFillMaskHoles,false);
   assert.equal(prefs.recognitionShapeRegularization,false);
   assert.equal(prefs.recognitionApertures,false);
   assert.equal('recognitionEdgePolish' in prefs,false);

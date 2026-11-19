@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
+import {build} from 'esbuild';
 import {browserHarness} from './browser-harness.mjs';
 
-const browser=await browserHarness('shiye-recognition-stage-reuse',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173');
+const fixture=await build({entryPoints:['tests/fixtures/ui-cloudbase-harness.mjs'],bundle:true,
+  platform:'browser',format:'iife',globalName:'ShiyeUiFixture',write:false});
+const browser=await browserHarness('shiye-recognition-stage-reuse',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173',
+  async({command})=>command('Page.addScriptToEvaluateOnNewDocument',{
+    source:fixture.outputFiles[0].text+'\nShiyeUiFixture.installUiCloudBase(window);'}));
 try{
-  await browser.wait('.series-grid');
+  await browser.wait('body');
   const result=await browser.evaluate(`(async()=>{
     const {visionTask}=await import('/src/vision-runtime.js');
     const {reprocessPaperCandidates}=await import('/src/image.js');
@@ -25,19 +30,21 @@ try{
       const pieces=await reprocessPaperCandidates(analysis,{...options,onProgress:event=>events.push(event.engine)});
       return {count:pieces.length,hasMask:pieces.every(p=>p.mask?.alpha?.length>0),events};
     };
-    const untouched=await run({postprocess:{shapeRegularization:false,apertures:false}});
-    const shaped=await run({postprocess:{shapeRegularization:true,apertures:false}});
-    const holed=await run({postprocess:{shapeRegularization:false,apertures:true}});
-    const separate=await run({mergeSharedCarrier:false,postprocess:{shapeRegularization:false,apertures:false}});
-    return {base:base.length,untouched,shaped,holed,separate};
+    const untouched=await run({postprocess:{fillMaskHoles:false,shapeRegularization:false,apertures:false}});
+    const filled=await run({postprocess:{fillMaskHoles:true,shapeRegularization:false,apertures:false}});
+    const shaped=await run({postprocess:{fillMaskHoles:false,shapeRegularization:true,apertures:false}});
+    const holed=await run({postprocess:{fillMaskHoles:false,shapeRegularization:false,apertures:true}});
+    const separate=await run({mergeSharedCarrier:false,postprocess:{fillMaskHoles:false,shapeRegularization:false,apertures:false}});
+    return {base:base.length,untouched,filled,shaped,holed,separate};
   })()`);
   assert.ok(result.base>0,JSON.stringify(result));
-  for(const key of ['untouched','shaped','holed','separate'])
+  for(const key of ['untouched','filled','shaped','holed','separate'])
     assert.ok(result[key].count>0&&result[key].hasMask,JSON.stringify(result));
   assert.deepEqual(result.untouched.events,[]);
+  assert.ok(result.filled.events.includes('fill-mask-holes'));
   assert.ok(result.shaped.events.includes('shape-regularization'));
   assert.ok(result.holed.events.includes('repeated-apertures'));
   assert.ok(result.separate.events.includes('separate-carrier'));
   assert.deepEqual(browser.errors,[]);
-  console.log('Recognition stage reuse: all three switches apply to cached base masks');
+  console.log('Recognition stage reuse: all postprocessing switches apply to cached base masks');
 }finally{await browser.close();}

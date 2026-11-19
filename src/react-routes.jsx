@@ -1745,6 +1745,8 @@ export function SettingsRecognitionPage({preferences,onAction}){
         help="本地候选发现使用；服务器分割模型会保留该设置，但不将其作为模型输入。"/>
     </SettingsGroup>
     <SettingsGroup title="4 · 轮廓后处理" description="在识别后处理 Mask 和最终素材边缘；更改此处无需再次运行分割模型。">
+      <SettingsToggle id="setting-postprocess-fill-holes" label="填充内部空洞" checked={p.recognitionFillMaskHoles!==false}
+        help="填满 Mask 内完全封闭的透明区域；外轮廓和与外部相通的缺口保持不变。"/>
       <SettingsToggle id="setting-postprocess-shapes" label="规则形状规整" checked={p.recognitionShapeRegularization!==false}
         help="边缘证据充分时规整形状，并在高清输出时抗锯齿。"/>
       <SettingsToggle id="setting-postprocess-apertures" label="重复孔洞恢复" checked={p.recognitionApertures!==false}
@@ -2052,7 +2054,8 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
             </>:null}
           {!snapshot?<><label className="toggle-row">未检测到纸张时使用整张照片<input id="whole-paper" type="checkbox" disabled={busy} checked={!!state.wholePaper} onChange={event=>onSettingChange('wholePaper',event.target.checked)}/></label>
               <h3>合并共同载体</h3><label className="toggle-row">同一纸片上的图案视为一件<input id="import-merge-carrier" type="checkbox" disabled={busy} checked={state.importMergeSharedCarrier!==false} onChange={event=>onRecognitionSettingChange('importMergeSharedCarrier',event.target.checked)}/></label>
-              <h3>轮廓后处理</h3><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" disabled={busy} checked={state.importShapeRegularization!==false} onChange={event=>onRecognitionSettingChange('importShapeRegularization',event.target.checked)}/></label>
+              <h3>轮廓后处理</h3><label className="toggle-row">填充内部空洞<input id="import-fill-mask-holes" type="checkbox" disabled={busy} checked={state.importFillMaskHoles!==false} onChange={event=>onRecognitionSettingChange('importFillMaskHoles',event.target.checked)}/></label>
+              <label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" disabled={busy} checked={state.importShapeRegularization!==false} onChange={event=>onRecognitionSettingChange('importShapeRegularization',event.target.checked)}/></label>
               <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" disabled={busy} checked={state.importApertures!==false} onChange={event=>onRecognitionSettingChange('importApertures',event.target.checked)}/></label></>:null}
           {!snapshot?<><small>{state.paperSize==='none'?'当前照片不计算素材尺寸':'尺寸变化仅更新标尺；不重新抠图'}</small>
             <button className="import-default-action" id="save-import-defaults" type="button" onClick={()=>onAction("import-save-defaults")}>将当前参数设为以后导入的默认值</button>

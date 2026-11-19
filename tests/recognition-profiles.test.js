@@ -32,13 +32,14 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(defaults.recognitionDenoise,false);
   assert.equal(defaults.recognitionLocalContrast,false);
   assert.equal(defaults.recognitionChromaEdges,true);
+  assert.equal(defaults.recognitionFillMaskHoles,true);
   assert.equal(defaults.recognitionShapeRegularization,true);
   assert.equal(defaults.recognitionApertures,true);
 
   const custom=normalizePreferences({
     recognition:'grabcut',candidateDiscovery:'physical',recognitionPixels:1600,balanceLight:true,
     recognitionDenoise:true,recognitionLocalContrast:true,
-    recognitionChromaEdges:false,recognitionShapeRegularization:false,
+    recognitionChromaEdges:false,recognitionFillMaskHoles:false,recognitionShapeRegularization:false,
     recognitionApertures:false
   });
   assert.equal(custom.recognition,'grabcut');
@@ -48,6 +49,7 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(custom.recognitionDenoise,true);
   assert.equal(custom.recognitionLocalContrast,true);
   assert.equal(custom.recognitionChromaEdges,false);
+  assert.equal(custom.recognitionFillMaskHoles,false);
   assert.equal(custom.recognitionShapeRegularization,false);
   assert.equal(custom.recognitionApertures,false);
 

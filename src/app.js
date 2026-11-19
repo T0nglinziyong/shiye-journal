@@ -108,6 +108,7 @@ import {paperDimensions as presetPaperDimensions} from './paper-sizes.js';
 import {refineManualBoxes,hasManualForegroundEvidence,manualSegmentationMethod} from './manual-import-recognition.js';
 import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {postprocessSamCandidates} from './sam-postprocess.js';
+import {fillCandidateMaskHoles} from './mask-hole-fill.js';
 import {seriesCovers,markProjectAssetsUsed,usedAssetIDs} from './library-model.js';
 import {clearSeriesContentFilters,snapshotSeriesContentFilters,restoreSeriesContentFilters} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
@@ -266,6 +267,7 @@ const recognitionPreprocessOptions=()=>({
   chromaEdges:state.preferences.recognitionChromaEdges!==false
 });
 const recognitionPostprocessOptions=()=>({
+  fillMaskHoles:state.importFillMaskHoles??(state.preferences.recognitionFillMaskHoles!==false),
   shapeRegularization:state.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false),
   apertures:state.importApertures??(state.preferences.recognitionApertures!==false)
 });
@@ -391,7 +393,7 @@ view.addEventListener('change',event=>{
 function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
-  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||state.preferences.candidateDiscovery||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels')?.value??state.preferences.recognitionPixels),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma')?.checked??state.preferences.recognitionChromaEdges,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes')?.checked??state.preferences.recognitionShapeRegularization,recognitionApertures:view.querySelector('#setting-postprocess-apertures')?.checked??state.preferences.recognitionApertures,mergeSharedCarrier:view.querySelector('#setting-merge-carrier')?.checked??state.preferences.mergeSharedCarrier,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false,samPointsPerSide:Number(view.querySelector('#setting-sam-points')?.value||state.preferences.samPointsPerSide||24),samCropNLayers:Number(view.querySelector('#setting-sam-crops')?.value??state.preferences.samCropNLayers??1),samGranularity:view.querySelector('#setting-sam-granularity')?.value||state.preferences.samGranularity||'balanced'};
+  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||state.preferences.candidateDiscovery||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels')?.value??state.preferences.recognitionPixels),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma')?.checked??state.preferences.recognitionChromaEdges,recognitionFillMaskHoles:view.querySelector('#setting-postprocess-fill-holes')?.checked??state.preferences.recognitionFillMaskHoles,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes')?.checked??state.preferences.recognitionShapeRegularization,recognitionApertures:view.querySelector('#setting-postprocess-apertures')?.checked??state.preferences.recognitionApertures,mergeSharedCarrier:view.querySelector('#setting-merge-carrier')?.checked??state.preferences.mergeSharedCarrier,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false,samPointsPerSide:Number(view.querySelector('#setting-sam-points')?.value||state.preferences.samPointsPerSide||24),samCropNLayers:Number(view.querySelector('#setting-sam-crops')?.value??state.preferences.samCropNLayers??1),samGranularity:view.querySelector('#setting-sam-granularity')?.value||state.preferences.samGranularity||'balanced'};
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value),seriesCoverLayout:view.querySelector('#setting-series-cover-layout').value};
 }
 const routeScroll=new Map();
@@ -2161,6 +2163,7 @@ async function runAppAction(action,id,value){try{
       orientation:state.paperOrientation,wholePaper:state.wholePaper,balanceLight:state.balanceLight,
       recognition:state.importRecognition||state.preferences.recognition,
       mergeSharedCarrier:state.importMergeSharedCarrier!==false,
+      recognitionFillMaskHoles:state.importFillMaskHoles!==false,
       recognitionShapeRegularization:state.importShapeRegularization!==false,
       recognitionApertures:state.importApertures!==false,
       materialColorMode:state.importMaterialColorMode||'auto',
@@ -2653,7 +2656,7 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
       paperWidthMM=request.paperWidthMM||210,paperHeightMM=request.paperHeightMM||297;
     let region;
     if(postprocessOnly){
-      let current=candidate;
+      let current=request.postprocess?.fillMaskHoles!==false?fillCandidateMaskHoles(candidate):candidate;
       if(request.postprocess?.shapeRegularization!==false){
         const shaped=await visionTask('material-boundary-refine',{pixels:raw.data,width:aw,height:ah,candidates:[current],mode:'postprocess',
           postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false},
@@ -2671,7 +2674,7 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
         processed=needs?await visionTask('balance',{pixels:raw.data,width:aw,height:ah,options:pre}):null,
         frame=processed?{data:processed.pixels}:raw,
         profile=recognitionProfile(request.method,request.pixels),
-        noPost={shapeRegularization:false,apertures:false},
+        noPost={fillMaskHoles:false,shapeRegularization:false,apertures:false},
         refined=await profile.refineCandidates({candidates:[candidate],frame,sourceFrame:raw,width:aw,height:ah,paperWidthMM,paperHeightMM,preprocess:pre,postprocess:noPost,onProgress:()=>{}});
       region=refined?.[0];
     }
@@ -2932,7 +2935,7 @@ function openProjectMetadata(){
 async function restoreTrash(id){if(!await changeTrash({db,state,ids:[id],recover:true,awaitStage:awaitTrashStages}))return;render();toast('已恢复');}
 function saveActiveImportRecord(){
   const rec=state.importRecords[state.importIndex];if(!rec)return;
-  Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importMergeSharedCarrier:state.importMergeSharedCarrier,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
+  Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importMergeSharedCarrier:state.importMergeSharedCarrier,importFillMaskHoles:state.importFillMaskHoles,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
 }
 const importPrefetchJobs=new WeakMap();
 const importPrefetchControllers=new Set();
@@ -2995,7 +2998,7 @@ function importPrefetchSettings(rec){
     wholePaper:rec.wholePaper??state.preferences.wholePaper,balanceLight:rec.balanceLight??state.preferences.balanceLight,
     recognition:rec.recognition||state.preferences.recognition,candidateDiscovery:rec.candidateDiscovery||state.preferences.candidateDiscovery||'unified',pixels:state.preferences.recognitionPixels||900,
     denoise:state.preferences.recognitionDenoise===true,localContrast:state.preferences.recognitionLocalContrast===true,
-    chromaEdges:state.preferences.recognitionChromaEdges!==false,shapeRegularization:rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false),
+    chromaEdges:state.preferences.recognitionChromaEdges!==false,fillMaskHoles:rec.importFillMaskHoles??(state.preferences.recognitionFillMaskHoles!==false),shapeRegularization:rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false),
     apertures:rec.importApertures??(state.preferences.recognitionApertures!==false),mergeSharedCarrier:rec.importMergeSharedCarrier??(state.preferences.mergeSharedCarrier!==false),materialColorMode:rec.importMaterialColorMode||state.preferences.materialColorMode||'auto',mode:state.importMode,
     samPointsPerSide:state.preferences.samPointsPerSide,samCropNLayers:state.preferences.samCropNLayers,
     samGranularity:state.preferences.samGranularity};
@@ -3046,7 +3049,7 @@ async function prefetchImportRecord(rec,settings,revision,signal){
       if(!valid())return;
       rec.computeRawCandidates=[...candidates];
       candidates=await postprocessSamCandidates(rec.computeRawCandidates,correctedBitmap,{
-        mergeSharedCarrier:settings.mergeSharedCarrier,shapeRegularization:settings.shapeRegularization,
+        mergeSharedCarrier:settings.mergeSharedCarrier,fillMaskHoles:settings.fillMaskHoles,shapeRegularization:settings.shapeRegularization,
         apertures:settings.apertures,backgrounds:rec.computeBackgrounds,
         paperWidthMM:pw,paperHeightMM:ph});
       if(!valid())return;
@@ -3056,7 +3059,7 @@ async function prefetchImportRecord(rec,settings,revision,signal){
         recognition:settings.recognition,candidateDiscovery:settings.candidateDiscovery,recognitionPixels:settings.pixels,
         recognitionSource:correctedBitmap&&corners?{bitmap,corners}:null,
         recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
-        recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
+        recognitionPostprocess:{fillMaskHoles:settings.fillMaskHoles,shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
         onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;},
         onAnalysis:analysis=>{if(valid())rec.recognitionAnalysis=analysis;}});if(!valid())return;
     }
@@ -3132,7 +3135,7 @@ async function switchImportRecord(index,skipSave=false){
   if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;
   const generation=state.importLoadGeneration=(state.importLoadGeneration||0)+1,isCurrent=()=>state.route==='import'&&state.importLoadGeneration===generation;
   state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
-  state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importMergeSharedCarrier=rec.importMergeSharedCarrier??(state.preferences.mergeSharedCarrier!==false);state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
+  state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importMergeSharedCarrier=rec.importMergeSharedCarrier??(state.preferences.mergeSharedCarrier!==false);state.importFillMaskHoles=rec.importFillMaskHoles??(state.preferences.recognitionFillMaskHoles!==false);state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
   state.paperCorners=rec.corners||null;
   state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;state.editingPaperCorners=false;discardPaperPreview();
   state.importSamMergeSelection=new Set();state.importSamMerging=false;
@@ -3540,7 +3543,7 @@ async function changeImportRecognitionSetting(key,value){
     finally{state.importProcessing='';if(state.route==='import')render();}
     return;
   }
-  const shape=key==='importShapeRegularization'||key==='importApertures';
+  const shape=key==='importFillMaskHoles'||key==='importShapeRegularization'||key==='importApertures';
   const reuse=shape||key==='importMergeSharedCarrier';
   if(!reuse&&state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){
     render();return;
