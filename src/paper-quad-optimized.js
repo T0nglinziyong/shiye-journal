@@ -5,7 +5,7 @@
 // Output is four normalized [0,1] corners; warp and material detection remain
 // entirely separate. The image has already been resized to <=800px upstream.
 export const A4_DETECTION_MAX_EDGE=800;
-export const A4_POLYGON_EPSILONS=[.014,.02,.03];
+export const A4_POLYGON_EPSILONS=[.014,.02,.03,.05];
 export const A4_CANNY_BLURS=[3,5];
 export const A4_GROUP_LIMIT=8;
 export const A4_REGION_OVERLAP=.65;
@@ -76,7 +76,7 @@ function assessShape(points,coverage,contourArea,w,h,paperRatio,source){
 }
 export function edgeEvidence(candidate,w,h,gray,gx,gy){
   const corners=candidate.corners;
-  const sides=[],insideMeans=[];
+  const sides=[],insideMeans=[],outerContrasts=[];
   const d=clamp(Math.max(w,h)*.012,3,11);
   for(let j=0;j<4;j++){
     const a=corners[j],b=corners[(j+1)%4];
@@ -110,6 +110,20 @@ export function edgeEvidence(candidate,w,h,gray,gx,gy){
     if(count<60)return null;
     sides.push({contrast:contrastSum/count,edge:edgeHits/count,positive:positiveHits/count});
     insideMeans.push(insideSum/count);
+    const broad=[];
+    for(const distance of [Math.max(16,d*2),Math.max(32,d*4),Math.max(52,d*6)]){
+      const differences=[];
+      for(let t=0;t<32;t++){
+        const step=.12+.76*t/31;
+        const x=(a.x+(b.x-a.x)*step)*w,y=(a.y+(b.y-a.y)*step)*h;
+        if(x-nx*distance<1||x-nx*distance>w-2||y-ny*distance<1||y-ny*distance>h-2||
+          x+nx*distance<1||x+nx*distance>w-2||y+ny*distance<1||y+ny*distance>h-2)continue;
+        differences.push(bilinear(gray,w,h,x+nx*distance,y+ny*distance)-
+          bilinear(gray,w,h,x-nx*distance,y-ny*distance));
+      }
+      if(differences.length>=20){differences.sort((a,b)=>a-b);broad.push(differences[Math.floor(differences.length/2)]);}
+    }
+    outerContrasts.push(clamp(Math.max(0,...broad)/140,0,1));
   }
   const sortedInside=insideMeans.slice().sort((a,b)=>a-b);
   const typicalInside=(sortedInside[1]+sortedInside[2])/2;
@@ -119,7 +133,8 @@ export function edgeEvidence(candidate,w,h,gray,gx,gy){
   const cs=sides.map(v=>v.contrast),es=sides.map(v=>v.edge);
   const avg=x=>x.reduce((a,b)=>a+b,0)/x.length;
   return .35*avg(cs)+.15*Math.min(...cs)+
-    .20*avg(es)+.10*Math.min(...es);
+    .20*avg(es)+.10*Math.min(...es)+
+    .30*avg(outerContrasts)+.12*Math.min(...outerContrasts);
 }
 function obtainContours(cv,mask,retrieval,own,visit){
   // Only Mats held past this call are worker-owned. MatVector contents are
