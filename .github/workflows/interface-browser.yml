@@ -40,6 +40,8 @@ jobs:
         timeout-minutes: 12
         shell: bash
         run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-wqy-microhei
           npm install --prefix "$RUNNER_TEMP/shiye-browser" --no-save --package-lock=false agent-browser@0.38.2
           "$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser" install
           echo "$RUNNER_TEMP/shiye-browser/node_modules/.bin" >> "$GITHUB_PATH"
