@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {boundedMap} from '../src/bounded-map.js';
 import {SamDaemonClient} from './sam-daemon-client.mjs';
 import {OrientationDaemonClient} from './orientation-daemon-client.mjs';
+import {createJobLanePool} from './job-lane-pool.mjs';
 
 const env=process.env;
 const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',
@@ -19,14 +20,13 @@ const workerID='shiye-compute-01',topic='shiye-job';
 const gateway=`https://${env.SHIYE_CLOUDBASE_ENV_ID}.api.tcloudbasegateway.com`;
 const root=path.dirname(fileURLToPath(import.meta.url));
 const samRoot=env.SHIYE_SAM_ROOT||path.resolve(root,'../../sam2.1-local');
-const samDaemon=new SamDaemonClient(samRoot);
-void samDaemon.start().catch(error=>console.warn('SAM warmup unavailable:',error.message));
+const samDaemons=[new SamDaemonClient(samRoot),new SamDaemonClient(samRoot)];
+for(const daemon of samDaemons)void daemon.start().catch(error=>console.warn('SAM warmup unavailable:',error.message));
 const orientationDaemon=env.SHIYE_ORIENTATION_PYTHON
   ?new OrientationDaemonClient(env.SHIYE_ORIENTATION_PYTHON):null;
 if(orientationDaemon)void orientationDaemon.start().catch(error=>console.warn('Direction warmup unavailable:',error.message));
 const uuid=/^[a-f0-9-]{36}$/i;
 const auth={'Authorization':'Bearer '+env.SHIYE_CLOUDBASE_SERVICE_KEY};
-let running=false,rerun=false,nextHint=null;
 
 async function jsonRequest(url,body){
   const response=await fetch(gateway+url,{method:'POST',headers:{...auth,'content-type':'application/json',accept:'application/json'},
@@ -90,7 +90,7 @@ function runPipeline(input,output,job){
     child.on('close',code=>{clearTimeout(timer);code===0?resolve():reject(Error('Pipeline exit '+code));});
   });
 }
-async function runFastOrLegacy(input,output,job){
+async function runFastOrLegacy(input,output,job,samDaemon){
   const p=job.parameters||{};
   const hybrid=p.algorithm==='fastsam-sam2';
   if(p.algorithm!==undefined&&!hybrid)throw Error('Unsupported segmentation algorithm');
@@ -115,7 +115,7 @@ async function runFastOrLegacy(input,output,job){
     return runPipeline(input,output,job);
   }
 }
-async function processJob(job){
+async function processJob(job,samDaemon){
   const prefix=`${job.user_id}/compute/${job.id}/`;
   if(!uuid.test(job.id)||!/^\d{10,22}$/.test(job.user_id)||job.input_path!==prefix+'input.png'||
     !Number.isInteger(job.attempts)||job.attempts<1||job.attempts>3)throw Error('Claimed job invalid');
@@ -125,13 +125,18 @@ async function processJob(job){
     const input=path.join(temp,'input.png'),output=path.join(temp,'output');
     await writeFile(input,await download(job.input_path));
     stages.downloadMs=Math.round(performance.now()-started);
-    await runFastOrLegacy(input,output,job);
+    const orientationPreparation=orientationDaemon&&job.kind==='material-recognition'
+      ?orientationDaemon.prepare(input).catch(error=>{
+          console.warn('Direction prepass unavailable:',error.message);return null;
+        }):null;
+    await runFastOrLegacy(input,output,job,samDaemon);
     stages.modelMs=Math.round(performance.now()-started-stages.downloadMs);
     const materials=path.join(output,'materials');
     const manifestPath=path.join(materials,'result.json');
     if(orientationDaemon&&job.kind==='material-recognition'){
       const orientationStarted=performance.now();
-      try{await orientationDaemon.run(input,manifestPath);}
+      const locations=await orientationPreparation;
+      try{await orientationDaemon.run(input,manifestPath,locations);}
       catch(error){console.warn('Direction inference unavailable; using geometric alignment:',error.message);}
       stages.orientationMs=Math.round(performance.now()-orientationStarted);
     }
@@ -156,29 +161,15 @@ async function processJob(job){
       const state=await rpc('shiye_finish_compute_job_v1',{
         p_id:job.id,p_worker_id:workerID,p_attempt:job.attempts,p_error_code:'COMPUTE_FAILED'});
       if(state?.status==='failed')await notify(job.id);
-      else if(state?.status==='queued')setTimeout(()=>void drain(),job.attempts===1?31_000:91_000);
+      else if(state?.status==='queued')setTimeout(()=>lanes.hint(job.id),job.attempts===1?31_000:91_000);
     }catch(finishError){console.error('Failed to update job',job.id,finishError.message);}
   }finally{await rm(temp,{recursive:true,force:true});}
 }
-async function drain(){
-  if(running){rerun=true;return;}
-  running=true;
-  try{
-    do{
-      rerun=false;
-      let requested=nextHint;nextHint=null;
-      for(;;){
-        let job;
-        try{job=await rpc('shiye_claim_compute_job_v1',{p_worker_id:workerID,p_id:requested});}
-        catch(error){console.error('Job claim unavailable:',error.message);return;}
-        for(const expired of job?.failed_ids||[])if(uuid.test(expired))await notify(expired);
-        requested=null;
-        if(!job?.id)break;
-        await processJob(job);
-      }
-    }while(rerun);
-  }finally{running=false;}
-}
+const lanes=createJobLanePool({slots:samDaemons,
+  claim:requested=>rpc('shiye_claim_compute_job_v1',{p_worker_id:workerID,p_id:requested}),
+  process:(job,daemon)=>processJob(job,daemon),
+  notifyFailed:id=>uuid.test(id)?notify(id):Promise.resolve(),
+  onError:error=>console.error('Compute lane stopped:',error.message)});
 const client=mqtt.connect('mqtts://g9eb1e1c.ala.cn-hangzhou.emqxsl.cn:8883',{
   clientId:workerID,username:env.SHIYE_EMQX_GPU_USERNAME,password:env.SHIYE_EMQX_GPU_PASSWORD,
   clean:true,reconnectPeriod:3000,connectTimeout:15000,protocolVersion:5,rejectUnauthorized:true,
@@ -191,7 +182,7 @@ client.on('connect',()=>client.subscribe(topic,{qos:1},error=>{
 client.on('message',(incoming,bytes)=>{
   if(incoming!==topic||bytes.length>4096)return;
   try{const event=JSON.parse(bytes.toString());
-    if(event.type==='job_queued'&&uuid.test(event.jobId)){nextHint=event.jobId;void drain();}}
+    if(event.type==='job_queued'&&uuid.test(event.jobId))lanes.hint(event.jobId);}
   catch{/* Invalid notifications do not affect authoritative database state. */}
 });
 client.on('error',error=>console.error('MQTT connection unavailable:',error.message));

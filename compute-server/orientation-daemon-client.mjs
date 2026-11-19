@@ -32,17 +32,19 @@ export class OrientationDaemonClient{
     child.on('close',code=>fail(Error('方向服务退出：'+code)));
     return this.ready;
   }
-  async run(input,manifest){
+  async request(payload){
     await this.start();
     const id=randomUUID();
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{this.child?.kill('SIGKILL');reject(Error('方向服务超时'));},30000);
       this.pending.set(id,{resolve,reject,timer});
-      this.child.stdin.write(JSON.stringify({id,input,manifest})+'\n',error=>{
+      this.child.stdin.write(JSON.stringify({id,...payload})+'\n',error=>{
         if(!error)return;
         clearTimeout(timer);this.pending.delete(id);reject(error);
       });
     });
   }
+  async prepare(input){return (await this.request({stage:'prepare',input})).locations;}
+  run(input,manifest,locations=null){return this.request({stage:'complete',input,manifest,locations});}
   stop(){this.child?.kill('SIGTERM');}
 }

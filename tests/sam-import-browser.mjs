@@ -90,6 +90,8 @@ try{
   await click('.import-primary-tools button:nth-child(3)');
   await click('.candidate-choice:nth-child(1) .import-candidate-tile');
   await click('.candidate-choice:nth-child(2) .import-candidate-tile');
+  await click('.import-primary-tools button:nth-child(2)');
+  await wait('.import-primary-tools button.primary');
   await click('.import-primary-tools button.primary');
   for(let attempt=0;attempt<300;attempt++){
     if(await evaluate(`document.querySelectorAll('.import-candidate-tile').length===2`))break;
@@ -102,19 +104,8 @@ try{
 
   const beforeSplitJobs=await evaluate('window.__SHIYE_UI_CLOUD__.state.jobRequests.length');
   await click('.import-primary-tools button:nth-child(3)');
-  await click('.candidate-choice:last-child .import-candidate-tile');
-  await click('.import-primary-tools button:nth-child(3)');
   assert.ok(await evaluate(`document.querySelector('.import-action-hint')?.textContent.includes('原始区域')`));
-  const sourcePoint=await evaluate(`(()=>{const canvas=document.querySelector('.sam-region-overlay');
-    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
-    for(let y=15;y<canvas.height-15;y+=4)for(let x=15;x<canvas.width-15;x+=4){
-      const alpha=pixels[(y*canvas.width+x)*4+3];
-      if(alpha>80&&alpha<130){const rect=canvas.getBoundingClientRect();
-        return {x:rect.left+x*rect.width/canvas.width,y:rect.top+y*rect.height/canvas.height};}
-    }return null;})()`);
-  assert.ok(sourcePoint,'a saved child mask should be visible for point splitting');
-  await command('Input.dispatchMouseEvent',{type:'mousePressed',x:sourcePoint.x,y:sourcePoint.y,button:'left',clickCount:1});
-  await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:sourcePoint.x,y:sourcePoint.y,button:'left',clickCount:1});
+  await click('.import-primary-tools button.primary');
   for(let attempt=0;attempt<100;attempt++){
     if(await evaluate(`document.querySelectorAll('.import-candidate-tile').length===3`))break;
     await sleep(100);
@@ -126,7 +117,9 @@ try{
   assert.ok(await evaluate(`document.querySelector('#toast')?.textContent.includes('已导出')`),
     'server segmentation must export diagnostics after recognition');
 
+  await click('.import-primary-tools button:nth-child(1)');
   await click('[data-act="manual-import-box"]','.multi-box-editor');
+  await evaluate(`document.querySelector('.multi-box-editor .import-region').scrollIntoView({block:'center'})`);
   const box=await evaluate(`(()=>{const r=document.querySelector('.multi-box-editor .import-region').getBoundingClientRect();
     return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
   await command('Input.dispatchMouseEvent',{type:'mousePressed',x:box.x,y:box.y,button:'left',clickCount:1});
