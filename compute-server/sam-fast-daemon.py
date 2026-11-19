@@ -92,12 +92,21 @@ def main():
         source = Path(job["input"])
         output = Path(job["output"])
         source_bytes = source.read_bytes()
-        image = np.array(Image.open(source).convert("RGB"), copy=True)
+        source_image = Image.open(source)
+        material_prompt = job.get("scope") == "material" and job.get("box") is not None
+        if job.get("scope") not in (None, "material") or (job.get("scope") == "material" and not material_prompt):
+            raise ValueError("Material segmentation requires a box prompt")
+        if material_prompt:
+            rgba = source_image.convert("RGBA")
+            background = Image.new("RGBA", rgba.size, "white")
+            image = np.array(Image.alpha_composite(background, rgba).convert("RGB"), copy=True)
+        else:
+            image = np.array(source_image.convert("RGB"), copy=True)
         height, width = image.shape[:2]
-        if min(width, height) < 600 or width * height > 20_000_000:
+        if min(width, height) < (32 if material_prompt else 600) or width * height > (4_000_000 if material_prompt else 20_000_000):
             raise ValueError("SAM image size is out of bounds")
         ratio = width / height
-        if min(abs(ratio - 297 / 210), abs(ratio - 210 / 297)) > .05:
+        if not material_prompt and min(abs(ratio - 297 / 210), abs(ratio - 210 / 297)) > .05:
             raise ValueError("Input is not a corrected A4 page")
         if model_size not in cache:
             cache[model_size] = build_sam2(config, str(root / "checkpoints" / checkpoint),
@@ -136,6 +145,9 @@ def main():
                 mask, _, _ = largest_connected_component(masks[best] > 0)
                 if hybrid:
                     mask = smooth_mask(mask)
+                if material_prompt:
+                    mask &= np.asarray(rgba)[:, :, 3] >= 128
+                    mask, _, _ = largest_connected_component(mask)
                 candidates = [{"segmentation": mask, "soft_logits": masks[best],
                                "predicted_iou": float(scores[best]),
                                "container_id": None, "source_file": "prompt"}]
@@ -206,10 +218,40 @@ def main():
                     return None
                 x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
                 packed = np.packbits(mask[y0:y1, x0:x1].ravel(), bitorder="little")
-                return {"bbox_xyxy": [x0, y0, x1, y1], "area": int(mask.sum()),
+                item = {"bbox_xyxy": [x0, y0, x1, y1], "area": int(mask.sum()),
                         "maskBits": base64.b64encode(packed.tobytes()).decode("ascii"),
                         "maskAlphaZlib": encode_mask_alpha(mask[y0:y1, x0:x1],
                             logits[y0:y1, x0:x1] if logits is not None else None)}
+                if material_prompt:
+                    # Source-relative contours retain holes and are used by the
+                    # same physical cut validator as manual editable cutouts.
+                    contours, hierarchy = cv2.findContours(mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+                    geometry = []
+                    def ring(index):
+                        points = cv2.approxPolyDP(contours[index], .65, True).reshape(-1, 2)
+                        if len(points) < 3 or abs(cv2.contourArea(points)) < 2:
+                            return None
+                        if len(points) > 1023:
+                            raise ValueError("Segmentation contour is too complex")
+                        result = [[float(x) / width, float(y) / height] for x, y in points]
+                        return result + [result[0]]
+                    if hierarchy is not None:
+                        for index, relation in enumerate(hierarchy[0]):
+                            if relation[3] != -1:
+                                continue
+                            outer = ring(index)
+                            if outer is None:
+                                continue
+                            polygon = [outer]
+                            child = relation[2]
+                            while child != -1:
+                                hole = ring(child)
+                                if hole is not None:
+                                    polygon.append(hole)
+                                child = hierarchy[0][child][0]
+                            geometry.append(polygon)
+                    item["geometry"] = geometry
+                return item
             def packed_subregion(node):
                 packed = packed_object(node["segmentation"])
                 if packed and node.get("subregions"):

@@ -9,6 +9,7 @@ import {boundedMap} from '../src/bounded-map.js';
 import {SamDaemonClient} from './sam-daemon-client.mjs';
 import {OrientationDaemonClient} from './orientation-daemon-client.mjs';
 import {createJobLanePool} from './job-lane-pool.mjs';
+import {createCreativeWorker} from './harness/worker.mjs';
 
 const env=process.env;
 const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',
@@ -32,14 +33,14 @@ async function jsonRequest(url,body){
   const response=await fetch(gateway+url,{method:'POST',headers:{...auth,'content-type':'application/json',accept:'application/json'},
     body:JSON.stringify(body),signal:AbortSignal.timeout(30000),redirect:'error'});
   const payload=await response.json().catch(()=>null);
-  if(!response.ok)throw Error('CloudBase request failed: HTTP '+response.status);
+  if(!response.ok)throw Object.assign(Error('CloudBase request failed: HTTP '+response.status),{status:response.status});
   return payload;
 }
 const rpc=(name,args)=>jsonRequest('/v1/rdb/rest/rpc/'+name,args);
 const objectURL=name=>gateway+'/v1/storages/object/shiye-private/'+name.split('/').map(encodeURIComponent).join('/');
 async function download(name){
   const response=await fetch(objectURL(name),{headers:auth,signal:AbortSignal.timeout(60000),redirect:'error'});
-  if(!response.ok)throw Error('CloudBase download failed: HTTP '+response.status);
+  if(!response.ok)throw Object.assign(Error('CloudBase download failed: HTTP '+response.status),{status:response.status});
   const bytes=Buffer.from(await response.arrayBuffer());
   if(!bytes.length||bytes.length>50*1024*1024)throw Error('CloudBase input size invalid');
   return bytes;
@@ -48,12 +49,12 @@ async function upload(name,bytes,type){
   if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>50*1024*1024)throw Error('Output size invalid');
   const response=await fetch(objectURL(name),{method:'PUT',headers:{...auth,'content-type':type,'content-length':String(bytes.length)},
     body:bytes,signal:AbortSignal.timeout(90000),redirect:'error'});
-  if(!response.ok)throw Error('CloudBase upload failed: HTTP '+response.status);
+  if(!response.ok)throw Object.assign(Error('CloudBase upload failed: HTTP '+response.status),{status:response.status});
 }
-async function notify(jobId){
+async function notify(jobId,route='/api/worker-notify'){
   try{
     const response=await jsonRequest('/v1/functions/shiye-api',{
-      version:1,route:'/api/worker-notify',method:'POST',
+      version:1,route,method:'POST',
       authorization:'Bearer '+env.SHIYE_GPU_WORKER_TOKEN,body:{jobId}
     });
     const result=typeof response?.result==='string'?JSON.parse(response.result):(response?.result||response);
@@ -170,21 +171,47 @@ const lanes=createJobLanePool({slots:samDaemons,
   process:(job,daemon)=>processJob(job,daemon),
   notifyFailed:id=>uuid.test(id)?notify(id):Promise.resolve(),
   onError:error=>console.error('Compute lane stopped:',error.message)});
+const query=async(table,params)=>{
+  const url=new URL(gateway+'/v1/rdb/rest/'+table);for(const [key,value] of Object.entries(params))url.searchParams.set(key,value);
+  const response=await fetch(url,{headers:{...auth,accept:'application/json'},signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw Error('CloudBase creative query failed: HTTP '+response.status);return response.json();
+};
+const creative=env.SHIYE_CREATIVE_API_KEY?createCreativeWorker({key:env.SHIYE_CREATIVE_API_KEY,dns:env.SHIYE_CREATIVE_DNS||'system',samRoot,rpc,
+  store:{download,upload},notify:id=>notify(id,'/api/creative-worker-notify'),
+  listCheckpoints:id=>query('shiye_creative_checkpoints',{select:'job_id,seq,object_path,object_hash',job_id:'eq.'+id,order:'seq.asc',limit:'512'}),
+  lookup:async id=>(await query('shiye_creative_jobs',{select:'id,status,lease_until',id:'eq.'+id}))[0],
+  listActive:async()=>{
+    const result=[];
+    for(let offset=0;;offset+=100){const rows=await query('shiye_creative_jobs',{select:'id',status:'in.(queued,running)',order:'created_at.asc,id.asc',limit:'100',offset:String(offset)});result.push(...rows);if(rows.length<100)return result;}
+  }
+}):null;
 const client=mqtt.connect('mqtts://g9eb1e1c.ala.cn-hangzhou.emqxsl.cn:8883',{
   clientId:workerID,username:env.SHIYE_EMQX_GPU_USERNAME,password:env.SHIYE_EMQX_GPU_PASSWORD,
-  clean:true,reconnectPeriod:3000,connectTimeout:15000,protocolVersion:5,rejectUnauthorized:true,
-  keepalive:30,properties:{sessionExpiryInterval:0}
+  clean:false,reconnectPeriod:3000,connectTimeout:15000,protocolVersion:5,rejectUnauthorized:true,
+  keepalive:30,properties:{sessionExpiryInterval:86400}
 });
 client.on('connect',()=>client.subscribe(topic,{qos:1},error=>{
   if(error)console.error('MQTT subscribe failed:',error.message);
-  else console.log('拾页计算服务器 connected; waiting for MQTT jobs');
+  else{console.log('拾页计算服务器 connected; waiting for MQTT jobs');
+    void creative?.recover().catch(error=>console.warn('Creative recovery unavailable:',error.message));}
 }));
 client.on('message',(incoming,bytes)=>{
   if(incoming!==topic||bytes.length>4096)return;
   try{const event=JSON.parse(bytes.toString());
-    if(event.type==='job_queued'&&uuid.test(event.jobId))lanes.hint(event.jobId);}
+    if(!uuid.test(event.jobId))return;
+    if(event.type==='job_queued')lanes.hint(event.jobId);
+    if(event.type==='creative_queued')creative?.hint(event.jobId);
+    if(event.type==='creative_cancelled')void creative?.cancelHint(event.jobId).catch(error=>console.warn('Creative cancellation check unavailable:',error.message));}
   catch{/* Invalid notifications do not affect authoritative database state. */}
 });
 client.on('error',error=>console.error('MQTT connection unavailable:',error.message));
-// The client re-publishes queued job IDs while it waits. No idle database
-// scan runs on this GPU host; every claim is triggered by an MQTT message.
+let shuttingDown=false;
+async function shutdown(){
+  if(shuttingDown)return;shuttingDown=true;
+  const timeout=setTimeout(()=>process.exit(0),20000);timeout.unref();
+  await new Promise(resolve=>client.end(false,{},resolve));
+  await creative?.close();
+  for(const daemon of samDaemons)daemon.stop();orientationDaemon?.stop();
+  process.exit(0);
+}
+process.once('SIGTERM',()=>void shutdown());process.once('SIGINT',()=>void shutdown());

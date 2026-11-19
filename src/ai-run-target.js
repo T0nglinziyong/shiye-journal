@@ -1,10 +1,16 @@
 import {attachSceneV2} from './scene-v2.js';
+function draftContent(draft){
+  if(!draft)return null;
+  const {coverImageID,coverBlobId,coverSceneHash,...content}=draft;
+  const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+  return JSON.stringify(canonical(content));
+}
 // A model turn is based on one draft snapshot. Never assign it to whatever
 // draft happens to be active when an asynchronous response arrives.
 export function commitAIDraft(project,{targetDraftID,expectedDraft,generatedDraft,newDraftID}){
   const index=project.drafts.findIndex(d=>d.id===targetDraftID);
   if(index<0)throw Error('原创作草稿已不存在；未覆盖其他草稿');
-  const unchanged=JSON.stringify(project.drafts[index])===JSON.stringify(expectedDraft);
+  const unchanged=draftContent(project.drafts[index])===draftContent(expectedDraft);
   if(unchanged){
     const saved=attachSceneV2(structuredClone(generatedDraft));saved.id=targetDraftID;
     project.drafts[index]=saved;

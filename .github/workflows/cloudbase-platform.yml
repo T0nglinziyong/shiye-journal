@@ -67,3 +67,5 @@ jobs:
           SHIYE_DB_TEST_DISPOSABLE: 'true'
           SHIYE_TEST_DATABASE_URL: postgresql://postgres:local-cloudbase-fixture@127.0.0.1:5432/shiye_cloudbase_test
         run: node scripts/test-cloudbase-platform-db.mjs
+      - name: Creative task leases, isolation and retention in an isolated database
+        run: node scripts/test-creative-jobs-db.mjs

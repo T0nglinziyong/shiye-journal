@@ -8,3 +8,5 @@
 .dialog-head{display:flex;align-items:center;justify-content:space-between}.dialog-head h2{margin:0}.dialog-head button{border:0;background:transparent;color:#52634b;font-size:28px;min-width:44px;min-height:44px}.match-custom-paper input{max-width:110px}.match-style-grid{grid-template-columns:repeat(auto-fill,minmax(135px,1fr))}
 
 .match-custom-paper{display:none!important}.matching-page.custom-paper .match-custom-paper{display:flex!important}.match-custom-paper input{width:100%;max-width:110px}
+
+.background-creation-preview{display:block;width:100%;max-height:360px;object-fit:contain;margin-top:12px;border-radius:10px;background:#f4f3ed}

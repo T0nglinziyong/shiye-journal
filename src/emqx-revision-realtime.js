@@ -22,7 +22,9 @@ export function startEmqxRevisionRealtime({userID,onChange,onReady=()=>{},onErro
     if(session.topic!==expectedTopic||session.endpoint!=='wss://g9eb1e1c.ala.cn-hangzhou.emqxsl.cn:8084/mqtt'||
       !/^shiye-user-[A-Za-z0-9_-]{1,64}$/.test(session.username||'')||typeof session.password!=='string')
       throw Error('实时订阅配置与当前账号不一致');
-    const factory=connect||(await import('mqtt')).connect;
+    const module=connect?null:await import('mqtt');
+    const factory=connect||module.connect||module.default?.connect;
+    if(typeof factory!=='function')throw Error('实时消息客户端加载失败');
     if(closed)return;
     client=factory(session.endpoint,{username:session.username,password:session.password,
       clientId:'shiye-pwa-'+crypto.randomUUID(),clean:true,reconnectPeriod:3000,
@@ -39,12 +41,12 @@ export function startEmqxRevisionRealtime({userID,onChange,onReady=()=>{},onErro
       if(closed||topic!==expectedTopic)return;
       try{
         const hint=JSON.parse(bytes.toString());
-        if(!['sync_changed','job_completed','job_failed'].includes(hint.type)||typeof hint.eventId!=='string')return;
+        if(!['sync_changed','job_completed','job_failed','creative_changed'].includes(hint.type)||typeof hint.eventId!=='string')return;
         if(seen.has(hint.eventId))return;
         seen.add(hint.eventId);
         if(seen.size>256)seen.delete(seen.values().next().value);
         if(hint.type==='sync_changed')wake();
-        else window.dispatchEvent(new CustomEvent('shiye-compute-job-notice',{detail:{jobId:hint.jobId}}));
+        else window.dispatchEvent(new CustomEvent(hint.type==='creative_changed'?'shiye-creative-job-notice':'shiye-compute-job-notice',{detail:{jobId:hint.jobId}}));
       }catch{/* Ignore malformed broker data; periodic reconciliation remains. */}
     });
     client.on('error',error=>{if(!closed)onError(error);});

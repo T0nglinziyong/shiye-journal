@@ -154,7 +154,6 @@ import {changeTrash,expiredTrash} from './trash-actions.js';
 import {visibleMaterials} from './asset-retention.js';
 // AI agent planning and visual review are paid, optional workflows. Load them only on demand.
 const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).runCreativeAgent(...args);
-import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {materialAliases} from './material-alias.js';
 import {snapshotRecord,workInTab} from './work-collections.js';
 import {generationProfile} from './creation-methods.js';
@@ -2481,14 +2480,15 @@ let aiController=null,aiReport=null;
 function openAICreation(){state.aiPanel=true;if(!state.aiPrompt)state.aiPrompt=state.matchIntent||'';render();view.querySelector('.inline-ai-panel')?.scrollIntoView({block:'nearest',behavior:'smooth'});}
 function publishAIStatus(){
   window.dispatchEvent(new CustomEvent('shiye-ai-status',{detail:{
-    busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport:!!aiReport
+    busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport:!!aiReport,previewURL:state.aiPreviewURL||null,resultDraftID:state.aiResultDraftID||null
   }}));
 }
 function handleAIPanelAction(action){
   if(action==='close'){state.aiPanel=false;render();}
   else if(action==='settings'){state.settingsSection='AI 与创作';route('settings');}
   else if(action==='start')void startAICreation();
-  else if(action==='stop')aiController?.abort(Error('已停止创作，之前成功的步骤已保存'));
+  else if(action==='stop'){aiController?.abort(Error('已停止创作，之前成功的步骤已保存'));const id=state.activeProject?.creativeTask?.id;if(id&&['uploading','queued','running'].includes(state.activeProject.creativeTask.status))void backgroundCreation.cancel(id).catch(error=>toast(error.message));}
+  else if(action==='result'&&state.aiResultDraftID){state.activeDraft=state.aiResultDraftID;state.activeProject.activeDraftID=state.activeDraft;state.selected=null;state.undo=[];state.redo=[];render();}
   else if(action==='report'&&aiReport)download(new Blob([
     JSON.stringify(publicAIDiagnosticReport(aiReport),null,2)],{type:'application/json'}),
     `拾页AI诊断-${new Date().toISOString().slice(0,10)}.json`);
@@ -2496,8 +2496,7 @@ function handleAIPanelAction(action){
 async function startAICreation(){
  if(state.aiBusy)return;
  const targetProject=state.activeProject,targetDraft=current();if(!targetProject||!targetDraft)return;
- const accountID=state.accountId,sourceProject=structuredClone(targetProject),sourceDraft=structuredClone(targetDraft),assetsSnapshot=structuredClone(state.assets),prompt=state.aiPrompt,cfg=structuredClone(state.aiSettings),{key,model}=cfg;
- const findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+ const accountID=state.accountId,sourceProject=structuredClone(targetProject),sourceDraft=structuredClone(targetDraft),assetsSnapshot=structuredClone(state.assets),prompt=state.aiPrompt,cfg=structuredClone(state.aiSettings);
  const ids=creativeSourceIDs({project:sourceProject,draft:sourceDraft,basket:state.basket});
  try{assertCreativeSources(ids,assetsSnapshot);}catch(error){state.aiProgress=error.message;render();return;}
  if(cfg.deliveryMode==='image'){
@@ -2509,27 +2508,13 @@ async function startAICreation(){
   finally{if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
   return;
  }
- if(!key){state.aiProgress='请先在设置 → AI 与创作保存所选服务的 API 密钥。';render();return;}
- let recorder;const projectID=targetProject.id,controller=new AbortController();
- const assertRun=createCreativeRunGuard({accountID,ids,assets:assetsSnapshot,getAccount:()=>state.accountId,getAsset:id=>state.assets.find(a=>a.id===id),signal:controller.signal});
- const checkpoints=createCreativeCheckpoint({getProject:()=>state.projects.find(item=>item.id===projectID),targetDraftID:sourceDraft.id,expectedDraft:sourceDraft,newDraftID:uid,
-  persist:async active=>{saveSpecificProject(active);await flushSave();}});
- checkpoint();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备素材预览…';aiReport={date:new Date().toISOString(),model,parameters:{generationMode:cfg.generationMode,temperature:cfg.temperature,maxTokens:cfg.maxTokens,materialCount:ids.length},rounds:[],outcome:'started'};render();
+ const controller=new AbortController();aiController=controller;
+ checkpoint();state.aiBusy=true;state.aiProgress='正在准备后台创作';state.aiPreviewURL=null;state.aiResultDraftID=null;aiReport=null;publishAIStatus();
  try{
-  recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const vision=supportsVision(cfg);
-  const {images}=await prepareCreativeRunInputs({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:modelImage,guard:assertRun});
-  const output=await runCreativeAgent({...creativeRunParameters({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:cfg,prompt}),images,request:recorder.request,signal:controller.signal,
-   onResponse:recorder.response,
-   onProgress:progress=>{state.aiProgress=creativeProgressText(progress);publishAIStatus();},
-   onScene:vision?async d=>{assertRun();return (await rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
-   onFinalScene:async d=>{assertRun();return (await rasterize(d,Math.min(1.5,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.8);},
-   onInspection:vision?async data=>{const parts=[];for(const m of data?.materials||[]){assertRun();const a=findAsset(m.assetID);if(a){const url=await modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的当前局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
-   onTurn:async({turn,results,draft,text,review})=>{assertRun();aiReport.rounds.push({turn,tools:results.map(x=>({name:x.name,ok:x.ok,detail:x.detail})),review});state.aiProgress='第 '+turn+' 轮\n'+results.map(x=>(x.ok?'✓':'×')+' '+x.name+'：'+x.detail).join('\n')+(text&&cfg.generationMode!=='direct'?'\n'+text:'');if(hasCreativeSceneChange(results)){const committed=await checkpoints.commit(draft);if(committed.candidate)state.aiProgress+='\n检测到原稿已手动修改，AI 结果另存为候选方案。';}assertRun();await recorder.turn(turn,results,draft).catch(()=>{state.aiProgress+='\n诊断记录暂不可用；已提交的画布检查点不受影响。';});if(state.route==='editor')render();}
-  });
-  assertRun();await checkpoints.commit(output.draft);const completed=state.projects.find(item=>item.id===projectID);completed.aiGenerated=true;completed.deliveryMode=cfg.deliveryMode;saveSpecificProject(completed);await flushSave();if(['image','pdf'].includes(cfg.deliveryMode)){await saveProjectSnapshot({...completed,projectDocumentPath:null,activeDraftID:checkpoints.targetDraftID},{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});completed.aiSnapshotCreated=true;saveSpecificProject(completed);}
-  aiReport.outcome='completed';aiReport.budget=output.budget;state.aiProgress+=checkpoints.candidateCreated?'\n结构已完成并另存 AI 候选；原稿手改未被覆盖。':'\n结构已完成，草稿已保存。';state.aiProgress+=output.draft.agentRun?.visualReview==='model-reviewed'?' GPT 已检查最终画面，仍可继续手改。':' 最终视觉请核对。';
- }catch(error){console.error(error);recordRuntimeIssue('handled',error,state.route,{phase:'ai'});aiReport.outcome=controller.signal.aborted?'stopped':'failed';aiReport.stopReason=error.code||aiReport.outcome;aiReport.budget=error.budget||null;aiReport.error=explainUserError(error,'创作');state.aiProgress+='\n'+aiReport.error+'。已保留成功的步骤。';}
- finally{await recorder?.finish(aiReport.outcome).catch(()=>{});if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
+  await backgroundCreation.generate({project:targetProject,draft:sourceDraft,assets:assetsSnapshot,ids,prompt,signal:controller.signal});
+ }catch(error){if(state.accountId===accountID){recordRuntimeIssue('handled',error,state.route,{phase:'ai'});state.aiProgress=explainUserError(error,'后台创作');}}
+ finally{if(aiController===controller)aiController=null;if(state.accountId===accountID){state.aiBusy=false;publishAIStatus();}}
+
 }
 async function flattenGeneratedPage(d,p=state.activeProject,persistProject=true){
  const canvas=await rasterize(d,2),blob=await new Promise((resolve,reject)=>canvas.toBlob(v=>v?resolve(v):reject(Error('整页成图失败')),'image/png')),id=uid(),blobId=uid();
@@ -4156,6 +4141,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
   if(resetPending)cloudResumer.suspend();
   const accountId=user?.id||'browser';
   if(state.accountId&&state.accountId!==accountId){
+    backgroundCreation.dispose();state.aiBusy=false;state.aiProgress='';state.aiPreviewURL=null;state.aiResultDraftID=null;
     navigationScope=null;
     mainNavigation.reset();
     matchingScrollMemory=null;
@@ -4196,7 +4182,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
     render();activateNavigation();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);if(state.route==='matching')updateMatchingRegions([],{persist:false});editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);if(state.route==='matching')updateMatchingRegions([],{persist:false});editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();void recoverBackgroundCreation();}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(createElement('div',{className:'empty'},
@@ -4209,9 +4195,36 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     createElement('button',{className:'btn',id:'storage-retry',onClick:()=>init()},'重试连接')));
   }saveStatus('存储不可用');}}
 mountIcons(document);
-const matchingSession=createMatchingSession({state,db,uid,asset,modelImage,rasterize,
+const backgroundCreation=createBackgroundCreationSession({
+  getAccount:()=>state.accountId,getAssets:()=>state.assets,createImage:modelImage,
+  getProject:async id=>{
+    const p=state.activeProject?.id===id?state.activeProject:state.projects.find(item=>item.id===id);
+    if(!p)return null;
+    if(p.projectDocumentPath){const full=await db.completeProject(p),index=state.projects.findIndex(item=>item.id===id);if(index>=0)state.projects[index]=full;return full;}
+    return p;
+  },
+  persist:async p=>{if(!state.projects.some(item=>item.id===p.id))state.projects.push(p);saveSpecificProject(p);await flushSave();},
+  onUpdate:event=>{
+    if(event.project)void matchingSession.reflectProject(event.project);
+    if(state.activeProject?.id!==event.projectID)return;
+    state.aiBusy=['uploading','queued','running','disconnected'].includes(event.status);state.aiProgress=event.message;
+    if(event.previewURL)state.aiPreviewURL=event.previewURL;
+    if(event.status==='completed')state.aiResultDraftID=event.project?.creativeCompletedJobs?.[event.jobID]||null;
+    publishAIStatus();
+  }
+});
+let creativeRecovery=null;
+function recoverBackgroundCreation(){
+  if(!cloudEnabled||!cloudSessionReady||!state.accountId||document.visibilityState==='hidden')return Promise.resolve();
+  if(!creativeRecovery)creativeRecovery=backgroundCreation.recover().catch(error=>console.warn('后台创作恢复待重试',error.name)).finally(()=>{creativeRecovery=null;});
+  return creativeRecovery;
+}
+window.addEventListener('online',()=>void recoverBackgroundCreation());
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void recoverBackgroundCreation();});
+const matchingSession=createMatchingSession({state,db,uid,asset,modelImage,rasterize,backgroundCreation,
   createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,
   saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,
   supportsVision,flushSave,route,toast});
 startCloudSession(init).catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'auth'});document.querySelector('#app').hidden=true;renderLoginGate({visible:false,status:'无法连接认证服务，请稍后刷新。未打开私人资料。',onLogin:async()=>{}});console.warn(error.name);});
 import {createMatchingSession} from './matching-session.js';
+import {createBackgroundCreationSession} from './background-creation-session.js';

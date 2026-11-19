@@ -957,10 +957,11 @@ function MatchingVariantCover({variant,session,source}){
     return ()=>{canceled=true;observer?.disconnect();};
   },[variant.project,variant.status,session]);
   const snapshot=variant.project?.isSnapshot?source(variant.project.snapshotBlobId):null;
+  const livePreview=variant.status==='running'||!raster?session.previewURL?.(variant):null;
   const draft=variant.project?.drafts?.find(item=>item.id===variant.project.activeDraftID)||
     variant.project?.drafts?.[0];
   return <div ref={host} className="match-cover-preview" data-match-raster={variant.id}>
-    {raster||snapshot?<img className="match-raster-preview" src={raster||snapshot}
+    {livePreview||raster||snapshot?<img className="match-raster-preview" src={livePreview||raster||snapshot}
       alt={variant.title+' 构图预览'}/>:<div className="match-cover-fallback"
       style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:'3/4',
         background:draft?.paperColor||'#fcfaf0'}}>
@@ -1291,7 +1292,7 @@ function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,
 }
 
 function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
-  const [status,setStatus]=useState({busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport});
+  const [status,setStatus]=useState({busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport,previewURL:state.aiPreviewURL,resultDraftID:state.aiResultDraftID});
   useEffect(()=>{
     const update=event=>setStatus(event.detail);
     window.addEventListener('shiye-ai-status',update);
@@ -1301,7 +1302,7 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
   return <section className="inline-ai-panel" aria-label="AI 创作">
     <div className="inline-ai-head"><h2>AI 创作</h2><button type="button" data-ai-close
       aria-label="收起 AI 创作" onClick={()=>onAction('close')}>×</button></div>
-    <p>边创作边在上方画布查看。使用设置中的 {state.aiSettings.model}，按模型能力发送素材描述与可选缩略图。</p>
+    <p>{state.aiSettings.deliveryMode==='image'?'使用设置中的图像模型生成画面。':'计算服务器持续创作，提交完成后可离开页面或锁屏。'}</p>
     <div className="inline-ai-assets">{ids.length?ids.map((id,index)=><span key={id}>m{index+1} · {asset(id)?.title||'来源待恢复'}</span>):'可直接用文字与图形创作，也可先到素材搭配中添加材料。'}</div>
     <label>这页想记录什么？<textarea id="ai-prompt" placeholder="写下主题、故事与喜欢的氛围"
       defaultValue={state.aiPrompt} onInput={event=>onPromptChange(event.currentTarget.value)}/></label>
@@ -1314,7 +1315,9 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
         onClick={()=>onAction('report')}>导出诊断</button>
       <button type="button" className="btn" id="ai-settings"
         onClick={()=>onAction('settings')}>AI 设置</button>
+      {status.resultDraftID&&<button type="button" className="btn" onClick={()=>onAction('result')}>查看作品</button>}
     </div><div id="ai-progress" role="status" aria-live="polite">{status.progress}</div>
+    {status.previewURL&&<img className="background-creation-preview" src={status.previewURL} alt="后台创作的当前实际画面"/>}
   </section>;
 }
 
