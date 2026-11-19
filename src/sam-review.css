@@ -14,7 +14,8 @@
 .import-primary-tools.import-mode-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
 .import-primary-tools.import-mode-tools:has(> .btn:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
 .import-primary-tools .btn{min-width:0;width:100%;padding:10px 6px!important;white-space:nowrap}
-.import-primary-tools .btn:last-child{background:#e0e5dc!important;color:#303b32!important}
+.import-primary-tools.import-region-tools{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.import-primary-tools .btn.is-muted{background:#e0e5dc!important;border-color:#d5dbd1!important;color:#566358!important;opacity:1;cursor:pointer}
 .import-primary-tools .btn.active{background:#52634b!important;color:#fff!important}
 .import-action-hint{display:block;margin:8px 0 0;color:#52634b;font-size:11px;line-height:1.4}
-@media(max-width:600px){.import-preparation-heading h3{font-size:14px}.import-view-actions button{font-size:11px;padding:5px 7px}.import-view-switch button{padding:4px 6px}.import-primary-tools .btn{font-size:12px!important}}
+@media(max-width:600px){.import-preparation-heading h3{font-size:14px}.import-view-actions button{font-size:11px;padding:5px 7px}.import-view-switch button{padding:4px 6px}.import-primary-tools .btn{font-size:12px!important}.import-primary-tools.import-region-tools{grid-template-columns:repeat(2,minmax(0,1fr))!important}}

@@ -69,6 +69,7 @@ export function SamRegionOverlay({regions,frameSize,mode,selected,onRegionClick,
       }
       onRegionClick(index,{x:x/event.currentTarget.width,y:y/event.currentTarget.height});return;
     }
+    onRegionClick(-1,{x:x/event.currentTarget.width,y:y/event.currentTarget.height});
   };
   const point=event=>{
     const rect=event.currentTarget.getBoundingClientRect();
