@@ -1,7 +1,5 @@
 .sam-region-overlay{position:absolute;z-index:5;max-width:none!important;max-height:none!important;pointer-events:none}
 .sam-region-overlay.interactive{pointer-events:auto;touch-action:manipulation;cursor:pointer}
-.sam-region-overlay.drawing{touch-action:none;cursor:crosshair}
-.sam-region-drag-box{position:absolute;z-index:6;display:none;border:2px dashed #52634b;background:#9bb79545;pointer-events:none}
 .import-preparation-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;min-width:0}
 .import-preparation-heading h3{min-width:0;margin:8px 0!important}
 .import-view-actions,.import-view-switch{display:flex;align-items:center;gap:5px}
@@ -14,8 +12,9 @@
 .import-primary-tools.import-mode-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
 .import-primary-tools.import-mode-tools:has(> .btn:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
 .import-primary-tools .btn{min-width:0;width:100%;padding:10px 6px!important;white-space:nowrap}
-.import-primary-tools.import-region-tools{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.import-primary-tools.import-region-tools{grid-template-columns:repeat(3,minmax(0,1fr))!important}
 .import-primary-tools .btn.is-muted{background:#e0e5dc!important;border-color:#d5dbd1!important;color:#566358!important;opacity:1;cursor:pointer}
+.import-primary-tools .btn.primary{background:#52634b;border-color:#52634b;color:#fff}
 .import-primary-tools .btn.active{background:#52634b!important;color:#fff!important}
 .import-action-hint{display:block;margin:8px 0 0;color:#52634b;font-size:11px;line-height:1.4}
-@media(max-width:600px){.import-preparation-heading h3{font-size:14px}.import-view-actions button{font-size:11px;padding:5px 7px}.import-view-switch button{padding:4px 6px}.import-primary-tools .btn{font-size:12px!important}.import-primary-tools.import-region-tools{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:600px){.import-preparation-heading h3{font-size:14px}.import-view-actions button{font-size:11px;padding:5px 7px}.import-view-switch button{padding:4px 6px}.import-primary-tools .btn{font-size:12px!important}}

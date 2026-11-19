@@ -72,7 +72,7 @@ import {startCloudSession} from './entry.js';
 import {cloudClient,cloudEnabled,cloudRealtime,cloudRealtimeEnabled,requireCloudUser} from './cloud-session.js';
 import {startEmqxRevisionRealtime} from './emqx-revision-realtime.js';
 import {submitSegmentationJob,waitForSegmentationJob} from './cloud-compute-jobs.js';
-import {planRegionMerge,planRegionSplit,findCachedRegion,planRegionAdd} from './region-edit-plan.js';
+import {planRegionMerge,planRegionSplit} from './region-edit-plan.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {describeSyncError} from './sync-browser-compat.js';
 import {explainUserError} from './user-facing-error.js';
@@ -861,22 +861,19 @@ function render(){
         onRemoveRecord:removeImportRecord,onCheckCandidate:index=>openCutoutCheck(null,state.importCandidateData[index]),
         onSamViewChange:mode=>{state.importSamDisplayMode=mode;render();},
         onSamMergeToggle:()=>{
-          if(state.importRegionDraft||state.importRegionAdding){cancelImportRegionAction();return;}
+          if(state.importRegionDraft){cancelImportRegionAction();return;}
           state.importSamMerging=!state.importSamMerging;
           if(state.importSamMerging)state.importSamDisplayMode='regions';
           state.importSamMergeSelection=new Set();render();
         },
-        onSamRegionClick:(index,point)=>{
-          if(state.importRegionAdding){void addImportRegionAt(point);return;}
+        onSamRegionClick:index=>{
           if(!state.importSamMerging||state.importRegionDraft||index<0)return;
           const selection=new Set(state.importSamMergeSelection||[]);
           if(selection.has(index))selection.delete(index);else selection.add(index);
           state.importSamMergeSelection=selection;render();
         },
-        onSamRegionBox:box=>{void addImportRegionInBox(box);},
         onSamMerge:mergeSelectedImportRegions,
         onSamSplit:beginSplitImportRegion,
-        onSamAdd:()=>{state.importRegionAdding=true;state.importSamMergeSelection=new Set();state.importSamDisplayMode='regions';render();},
         onSamConfirm:confirmImportRegionAction,
         onSamCancel:cancelImportRegionAction,
         onManualCancel:()=>{state.showManualBox=false;render();},
@@ -3119,7 +3116,7 @@ function resetImportBatch(){
   const bitmaps=new Set(),objectURLs=new Set();
   for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
   for(const b of bitmaps)b.close?.();for(const u of objectURLs)URL.revokeObjectURL(u);
-  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,paperAdjustmentOriginalCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importSamDisplayMode:'boxes',importSamMerging:false,importSamMergeSelection:new Set(),importRegionDraft:null,importRegionAdding:false,importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,editingPaperCorners:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
+  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,paperAdjustmentOriginalCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importSamDisplayMode:'boxes',importSamMerging:false,importSamMergeSelection:new Set(),importRegionDraft:null,importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,editingPaperCorners:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
 }
 function openImportGallery(mode){
   resetImportBatch();state.importMode=mode;route('import');
@@ -3134,7 +3131,7 @@ async function switchImportRecord(index,skipSave=false){
   state.paperCorners=rec.corners||null;
   state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;state.editingPaperCorners=false;discardPaperPreview();
   state.importSamMergeSelection=new Set();state.importSamMerging=false;
-  state.importRegionDraft=null;state.importRegionAdding=false;state.paperAdjustmentOriginalCorners=null;
+  state.importRegionDraft=null;state.paperAdjustmentOriginalCorners=null;
   const progress=message=>{state.importProcessing=message;const status=view.querySelector('.import-processing');if(status)status.textContent=message;};
   state.importProcessing=state.importMode==='snapshot'?'正在读取页面…':isComputeRecognition(state.importRecognition)?'正在读取照片…':'正在读取照片并加载本机识别引擎…';render();
   // Paint the selected photo before decoding, engine initialization or warp.
@@ -3273,20 +3270,18 @@ function beginSplitImportRegion(){
   const selected=[...(state.importSamMergeSelection||[])];
   if(selected.length!==1){toast('请先选中一件素材');return;}
   state.importRegionDraft=planRegionSplit(state.importCandidates,selected[0])||{
-    kind:'minimum',message:'原始 Mask 已是最小对象。可取消，或使用“新增分割”点选、画框重新查找。'};
+    kind:'minimum',message:'原始 Mask 已是最小对象，无法继续拆分。'};
   state.importSamDisplayMode='regions';render();
 }
 function cancelImportRegionAction(){
-  state.importRegionDraft=null;state.importRegionAdding=false;render();
+  state.importRegionDraft=null;render();
 }
 async function confirmImportRegionAction(){
   const draft=state.importRegionDraft;
   if(!draft)return;
-  if(draft.kind==='minimum'){
-    state.importRegionDraft=null;state.importRegionAdding=true;render();return;
-  }
+  if(draft.kind==='minimum')return;
   const record=state.importRecords[state.importIndex];
-  state.importProcessing=`正在确认${draft.kind==='merge'?'合并':draft.kind==='split'?'拆分':'新增'}结果…`;render();
+  state.importProcessing=`正在确认${draft.kind==='merge'?'合并':'拆分'}结果…`;render();
   try{
     const highlighted=new Set(draft.highlight);
     const regions=draft.regions.map((region,index)=>highlighted.has(index)
@@ -3295,72 +3290,11 @@ async function confirmImportRegionAction(){
     state.importCandidateSelection=new Set(draft.highlight);
     state.importCandidateData.forEach((item,index)=>item.selected=state.importCandidateSelection.has(index));
     state.importSamMergeSelection=new Set(draft.highlight);
-    state.importRegionDraft=null;state.importRegionAdding=false;
+    state.importRegionDraft=null;
     record.computeRawCandidates=[...state.importCandidates];
     record.manualEdits=true;record.confirmed=false;saveActiveImportRecord();
     toast('已更新区域，可继续编辑');
   }catch(error){toast('区域更新失败：'+error.message);}
-  finally{state.importProcessing='';if(state.route==='import')render();}
-}
-function previewAddedRegion(child,parentIndex=-1){
-  try{
-    state.importRegionDraft=planRegionAdd(state.importCandidates,child,parentIndex);
-    state.importRegionAdding=false;state.importSamDisplayMode='regions';render();
-  }catch(error){toast(error.message);}
-}
-async function addImportRegionAt(point){
-  if(!state.importRegionAdding||state.importProcessing)return;
-  const record=state.importRecords[state.importIndex];
-  const cached=findCachedRegion(state.importCandidates,
-    record.computeHiddenCandidates||record.computeRawCandidates||[],point);
-  if(cached){previewAddedRegion(cached.region,cached.parentIndex);return;}
-  const box={x:Math.max(0,point.x-.045),y:Math.max(0,point.y-.045),w:.09,h:.09};
-  await addImportRegionInBox(box);
-}
-async function addImportRegionInBox(box){
-  if(!state.importRegionAdding||state.importProcessing)return;
-  const record=state.importRecords[state.importIndex];
-  const cached=findCachedRegion(state.importCandidates,
-    record.computeHiddenCandidates||record.computeRawCandidates||[],null,box);
-  if(cached){previewAddedRegion(cached.region,cached.parentIndex);return;}
-  await addImportRegionWithSam(box);
-}
-async function addImportRegionWithSam(box){
-  if(state.importProcessing)return;
-  if(!isComputeRecognition(state.importRecognition||state.preferences.recognition)){
-    toast('缓存中没有对应分割；局部新增需要在设置中选择服务器分割模型');return;
-  }
-  const record=state.importRecords[state.importIndex],source=state.correctedBitmap;
-  if(!source||!correctionMatches(record)){toast('请先应用当前纸张矫正');return;}
-  const x0=Math.max(0,box.x),y0=Math.max(0,box.y);
-  const x1=Math.min(1,box.x+box.w),y1=Math.min(1,box.y+box.h);
-  if(x1-x0<.01||y1-y0<.01){toast('请框出要新增的部分');return;}
-  state.importProcessing='正在查找局部分割…';render();
-  try{
-    const signature=JSON.stringify(state.paperCorners)+'|'+source.width+'x'+source.height;
-    const sourceJobId=record.computeSourceSignature===signature&&record.computeInputSize?
-      record.computeSourceJobId:null;
-    const inputSize=sourceJobId?record.computeInputSize:samInputSize(source.width,source.height);
-    const correctedBlob=sourceJobId?null:(await samInputBlob(source)).blob;
-    const promptBox=[Math.floor(x0*source.width),Math.floor(y0*source.height),
-      Math.ceil(x1*source.width),Math.ceil(y1*source.height)];
-    const jobId=await submitSegmentationJob(correctedBlob,{
-      model:state.importRecognition||state.preferences.recognition,sourceJobId,
-      recreateInput:sourceJobId?async()=>(await samInputBlob(source)).blob:null,
-      pointsPerSide:state.preferences.samPointsPerSide,cropNLayers:state.preferences.samCropNLayers,
-      granularity:state.preferences.samGranularity,kind:'material-segmentation',
-      box:samInputBox(promptBox,{width:source.width,height:source.height},inputSize),
-      preprocessing:recognitionPreprocessOptions()});
-    const [child]=await waitForSegmentationJob(jobId);
-    if(!child?.mask?.alpha?.length)throw Error('局部 SAM 未找到有效区域，请缩小框选');
-    if(record!==state.importRecords[state.importIndex])return;
-    const parentIndex=state.importCandidates.findIndex(parent=>{
-      const overlap=Math.max(0,Math.min(parent.x+parent.w,child.x+child.w)-Math.max(parent.x,child.x))*
-        Math.max(0,Math.min(parent.y+parent.h,child.y+child.h)-Math.max(parent.y,child.y));
-      return overlap>child.w*child.h*.5;
-    });
-    previewAddedRegion(child,parentIndex);
-  }catch(error){toast('局部新增失败：'+error.message);}
   finally{state.importProcessing='';if(state.route==='import')render();}
 }
 async function refreshImportCandidates(regions,{manual=false}={}){
@@ -3524,7 +3458,7 @@ function recalibrateImport(){
   if(rec)rec.confirmed=false;saveActiveImportRecord();render();
 }
 function changeImportCalibration(key,value){
-  state.importRegionDraft=null;state.importRegionAdding=false;
+  state.importRegionDraft=null;
   if(key==='customImportWidth'||key==='customImportHeight'){
     const n=Number(value);
     if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}
@@ -3536,7 +3470,7 @@ function changeImportCalibration(key,value){
 }
 async function changeImportRecognitionSetting(key,value){
   if(state.importProcessing)return;
-  state.importRegionDraft=null;state.importRegionAdding=false;
+  state.importRegionDraft=null;
   const before=state[key],record=state.importRecords[state.importIndex];
   if(key==='importMaterialColorMode'){
     state[key]=value;if(record)record[key]=value;
