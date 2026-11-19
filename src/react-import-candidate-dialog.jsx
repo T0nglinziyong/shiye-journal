@@ -32,7 +32,8 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
        height!==null&&(!Number.isFinite(height)||height<=0)){
       onError('尺寸需为正数');return;
     }
-    onSave(recordIndex,candidateIndex,{...draft,title:draft.title.trim(),width,height});
+    onSave(recordIndex,candidateIndex,{...draft,title:draft.title.trim(),width,height,
+      ...(draft.reviewStatus!==candidate.reviewStatus?{reviewStatusSource:'user'}:{})});
     onClose();
   };
   return createPortal(editing?<><div className="dialog-head"><h2>素材信息</h2>

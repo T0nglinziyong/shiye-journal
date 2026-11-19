@@ -75,15 +75,17 @@ export function applyAIClassification(old,result,{minConfidence=.7,allowMigratio
   set('role',result.role,isMaterialRole);
   for(const [key,valid] of [['secondaryRoles',isMaterialRole],['contentCategories',isContentCategory],['layoutFits',isLayoutFit]]){
     if(categoryEvidence[key]?.source==='user'||categoryEvidence[key]?.source==='migration'&&!allowMigrationOverride)continue;
-    const values=Array.isArray(result[key])?result[key].filter(item=>candidate(item,valid)&&item.confidence>=minConfidence):[];
+    if(!Array.isArray(result[key]))continue;
+    const values=result[key].filter(item=>candidate(item,valid)&&item.confidence>=minConfidence);
     next[key]=unique(values.map(item=>item.id).filter(id=>key!=='secondaryRoles'||id!==next.role));
     categoryEvidence[key]={source:'ai',confidence:values.length?Math.min(...values.map(item=>item.confidence)):0,
       modelVersion:result.modelVersion,items:Object.fromEntries(values.map(item=>[item.id,{confidence:item.confidence}]))};
   }
   for(const key of TAG_FIELDS){
     if(old.tagGroupEvidence?.[key]?.source==='user')continue;
-    const incoming=Array.isArray(result[key])?result[key].filter(item=>item&&typeof item.value==='string'&&
-      item.value.trim()&&item.value.length<=80&&Number.isFinite(item.confidence)&&item.confidence>=minConfidence&&item.confidence<=1):[];
+    if(!Array.isArray(result[key]))continue;
+    const incoming=result[key].filter(item=>item&&typeof item.value==='string'&&
+      item.value.trim()&&item.value.length<=80&&Number.isFinite(item.confidence)&&item.confidence>=minConfidence&&item.confidence<=1);
     const prior=tagEvidence[key]||{},kept=next[key].filter(value=>prior[value]?.source!=='ai');
     next[key]=boundedTags([...kept,...incoming.map(item=>item.value)]);
     tagEvidence[key]={...Object.fromEntries(kept.map(value=>[value,prior[value]||{source:'user',confidence:1}])),

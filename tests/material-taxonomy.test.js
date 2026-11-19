@@ -60,6 +60,18 @@ test('AI descriptions directly describe the material without scene prefaces or t
  assert.equal(applyAIClassification({...base,description:'用户写的画面中有花朵',
   descriptionEvidence:{source:'user',confidence:1}},suggestion).description,'用户写的画面中有花朵');
 });
+test('a partial reclassification does not erase existing optional categories or AI tags',()=>{
+ const base=initialMaterialClassification({kind:'sticker'});
+ const first=applyAIClassification(base,{modelVersion:'first',kind:{id:'sticker',confidence:.9},
+  role:{id:'accent',confidence:.9},contentCategories:[{id:'animals',confidence:.9}],
+  contentTags:[{value:'猫',confidence:.9}],themeTags:[{value:'日常',confidence:.9}]});
+ const second=applyAIClassification(first,{modelVersion:'second',kind:{id:'sticker',confidence:.9},
+  role:{id:'accent',confidence:.9},colorTags:[{value:'蓝色',confidence:.9}]});
+ assert.deepEqual(second.contentCategories,['animals']);
+ assert.deepEqual(second.contentTags,['猫']);
+ assert.deepEqual(second.themeTags,['日常']);
+ assert.deepEqual(second.colorTags,['蓝色']);
+});
 test('legacy migration preserves custom tags and does not invent a subtype',()=>{
  const converted=migrateMaterialV1({id:'a',title:'小纸片',kind:'sticker',role:'annotation',
   texture:'贴纸纸',tags:['用户标签'],contentTags:['猫'],semanticColorNames:['蓝色'],

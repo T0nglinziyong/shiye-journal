@@ -103,7 +103,7 @@ import {assetEditorValue} from './asset-editor.js';
 import {applyMaterialDisplayRotation} from './material-display-apply.js';
 import {AssetEditorDialog} from './react-asset-editor.jsx';
 import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
-import {saveImportBatch,importPaperDimensions} from './import-save.js';
+import {saveImportBatch,importPaperDimensions,reviewedImportCandidates} from './import-save.js';
 import {paperDimensions as presetPaperDimensions} from './paper-sizes.js';
 import {refineManualBoxes,hasManualForegroundEvidence,manualSegmentationMethod} from './manual-import-recognition.js';
 import {manualPhysicalRegion} from './manual-import-geometry.js';
@@ -3382,7 +3382,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       if(isComputeRecognition(state.importRecognition||state.preferences.recognition))regenerated.previewOnly=true;
       // Changing only colour must not reset manual names, tags, dimensions or
       // choices, and must never cause the segmentation algorithm to rerun.
-      if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','dimensionSource','width','height']){
+      if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','reviewStatusSource','dimensionSource','width','height']){
         if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
       }
       created.push(regenerated);
@@ -3556,7 +3556,8 @@ async function confirmImportPhoto(){
     toast('纸张边框或方向已调整，请先“预览矫正”并使用校正结果，再确认素材');return;
   }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode==='material'){toast('请选择至少一件素材，或使用手动补框');return;}
-  const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
+  const rec=state.importRecords[state.importIndex];rec.selectedCandidates=reviewedImportCandidates(
+    state.importCandidateData||[],state.importCandidateSelection);rec.confirmed=true;saveActiveImportRecord();
   // Review/save no longer needs the 900 px analysis rasters. Keep extracted
   // candidate Blobs, but release this transient workspace on mobile devices.
   rec.recognitionAnalysis=null;

@@ -23,7 +23,7 @@ export function materialClassificationPrompt(original){
     `素材类型（必选单选）：${choices(materialKinds)}。具体类型（仅选所选素材类型下的 ID；不确定填 null）：${choices(materialKindDetails)}。\n`+
     `画面作用（选最合适的 1 项放 role，其他确实适用的放 secondaryRoles；这两处合起来是多选）：${choices(materialRoles)}。\n`+
     `内容类别（可多选；无具体内容与其他内容不并列）：${choices(contentCategories)}。版面适配（可多选，只选具体适配项）：${choices(layoutFits)}。\n`+
-    `开放标签分组：${choices(tagGroups)}。仅写有图像证据的简短词，每组最多 3 个；不要在不同组重复同一词，不要把类型、尺寸、透明度、文件来源或未证实的材质写成标签。\n`+
+    `开放标签分组：${choices(tagGroups)}。有明确证据的分组写 1–5 个简短且具体的词，尽量覆盖内容、主题、风格、色彩和氛围；没有证据的分组留空。内容标签可同时写具体对象及其上位词，主题和风格分别描述场景与表现方式；不要在不同组重复同一词，不要把类型、尺寸、透明度、文件来源或未证实的材质写成标签。\n`+
     `分类字段用 {"id":"上列 ID","confidence":0到1}，多选字段用此对象的数组，标签字段用 {"value":"词","confidence":0到1} 的数组。缺少证据填 null 或 []，不要编造 ID。title 用“可见内容＋实物类型”写简短中文名；不确定时用中性名称。description 用一到两句简洁中文直接描述主体、色彩、图案和构图，不重复标题，不猜测看不出的材质、背胶或用途；模糊的小图案只写轮廓或装饰画，不猜具体人物或物种。以素材本身开头，例如“浅粉色花朵居中，花瓣边缘有白色描线。”不要写“画面中”“图中”“照片里”“这是一张”“可以看到”“整体来看”，不要用“此外”“同时”“并且”等衔接词。\n`+
     `JSON 格式：{"title":"花朵贴纸","titleConfidence":0.9,"description":"浅粉色花朵居中，花瓣边缘有白色描线。","descriptionConfidence":0.9,"kind":{"id":"sticker","confidence":0.9},"kindDetail":{"id":"sticker.subject","confidence":0.8},"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],"colorTags":[],"materialTags":[],"moodTags":[],"tags":[]}。\n`+
     `已知元数据（只作辅助，不优先于图像）：${JSON.stringify(metadata)}\n`+
@@ -86,7 +86,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
     if(context)contents.push({type:'image_url',image_url:{url:context,detail:'low'}});
     const response=await fetcher('https://api.deepseek.com/chat/completions',{method:'POST',redirect:'error',
       headers:{Authorization:'Bearer '+modelKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model,thinking:{type:'disabled'},temperature:0,max_tokens:1000,response_format:{type:'json_object'},
+      body:JSON.stringify({model,thinking:{type:'disabled'},temperature:0,max_tokens:1400,response_format:{type:'json_object'},
         messages:[{role:'user',content:contents}]}),signal:AbortSignal.timeout(35000)});
     if(!response.ok)throw new ServiceError(503,'CLASSIFICATION_MODEL_UNAVAILABLE','云端素材分析暂不可用');
     const answer=await parse(response);
@@ -102,7 +102,7 @@ export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fet
       const head=await revision(token,userID),latest=await record(token,userID,'assets',assetID);
       if(!head||!latest||latest.id!==assetID)throw new ServiceError(409,'CLASSIFICATION_STALE','素材资料已变化');
       let updated;
-      try{updated=applyAIClassification(latest,result,{allowMigrationOverride:reclassify});}
+      try{updated=applyAIClassification(latest,result,{minConfidence:.6,allowMigrationOverride:reclassify});}
       catch{throw new ServiceError(502,'CLASSIFICATION_MODEL_INVALID','云端模型分类不符合预设字典');}
       updated.updatedAt=new Date().toISOString();
       try{

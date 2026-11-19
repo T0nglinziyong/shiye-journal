@@ -34,7 +34,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
   if(address.hostname==='api.deepseek.com'){
    const payload=JSON.parse(options.body);
    assert.deepEqual(payload.thinking,{type:'disabled'});
-   assert.equal(payload.max_tokens,1000);
+   assert.equal(payload.max_tokens,1400);
    assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low']);
    assert.match(payload.messages[0].content[0].text,/paper\.patterned=花纹纸/);
    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({

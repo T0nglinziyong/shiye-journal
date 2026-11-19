@@ -36,6 +36,54 @@ export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/
 }
 export async function suggestPaperCorners(bitmap,paperRatio=210/297){
   const ratio=Math.min(1,800/Math.max(bitmap.width,bitmap.height)),w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
-  return visionTask('quad',{pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h),width:w,height:h,paperRatio});
+  const pixels=await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h);
+  const corners=await visionTask('quad',{pixels,width:w,height:h,paperRatio});
+  return corners?refinePaperHorizontalBorders(pixels,w,h,corners):null;
 }
 
+export function refinePaperHorizontalBorders(pixels,width,height,corners){
+  const result=corners.map(point=>({...point}));
+  const brightness=(x,y)=>{
+    const ix=Math.round(x),iy=Math.round(y);
+    if(ix<0||iy<0||ix>=width||iy>=height)return null;
+    const at=(iy*width+ix)*4;
+    return (pixels[at]*77+pixels[at+1]*150+pixels[at+2]*29)/256;
+  };
+  for(const side of [0,2]){
+    const a=corners[side],b=corners[(side+1)%4];
+    const vx=(b.x-a.x)*width,vy=(b.y-a.y)*height;
+    const length=Math.hypot(vx,vy);
+    if(length<width*.25)continue;
+    const nx=-vy/length,ny=vx/length,observations=[];
+    for(let index=0;index<30;index++){
+      const t=.12+.76*index/29,x=(a.x+(b.x-a.x)*t)*width,y=(a.y+(b.y-a.y)*t)*height;
+      const outside=brightness(x-28*nx,y-28*ny);
+      if(outside===null)continue;
+      for(let offset=-22;offset<=22;offset++){
+        const before=brightness(x+(offset-3)*nx,y+(offset-3)*ny);
+        const after=brightness(x+(offset+3)*nx,y+(offset+3)*ny);
+        const deeper=brightness(x+(offset+10)*nx,y+(offset+10)*ny);
+        if(before===null||after===null||deeper===null)continue;
+        if(Math.min(after,deeper)>outside+25&&after-before>18){
+          observations.push({t,offset});break;
+        }
+      }
+    }
+    if(observations.length<24)continue;
+    const values=observations.map(item=>item.offset).sort((x,y)=>x-y);
+    if(values[Math.floor(values.length*.9)]-values[Math.floor(values.length*.1)]>11)continue;
+    const meanT=observations.reduce((sum,item)=>sum+item.t,0)/observations.length;
+    const meanOffset=observations.reduce((sum,item)=>sum+item.offset,0)/observations.length;
+    const numerator=observations.reduce((sum,item)=>sum+(item.t-meanT)*(item.offset-meanOffset),0);
+    const denominator=observations.reduce((sum,item)=>sum+(item.t-meanT)**2,0);
+    const slope=denominator?numerator/denominator:0;
+    const shifts=[0,1].map(t=>Math.max(-18,Math.min(18,meanOffset+slope*(t-meanT)+1.5)));
+    if(Math.abs(shifts[0]-shifts[1])<6)continue;
+    for(const [index,t] of [[side,0],[(side+1)%4,1]]){
+      const shift=shifts[t];
+      result[index].x=Math.max(0,Math.min(1,result[index].x+shift*nx/width));
+      result[index].y=Math.max(0,Math.min(1,result[index].y+shift*ny/height));
+    }
+  }
+  return result;
+}

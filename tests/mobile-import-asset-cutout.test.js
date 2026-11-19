@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {candidateMetadata} from '../src/import-save.js';
+import {candidateMetadata,reviewedImportCandidates} from '../src/import-save.js';
 import {assetEditorValue} from '../src/asset-editor.js';
 import {initialMaterialClassification} from '../src/material-classification.js';
 import {decodeImageBlob} from '../src/image-blob-decoder.js';
@@ -9,6 +9,16 @@ import {validatePhysicalDraft} from '../src/domain.js';
 const material=(kind,quantity)=>candidateMetadata({
   id:'c',title:'胶带测试',kind,width:40,height:80,quantity,selected:true
 },{seriesID:null},null);
+test('checking an imported photo marks selected materials reviewed while preserving an explicit pending choice',()=>{
+ const reviewed=reviewedImportCandidates([
+  {title:'A',reviewStatus:'pendingReview'},
+  {title:'B',reviewStatus:'pendingReview',reviewStatusSource:'user'},
+  {title:'C',reviewStatus:'pendingReview'}
+ ],new Set([0,1]));
+ assert.deepEqual(reviewed.map(item=>item.reviewStatus),['ready','pendingReview','ready']);
+ assert.deepEqual(reviewed.map(item=>item.selected),[true,true,false]);
+ assert.equal(candidateMetadata(reviewed[0],{},null).reviewStatus,'ready');
+});
 test('candidate metadata never creates stock counts for tape or ordinary material',()=>{
  assert.equal(material('tape',1).supply,undefined);
  assert.equal(material('sticker',1).supply,undefined);

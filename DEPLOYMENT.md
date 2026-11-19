@@ -13,7 +13,7 @@
 - 云存储：先执行 `deploy/cloudbase/004-private-storage.sql` 创建 `shiye-private` 和 `shiye-presets` 两个私有桶及 RLS 策略。将 70 张预设图迁入 `shiye-presets/journal-presets/source/`，将账号对象迁入 `shiye-private/<user-id>/`，逐件下载核对 SHA-256，再改数据库引用。旧 COS 对象在新站和各设备完成验收前保留，不作为新站读取回退。
 - 引用切换：完成对象复制核对后执行 `deploy/cloudbase/005-switch-object-references.sql`；该事务更新 blob provider 和同步修订，并阻止旧客户端重新提交 COS blob 引用。执行后分别核对 70 个预设、全部私有对象及 `shiye_records` 中没有 COS blob 引用。
 - 现有网站是 CloudBase App `shiye-journal-test`（`webapps.tcloudbase.com`），通过其 Git 构建发布。`.github/workflows/verify.yml` 在 `test` 分支 push 检查通过后，使用限权 CAM 子账号调用 CloudBase 云应用 API：读取当前成功版本，保留构建配置，指定本次准确 Git SHA，等待构建并核对公开站 `/version.json`。只在 GitHub 环境 `cloudbase-test` 配置 `TCB_DEPLOY_SECRET_ID` 和 `TCB_DEPLOY_SECRET_KEY` 后才可自动发布；没有凭证会失败并保留旧站。不要把 `tcb hosting deploy` 到另一个静态托管入口当成该网站已更新。测试构建 `npm run test:ui` 使用模拟 CloudBase 会话，产物仅供测试，绝不能发布。
-- 后端：`node scripts/build-cloudbase-functions.mjs` 产生 `.cloudbase-build/functions/shiye-api`；部署为事件云函数 `index.main`，Node.js 20.19，`256 MB`、`60 秒`。
+- 后端：`node scripts/build-cloudbase-functions.mjs` 产生 `.cloudbase-build/functions/shiye-api`；`test` 分支验证通过后先更新现有 `shiye-api` 事件函数代码，再发布静态网站。函数保持 `index.main`、Node.js 20.19、`256 MB`、`60 秒` 及原环境变量。
 - 云函数独立配置 `SHIYE_CLOUDBASE_ENV_ID`。图片由浏览器凭 CloudBase 登录会话直连云存储，旧 COS 签名配置不再是网站上传的依赖。
 - 在 CloudBase 网关允许测试站 Web 来源；私有桶通过账号 RLS 授权，无需为新站签发旧 COS URL。
 
