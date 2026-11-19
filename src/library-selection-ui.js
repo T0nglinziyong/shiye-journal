@@ -1,6 +1,6 @@
 import {finishSelection} from './library-selection-model.js';
 import {addMatchingFromLibrary} from './matching-selection.js';
-import {classifyCloudAsset} from './cloud-asset-classification.js';
+import {applyFreshClassification,classifyCloudAsset} from './cloud-asset-classification.js';
 import {withUsageStatus} from './library-model.js';
 import {hiddenAssetCopy} from './asset-retention.js';
 import {explainUserError} from './user-facing-error.js';
@@ -59,7 +59,7 @@ export async function runAssetBatchAction(c,selection,action,value){
         const result=await classifyCloudAsset(record.id,{db,reclassify:true,skipFlush:true,skipRefresh:true});
         if(state.accountId===accountID&&isCurrent()){
           const current=state.assets.find(asset=>asset.id===record.id);
-          if(current)Object.assign(current,result);
+          applyFreshClassification(current,record,result);
           completed++;
           window.dispatchEvent(new Event('shiye-library-refresh'));
         }

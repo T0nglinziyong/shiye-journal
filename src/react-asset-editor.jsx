@@ -10,6 +10,7 @@ const tabNames=['基本信息','尺寸与胶带','分类与标签'];
 
 export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const [tab,setTab]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [reviewStatusTouched,setReviewStatusTouched]=useState(false);
   const [autoCrop,setAutoCrop]=useState(null);
   const previewRef=useRef(null),[previewSize,setPreviewSize]=useState({width:0,height:0});
   const sourceImage=useRef(null),[sourceSize,setSourceSize]=useState(null);
@@ -76,7 +77,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const field=(label,key,type='text')=><label key={key}>{label}<input id={`asset-${key}`} type={type}
     value={form[key]} onChange={event=>set(key,event.target.value)}/></label>;
   const select=(label,key,choices)=><label key={key}>{label}<select id={`asset-${key}`}
-    value={form[key]} onChange={event=>set(key,event.target.value)}>
+    value={form[key]} onChange={event=>{if(key==='reviewStatus')setReviewStatusTouched(true);set(key,event.target.value);}}>
     {choices.map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label>;
   const multiple=(label,key,options)=>{
     const selected=key==='roles'?[...new Set([form.role,...form.secondaryRoles].filter(Boolean))]:
@@ -115,7 +116,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const guideFraction=value=>Math.min(1,Math.max(0,value));
   const submit=async()=>{
     if(busy)return;setBusy(true);setError('');
-    try{await onSave(form);onClose();}
+    try{await onSave({...form,reviewStatusTouched});onClose();}
     catch(cause){setError(cause.message||'保存失败');}
     finally{setBusy(false);}
   };

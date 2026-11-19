@@ -76,7 +76,7 @@ function assessShape(points,coverage,contourArea,w,h,paperRatio,source){
 }
 function edgeEvidence(candidate,w,h,gray,gx,gy){
   const corners=candidate.corners;
-  const sides=[];
+  const sides=[],insideMeans=[];
   const d=clamp(Math.max(w,h)*.012,3,11);
   for(let j=0;j<4;j++){
     const a=corners[j],b=corners[(j+1)%4];
@@ -84,7 +84,7 @@ function edgeEvidence(candidate,w,h,gray,gx,gy){
     const len=Math.hypot(vx,vy);
     if(len<10)return null;
     const nx=-vy/len,ny=vx/len;
-    let count=0,contrastSum=0,edgeHits=0;
+    let count=0,contrastSum=0,edgeHits=0,insideSum=0;
     for(let t=0;t<96;t++){
       const step=.05+.9*t/95;
       const x=(a.x+(b.x-a.x)*step)*w;
@@ -103,11 +103,16 @@ function edgeEvidence(candidate,w,h,gray,gx,gy){
         bestGradient=Math.max(bestGradient,g);
       }
       if(bestGradient>45)edgeHits++;
+      insideSum+=bilinear(gray,w,h,x+nx*Math.max(12,d*1.5),y+ny*Math.max(12,d*1.5));
       count++;
     }
     if(count<60)return null;
     sides.push({contrast:contrastSum/count,edge:edgeHits/count});
+    insideMeans.push(insideSum/count);
   }
+  const sortedInside=insideMeans.slice().sort((a,b)=>a-b);
+  const typicalInside=(sortedInside[1]+sortedInside[2])/2;
+  if(typicalInside>125&&sortedInside[0]<typicalInside*.62)return null;
   const cs=sides.map(v=>v.contrast),es=sides.map(v=>v.edge);
   const avg=x=>x.reduce((a,b)=>a+b,0)/x.length;
   return .35*avg(cs)+.15*Math.min(...cs)+

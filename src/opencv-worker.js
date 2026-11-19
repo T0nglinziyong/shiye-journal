@@ -86,10 +86,18 @@ export async function processVision(cv,operation,p){
 
     if(operation==='warp'){
       const src=own(cv.matFromArray(p.sourceHeight,p.sourceWidth,cv.CV_8UC4,p.pixels)),dst=own(new cv.Mat());
-      const from=own(cv.matFromArray(4,1,cv.CV_32FC2,p.corners.flatMap(c=>[c.x*p.sourceWidth,c.y*p.sourceHeight])));
+      const sourceLong=Math.max(p.sourceWidth,p.sourceHeight),outputLong=Math.max(p.width,p.height);
+      let sample=src;
+      if(p.antialias&&sourceLong>outputLong*2.4){
+        const scale=outputLong*1.5/sourceLong;
+        sample=own(new cv.Mat());
+        cv.resize(src,sample,new cv.Size(Math.max(1,Math.round(p.sourceWidth*scale)),
+          Math.max(1,Math.round(p.sourceHeight*scale))),0,0,cv.INTER_AREA);
+      }
+      const from=own(cv.matFromArray(4,1,cv.CV_32FC2,p.corners.flatMap(c=>[c.x*sample.cols,c.y*sample.rows])));
       const to=own(cv.matFromArray(4,1,cv.CV_32FC2,[0,0,p.width,0,p.width,p.height,0,p.height]));
       const transform=own(cv.getPerspectiveTransform(from,to));
-      cv.warpPerspective(src,dst,transform,new cv.Size(p.width,p.height),cv.INTER_LINEAR,cv.BORDER_REPLICATE);
+      cv.warpPerspective(sample,dst,transform,new cv.Size(p.width,p.height),cv.INTER_LINEAR,cv.BORDER_REPLICATE);
       return {pixels:new Uint8ClampedArray(dst.data),width:p.width,height:p.height};
     }
     if(operation==='warp-research'){

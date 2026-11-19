@@ -1,5 +1,11 @@
 import {cloudApiRequest} from './cloud-api-origin.js';
 
+export function applyFreshClassification(current,requested,result){
+  if(!current||current.updatedAt!==requested.updatedAt)return false;
+  Object.assign(current,result);
+  return true;
+}
+
 export async function classifyCloudAsset(id,{db,signal,reclassify=false,skipFlush=false,
   skipRefresh=false,request=cloudApiRequest}={}){
   if(typeof id!=='string'||!id)throw Error('素材编号无效');

@@ -135,7 +135,7 @@ import {boundedMap} from './bounded-map.js';
 import {samInputBlob,samInputBox,samInputSize} from './sam-input.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionPixelOptions,recognitionMethodDetails,recognitionProfile,isComputeRecognition} from './recognition-profiles.js';
-import {classifyCloudAsset,classifyCloudProject} from './cloud-asset-classification.js';
+import {applyFreshClassification,classifyCloudAsset,classifyCloudProject} from './cloud-asset-classification.js';
 import {initialMaterialClassification} from './material-classification.js';
 import {resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
@@ -3615,7 +3615,7 @@ async function organizeSavedAssets(records,{projects=[]}={}){
       const result=await classifyCloudAsset(record.id,{db,skipFlush:true,skipRefresh:true});
       if(state.accountId!==accountID||!isCurrent())return;
       const current=state.assets.find(asset=>asset.id===record.id);
-      if(current)Object.assign(current,result);
+      applyFreshClassification(current,record,result);
       window.dispatchEvent(new Event('shiye-library-refresh'));
       window.dispatchEvent(new Event('shiye-matching-refresh'));
     },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});

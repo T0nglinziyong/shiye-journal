@@ -40,6 +40,17 @@ test('material editor removes stock metadata and no-op stays stable',()=>{
  assert.equal(edited.usageStatus,'used','tape usage can be marked manually');
  assert.equal(assetEditorValue(edited,values),edited,'an unchanged save must not create another cloud write');
 });
+test('explicitly keeping pending review survives automatic classification',()=>{
+ const old={id:'a',title:'待检查素材',...initialMaterialClassification({kind:'sticker'}),
+   reviewStatus:'pendingReview',reviewStatusSource:'import'};
+ const values={title:old.title,kind:'sticker',role:old.role,kindDetail:'',
+   secondaryRoles:[],contentCategories:[],layoutFits:[],width:'',height:'',tags:'',
+   contentTags:'',themeTags:'',styleTags:'',colorTags:'',materialTags:'',moodTags:'',
+   seriesID:'',reviewStatus:'pendingReview',reviewStatusTouched:true,usageStatus:'unused'};
+ const edited=assetEditorValue(old,values);
+ assert.equal(edited.reviewStatus,'pendingReview');
+ assert.equal(edited.reviewStatusSource,'user');
+});
 test('material editor keeps tape orientation and validates period along that axis',()=>{
  const old={id:'vertical-tape',title:'竖向胶带',...initialMaterialClassification({kind:'tape'}),
    physicalWidthMM:20,physicalHeightMM:80};
