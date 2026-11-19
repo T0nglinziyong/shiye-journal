@@ -13,6 +13,7 @@ const defaults={
   recognitionChromaEdges:true,
   // Final automatic finishing is intentionally small: geometry cleanup plus
   // precision-first manufactured aperture recovery.
+  recognitionFillMaskHoles:true,
   recognitionShapeRegularization:true,
   recognitionApertures:true,
   samPointsPerSide:24,samCropNLayers:1,samGranularity:'balanced',
@@ -38,6 +39,7 @@ export function normalizePreferences(value={}){
     recognitionDenoise:value?.recognitionDenoise===true,
     recognitionLocalContrast:value?.recognitionLocalContrast===true,
     recognitionChromaEdges:value?.recognitionChromaEdges!==false,
+    recognitionFillMaskHoles:value?.recognitionFillMaskHoles!==false,
     recognitionShapeRegularization:value?.recognitionShapeRegularization!==false,
     recognitionApertures:value?.recognitionApertures!==false,
     samPointsPerSide:[8,12,16,24,32].includes(Number(value?.samPointsPerSide))?Number(value.samPointsPerSide):24,
@@ -65,7 +67,7 @@ export function migrateStoredPreferences(value={}){
   return {...value,
     recognition:'auto',candidateDiscovery:'unified',recognitionPixels:900,
     balanceLight:false,recognitionDenoise:false,recognitionLocalContrast:false,recognitionChromaEdges:true,
-    recognitionShapeRegularization:true,recognitionApertures:true,
+    recognitionFillMaskHoles:true,recognitionShapeRegularization:true,recognitionApertures:true,
     recognitionDefaultsVersion:RECOGNITION_DEFAULTS_VERSION
   };
 }

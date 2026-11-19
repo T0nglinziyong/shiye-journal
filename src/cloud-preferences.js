@@ -5,7 +5,7 @@ const safeFields=new Set([
   'paperSize','orientation','wholePaper','autoOrganize','autoOrganizeWorks',
   'recognition','candidateDiscovery','recognitionPixels','materialColorMode','balanceLight',
   'recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
-  'recognitionShapeRegularization','recognitionApertures',
+  'recognitionFillMaskHoles','recognitionShapeRegularization','recognitionApertures',
   'customPaperWidth','customPaperHeight','display','backdrop','maxPageItems','seriesCoverLayout',
   'markTapeUsedWithProject',
   'recognitionDefaultsVersion'

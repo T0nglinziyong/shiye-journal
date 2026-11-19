@@ -96,7 +96,7 @@ export async function showCutoutEditor({
     savedRecognition=processing.rerecognition||{},
     savedPost=processing.autoPostprocess||savedRecognition.postprocess||{},
     defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
-    defaultPost={shapeRegularization:true,apertures:true,...recognitionUI.postprocess,...savedPost};
+    defaultPost={fillMaskHoles:true,shapeRegularization:true,apertures:true,...recognitionUI.postprocess,...savedPost};
 
   // Masks are immutable: paintMask/refineMaskStroke allocate new arrays.
   // Stage baselines can initially share their Uint8 storage. Six eager 4K

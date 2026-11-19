@@ -3,6 +3,7 @@ import {sourcePixels} from './recognition-raster.js';
 import {mergeSamRegions} from './sam-region-merge.js';
 import {splitSources,splitBySource} from './sam-region-split.js';
 import {detectRemovedPhysicalInterior} from './material-physical-mask-guard.js';
+import {fillCandidateMaskHoles} from './mask-hole-fill.js';
 
 export function expandSavedRegions(region,depth=0){
   if(depth>4)return [region];
@@ -18,7 +19,7 @@ export function expandSavedRegions(region,depth=0){
 // These operations consume saved SAM masks and the already corrected page.
 // The caller retains `raw` so toggling an option off restores the original.
 export async function postprocessSamCandidates(raw,source,{
-  mergeSharedCarrier=false,shapeRegularization=false,apertures=false,
+  mergeSharedCarrier=false,fillMaskHoles=false,shapeRegularization=false,apertures=false,
   backgrounds=[],paperWidthMM=210,paperHeightMM=297
 }={}){
   if(!raw?.length||!source)return raw||[];
@@ -32,9 +33,10 @@ export async function postprocessSamCandidates(raw,source,{
     const context=frame.getContext('2d',{willReadFrequently:true});
     context.imageSmoothingQuality='high';context.drawImage(source,0,0,width,height);
   }
-  const pixels=sourcePixels(frame);
+  const pixels=shapeRegularization||apertures?sourcePixels(frame):null;
   let regions=mergeSharedCarrier?mergeSharedCarriers(raw,backgrounds):
     raw.flatMap(region=>expandSavedRegions(region));
+  if(fillMaskHoles)regions=regions.map(fillCandidateMaskHoles);
   if(shapeRegularization){
     const shaped=await visionTask('material-boundary-refine',{
       pixels,width,height,candidates:regions,mode:'postprocess',

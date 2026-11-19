@@ -61,6 +61,7 @@ export function CutoutPanel({state,actions,canvasRef}){
       <MaskTools {...common} note="先手动修正主算法输出，再把当前 mask 送入后处理；后处理不会回到修正前的版本。"
         extra={<button type="button" id="cutout-recognition-base" onClick={actions.restoreRecognitionBase}>恢复刚识别结果</button>}/>
       <details className="cutout-advanced"><summary>边缘后处理选项</summary>
+        <Toggle id="cutout-post-fill-holes" label="填充内部空洞" description="填满完全封闭的透明空洞，不改变外轮廓。" checked={state.post.fillMaskHoles} onChange={value=>actions.post('fillMaskHoles',value)}/>
         <Toggle id="cutout-post-shapes" label="形状规整" description="只在真实边缘证据足够强时，把规则纸片收成更干净的直边、圆弧或多边形；自由异形保持原轮廓。" checked={state.post.shapeRegularization} onChange={value=>actions.post('shapeRegularization',value)}/>
         <Toggle id="cutout-post-apertures" label="重复打孔恢复" description="只恢复成排、等半径、近等间距且中心接近 A4 纸色的制造型孔；孤立白点不会挖空。" checked={state.post.apertures} onChange={value=>actions.post('apertures',value)}/>
       </details><button type="button" className="btn primary" id="cutout-postprocess" disabled={state.busy||!state.canPostprocess} onClick={actions.postprocess}>自动优化边缘</button>
