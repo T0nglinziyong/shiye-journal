@@ -12,6 +12,7 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 from proposal_policy import largest_connected_component, mask_box, select_proposals
 from carrier_policy import (find_composite_carriers, inside, page_edge_artifact,
                             merge_aligned_tiled_masks)
+from mask_page_boundary import trim_page_edge_leak
 
 
 def _printed_carrier_footer(item, carriers, height):
@@ -284,7 +285,7 @@ class FastSamHybrid:
                 item["segmentation"] = refined
                 item["soft_logits"] = masks[index,0]
             continuous, _, _ = largest_connected_component(item["segmentation"])
-            item["segmentation"] = smooth_mask(continuous)
+            item["segmentation"] = smooth_mask(trim_page_edge_leak(continuous, image))
             item["bbox_xyxy"] = mask_box(item["segmentation"])
             item["area"] = int(item["segmentation"].sum())
         joined = merge_aligned_tiled_masks(items, width, height)
