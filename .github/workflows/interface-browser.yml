@@ -41,7 +41,7 @@ jobs:
         shell: bash
         run: |
           npm install --prefix "$RUNNER_TEMP/shiye-browser" --no-save --package-lock=false agent-browser@0.38.2
-          "$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser" install --with-deps
+          "$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser" install
           echo "$RUNNER_TEMP/shiye-browser/node_modules/.bin" >> "$GITHUB_PATH"
       - run: npm run build
       - name: Check screens and editor in Chromium viewports
