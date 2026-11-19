@@ -5,6 +5,7 @@ import './shell-viewport.css';
 import {iconMarkup} from './icons.js';
 import {CloudAccountMenu} from './react-cloud-auth.jsx';
 import {recordRuntimeIssue} from './runtime-diagnostics.js';
+import {keepMobileNavAtScreenBottom} from './mobile-nav-position.js';
 
 // The shell and every route are React roots. The canvas and image loader own
 // only their resource nodes, not a fallback HTML page renderer.
@@ -52,6 +53,7 @@ function AppShell(){
   },[]);
   useLayoutEffect(()=>{shellSetter=setShell;overlaySetter=setOverlay;
     return ()=>{shellSetter=null;overlaySetter=null;};},[]);
+  useLayoutEffect(()=>mobile?keepMobileNavAtScreenBottom():undefined,[mobile]);
   const active=route=>shell.route===route||(route==='library'&&['series','import'].includes(shell.route));
   const navigation=<nav className="main-nav" aria-label="主导航">
       <button data-route="library" className={active('library')?'active':''} onClick={()=>shellActions.navigate?.('library')}><Icon name="folder"/> 素材</button><button data-route="matching" className={active('matching')?'active':''} onClick={()=>shellActions.navigate?.('matching')}><Icon name="sparkles"/> 搭配</button><button data-route="works" className={active('works')?'active':''} onClick={()=>shellActions.navigate?.('works')}><Icon name="book"/> 作品</button>

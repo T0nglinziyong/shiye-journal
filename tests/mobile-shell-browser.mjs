@@ -5,6 +5,8 @@ const b=await browserHarness('shiye-mobile-shell',(process.env.SHIYE_TEST_URL||'
 try{
  await b.wait('.series-grid');
  await b.click('#top-settings','.settings-page');
+ const settingsGap=async()=>b.evaluate('document.querySelector("#filing-footer").getBoundingClientRect().top-document.querySelector(".settings-page>.actions").getBoundingClientRect().bottom');
+ assert.ok(await settingsGap()<160,'settings content should not reserve another screen before the footer');
  const check=async label=>{
    await b.sleep(60);
    const rect=await b.evaluate(`(()=>{const header=document.querySelector('.topbar'),
@@ -31,6 +33,13 @@ try{
  await check('short viewport');
  await b.command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  await check('restored viewport');
+ await b.evaluate('(()=>{document.querySelector(".main-nav").style.transform="translateY(-160px)";dispatchEvent(new Event("scroll"));})()');
+ await check('recovered displaced navigation');
+ await b.evaluate('(()=>{document.querySelector(".main-nav").style.removeProperty("transform");dispatchEvent(new Event("scroll"));})()');
+ await check('recovered normal navigation');
+ await b.command('Emulation.setDeviceMetricsOverride',{width:390,height:1200,deviceScaleFactor:1,mobile:true});
+ assert.ok(await settingsGap()<160,'tall screen should not add viewport-sized blank space in settings');
+ await b.command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  await b.click('[data-route="works"]','.works-grid');await check('route after restore');
  await b.command('Emulation.setDeviceMetricsOverride',{width:1180,height:820,deviceScaleFactor:1,mobile:false});
  await b.sleep(80);
