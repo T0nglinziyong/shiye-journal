@@ -210,6 +210,12 @@ def main():
                         "maskBits": base64.b64encode(packed.tobytes()).decode("ascii"),
                         "maskAlphaZlib": encode_mask_alpha(mask[y0:y1, x0:x1],
                             logits[y0:y1, x0:x1] if logits is not None else None)}
+            def packed_subregion(node):
+                packed = packed_object(node["segmentation"])
+                if packed and node.get("subregions"):
+                    packed["subregions"] = [child for source in node["subregions"]
+                        if (child := packed_object(source["segmentation"]))]
+                return packed
             objects = []
             for group_index, group in enumerate(groups):
                 mask = np.zeros((height, width), dtype=bool)
@@ -219,7 +225,7 @@ def main():
                 if item:
                     if hybrid and group_index < len(subregion_masks):
                         item["subregions"] = [packed for child in subregion_masks[group_index]
-                            if (packed := packed_object(child))]
+                            if (packed := packed_subregion(child))]
                     elif not hybrid and 1 < len(group) <= 12:
                         item["subregions"] = [packed for member in group
                             if (packed := packed_object(member["segmentation"]))]
