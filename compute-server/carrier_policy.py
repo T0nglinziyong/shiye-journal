@@ -5,6 +5,7 @@ worker's policy here so deployment does not depend on that research heuristic.
 """
 
 import numpy as np
+import cv2
 
 
 def inside(inner, outer):
@@ -61,7 +62,82 @@ def page_edge_artifact(candidate, width, height):
     return touches and (
         w > 0.85 * width or h > 0.85 * height
         or w < 0.025 * width or h < 0.025 * height
+        or x0 <= 2 and w < 0.1 * width and h > 0.18 * height and h > 3 * w
+        or x1 >= width - 2 and w < 0.1 * width and h > 0.18 * height and h > 3 * w
+        or y0 <= 2 and h < 0.1 * height and w > 0.18 * width and w > 3 * h
+        or y1 >= height - 2 and h < 0.1 * height and w > 0.18 * width and w > 3 * h
     )
+
+
+def merge_aligned_tiled_masks(items, width, height):
+    parent = list(range(len(items)))
+
+    def root(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for index, a in enumerate(items):
+        ax0, ay0, ax1, ay1 = a["bbox_xyxy"]
+        aw, ah = ax1 - ax0, ay1 - ay0
+        if aw < width * .045 or ah < height * .2 or a["area"] < aw * ah * .82:
+            continue
+        for next_index in range(index + 1, len(items)):
+            b = items[next_index]
+            bx0, by0, bx1, by1 = b["bbox_xyxy"]
+            bw, bh = bx1 - bx0, by1 - by0
+            if bw < width * .045 or bh < height * .2 or b["area"] < bw * bh * .82:
+                continue
+            left, right = (a, b) if ax0 < bx0 else (b, a)
+            lx0, ly0, lx1, ly1 = left["bbox_xyxy"]
+            rx0, ry0, rx1, ry1 = right["bbox_xyxy"]
+            tolerance = max(5, round(height * .012))
+            if abs(ly0 - ry0) > tolerance or abs(ly1 - ry1) > tolerance:
+                continue
+            gap = rx0 - lx1
+            if abs(gap) <= max(4, round(width * .008)):
+                parent[root(next_index)] = root(index)
+            elif (0 < gap < width * .25 and
+                  lx1 - lx0 < width * .13 and rx1 - rx0 < width * .13):
+                center = [(candidate_index, candidate) for candidate_index, candidate in enumerate(items)
+                          if candidate is not a and candidate is not b
+                          and candidate["bbox_xyxy"][0] >= lx1 - tolerance
+                          and candidate["bbox_xyxy"][2] <= rx0 + tolerance
+                          and candidate["bbox_xyxy"][1] >= min(ly0, ry0) - tolerance
+                          and candidate["bbox_xyxy"][3] <= max(ly1, ry1) + tolerance]
+                if not center:
+                    continue
+                covered = np.logical_or.reduce([candidate["segmentation"] for _, candidate in center])
+                if np.count_nonzero(covered[ly0:ly1, lx1:rx0]) < gap * ah * .55:
+                    continue
+                parent[root(next_index)] = root(index)
+                for candidate_index, _ in center:
+                    parent[root(candidate_index)] = root(index)
+
+    groups = {}
+    for index, item in enumerate(items):
+        groups.setdefault(root(index), []).append(item)
+    result = []
+    for group in groups.values():
+        if len(group) == 1:
+            result.append(group[0])
+            continue
+        union = np.logical_or.reduce([item["segmentation"] for item in group])
+        points = cv2.findNonZero(union.astype(np.uint8))
+        filled = np.zeros((height, width), dtype=np.uint8)
+        cv2.fillConvexPoly(filled, cv2.convexHull(points), 1)
+        area, filled_area = int(union.sum()), int(filled.sum())
+        if filled_area > area * 1.17:
+            result.extend(group)
+            continue
+        ys, xs = np.nonzero(filled)
+        box = [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+        result.append({**max(group, key=lambda item: item["area"]),
+                       "segmentation": filled.astype(bool), "bbox_xyxy": box,
+                       "bbox": [box[0], box[1], box[2]-box[0], box[3]-box[1]],
+                       "area": filled_area, "soft_logits": None, "tile_members": group})
+    return result
 
 
 def _box_iou(a, b):

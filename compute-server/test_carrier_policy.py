@@ -4,7 +4,8 @@ import unittest
 
 import numpy as np
 
-from carrier_policy import find_composite_carriers
+from carrier_policy import (find_composite_carriers, merge_aligned_tiled_masks,
+                            page_edge_artifact)
 
 
 def candidate(mask):
@@ -15,6 +16,34 @@ def candidate(mask):
 
 
 class CarrierPolicyTests(unittest.TestCase):
+    def test_aligned_panels_restore_one_paper_without_using_color(self):
+        shape = (1000, 700)
+        def panel(x0, y0, x1, y1):
+            mask = np.zeros(shape, dtype=bool)
+            mask[y0:y1, x0:x1] = True
+            return candidate(mask)
+        for pieces in (
+            [panel(100, 100, 145, 500), panel(145, 100, 300, 500),
+             panel(300, 100, 385, 500)],
+            [panel(100, 100, 145, 500), panel(300, 100, 385, 500),
+             panel(145, 230, 300, 500), panel(180, 100, 240, 220)],
+        ):
+            merged = merge_aligned_tiled_masks(pieces, 700, 1000)
+            self.assertEqual(len(merged), 1)
+            self.assertEqual(len(merged[0]["tile_members"]), len(pieces))
+            self.assertEqual(merged[0]["bbox_xyxy"], [100, 100, 385, 500])
+        self.assertEqual(len(merge_aligned_tiled_masks([
+            panel(100, 100, 145, 500), panel(155, 100, 300, 500)], 700, 1000)), 2)
+
+    def test_clipped_narrow_page_edge_is_not_a_material(self):
+        shape = (1024, 724)
+        strip = np.zeros(shape, dtype=bool)
+        strip[412:655, 1:51] = True
+        self.assertTrue(page_edge_artifact(candidate(strip), 724, 1024))
+        interior = np.zeros(shape, dtype=bool)
+        interior[412:655, 100:150] = True
+        self.assertFalse(page_edge_artifact(candidate(interior), 724, 1024))
+
     def test_color_does_not_change_carrier_detection(self):
         backing = np.zeros((100, 100), dtype=bool)
         backing[10:55, 10:55] = True

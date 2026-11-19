@@ -108,6 +108,8 @@ test('completed SAM masks download in bounded parallel order',async()=>{
 test('packed SAM result restores transparent holes without per-object downloads',async()=>{
   const manifest=new Blob([JSON.stringify({version:2,width:4,height:2,model:'sam2-small',
     objects:[{bbox_xyxy:[0,0,4,2],area:7,maskBits:Buffer.from([0xef]).toString('base64'),
+      subregions:[{bbox_xyxy:[0,0,2,2],area:4,maskBits:Buffer.from([0x0f]).toString('base64'),
+        subregions:[{bbox_xyxy:[0,0,1,1],area:1,maskBits:Buffer.from([0x01]).toString('base64')}]}],
       orientation:{source:'ocr',degrees:-90,confidence:.94}}],
     backgrounds:[{bbox_xyxy:[0,0,4,2],area:8,maskBits:Buffer.from([0xff]).toString('base64')}]})]);
   let downloads=0;
@@ -124,6 +126,7 @@ test('packed SAM result restores transparent holes without per-object downloads'
     assert.equal(downloads,1);
     assert.deepEqual([...regions[0].mask.alpha],[255,255,255,255,0,255,255,255]);
     assert.deepEqual(regions[0].orientationProposal,{source:'ocr',degrees:-90,confidence:.94});
+    assert.equal(regions[0].splitSources[0].splitSources[0].pixels,1);
     assert.deepEqual([...regions.backgrounds[0].mask.alpha],Array(8).fill(255));
   }finally{
     delete globalThis.__computeMock;

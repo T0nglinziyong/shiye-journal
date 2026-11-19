@@ -146,14 +146,23 @@ async function loadSegmentationResult(job){
       segmentationFrameWidth:manifest.width,segmentationFrameHeight:manifest.height,
       mask:{width,height,alpha,topologyPreserved:true}};
   };
+  let subregionCount=0;
+  const decodePackedTree=(object,depth=0)=>{
+    const region=decodePacked(object);
+    if(object.subregions!==undefined){
+      if(depth>=3||!Array.isArray(object.subregions)||object.subregions.length>12||
+        (subregionCount+=object.subregions.length)>1000)
+        throw Error('原始子区域数据无效');
+      if(object.subregions.length)region.splitSources=object.subregions.map(child=>decodePackedTree(child,depth+1));
+    }
+    return region;
+  };
   const regions=await boundedMap(manifest.objects,4,async object=>{
     const [x0,y0,x1,y1]=object.bbox_xyxy||[];
     if(![x0,y0,x1,y1].every(Number.isInteger)||x0<0||y0<0||x1>manifest.width||y1>manifest.height||x1<=x0||y1<=y0)
       throw Error('识别结果区域无效');
     if(manifest.version===2){
-      if(object.subregions!==undefined&&(!Array.isArray(object.subregions)||object.subregions.length>12))
-        throw Error('原始子区域数据无效');
-      const region=decodePacked(object);
+      const region=decodePackedTree(object);
       if(object.orientation!==undefined){
         const proposal=object.orientation;
         if(!proposal||!['ocr','rightwayup'].includes(proposal.source)||
@@ -162,7 +171,6 @@ async function loadSegmentationResult(job){
           throw Error('识别方向数据无效');
         region.orientationProposal=proposal;
       }
-      if(object.subregions?.length)region.splitSources=object.subregions.map(decodePacked);
       return region;
     }
     if(!/^material-\d{3}\.png$/.test(object.file||''))throw Error('识别结果区域无效');
