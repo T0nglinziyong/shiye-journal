@@ -78,39 +78,9 @@ jobs:
     steps:
       - run: echo 'All unit-test partitions and built UI checks succeeded'
 
-  deploy-cloudbase-function-test:
-    name: Deploy CloudBase function test
-    needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: cloudbase-test
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: test
-          persist-credentials: false
-      - name: Only release the tested branch head
-        env:
-          TESTED_SHA: ${{ github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '22'
-      - name: Build reviewed function package
-        run: node scripts/build-cloudbase-functions.mjs
-      - name: Update existing CloudBase function code
-        env:
-          TCB_DEPLOY_SECRET_ID: ${{ secrets.TCB_DEPLOY_SECRET_ID }}
-          TCB_DEPLOY_SECRET_KEY: ${{ secrets.TCB_DEPLOY_SECRET_KEY }}
-        run: |
-          npm install --global @cloudbase/cli@3.9.4
-          tcb login --apiKeyId "$TCB_DEPLOY_SECRET_ID" --apiKey "$TCB_DEPLOY_SECRET_KEY"
-          tcb fn code update shiye-api -e shiye-pg-test-d1gg723f7fb356ccc --dir .cloudbase-build/functions/shiye-api --deployMode zip --json
-
   deploy-cloudbase-test:
     name: Deploy CloudBase test
-    needs: [verify, deploy-cloudbase-function-test]
+    needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/test'
     runs-on: ubuntu-latest
     timeout-minutes: 20
