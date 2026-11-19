@@ -10,7 +10,7 @@ import {A4_DETECTION_MAX_EDGE,A4_GROUP_LIMIT,A4_CANNY_BLURS,
 test('one fixed 800px detection stage; no return to 400/1200 cascade',async()=>{
  assert.equal(A4_DETECTION_MAX_EDGE,800);
  assert.deepEqual(A4_CANNY_BLURS,[3,5]);
- assert.deepEqual(A4_POLYGON_EPSILONS,[.014,.02,.03]);
+ assert.deepEqual(A4_POLYGON_EPSILONS,[.014,.02,.03,.05]);
  assert.equal(A4_GROUP_LIMIT,8);
  assert.equal(A4_REGION_OVERLAP,.65);
  const perspective=await readFile(new URL('../src/perspective.js',import.meta.url),'utf8');
