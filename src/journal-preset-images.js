@@ -34,6 +34,39 @@ export function journalPanelPixels(panel,width,height){
   return {x:Math.round(rect[0]*width),y:Math.round(rect[1]*height),width:Math.round(rect[2]*width),height:Math.round(rect[3]*height)};
 }
 
+export function pageContentBounds(canvas){
+  const probe=document.createElement('canvas');probe.width=64;probe.height=64;
+  const context=probe.getContext('2d',{willReadFrequently:true});
+  context.drawImage(canvas,0,0,64,64);
+  const data=context.getImageData(0,0,64,64).data,light=new Float32Array(4096),edge=[];
+  for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+    const i=y*64+x,p=i*4;light[i]=.2126*data[p]+.7152*data[p+1]+.0722*data[p+2];
+    if(x<2||y<2||x>61||y>61)edge.push(light[i]);
+  }
+  edge.sort((a,b)=>a-b);
+  const background=edge[Math.floor(edge.length/2)];
+  if(edge[Math.floor(edge.length*.85)]-edge[Math.floor(edge.length*.15)]>38)return null;
+  let best=null;
+  for(const sign of [1,-1]){
+    const seen=new Uint8Array(4096);
+    for(let i=0;i<4096;i++){
+      if(seen[i]||sign*(light[i]-background)<35)continue;
+      const queue=[i];seen[i]=1;let count=0,minX=63,minY=63,maxX=0,maxY=0;
+      for(let head=0;head<queue.length;head++){
+        const cell=queue[head],x=cell%64,y=Math.floor(cell/64);count++;
+        minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+        for(const next of [x>0?cell-1:-1,x<63?cell+1:-1,y>0?cell-64:-1,y<63?cell+64:-1])
+          if(next>=0&&!seen[next]&&sign*(light[next]-background)>=35){seen[next]=1;queue.push(next);}
+      }
+      const width=maxX-minX+1,height=maxY-minY+1,fill=count/(width*height);
+      if(count>700&&fill>.48&&width<62&&height<62&&(!best||count>best.count))best={minX,minY,maxX,maxY,count};
+    }
+  }
+  if(!best)return null;
+  const x=Math.max(0,(best.minX-1)/64),y=Math.max(0,(best.minY-1)/64);
+  return {x,y,width:Math.min(1-x,(best.maxX-best.minX+3)/64),height:Math.min(1-y,(best.maxY-best.minY+3)/64)};
+}
+
 // Keep the original private JPEG unchanged. Derive a centered, straight panel
 // locally so gallery, detail, and AI handoff always see the same exact content.
 export async function loadJournalPresetPanel(panel,options={}){
@@ -48,6 +81,13 @@ export async function loadJournalPresetPanel(panel,options={}){
     const source=await loadJournalPresetImage(panel.number,options);if(!source)return null;
     const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('预设图片无法解码'));img.src=source;});
     const rect=journalPanelPixels(panel,image.naturalWidth,image.naturalHeight);
+    if(panel.rect.every((value,index)=>value===[0,0,1,1][index])){
+      const probe=document.createElement('canvas');probe.width=256;probe.height=256;
+      probe.getContext('2d').drawImage(image,0,0,probe.width,probe.height);
+      const bounds=pageContentBounds(probe);
+      if(bounds){rect.x+=Math.round(rect.width*bounds.x);rect.y+=Math.round(rect.height*bounds.y);
+        rect.width=Math.round(rect.width*bounds.width);rect.height=Math.round(rect.height*bounds.height);}
+    }
     const angle=(panel.rotate||0)*Math.PI/180;
     const rotatedWidth=Math.abs(rect.width*Math.cos(angle))+Math.abs(rect.height*Math.sin(angle));
     const rotatedHeight=Math.abs(rect.height*Math.cos(angle))+Math.abs(rect.width*Math.sin(angle));

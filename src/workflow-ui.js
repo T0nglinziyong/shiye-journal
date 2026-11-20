@@ -220,7 +220,11 @@ export async function runWorkBatchAction(c,selection,action,value){
     case 'classify':return classifySelectedWorks(c,c.state.projects.filter(project=>selection.selected.has(project.id)));
     case 'set-used':return setSelectedWorkUsage(c,!!value);
     case 'delete':{
-      if(!selection.selected.size||!confirm('将所选作品移到最近删除？'))return;
+      if(!selection.selected.size)return;
+      const chosen=c.state.projects.filter(project=>selection.selected.has(project.id));
+      const message=chosen.every(project=>project.isDraft)?'删除所选草稿？不会进入最近删除，无法恢复。':
+        chosen.some(project=>project.isDraft)?'将作品移到最近删除，并删除草稿？草稿不会进入最近删除。':'将所选作品移到最近删除？';
+      if(!confirm(message))return;
       const ids=[...selection.selected];finishSelection(selection);
       await c.moveProjectsToTrash(ids);return;
     }

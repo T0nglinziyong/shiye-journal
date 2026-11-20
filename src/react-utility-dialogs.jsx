@@ -87,15 +87,25 @@ export function BlankProjectDialog({defaultSize,onClose,onCreate}){
       {error?<p role="alert">{error}</p>:null}<button type="button" className="btn primary" id="blank-create-confirm" disabled={busy} onClick={()=>void submit()}>开始创作</button></div>
   </Dialog>;
 }
-export function ManualLayoutDialog({choices,onClose,onChoose}){
+export function ManualLayoutDialog({choices,source,onClose,onChoose}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
+  const slotNames={focal:'主视觉',secondary:'次图',information:'信息区',background:'背景',accent:'点缀',marker:'标记',connector:'连接',divider:'分隔'};
   const choose=async id=>{if(busy)return;setBusy(true);setError('');try{await onChoose(id);onClose();}catch(cause){setError('创建草稿失败：'+cause.message);setBusy(false);}};
-  return <Dialog title="手动创作从哪里开始？" onClose={onClose} closeId="manual-layout-cancel" className="manual-layout-dialog">
-    <h2>手动创作从哪里开始？</h2>
-    <p>根据本次素材、页面风格和用途推荐起点。仅预排版实物，所有对象仍可独立编辑；不会调用 AI。</p>
+  return <Dialog title="从模板开始" onClose={onClose} closeId="manual-layout-cancel" className="manual-layout-dialog">
+    <h2>从模板开始</h2>
+    <p>根据已选素材的尺寸、作用与纸张比例推荐。预览显示实际会放入的素材；虚线位置暂时留空。</p>
     <div className="manual-layout-choices">{choices.map((item,index)=><button type="button" key={item.id} disabled={busy} className="manual-layout-choice" data-manual-template={item.id} onClick={()=>void choose(item.id)}>
-      <span className={`manual-layout-sketch sketch-${item.id}`} aria-hidden="true"><i/><i/><i/></span><span><strong>{item.title}{index===0?' · 推荐':''}</strong><small>{item.description}</small><small>{item.reason}</small></span>
-    </button>)}<button type="button" disabled={busy} className="manual-layout-choice" data-manual-template="" onClick={()=>void choose(null)}><span className="manual-layout-sketch sketch-blank" aria-hidden="true"/><span><strong>从空画布开始</strong><small>保留纸张与素材篮，所有元素由你自己添加。</small></span></button></div>
+      {item.template?<span className="manual-template-preview" aria-hidden="true">{item.template.elements.filter(slot=>item.assignments.some(row=>row.slotId===slot.id)||item.emptySlots.includes(slot.id)).map(slot=>{
+        const assigned=item.assignments.find(row=>row.slotId===slot.id);
+        const asset=item.selected.find(row=>row.id===assigned?.alias);
+        const width=asset?.physicalWidthMM/item.paper.width||slot.box[2],height=asset?.physicalHeightMM/item.paper.height||slot.box[3];
+        return <span key={slot.id} className={`manual-template-slot ${asset?'filled':'missing'}`}
+          style={{left:`${(slot.box[0]+slot.box[2]/2-width/2)*100}%`,top:`${(slot.box[1]+slot.box[3]/2-height/2)*100}%`,width:`${width*100}%`,height:`${height*100}%`}}>
+          {asset?<img src={source?.(asset.blobId)||asset.staticPath||''} alt=""/>:null}</span>;
+      })}</span>:<span className="manual-layout-sketch sketch-stage" aria-hidden="true"><i/><i/><i/></span>}
+      <span><strong>{item.title}{index===0?' · 最匹配':''}</strong><small>{item.reason||item.description}</small>
+        {item.missing?.length?<small>空位：{item.missing.slice(0,3).map(slot=>slotNames[slot.role]||'素材').join('、')}{item.missing.length>3?'等':''}</small>:null}</span>
+    </button>)}<button type="button" disabled={busy} className="manual-layout-choice" data-manual-template="stage" onClick={()=>void choose('stage')}><span className="manual-layout-sketch sketch-stage" aria-hidden="true"><i/><i/><i/></span><span><strong>沿用本页摆放</strong><small>保留你刚才拖动的素材位置。</small></span></button><button type="button" disabled={busy} className="manual-layout-choice" data-manual-template="" onClick={()=>void choose(null)}><span className="manual-layout-sketch sketch-blank" aria-hidden="true"/><span><strong>从空画布开始</strong><small>自行安排所有元素。</small></span></button></div>
     {error?<p role="alert">{error}</p>:null}
   </Dialog>;
 }
