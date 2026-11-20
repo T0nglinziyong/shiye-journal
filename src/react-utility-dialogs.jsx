@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {paperPresets} from './paper-sizes.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
+import {isTextSlot,resolveTemplateStyle,templatePalette} from './creation-library/template-elements.js';
 
 const dialogStack=[];
 const isolatedNodes=new Map();
@@ -87,21 +88,33 @@ export function BlankProjectDialog({defaultSize,onClose,onCreate}){
       {error?<p role="alert">{error}</p>:null}<button type="button" className="btn primary" id="blank-create-confirm" disabled={busy} onClick={()=>void submit()}>开始创作</button></div>
   </Dialog>;
 }
+function TemplateGraphicPreview({slot,palette}){
+  const geometry=slot.render.geometry,style=resolveTemplateStyle(slot.render.style||{},palette);
+  const fill=style.fill||'none',stroke=style.stroke||'none',strokeWidth=Math.max(.7,(style.strokeWidthMm||0)*3);
+  const common={fill,stroke,strokeWidth,vectorEffect:'non-scaling-stroke'};
+  const content=geometry.kind==='ellipse'?<ellipse cx="50" cy="50" rx="48" ry="48" {...common}/>:
+    geometry.kind==='path'?geometry.paths.map((path,index)=><path key={index} d={path.d} {...common}/>):
+    geometry.kind==='stripes'?Array.from({length:9},(_,index)=><path key={index} d={`M ${index*13-20} 100 L ${index*13+80} 0`} {...common}/>):
+    geometry.kind==='paperclip'?<path d="M 65 12 L 35 12 Q 15 12 15 32 L 15 78 Q 15 95 33 95 L 70 95 Q 85 95 85 78 L 85 35 Q 85 22 73 22 L 43 22 Q 33 22 33 35 L 33 75 Q 33 82 43 82 L 68 82" {...common}/>:
+    <rect x="1" y="1" width="98" height="98" rx={geometry.kind==='bubble'?12:0} {...common}/>;
+  return <svg viewBox={(geometry.viewBox||[0,0,100,100]).join(' ')} preserveAspectRatio="none" aria-hidden="true">{content}</svg>;
+}
 export function ManualLayoutDialog({choices,source,onClose,onChoose}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const slotNames={focal:'主视觉',secondary:'次图',information:'信息区',background:'背景',accent:'点缀',marker:'标记',connector:'连接',divider:'分隔'};
   const choose=async id=>{if(busy)return;setBusy(true);setError('');try{await onChoose(id);onClose();}catch(cause){setError('创建草稿失败：'+cause.message);setBusy(false);}};
   return <Dialog title="从模板开始" onClose={onClose} closeId="manual-layout-cancel" className="manual-layout-dialog">
     <h2>从模板开始</h2>
-    <p>根据已选素材的尺寸、作用与纸张比例推荐。预览显示实际会放入的素材；虚线位置暂时留空。</p>
+    <p>根据素材尺寸、作用与纸张比例推荐。预览包含模板底形和装饰；虚线素材位与文字位留空。</p>
     <div className="manual-layout-choices">{choices.map((item,index)=><button type="button" key={item.id} disabled={busy} className="manual-layout-choice" data-manual-template={item.id} onClick={()=>void choose(item.id)}>
-      {item.template?<span className="manual-template-preview" aria-hidden="true">{item.template.elements.filter(slot=>item.assignments.some(row=>row.slotId===slot.id)||item.emptySlots.includes(slot.id)).map(slot=>{
+      {item.template?<span className="manual-template-preview" aria-hidden="true">{item.template.elements.filter(slot=>isTextSlot(slot)||item.assignments.some(row=>row.slotId===slot.id)||item.emptySlots.includes(slot.id)||slot.render?.kind==='graphic'&&(!slot.contentFor||item.assignments.some(row=>row.slotId===slot.contentFor))).map(slot=>{
         const assigned=item.assignments.find(row=>row.slotId===slot.id);
         const asset=item.selected.find(row=>row.id===assigned?.alias);
+        const graphic=slot.render?.kind==='graphic';
         const width=asset?.physicalWidthMM/item.paper.width||slot.box[2],height=asset?.physicalHeightMM/item.paper.height||slot.box[3];
-        return <span key={slot.id} className={`manual-template-slot ${asset?'filled':'missing'}`}
+        return <span key={slot.id} className={`manual-template-slot ${graphic?'graphic':asset?'filled':isTextSlot(slot)?'text':'missing'}`}
           style={{left:`${(slot.box[0]+slot.box[2]/2-width/2)*100}%`,top:`${(slot.box[1]+slot.box[3]/2-height/2)*100}%`,width:`${width*100}%`,height:`${height*100}%`}}>
-          {asset?<img src={source?.(asset.blobId)||asset.staticPath||''} alt=""/>:null}</span>;
+          {graphic?<TemplateGraphicPreview slot={slot} palette={templatePalette(item.template)}/>:asset?<img src={source?.(asset.blobId)||asset.staticPath||''} alt=""/>:null}</span>;
       })}</span>:<span className="manual-layout-sketch sketch-stage" aria-hidden="true"><i/><i/><i/></span>}
       <span><strong>{item.title}{index===0?' · 最匹配':''}</strong><small>{item.reason||item.description}</small>
         {item.missing?.length?<small>空位：{item.missing.slice(0,3).map(slot=>slotNames[slot.role]||'素材').join('、')}{item.missing.length>3?'等':''}</small>:null}</span>

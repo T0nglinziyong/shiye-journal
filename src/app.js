@@ -2429,7 +2429,7 @@ async function createFromBasket(templateID=null){
   const p=createMatchingProject(false),draft=p.drafts[0];
   let result=null;
   if(templateID==='stage')result=applyMatchingStage(draft,state.assets,state.basket,state.matchPlacements);
-  else if(templateID)result=applyManualTemplate(draft,state.assets,state.basket,templateID);
+  else if(templateID)result=await applyManualTemplate(draft,state.assets,state.basket,templateID);
   else draft.items=[];
   await db.stageProject(p);
   state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool='select';

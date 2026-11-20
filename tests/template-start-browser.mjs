@@ -34,10 +34,11 @@ try{
     assert.ok(await b.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),`${width}px 出现横向溢出`);
   }
   await b.click('[data-act="create-from-basket"]','.manual-layout-dialog');
-  const choice=await b.evaluate(`(()=>{const node=[...document.querySelectorAll('[data-manual-template]')].find(item=>item.dataset.manualTemplate&&!['stage'].includes(item.dataset.manualTemplate));return node&&{id:node.dataset.manualTemplate,slots:node.querySelectorAll('.manual-template-slot').length,text:node.textContent}})()`);
-  assert.ok(choice?.slots>0,JSON.stringify(choice));
+  const choice=await b.evaluate(`(()=>{const node=[...document.querySelectorAll('[data-manual-template]')].find(item=>item.dataset.manualTemplate&&!['stage'].includes(item.dataset.manualTemplate));return node&&{id:node.dataset.manualTemplate,slots:node.querySelectorAll('.manual-template-slot').length,graphics:node.querySelectorAll('.manual-template-slot.graphic').length,text:node.textContent}})()`);
+  assert.ok(choice?.slots>0&&choice.graphics>0,JSON.stringify(choice));
   assert.match(choice.text,/匹配.*空位/);
-  await b.click(`[data-manual-template="${choice.id}"]`,'#canvas-page');
+  try{await b.click(`[data-manual-template="${choice.id}"]`,'#canvas-page');}
+  catch(error){throw Error(error.message+' '+JSON.stringify({dialog:await b.evaluate('document.querySelector(".manual-layout-dialog")?.textContent'),errors:b.errors}));}
   assert.ok(await b.evaluate('!!document.querySelector("#canvas-page canvas")'));
   assert.deepEqual(b.errors,[]);
   console.log('Collapsible matching sections and ranked manual template preview passed');

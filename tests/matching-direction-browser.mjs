@@ -14,7 +14,11 @@ const {command,evaluate,wait,click,sleep,errors}=browser;
 try{
   await wait('.series-grid');
   await click('[data-route="matching"]','.match-recommendations');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  const summaryHeights=await evaluate('([...document.querySelectorAll(".match-direction>.match-panel-head,.match-stage-section>.match-panel-head,.match-recommendations>.match-panel-head")].map(node=>node.getBoundingClientRect().height))');
+  assert.equal(new Set(summaryHeights).size,1,`折叠栏高度不一致：${summaryHeights}`);
   await click('.match-direction summary','.match-direction[open]');
+  assert.equal(await evaluate('document.querySelector(".match-direction>.match-panel-head").getBoundingClientRect().height'),summaryHeights[0]);
   await evaluate(`(()=>{const choice=document.querySelector('[data-direction="purpose"][data-group="page"]');choice.value='清单计划';choice.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   for(let attempt=0;attempt<30&&await evaluate('document.querySelector(".match-rec strong")?.textContent')!=='清单便签';attempt++)await sleep(100);
   assert.equal(await evaluate('document.querySelector(".match-rec strong")?.textContent'),'清单便签');

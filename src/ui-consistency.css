@@ -135,13 +135,53 @@
 .journal-template-detail-card{max-width:720px;margin:auto}
 .journal-template-detail-image{min-height:min(58dvh,540px)}
 .journal-template-detail-image img{max-height:min(58dvh,540px);object-position:center}
-.journal-template-composition{margin-top:20px;padding:16px;border:1px solid #e2e7dd;border-radius:14px;background:#f7f8f3}
-.journal-template-composition h3{margin:0 0 12px;font-size:16px;color:#354b40}
-.journal-template-parts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.journal-template-part{display:flex;align-items:flex-start;gap:9px;padding:10px;border-radius:10px;background:#fffefa}
-.journal-template-part span{flex:none;min-width:42px;color:#52634b;font-size:12px;font-weight:700}
-.journal-template-part p{margin:0;font-size:12px;line-height:1.5;color:#596b5c}
-@media(max-width:600px){.journal-template-parts{grid-template-columns:1fr}.works-grid.journal-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.works-grid.journal-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.works-grid.journal-template-grid:not(.journal-template-detail){align-items:start}
+.works-grid.journal-template-grid .journal-template-card,
+.works-grid.journal-template-grid .journal-template-import-card{align-self:start;min-height:0}
+.works-grid.journal-template-grid .journal-template-card .card-image,
+.works-grid.journal-template-grid .journal-template-import-card .card-image{aspect-ratio:var(--shiye-catalog-cover-ratio,1.14)}
+.works-grid.journal-template-grid .journal-template-card .journal-template-tags{display:none}
+.works-grid.journal-template-grid .journal-template-card .card-body,
+.works-grid.journal-template-grid .journal-template-import-card .card-body{padding-bottom:2px}
+
+.works-grid.journal-template-detail{display:block}
+.journal-template-detail-card.detail-page{max-width:1100px;margin:0 auto;padding:15px 20px 80px;border:0;border-radius:0;background:transparent}
+.journal-template-detail-card .detail-topline{display:flex;align-items:center;justify-content:space-between}
+.journal-template-detail-card .detail-category{float:none}
+.journal-template-preview{width:100%;max-width:560px;min-width:0;border:1px solid #e2e5db;border-radius:12px;background:#eef2e9;padding:12px}
+.journal-template-preview .journal-template-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 10px}
+.journal-template-preview .journal-template-switch .btn{min-width:0;padding:8px 3px;border-radius:10px;font-size:13px}
+.journal-template-preview .journal-template-switch .btn:disabled{opacity:.45}
+.journal-template-preview .journal-template-detail-image{position:relative;width:100%;min-height:0;aspect-ratio:1;max-height:none;background:transparent}
+.journal-template-preview .journal-template-detail-image img{position:absolute;inset:0;width:100%;height:100%;max-height:100%;object-fit:contain}
+.journal-template-detail-card .detail-copy .detail-description{color:#596b5c;line-height:1.65}
+.journal-template-detail-card .detail-copy .journal-template-tags{margin-top:20px}
+.journal-template-elements-view{position:relative;padding:14px 14px 32px}
+.journal-template-elements-page{position:relative;height:100%;max-width:100%;max-height:100%;background:#fffefa;border:1px solid #d3ddcf;box-shadow:0 8px 24px #40514118;overflow:hidden}
+.journal-template-element{position:absolute;display:grid;place-items:center;box-sizing:border-box;overflow:hidden;background:#b9d7cacc;border:1px solid #4d785e;border-radius:3px;color:#244f39;font-size:11px;font-weight:700;text-align:center;line-height:1.2}
+.journal-template-element.role-title,.journal-template-element.role-text{background:#f6e2a6d9;border-color:#a98d4b;color:#634d17}
+.journal-template-element.role-background{background:#d7e2d6a8;border-color:#8ca58a}
+.journal-template-element.role-accent,.journal-template-element.role-decoration,.journal-template-element.role-marker,.journal-template-element.role-connector,.journal-template-element.role-divider{background:#eeaa91bb;border-color:#c57962;color:#743b30}
+.journal-template-elements-caption{position:absolute;bottom:5px;left:0;right:0;color:#708173;font-size:11px;text-align:center}
+@media(max-width:680px){.journal-template-detail-card.detail-page{padding:8px 0 90px}.journal-template-detail-card .detail-columns{display:grid;grid-template-columns:1fr;gap:16px}.journal-template-preview{max-width:none}.journal-template-detail-card .detail-copy{padding:0 2px}.journal-template-preview .journal-template-switch .btn{font-size:12px}}
+
+.matching-page .match-direction,
+.matching-page .matching-layout>.match-stage-section,
+.matching-page .matching-layout>.match-recommendations{padding:0}
+.matching-page .match-direction>.match-panel-head,
+.matching-page .matching-layout>.panel>.match-panel-head{display:flex;align-items:center;height:62px;min-height:62px;box-sizing:border-box;padding:10px 16px;gap:10px;border-bottom:1px solid transparent;background:#f4f7f1;border-radius:14px;list-style:none;cursor:pointer}
+.matching-page details[open]>.match-panel-head{border-bottom-color:#e2e9df;border-radius:14px 14px 0 0}
+.matching-page .match-panel-head::-webkit-details-marker{display:none}
+.matching-page .match-panel-head h2{flex:none;margin:0;font-size:18px;line-height:1.3}
+.matching-page .match-panel-title{display:grid;gap:2px;min-width:0;flex:1}
+.matching-page .match-panel-title small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#718273;font-size:11px}
+.matching-page .match-panel-head>small{margin-left:auto;white-space:nowrap}
+.matching-page .match-panel-head::after{display:grid;place-items:center;flex:none;width:29px;height:29px;border-radius:50%;background:#e3eae0;content:'⌄';font-size:18px;color:#45604a;transition:transform .18s}
+.matching-page details:not([open])>.match-panel-head::after{transform:rotate(-90deg)}
+.matching-page .match-direction-body{padding:12px 16px 16px;border:0}
+.matching-page .match-fold-body{padding:0 16px 16px}
 /* Range controls must not inherit the text field's 11px side padding. That
    padding clips both ends of the native track, especially on iOS Safari. */
 input[type=range]{box-sizing:border-box;min-width:0;padding:0;border:0;border-radius:0;
