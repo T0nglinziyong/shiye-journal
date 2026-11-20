@@ -5,6 +5,8 @@ import {compileAccents} from './accents.js';
 import {compileFilm} from './film.js';
 import {compileTitle,titleFields,titleHelp} from './title.js';
 import {techniqueExample,exampleMaterials} from './examples.js';
+import {measureSceneText} from '../scene-text-layout.js';
+import {styleFor} from '../scene-node-properties.js';
 export const techniqueCatalog=catalog;
 const common=['id','reference','at','rotationDeg'];
 const graphic=['widthMm','heightMm','colors','seed'];
@@ -54,6 +56,7 @@ function validate(method,params){
  if(params.gapRatio!==undefined&&(!Number.isFinite(params.gapRatio)||params.gapRatio<0||params.gapRatio>.05))throw Error('余料间隔比例为 0–0.05');
 }
 const mmPlace=(x,y)=>({reference:'parent',at:[x,y],unit:'mm'});
+const measureTextHeight=(content,width,fontSizePt,fontFamily)=>measureSceneText({type:'text',content,width,...styleFor('text',{fontSizePt,fontFamily},{canvas:{height:100},physicalPageHeightMM:100})}).height;
 export function compileTechnique({methodId,parameters,materials=[]}){
  const method=catalog.methods.find(m=>m.id===methodId);if(!method)throw Error('未知教程方法');validate(method,parameters);
  const p={...method.defaults,...parameters,...(method.defaults.options?{options:{...method.defaults.options,...parameters.options}}:{})},id=p.id,colors=p.colors||['#3D6871','#E6B45E','#F1E8D5'],font=p.fontFamily||'Xiaolai',fontSize=p.fontSizePt||18;
@@ -108,7 +111,7 @@ export function compileTechnique({methodId,parameters,materials=[]}){
    children.push({op:'material.add',id:id+'-m'+i,asset:a.alias,place:mmPlace(x+a.w/2,y+a.h/2)});
   }
   width=right;height=bottom;
-  if(p.caption){const captionFont=p.fontSizePt||11,captionHeight=Math.ceil([...p.caption].length/Math.max(1,width/(captionFont*.353)))*captionFont*.45;text(p.caption,0,height+gap,width,{fontSizePt:captionFont});height+=gap+captionHeight;}
+  if(p.caption){const captionFont=p.fontSizePt||11,captionHeight=measureTextHeight(p.caption,width,captionFont,font);text(p.caption,0,height+gap,width,{fontSizePt:captionFont});height+=gap+captionHeight;}
  }else if(method.recipe==='graphic'){
   if(p.shape)resolvedShapeOptions(p.shape,p.options);
   shape(p.shape?{kind:p.shape,...(p.options?{options:p.options}:{})}:{kind:'sketch',motif:p.motif,seed:p.seed||17,...(p.waypoints?{waypoints:p.waypoints}:{})},width/2,height/2,width,height,{fill:p.fill??null,stroke:colors[0],strokeWidthMm:p.strokeWidthMm||.65,opacity:p.opacity??1});
@@ -123,7 +126,7 @@ export function compileTechnique({methodId,parameters,materials=[]}){
   points.forEach(([x,y,r],i)=>children.push({op:'material.tape',id:id+'-tape'+i,asset:alias,lengthMm:p.lengthMm||25,place:{...mmPlace(x,y),rotationDeg:r},caps:{start:'torn',end:'torn',depthMm:.5}}));
  }else if(method.recipe==='record'){
   const size=p.fontSizePt||11,gap=p.gapMm??4,col=p.layout==='columns'?2:1,rowWidth=width/col;
-  const heights=p.items.map(t=>Math.max(1,Math.ceil([...t].length/Math.max(1,(rowWidth-10)/(size*.353))))*size*.48+gap);
+  const heights=p.items.map(t=>Math.max(8,measureTextHeight(t,rowWidth-9,size,font))+gap);
   let y=0;for(let i=0;i<p.items.length;i++){
    if(i%col===0&&i>0)y+=Math.max(...heights.slice(i-col,i));const x=(i%col)*rowWidth;
    if(['numbered','timeline'].includes(p.layout)){shape('ellipse',x+3,y+3,5,5,{fill:colors[1]||colors[0]});text(String(i+1),x+1.5,y+.6,5,{fontSizePt:8});}

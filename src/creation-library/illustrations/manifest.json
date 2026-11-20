@@ -869,15 +869,15 @@
       "id": "record-checklist",
       "file": "record-checklist.png",
       "kind": "rendered-editable-commands",
-      "sha256": "e9f35bb54b34aaa1109d8ee82dd7b69fcbc3b67a6750a2a70446b30a573c3c00",
-      "width": 360,
-      "height": 254
+      "sha256": "e7a851831b34fbffcc1a0391671d0853f5da19ebf1b63b7e1bba8079a4d8d31c",
+      "width": 359,
+      "height": 300
     },
     {
       "id": "record-timeline",
       "file": "record-timeline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "04aabfa9b16f39266dd34dbf666f93758387ccd1af27aa64f871cb0331d8e228",
+      "sha256": "1676f71cd058fea3bed04d187416f27d986e6c3cfe450cc6ccd81e191ddfd7bc",
       "width": 283,
       "height": 300
     },
@@ -885,9 +885,9 @@
       "id": "record-columns",
       "file": "record-columns.png",
       "kind": "rendered-editable-commands",
-      "sha256": "aef713de4917026f41c3dbc655e73be642b77cdb17f636a19079ef54b9394733",
+      "sha256": "4a639cc94be83d5bee836f27138e99fa36c4144e724030ec8d306842e5f9afcb",
       "width": 360,
-      "height": 141
+      "height": 154
     },
     {
       "id": "color-echo",
@@ -917,7 +917,7 @@
       "id": "quiet-note",
       "file": "quiet-note.png",
       "kind": "rendered-editable-commands",
-      "sha256": "e4f3e1e5627a40c4e42cca9c642e1f1467e1ee8ba0a9a65fc55c5353497485da",
+      "sha256": "054999de871dd68bfa0007f1fa6bcfbf1b83ef8c3136ba50507c81dd1b29a5e0",
       "width": 170,
       "height": 300
     },
@@ -965,15 +965,15 @@
       "id": "playful-number",
       "file": "playful-number.png",
       "kind": "rendered-editable-commands",
-      "sha256": "792b614e9eaac3be21904fe41992e104deaddf10ba2e696a8f954f740f499e2d",
-      "width": 360,
-      "height": 266
+      "sha256": "3f51959ef29010c0b2a393f04c2d22b2402e44f77caffeb906098e4f13f3a9a4",
+      "width": 345,
+      "height": 300
     },
     {
       "id": "vintage-ticket",
       "file": "vintage-ticket.png",
       "kind": "rendered-editable-commands",
-      "sha256": "7c8caa56c7c7d47dd3589981e3fad609b64112a5f2b8f6d961e96752e22e924f",
+      "sha256": "27564a127cb64675d3a6e65c0c49f25603f28e46a6bcac148fcfa420a78efc76",
       "width": 292,
       "height": 300
     },

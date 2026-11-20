@@ -145,6 +145,24 @@ test('wrapped emphasis marks each occupied line without spanning the empty line 
   assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
  }
 });
+test('long captions and record entries stay inside their reported editable groups',async()=>{
+ const cases=[
+  {methodId:'photo-caption',parameters:{id:'caption',aliases:['m1'],caption:'Today we found a little place by the sea. '.repeat(4),fontSizePt:14,gapMm:2}},
+  ...['record-checklist','record-timeline','record-columns'].map(methodId=>({methodId,parameters:{id:methodId,items:['今天收集了很多文字，需要按实际宽度换行。'.repeat(3),'A long note about the photos saved this afternoon. '.repeat(2)],fontSizePt:14,gapMm:2}}))
+ ];
+ for(const {methodId,parameters} of cases){
+  const compiled=compileTechnique({methodId,parameters,materials:exampleMaterials});
+  const doc=await document(exampleMaterials),done=apply(doc,compiled.operations,exampleMaterials).document;
+  const group=done.page.layers.find(n=>n.id===parameters.id),scale=done.page.canvas.height/done.page.physicalPageHeightMM;
+  const ends=[];
+  for(const command of compiled.operations[0].children.filter(n=>n.op==='text.add')){
+   const node=group.children.find(n=>n.id===command.id);
+   const end=command.place.at[1]+node.height/scale;ends.push(end);
+   assert.ok(end<=compiled.report.heightMm+.01,methodId+'/'+command.id);
+  }
+  assert.ok(compiled.report.heightMm-Math.max(...ends)<=parameters.gapMm+.01,methodId+' should not reserve unused rows');
+ }
+});
 test('title effects compose in one editable text, while curve and grapheme constraints are explicit',async()=>{
  const gradient={angleDeg:45,stops:[{offset:0,color:'#112233'},{offset:1,color:'#445566'}]};
  const compiled=compileTechnique({methodId:'title-shadow',parameters:{id:'fx',text:'标题',style:{gradient,outline:{color:'#FFFFFF',widthMm:.3}}}});
