@@ -150,6 +150,16 @@ test('bubble lesson creates editable text inside the frame and rejects overflow'
  assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble',text:'这段批注长到不可能放进很小的气泡主体内',widthMm:20,heightMm:12}}),/超出框内可写区域/);
  for(const id of ['graphic-arch','graphic-scallop-frame','graphic-paperclip'])assert.ok(describeTechnique(id).example.prepare.some(op=>op.op==='material.add'),id+' missing context');
 });
+test('timeline connector ends at the first and last event, with no tail for a single event',()=>{
+ const operations=compileTechnique({methodId:'record-timeline',parameters:{id:'time',items:['早晨','午后','夜晚']}}).operations[0].children;
+ const circles=operations.filter(op=>op.op==='graphic.add'&&op.geometry.kind==='ellipse');
+ const line=operations.find(op=>op.op==='graphic.add'&&op.geometry.kind==='rect'&&op.size.width===.25);
+ assert.equal(circles.length,3);assert.ok(line);
+ assert.equal(line.place.at[1]-line.size.height/2,circles[0].place.at[1]);
+ assert.equal(line.place.at[1]+line.size.height/2,circles.at(-1).place.at[1]);
+ const single=compileTechnique({methodId:'record-timeline',parameters:{id:'one',items:['唯一事件']}}).operations[0].children;
+ assert.ok(!single.some(op=>op.op==='graphic.add'&&op.geometry.kind==='rect'&&op.size.width===.25));
+});
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
  const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
  assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);

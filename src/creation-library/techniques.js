@@ -170,7 +170,7 @@ export function compileTechnique({methodId,parameters,materials=[]}){
    else if(p.layout==='checklist')shape('rect',x+2,y+3,3,3,{fill:null,stroke:colors[0],strokeWidthMm:.3});
    text(p.items[i],x+8,y,rowWidth-9,{fontSizePt:size});
   }height=Math.max(height,y+Math.max(...heights.slice(-col)));
-  if(p.layout==='timeline'){shape('rect',3,height/2,.25,height,{fill:colors[1]||colors[0]});children.unshift(children.pop());}
+  if(p.layout==='timeline'&&y>0){shape('rect',3,3+y/2,.25,y,{fill:colors[1]||colors[0]});children.unshift(children.pop());}
  }else {
   const target=p.target;libraryID(target);let operations;
   if(method.recipe==='relate')operations=[{op:'material.relate',target,relation:{kind:'peek',reference:'node:'+p.referenceTarget,edge:p.edge||'right',exposedMm:p.amountMm??4}}];

@@ -877,17 +877,17 @@
       "id": "record-timeline",
       "file": "record-timeline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "1676f71cd058fea3bed04d187416f27d986e6c3cfe450cc6ccd81e191ddfd7bc",
-      "width": 283,
-      "height": 300
+      "sha256": "04e6ad9c0aaeda0058e90e2c30967e4be251cfb212b387c4e886a719be62baf6",
+      "width": 360,
+      "height": 264
     },
     {
       "id": "record-columns",
       "file": "record-columns.png",
       "kind": "rendered-editable-commands",
-      "sha256": "4a639cc94be83d5bee836f27138e99fa36c4144e724030ec8d306842e5f9afcb",
+      "sha256": "bb7d9fcc7f234c5d54ee7c7fb089d393e742295b8a5e4df18c81e40300e40ed9",
       "width": 360,
-      "height": 154
+      "height": 91
     },
     {
       "id": "color-echo",
@@ -1149,9 +1149,9 @@
       "id": "graphic-film-frame",
       "file": "graphic-film-frame.png",
       "kind": "rendered-editable-commands",
-      "sha256": "943c8dceb1d6df242290957a251706bfe90ad6b734296ed72d5c1ec91e0acb7e",
+      "sha256": "d913028ca5760734eecfc7c2611980cabc5e982f149fd65e194b729c37e4b5de",
       "width": 360,
-      "height": 139
+      "height": 166
     },
     {
       "id": "accent-spark",

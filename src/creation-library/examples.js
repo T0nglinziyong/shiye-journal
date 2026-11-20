@@ -67,6 +67,10 @@ export function techniqueExample(method){
   before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,88],unit:'mm'}});
  }
  if(method.id==='graphic-bubble')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[80,121],unit:'mm'}});
+ if(method.id==='graphic-film-frame'){
+  p.widthMm=134;p.heightMm=58;
+  for(const [i,alias] of ['m1','m8','m9'].entries())before.push({op:'material.add',id:'photo-'+i,asset:alias,place:{reference:'page',at:[72-134/2+134*(i+.5)/3,88],unit:'mm'}});
+ }
  if(method.id==='graphic-arrow')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[35,88],unit:'mm'}},{op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[108,88],unit:'mm'}});
  if(['graphic-wave','graphic-zigzag'].includes(method.id)){
   for(const [id,content,y] of [['first','一段短记',77],['second','另一段短记',95]])before.push({op:'text.add',id,content,place:{reference:'page',at:[45,y],unit:'mm',anchor:'top-left'},size:{width:54,unit:'mm'},style:{fontFamily:'Xiaolai',fontSizePt:11,color:'#3D6871'}});
@@ -99,6 +103,8 @@ export function techniqueExample(method){
   if(method.id==='tape-divider')before.push({op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[72,72],unit:'mm'}},{op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,106],unit:'mm'}});
  }
  if(method.recipe==='record')p.items=['留下一片颜色','写下一句短记','收好今天的小物'];
+ if(method.id==='record-timeline')p.items=['08:00 走出家门','14:00 走进旧书店','19:00 写下今日小记'];
+ if(method.id==='record-columns'){p.widthMm=110;p.fontSizePt=13;p.items=['照片：记录光线','纸片：记录触感','蓝色：安静留白','橙色：局部强调'];}
  if(method.recipe==='write'){
   delete p.at;p.target='note';p.box=[.12,.16,.76,.68];p.text='留一片颜色，\n记一件小事。';p.fontSizePt=11;
   before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[70,80],unit:'mm',rotationDeg:-8}});
