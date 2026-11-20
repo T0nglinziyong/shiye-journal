@@ -16,18 +16,22 @@ async function save(id,image,kind){const bytes=image.toBuffer('image/png');await
 const palette=['#72A8B7','#E5B456','#96BAB6','#D59076'];
 for(const t of templateCatalog.templates){
  const fixture=templateFixture(t),images={};
- fixture.materials.forEach((asset,i)=>{
+ for(const [i,asset] of fixture.materials.entries()){
   const slot=t.elements.find(e=>e.id===fixture.bindings[i].slotId),style=resolveTemplateStyle(slot.example||{},t.palette||{});
   const c=canvas.createCanvas(400,Math.round(400*asset.physicalHeightMM/asset.physicalWidthMM)),ctx=c.getContext('2d');
   ctx.fillStyle=style.fill||palette[i%palette.length];
-  if((style.shape||slot.shape)==='ellipse'){ctx.beginPath();ctx.ellipse(c.width/2,c.height/2,c.width/2,c.height/2,0,0,Math.PI*2);ctx.fill();}
+  if(style.shape==='path'){
+   if(typeof style.path!=='string'||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(style.path)||!/^#[0-9a-f]{6}$/i.test(style.fill))throw Error('合成素材轮廓无效：'+slot.id);
+   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${style.path}" fill="${style.fill}"/></svg>`;
+   ctx.drawImage(await canvas.loadImage(Buffer.from(svg)),0,0,c.width,c.height);
+  }else if((style.shape||slot.shape)==='ellipse'){ctx.beginPath();ctx.ellipse(c.width/2,c.height/2,c.width/2,c.height/2,0,0,Math.PI*2);ctx.fill();}
   else if(style.shape==='star'){
    ctx.beginPath();const count=style.points||5;
    for(let k=0;k<count*2;k++){const angle=k*Math.PI/count-Math.PI/2,r=k%2?style.innerRatio||.5:1;const x=c.width/2*(1+r*Math.cos(angle)),y=c.height/2*(1+r*Math.sin(angle));k?ctx.lineTo(x,y):ctx.moveTo(x,y);}
    ctx.closePath();ctx.fill();
   }else ctx.fillRect(0,0,c.width,c.height);
   images[asset.alias]=c.toBuffer('image/png');
- });
+ }
  const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;
  const doc=await createCreationDocument({draft:page,assets:fixture.materials,aliases:Object.fromEntries(fixture.materials.map(a=>[a.alias,a.id]))});
  const compiled=compileTemplate({...fixture,templateId:t.id,id:'template'});

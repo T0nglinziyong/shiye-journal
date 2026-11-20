@@ -51,3 +51,14 @@ test('custom path strokes retain physical width in tall and wide boxes without m
   assert.deepEqual(node,before);
  }
 });
+
+test('stripes retain the requested physical angle and continuous strokes in thin wide and tall regions',async()=>{
+ for(const [width,height] of [[300,40],[40,300]])for(const angle of [-45,0,45]){
+  const node={...base,kind:'stripes',width,height,fill:null,stroke:'#000000',lineWidth:3,shapeOptions:{rows:5,columns:8,angle,showOuterBorder:false}},before=structuredClone(node);
+  const data=await pixels(node),alpha=(x,y)=>data[(y*width+x)*4+3],dy=angle===0?0:Math.sign(angle)*6;let samples=0,continued=0;
+  for(let y=9;y<height-9;y++)for(let x=9;x<width-9;x++)if(alpha(x,y)>220){samples++;if(alpha(x+6,y+dy)>170)continued++;}
+  assert.ok(samples>100,`${width}x${height} ${angle} has visible stripes`);
+  assert.ok(continued/samples>.96,`${width}x${height} ${angle} continuity ${continued}/${samples}`);
+  assert.deepEqual(node,before);
+ }
+});

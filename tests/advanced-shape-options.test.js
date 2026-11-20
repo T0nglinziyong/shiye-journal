@@ -38,7 +38,8 @@ test('resizing repeats keeps their count, while changing count keeps the cell pi
   for(const kind of ['dots','stripes']){
     const pattern=configureShape({id:kind},kind);
     assert.deepEqual(pattern.shapeOptions,{rows:6,columns:8});
-    assert.match(shapeSVG({...pattern,width:pattern.width*2}),/width="0\.125" height="0\.16666666666666666"/);
+    if(kind==='dots')assert.match(shapeSVG({...pattern,width:pattern.width*2}),/width="0\.125" height="0\.16666666666666666"/);
+    else assert.equal((shapeSVG(pattern).match(/ L/g)||[]).length,(shapeSVG({...pattern,width:pattern.width*2}).match(/ L/g)||[]).length);
     assert.equal(shapeRepeatCountPatch(pattern,'columns',12).width,pattern.width*12/8);
   }
   const columns=shapeRepeatCountPatch(grid,'columns',12);
