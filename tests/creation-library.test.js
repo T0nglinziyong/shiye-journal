@@ -5,15 +5,17 @@ import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision,applyCreationTransaction} from '../src/creation-transaction.js';
 import {templateCatalog,rankTemplates,scoreTemplate,templateMarginalScores,maximumAssignment,materialSlots} from '../src/creation-library/matcher.js';
 import {compileTemplate} from '../src/creation-library/compiler.js';
+import {templateFixture,isGraphicElement} from '../src/creation-library/template-elements.js';
 import {techniqueCatalog,compileTechnique,describeTechnique} from '../src/creation-library/techniques.js';
 import {exampleMaterials,techniqueExample} from '../src/creation-library/examples.js';
+import {worldBox} from '../src/scene-spatial.js';
 const document=assets=>createCreationDocument({draft:draft({ratio:'a5'}),assets,aliases:Object.fromEntries(assets.map(a=>[a.alias,a.id]))});
 const apply=(doc,operations,assets)=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:'library-test',baseSceneRevision:creationSceneRevision(doc),operations},assets);
 
 test('at least fifty independently sourced, reviewed diagrams have usable typed elements',()=>{
  assert.ok(templateCatalog.templates.length>=50);const panels=new Set();
  for(const t of templateCatalog.templates){assert.equal(t.reviewed,true);assert.ok(templateCatalog.sources.some(s=>s.id===t.sourceId));assert.ok(t.elements.length>2);assert.ok(materialSlots(t).length);assert.ok(t.aspect>0);panels.add(t.sourcePanel.sha256);
-  for(const e of t.elements){assert.equal(e.box.length,4);assert.ok(e.box.every(Number.isFinite));assert.ok(e.box[2]>0&&e.box[3]>0);assert.ok(e.accepts.length);}}
+  for(const e of t.elements){assert.equal(e.box.length,4);assert.ok(e.box.every(Number.isFinite));assert.ok(e.box[2]>0&&e.box[3]>0);assert.ok(isGraphicElement(e)?e.render.geometry.kind:e.accepts.length);}}
  assert.equal(panels.size,templateCatalog.templates.length);
 });
 test('optimal assignment beats a greedy slot choice and permits omission',()=>{
@@ -76,4 +78,112 @@ test('an existing editable title group can occupy a template slot without raster
 test('taxonomy and open semantic tags remain available in frozen matching sources',async()=>{
  const asset={...exampleMaterials[0],styleTags:['手绘'],contentTags:['咖啡杯'],contentCategories:['food']};
  const doc=await document([asset]);assert.deepEqual(doc.source.sourceSnapshots[0].styleTags,['手绘']);
+});
+
+test('every method exposes a complete example and distinct construction/review guidance',async()=>{
+ for(const method of techniqueCatalog.methods){
+  const info=describeTechnique(method.id);
+  assert.ok(info.lesson.principle.length>12,method.id);assert.ok(info.lesson.steps.length>=2,method.id);assert.ok(info.lesson.check.length>=2,method.id);
+  const materials=info.example.materials,doc=await document(materials);
+  const compiled=compileTechnique({methodId:method.id,parameters:info.tool.arguments.parameters,materials});
+  assert.equal(apply(doc,[...info.example.prepare,...compiled.operations],materials).changed,true,method.id);
+ }
+});
+test('phrase composition preserves the supplied text, meaningful grouping and physical font sizes',async()=>{
+ const compiled=compileTechnique({methodId:'title-phrases',parameters:{id:'phrase',text:'把日常收好',fontSizePt:20,widthMm:36,runs:[{text:'把',role:'secondary'},{text:'日常',role:'primary'},{text:'收好',breakBefore:true}]}});
+ const texts=compiled.operations[0].children.filter(o=>o.op==='text.add');assert.equal(texts.map(t=>t.content).join(''),'把日常收好');
+ assert.ok(texts[1].style.fontSizePt>texts[0].style.fontSizePt);assert.equal(texts[2].style.fontSizePt,20);
+ assert.ok(texts[2].place.at[1]>texts[1].place.at[1]);assert.ok(texts.every(t=>!t.place.rotationDeg));
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-phrases',parameters:{id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
+});
+test('keyword highlight is local, behind text, and transparent hollow titles do not paint paper color',()=>{
+ const marked=compileTechnique({methodId:'title-highlight',parameters:{id:'h',text:'留住今天的小美好',emphasis:'小美好',widthMm:100}}).operations[0].children;
+ const bg=marked.find(o=>o.op==='graphic.add'),texts=marked.filter(o=>o.op==='text.add');
+ assert.ok(bg.size.width<70);assert.ok(bg.style.fillOpacity<1);assert.equal(marked[0],bg);
+ assert.equal(texts.map(o=>o.content).join(''),'留住今天的小美好');assert.equal(texts.at(-1).content,'小美好');
+ const hollow=compileTechnique({methodId:'title-outline',parameters:{id:'o',text:'空心'}}).operations[0].children;
+ assert.equal(hollow.length,1);assert.equal(hollow[0].style.fillOpacity,0);assert.ok(hollow[0].style.outline);
+ assert.throws(()=>compileTechnique({methodId:'title-highlight',parameters:{id:'h',text:'留住日常',emphasis:'旅行'}}),/原|标题/);
+});
+test('title effects compose in one editable text, while curve and grapheme constraints are explicit',async()=>{
+ const gradient={angleDeg:45,stops:[{offset:0,color:'#112233'},{offset:1,color:'#445566'}]};
+ const compiled=compileTechnique({methodId:'title-shadow',parameters:{id:'fx',text:'标题',style:{gradient,outline:{color:'#FFFFFF',widthMm:.3}}}});
+ const child=compiled.operations[0].children.find(o=>o.op==='text.add');assert.ok(child.style.shadow);assert.deepEqual(child.style.gradient,gradient);
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ const vertical=compileTechnique({methodId:'title-vertical',parameters:{id:'v',text:'e\u0301好'}});assert.equal(vertical.operations[0].children[0].content,'e\u0301\n好');
+ assert.throws(()=>compileTechnique({methodId:'title-curve',parameters:{id:'c',text:'过长的标题必须加宽不能截断',widthMm:20}}),/宽度/);
+ assert.throws(()=>compileTechnique({methodId:'title-curve',parameters:{id:'c',text:'两行\n标题'}}),/单行/);
+});
+test('geometry remains parametric and irrelevant parameters are rejected instead of ignored',async()=>{
+ const flower=compileTechnique({methodId:'graphic-flower',parameters:{id:'flower',options:{petals:9}}});
+ const cmd=flower.operations[0].children[0];assert.equal(cmd.geometry.kind,'flower');assert.equal(cmd.geometry.options.petals,9);assert.equal(cmd.geometry.options.showCenter,true);
+ const made=apply(await document([]),flower.operations,[]).document;assert.equal(made.page.layers[0].children[0].shapeOptions.petals,9);
+ const dots=compileTechnique({methodId:'pattern-dots',parameters:{id:'dots',options:{rows:3,columns:5}}});assert.equal(dots.operations[0].children.length,1);assert.equal(dots.operations[0].children[0].geometry.options.columns,5);
+ assert.throws(()=>compileTechnique({methodId:'paper-peek',parameters:{id:'p',target:'a',referenceTarget:'b',at:[1,2]}}),/不支持/);
+ assert.throws(()=>compileTechnique({methodId:'graphic-loop',parameters:{id:'p',options:{petals:5}}}),/不支持/);
+});
+
+
+for(const t of templateCatalog.templates.filter(t=>t.reconstruction))test('fully specified template reconstructs every analyzed element in declared stacking order: '+t.id,async()=>{
+ const fixture=templateFixture(t);
+ const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;
+ const doc=await createCreationDocument({draft:page,assets:fixture.materials,aliases:Object.fromEntries(fixture.materials.map(a=>[a.alias,a.id]))});
+ const compiled=compileTemplate({...fixture,templateId:t.id,id:'full'}),done=apply(doc,compiled.operations,fixture.materials).document;
+ assert.deepEqual(compiled.report.missingElements,[]);
+ assert.deepEqual(done.page.layers[0].children.map(n=>n.creativePieceID||n.id),t.elements.map(e=>'full-'+e.id));
+ assert.equal(done.page.layers[0].children.length,t.reconstruction.sourceElementCount);
+ assert.deepEqual(compiled.operations[0].children.filter(o=>o.op==='material.add').map(o=>o.asset),fixture.bindings.map(b=>b.alias));
+ assert.ok(compiled.operations[0].children.filter(o=>o.op==='material.add').every(o=>o.size===undefined));
+ if(t.elements.find(e=>e.id==='e7')?.render?.style.fillOpacity===0)assert.equal(done.page.layers[0].children.find(n=>n.id==='full-e7').fillOpacity,0);
+});
+test('template palette and omissions are explicit, preserve input assets, and cannot create fake material placeholders',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t),before=structuredClone(fixture.materials);
+ const compiled=compileTemplate({templateId:t.id,id:'partial',paper:fixture.paper,materials:fixture.materials.slice(0,1),colors:{orange:'#123456'},omit:['dot-top','e2']});
+ assert.ok(compiled.report.missingElements.includes('e2'));assert.ok(compiled.report.missingElements.includes('dot-top'));
+ assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-date-card').style.fill,t.palette.yellow);
+ assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-small-tab').style.fill,'#123456');
+ assert.deepEqual(fixture.materials,before);assert.equal(compiled.operations[0].children.filter(n=>n.op==='material.add').length,1);
+ assert.equal(apply(await document(fixture.materials),compiled.operations,fixture.materials).changed,true);
+ assert.throws(()=>compileTemplate({...fixture,templateId:t.id,id:'bad',colors:{orange:'red'}}),/配色/);
+ assert.throws(()=>compileTemplate({...fixture,templateId:t.id,id:'bad',omit:['unknown']}),/省略/);
+ assert.throws(()=>compileTemplate({...fixture,templateId:t.id,id:'bad',bindings:[{slotId:'dot-top',alias:'m1'}]}),/位置/);
+});
+test('an existing title keeps the template stacking position rather than always becoming the top layer',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t);let doc=await document(fixture.materials);
+ doc=apply(doc,compileTechnique({methodId:'title-outline',parameters:{id:'heading',text:'日常'}}).operations,fixture.materials).document;
+ const compiled=compileTemplate({...fixture,templateId:t.id,id:'joined',bindings:[...fixture.bindings,{slotId:'e7',node:'heading'}],nodes:[{id:'heading'}]});
+ const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'join-template',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},fixture.materials).document;
+ assert.deepEqual(done.page.layers.find(n=>n.id==='joined').children.map(n=>n.creativePieceID||n.id),t.elements.map(e=>e.id==='e7'?'heading':'joined-'+e.id));
+});
+
+test('writing regions replace the guide paths with supplied text in the same editable layer',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='moon-03'),fixture=templateFixture(t),slot=t.elements.find(e=>e.role==='text'&&isGraphicElement(e));
+ const guide=compileTemplate({...fixture,templateId:t.id,id:'guide'});
+ assert.equal(guide.operations[0].children.find(c=>c.id==='guide-'+slot.id).op,'graphic.add');
+ const content='在这里写下今天的两件小事。',result=compileTemplate({...fixture,templateId:t.id,id:'written',texts:{...fixture.texts,[slot.id]:content}});
+ const items=result.operations[0].children.filter(c=>c.id==='written-'+slot.id);assert.equal(items.length,1);assert.equal(items[0].op,'text.add');assert.equal(items[0].content,content);assert.equal(items[0].style.fontFamily,'Xiaolai');assert.equal('stroke' in items[0].style,false);
+ assert.deepEqual(items[0].place.at,[slot.render.textBox[0]*fixture.paper.width,slot.render.textBox[1]*fixture.paper.height]);
+ assert.notDeepEqual(items[0].place.at,[slot.box[0]*fixture.paper.width,slot.box[1]*fixture.paper.height]);
+ assert.equal(items[0].place.rotationDeg,32);assert.equal(items[0].size.width,slot.render.textBox[2]*fixture.paper.width);
+ const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;
+ const doc=await createCreationDocument({draft:page,assets:fixture.materials,aliases:Object.fromEntries(fixture.materials.map(a=>[a.alias,a.id]))});
+ const done=apply(doc,result.operations,fixture.materials).document;assert.equal(done.page.layers[0].children.find(n=>n.id==='written-'+slot.id).content,content);
+});
+
+test('writing on a material follows translation and rotation, and does not alter the source or drop long text',async()=>{
+ const method=techniqueCatalog.methods.find(m=>m.id==='record-on-material'),example=techniqueExample(method),materials=exampleMaterials;
+ const text='完整正文不能为了塞进便签而裁掉。'.repeat(4);
+ const recipe=compileTechnique({methodId:method.id,parameters:{...example.parameters,text},materials});
+ let doc=apply(await document(materials),[...example.before,...recipe.operations],materials).document;
+ let revision=0;const edit=operations=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:'writing-'+(++revision),baseSceneRevision:creationSceneRevision(doc),operations},materials).document;
+ const originalSource=structuredClone(doc.source),before=worldBox(doc.page,'demo'),paperBefore=worldBox(doc.page,'note');
+ doc=edit([{op:'layer.update',target:'note',place:{reference:'page',at:[90,100],unit:'mm',rotationDeg:-8}}]);
+ const after=worldBox(doc.page,'demo'),paperAfter=worldBox(doc.page,'note');
+ assert.ok(Math.abs((after.cx-before.cx)-(paperAfter.cx-paperBefore.cx))<1e-6);
+ assert.ok(Math.abs((after.cy-before.cy)-(paperAfter.cy-paperBefore.cy))<1e-6);
+ assert.equal(doc.page.layers.find(n=>n.id==='demo').content,text);assert.deepEqual(doc.source,originalSource);
+ doc=edit([{op:'layer.update',target:'note',place:{reference:'page',at:[90,100],unit:'mm',rotationDeg:28}}]);
+ assert.equal(doc.page.layers.find(n=>n.id==='demo').rotation,28);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{...example.parameters,box:[.8,.1,.4,.5]},materials}),/可写区域/);
 });

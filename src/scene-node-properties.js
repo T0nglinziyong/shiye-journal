@@ -14,7 +14,7 @@ export function styleFor(type,style,page,node={}){
  if(!style)return {};
  const s=sceneScale(page),mapping={opacity:'opacity',blendMode:'blendMode',shadow:'shadow'};
  if(type==='material')mapping.flipHorizontal='isFlippedHorizontally';
- if(type==='text')Object.assign(mapping,{outline:'textOutline',gradient:'textGradient',color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
+ if(type==='text')Object.assign(mapping,{outline:'textOutline',gradient:'textGradient',fillOpacity:'fillOpacity',color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
  if(['shape','ink'].includes(type))Object.assign(mapping,{outline:'graphicOutline',gradient:'graphicGradient'});
  if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{stroke:'color',strokeWidthMm:'width',penStyle:'penStyle'});

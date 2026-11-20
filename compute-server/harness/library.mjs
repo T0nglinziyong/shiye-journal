@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import manifest from '../../src/creation-library/illustrations/manifest.json' with {type:'json'};
 import {templateCatalog,rankTemplates} from '../../src/creation-library/matcher.js';
 import {compileTemplate} from '../../src/creation-library/compiler.js';
+import {templateFixture} from '../../src/creation-library/template-elements.js';
 import {compileTechnique,techniqueCatalog} from '../../src/creation-library/techniques.js';
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 import {inspectCreationDocument} from '../../src/creation-inspection.js';
@@ -37,7 +38,8 @@ export function matchLibraryTemplates(document,{aliases,reference='page',limit=5
 export function templateDetails(id){
  const template=templateCatalog.templates.find(t=>t.id===id);if(!template)throw Error('未知模板');
  return {...template,source:templateCatalog.sources.find(s=>s.id===template.sourceId),
-  parameters:{id:'新组合 ID',reference:'page/page.left/page.right',aliases:'可选素材别名列表，省略时匹配未放置素材',bindings:'可选 [{slotId,alias}] 或 [{slotId,node}]；node 可引用已生成的标题组',title:'可选标题，未提供不生成',texts:'可选 {文字位置ID:完整文字}'},
+  example:templateFixture(template),
+  parameters:{colors:'可选模板 palette 名称到 HEX 的覆盖，只改变数字图形和文字',omit:'可选省略的元素 ID 数组',id:'新组合 ID',reference:'page/page.left/page.right',aliases:'可选素材别名列表，省略时匹配未放置素材',bindings:'可选 [{slotId,alias}] 或 [{slotId,node}]；node 可引用已生成的标题组',title:'可选标题，未提供不生成',texts:'可选 {文字位置ID:完整文字}；书写区输入正文后替换示意引导线，按内部文字区域排版，长文需要检查预览'},
   tool:{name:'creation_recipe',arguments:{kind:'template',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:{id:'layout',reference:'page'}}}};
 }
 export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
@@ -46,7 +48,7 @@ export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
   return compileTechnique({methodId:recipeId,parameters,materials});
  }
  if(kind!=='template')throw Error('未知配方类型');
- for(const key of Object.keys(parameters))if(!['id','reference','aliases','bindings','title','texts'].includes(key))throw Error('模板不支持参数：'+key);
+ for(const key of Object.keys(parameters))if(!['id','reference','aliases','bindings','title','texts','colors','omit'].includes(key))throw Error('模板不支持参数：'+key);
  const context=libraryContext(document,parameters.reference);
  if(parameters.aliases){if(!Array.isArray(parameters.aliases)||new Set(parameters.aliases).size!==parameters.aliases.length||parameters.aliases.some(a=>!context.materials.some(m=>m.alias===a)))throw Error('素材已放置或不在本次授权范围');context.materials=context.materials.filter(m=>parameters.aliases.includes(m.alias));}
  if(parameters.bindings){if(!Array.isArray(parameters.bindings)||parameters.bindings.length>50)throw Error('绑定格式无效');for(const b of parameters.bindings)if(!b||Object.keys(b).some(k=>!['slotId','alias','node'].includes(k)))throw Error('绑定参数无效');}

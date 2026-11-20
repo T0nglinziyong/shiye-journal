@@ -2,16 +2,17 @@
 
 **字体决定字形，效果决定处理方式。** 单字本来就可用 text.add；text.lettering 便于一次建立整组、每字不同字体或效果。保持统一色彩/方向，避免每字都用完全不相关的处理。大标题、单字、正文块也能独立撑起素材少的页面。
 
-先运行 `node runtime/shiye.cjs fonts` 查看当前环境。fontPreset 是 serif/sans/rounded/hand 类别偏好，不保证机器里都有不同字体；fontFamily 是具体名称，必须确认实际可用。创作包随附开源 Ma Shan Zheng 手写字体及许可证，其他字体仍取决于运行环境；没有某个字体时换可用字体或保留普通文字，不假装生成了该艺术字体。
+先运行 `node runtime/shiye.cjs fonts` 查看当前环境。fontPreset 是 serif/sans/rounded/hand 类别偏好，不保证机器里都有不同字体；fontFamily 是具体名称，必须确认实际可用。具体字体以任务资源清单和 fonts 的实际报告为准；没有某个字体时换可用字体，不假装生成了该艺术字体。
 
 ## 一字或一段：普通文字上直接做效果
-通过相同 style 用于 text.add / layer.update / layer.update。outline=null、gradient=null 清除对应效果，正文仍可改。
+相同 style 用于 text.add / layer.update。outline=null、gradient=null 清除对应效果，正文仍可改。
 
 ```json
 {"op":"text.add","id":"accent-word","content":"试","place":{"reference":"page","at":[45,40],"unit":"mm"},"size":{"width":24,"unit":"mm"},"style":{"fontSizePt":30,"fontPreset":"serif","fontWeight":"bold","color":"#426076","outline":{"color":"#D8B980","widthMm":0.6,"offsetMm":[0,0]}}}
 ```
 
 - **同侧阴影**：style.shadow 的 offsetMm 方向一致。浅底用深字，模糊投影不能冒充描边。
+- **透明空心**：`style.fillOpacity=0` 配合 outline，字心真正透明；设回 1 恢复实字。底层照片或花纹不被纸色覆盖。
 - **完整描边**：style.outline，offsetMm=[0,0]；围绕字形所有边缘，stroke 后 fill 保留实字。
 - **偏移轮廓**：同一个 outline 设置 offsetMm，例如 [.6,.8]，偏移方向一致，区别于模糊阴影。
 - **真实渐变**：style.gradient 的 stops 从 0 到 1 严格递增；角度 0 为横向，90 为纵向。只改变字形内部颜色，不是把两段文字错位叠加。
@@ -43,7 +44,7 @@
 图形、笔迹可以成为页面主体：素材少时用自由路径绘制主图，用大字、色块、线框构建区域关系。不要把稀疏文字加几条高亮误认为完整构图。
 
 ## 默认可用字体
-当前默认 `fontPreset:"hand"`。网页编辑器和新版离线创作包均使用 Ma Shan Zheng 艺术手写字体；离线 `fonts` 会报告 bundledHandFont，Node Canvas 或离线 Chromium 渲染时加载随包字体。其他字体仍依赖本机，应用打开作品后也应核对换行。`fontPreset` 改变且未明确给 `fontFamily` 时，会清除之前的指定字体覆盖，保证新预设真正生效。
+当前默认 `fontPreset:"hand"`。服务器与 App 从同一字体资源清单加载，具体可用字体以 `fonts` 报告为准，不把某一种毛笔字当作所有页面的默认字形。应用打开作品后也应核对换行。`fontPreset` 改变且未明确给 `fontFamily` 时，会清除之前的指定字体覆盖，保证新预设真正生效。
 
 自动换行会尽量避免把标点放在行首、开括号留在行尾，并保持能放下的英文整词；中文语义分词仍需查看真实 PNG。窄栏出现不自然断句时，优先改文字框宽度或主动插入换行，不要反复缩小正文字号。
 

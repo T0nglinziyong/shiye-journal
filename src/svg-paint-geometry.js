@@ -25,7 +25,14 @@ export function physicalSVGPath(d,{sx=1,sy=1,tx=0,ty=0}={}){
   if(isOp(parts[i]))op=parts[i++];if(!op)throw Error('绘制路径缺少命令');const kind=op.toUpperCase(),relative=op!==kind;
   if(!moved&&kind!=='M')throw Error('绘制路径须以 M 开始');
   if(kind==='Z'){emit('Z');at=[...start];lastC=lastQ=null;op=null;continue;}
-  const n=arity[kind];if(i+n>parts.length||parts.slice(i,i+n).some(isOp))throw Error('绘制路径参数不足');const v=parts.slice(i,i+n).map(Number);i+=n;
+  const n=arity[kind],v=[];
+  for(let j=0;j<n;j++){
+   if(i>=parts.length||isOp(parts[i]))throw Error('绘制路径参数不足');
+   if(kind==='A'&&(j===3||j===4)){
+    if(!/^[01]/.test(parts[i]))throw Error('绘制路径圆弧标志无效');
+    v.push(Number(parts[i][0]));parts[i]=parts[i].slice(1);if(!parts[i])i++;
+   }else v.push(Number(parts[i++]));
+  }
   if(!v.every(Number.isFinite))throw Error('绘制路径参数无效');const abs=(x,y)=>[x+(relative?at[0]:0),y+(relative?at[1]:0)];
   if(kind==='M'||kind==='L'){at=abs(v[0],v[1]);emit(kind,at);if(kind==='M'){start=[...at];moved=true;op=relative?'l':'L';}lastC=lastQ=null;}
   else if(kind==='H'||kind==='V'){at=kind==='H'?[v[0]+(relative?at[0]:0),at[1]]:[at[0],v[0]+(relative?at[1]:0)];emit('L',at);lastC=lastQ=null;}

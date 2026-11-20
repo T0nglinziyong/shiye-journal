@@ -4,6 +4,7 @@ export function textEffectStyle(id,color='#35516A'){
  const clear={outline:null,gradient:null,shadow:null};
  if(id==='plain')return clear;
  if(id==='outline')return {...clear,outline:{color:'#FFFFFF',widthMm:.5,offsetMm:[0,0]}};
+ if(id==='hollow')return {...clear,fillOpacity:0,outline:{color,widthMm:.35,offsetMm:[0,0]}};
  if(id==='offset')return {...clear,outline:{color:'#738BA4',widthMm:.45,offsetMm:[.65,.65]}};
  if(id==='shadow')return {...clear,shadow:{color:'#B6B4C8',offsetMm:[.65,.65],blurMm:.4}};
  if(['gradient','gradient-outline'].includes(id))return {...clear,gradient:{angleDeg:90,stops:[{offset:0,color:'#D49B7D'},{offset:1,color}]},...(id==='gradient-outline'?{outline:{color:'#FFFFFF',widthMm:.45,offsetMm:[0,0]}}:{})};

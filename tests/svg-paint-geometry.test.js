@@ -6,6 +6,7 @@ test('physical outline transformation retains curves, subpaths, relative and smo
  assert.equal(physicalSVGPath('m1 2 l3 4 h5 v6 z',{sx:2,sy:3,tx:7,ty:11}),'M9 17 L15 29 L25 29 L25 47 Z');
  assert.equal(physicalSVGPath('M0 0 C1 2 3 4 5 6 S9 10 11 12 Q13 14 15 16 T19 20',{sx:2,sy:3}),'M0 0 C2 6 6 12 10 18 C14 24 18 30 22 36 Q26 42 30 48 Q34 54 38 60');
  assert.match(physicalSVGPath('M0 0 A10 20 30 0 1 20 40'),/^M0 0 C.*20 40$/);
+ assert.equal(physicalSVGPath('M0 0 A10 20 30 0120 40'),physicalSVGPath('M0 0 A10 20 30 0 1 20 40'));
  assert.equal(physicalSVGPath('M1 2 A0 0 0 0 1 3 4'),'M1 2 L3 4');
  assert.throws(()=>physicalSVGPath('M1 2 A2 3 0 4 5 6 7'),/标志/);assert.throws(()=>physicalSVGPath('L1 2'),/M/);
 });

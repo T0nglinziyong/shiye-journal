@@ -38,3 +38,16 @@ test('gradient on an explicitly hollow graphic remains a hollow stroke',async()=
  const center=c.getContext('2d').getImageData(Math.floor(frame.left+node.width/2),Math.floor(frame.top+node.height/2),1,1).data;assert.equal(center[3],0);
 });
 
+
+test('custom path strokes retain physical width in tall and wide boxes without mutating editable geometry',async()=>{
+ for(const [width,height] of [[40,300],[300,40]]){
+  const node={...base,width,height,fill:null,stroke:'#000000',lineWidth:4,svgViewBox:[10,20,100,100],svgPaths:[{d:'M30 40 L90 40 L90 100 L30 100 Z'}]},before=structuredClone(node);
+  const data=await pixels(node),alpha=(x,y)=>data[(y*width+x)*4+3];
+  const cy=Math.floor(height*.5),cx=Math.floor(width*.5);
+  const vertical=Array.from({length:width},(_,x)=>alpha(x,cy)>127).filter(Boolean).length;
+  const horizontal=Array.from({length:height},(_,y)=>alpha(cx,y)>127).filter(Boolean).length;
+  assert.ok(Math.abs(vertical-8)<=2,`vertical ${width}x${height}: ${vertical}`);
+  assert.ok(Math.abs(horizontal-8)<=2,`horizontal ${width}x${height}: ${horizontal}`);
+  assert.deepEqual(node,before);
+ }
+});

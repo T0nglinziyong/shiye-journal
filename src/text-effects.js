@@ -18,6 +18,7 @@ export function validateEffectValues(outline,gradient,label='文字'){
  return true;
 }
 export function validateTextEffects(node){
+ if(node.type==='text'&&node.fillOpacity!==undefined&&!finite(node.fillOpacity,0,1))throw Error('文字填充透明度须为 0–1');
  if((node.textOutline||node.textGradient)&&node.type!=='text')throw Error('文字效果只用于 text');
  validateEffectValues(node.textOutline,node.textGradient);return node;
 }
@@ -36,7 +37,7 @@ export function textFillStyle(ctx,node,height=node.height,bounds={x:-node.width/
 export function paintTextGlyphs(ctx,node,text,x,y){
  const outline=node.textOutline;
  if(outline){ctx.save();try{ctx.strokeStyle=outline.color;ctx.lineWidth=outline.width;ctx.lineJoin='round';ctx.miterLimit=2;ctx.strokeText(text,x+outline.offsetX,y+outline.offsetY);}finally{ctx.restore();}}
- ctx.fillText(text,x,y);
+ if((node.fillOpacity??1)>0){ctx.save();try{ctx.globalAlpha*=node.fillOpacity??1;ctx.fillText(text,x,y);}finally{ctx.restore();}}
 }
 // Font/geometry scaling must scale physical outline offsets exactly once.
 export function scaleTextEffects(node,factor){if(node.textOutline)node.textOutline={...node.textOutline,width:node.textOutline.width*factor,offsetX:node.textOutline.offsetX*factor,offsetY:node.textOutline.offsetY*factor};}
@@ -45,6 +46,7 @@ export function scaleTextEffects(node,factor){if(node.textOutline)node.textOutli
 // share this shape and the same styleFor conversion (never raw Scene units).
 const pair={type:'array',items:num(-100,100),minItems:2,maxItems:2};
 export const publicTextEffectSchema={type:'object',additionalProperties:false,minProperties:1,properties:{
+ fillOpacity:num(0,1),
  outline:{anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['color','widthMm'],properties:{color,widthMm:num(.01,8),offsetMm:pair}}]},
  gradient:textGradientSchema,
  shadow:{anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['color','offsetMm','blurMm'],properties:{color,offsetMm:pair,blurMm:num(0,30)}}]}

@@ -60,6 +60,21 @@ test('outline paints full glyph boundaries and gradient paints real multiple col
  const plain=pixels({}),border=pixels({textOutline:{color:'#000000',width:5,offsetX:0,offsetY:0}}),offset=pixels({textOutline:{color:'#000000',width:5,offsetX:8,offsetY:4}}),grad=pixels({textGradient:gradient});
  assert.ok(ink(border)>ink(plain));assert.notDeepEqual(border,offset);let red=0,blue=0;for(let i=0;i<grad.length;i+=4)if(grad[i+3]>200){if(grad[i]>grad[i+2]+20)red++;if(grad[i+2]>grad[i]+20)blue++;}assert.ok(red>10&&blue>10,JSON.stringify({red,blue}));
 });
+test('hollow text reveals the underlying pixels and survives editing, Fabric projection and import',async()=>{
+ const border={color:'#000000',width:1,offsetX:0,offsetY:0};
+ const filled=pixels({textOutline:border}),hollow=pixels({textOutline:border,fillOpacity:0});
+ let transparentBody=0;for(let i=3;i<hollow.length;i+=4)if(filled[i]>240&&hollow[i]===0)transparentBody++;
+ assert.ok(transparentBody>80,'glyph interiors must actually be transparent');
+ assert.ok(ink(hollow)>0&&ink(hollow)<ink(filled));
+ const {run,assets}=await fixture(),d=run([{...text,style:{...text.style,outline,fillOpacity:0}}]);
+ assert.equal(node(d).fillOpacity,0);
+ const object=await createFabricSceneBridge(fabric).fromNode(node(d));assert.equal(object.sceneTextNode.fillOpacity,0);
+ const changed=run([{op:'layer.update',target:'word',content:'可编辑'}],d);
+ assert.equal(node(changed).fillOpacity,0);
+ assert.equal(importEditableWork(JSON.stringify(changed),assets).drafts[0].layers[0].fillOpacity,0);
+ assert.equal(node(run([{op:'layer.update',target:'word',style:{fillOpacity:1}}],changed)).fillOpacity,1);
+ assert.throws(()=>run([{op:'layer.update',target:'word',style:{fillOpacity:-1}}],changed));
+});
 test('effects are real native Scene fields shared by create/update, manual update and import',async()=>{
  const {run,assets}=await fixture(),original=run([text]);const viaText=run([{op:'layer.update',target:'word',style:{outline,gradient}}],original),viaLayer=run([{op:'layer.update',target:'word',style:{outline,gradient}}],original),created=run([{...text,style:{...text.style,outline,gradient}}]);
  assert.deepEqual(node(viaText),node(viaLayer));for(const k of ['height','width','textGradient','textOutline','fontSize'])assert.deepEqual(node(viaText)[k],node(created)[k]);
@@ -155,4 +170,16 @@ test('rich spread advisory reports where graphics were placed without treating o
 });
 test('current help stays compact and describes the exact executable examples',()=>{
  for(const name of ['text.lettering','graphic.add']){const help=describeCreationCommand(name);assert.ok(JSON.stringify(help).length<7000);assert.equal(help.schema,undefined);for(const example of creationCommandRegistry[name].examples)validateCreationV2Commands(batch([example]));}
+});
+
+test('hollow lettering preserves fill opacity when text is extended or restored to solid',async()=>{
+ const {run,assets}=await fixture();
+ const made=run([{op:'text.lettering',id:'letters',content:'空心',place:at(),style:{fontSizePt:24,fillOpacity:0,outline}}]);
+ assert.ok(node(made,'letters').children.every(n=>n.fillOpacity===0));
+ const extended=run([{op:'text.reflow',target:'letters',content:'空心标题'}],made);
+ assert.ok(node(extended,'letters').children.every(n=>n.fillOpacity===0));
+ const imported=importEditableWork(JSON.stringify(extended),assets).drafts[0].layers[0];
+ assert.equal(imported.lettering.style.fillOpacity,0);assert.equal(imported.children.length,4);
+ const solid=run([{op:'text.reflow',target:'letters',style:{fillOpacity:1}}],extended);
+ assert.ok(node(solid,'letters').children.every(n=>n.fillOpacity===1));
 });

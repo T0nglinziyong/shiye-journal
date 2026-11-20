@@ -34,7 +34,7 @@ d.Outline=d.Style.properties.outline;d.Gradient=d.Style.properties.gradient;d.St
 const commonStyles=['opacity','blendMode','shadow'];
 const styleNames={
  material:[...commonStyles,'flipHorizontal'],group:commonStyles,
- text:[...commonStyles,'outline','gradient','color','fontFamily','fontSizePt','fontPreset','fontWeight','italic','underline','strikethrough','textAlign','lineHeight','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'],
+ text:[...commonStyles,'outline','gradient','fillOpacity','color','fontFamily','fontSizePt','fontPreset','fontWeight','italic','underline','strikethrough','textAlign','lineHeight','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'],
  shape:[...commonStyles,'outline','gradient','fill','stroke','strokeWidthMm','fillOpacity','strokeOpacity','strokeDash','cornerRadiusRatio'],
  graphic:[...commonStyles,'outline','gradient','fill','stroke','strokeWidthMm','fillOpacity','strokeOpacity','strokeDash','cornerRadiusRatio','penStyle']
 };

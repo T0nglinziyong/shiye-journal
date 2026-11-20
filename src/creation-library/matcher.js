@@ -1,11 +1,12 @@
 import catalog from './templates.json' with {type:'json'};
+import {isMaterialSlot} from './template-elements.js';
 export const templateCatalog=catalog;
 const clamp=v=>Math.max(0,Math.min(1,v));
 const roles={focal:['focal','secondary'],material:['secondary','focal','information'],background:['background'],accent:['accent','marker','connector','divider']};
 const dimensions=a=>[Number(a.physicalWidthMM??a.widthMM),Number(a.physicalHeightMM??a.heightMM)];
 const terms=a=>[a.title,...(a.tags||[]),...(a.contentTags||[]),...(a.contentCategories||[]),...(a.themeTags||[]),...(a.styleTags||[]),...(a.materialTags||[])].filter(Boolean).join(' ').toLowerCase();
 const overlap=(wanted,text)=>wanted.length?wanted.filter(s=>text.includes(s.toLowerCase())).length/wanted.length:null;
-export const materialSlots=t=>t.elements.filter(e=>!['title','text'].includes(e.role));
+export const materialSlots=t=>t.elements.filter(isMaterialSlot);
 export function slotAffinity(asset,slot,paper){
  const [w,h]=dimensions(asset),[,,sw,sh]=slot.box;
  if(!(w>0&&h>0&&paper.width>0&&paper.height>0))return {score:0,geometry:0,reason:'缺少真实尺寸'};

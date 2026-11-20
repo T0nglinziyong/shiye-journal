@@ -1,3 +1,4 @@
+import {physicalSVGPath} from './svg-paint-geometry.js';
 import {withGraphicEffects,graphicGradientID,graphicPaintFrame,hasGraphicEffects} from './graphic-effects.js';
 import {journalFontFamily} from './journal-fonts.js';
 import {textEffectInsets,textContentWidth,textFillStyle,paintTextGlyphs} from './text-effects.js';
@@ -77,12 +78,13 @@ function baseShapeSVG(s){
  if(Array.isArray(s.svgPaths)){
   const [x,y,w,h]=s.svgViewBox||[0,0,1,1];
   if(![x,y,w,h].every(Number.isFinite)||w<=0||h<=0||s.svgPaths.length>64)throw Error('SVG 路径边界无效');
+  const width=Math.max(.01,s.width||100),height=Math.max(.01,s.height||100);
   const paths=s.svgPaths.map(path=>{
    if(typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d))throw Error('SVG 路径包含不支持的字符');
    const pathFill=safe((Object.hasOwn(path,'fill')?path.fill:s.fill)??'none'),pathStroke=safe((Object.hasOwn(path,'stroke')?path.stroke:s.stroke)??'none');
-   return '<path d="'+path.d+'" fill="'+pathFill+'" stroke="'+pathStroke+'" fill-rule="'+(path.fillRule==='evenodd'?'evenodd':'nonzero')+'" stroke-width="'+Math.max(0,(s.lineWidth??2)*w/Math.max(1,s.width))+'" opacity="'+Math.max(0,Math.min(1,path.opacity??1))+'"/>';
+   return '<path d="'+physicalSVGPath(path.d,{sx:width/w,sy:height/h,tx:-x*width/w,ty:-y*height/h})+'" fill="'+pathFill+'" stroke="'+pathStroke+'" fill-rule="'+(path.fillRule==='evenodd'?'evenodd':'nonzero')+'" stroke-width="'+Math.max(0,s.lineWidth??2)+'" stroke-linecap="round" stroke-linejoin="round" fill-opacity="'+fillOpacity+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(dash==='dash'?(s.lineWidth??2)*5+' '+(s.lineWidth??2)*3:dash==='dot'?(s.lineWidth??2)+' '+(s.lineWidth??2)*2.5:'none')+'" opacity="'+Math.max(0,Math.min(1,path.opacity??1))+'"/>';
   }).join('');
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+[x,y,w,h].join(' ')+'" preserveAspectRatio="none" style="width:100%;height:100%">'+paths+'</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="width:100%;height:100%">'+paths+'</svg>';
  }
  if(Array.isArray(s.vectorLayers)){
   const geometry=s.vectorLayers.map(layer=>{const rectangles=(layer.rects||[]).filter(r=>Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[2]>0&&r[3]>0).map(([x,y,w,h])=>'M'+x+' '+y+'h'+w+'v'+h+'h-'+w+'Z').join(' '),freeform=(layer.paths||[]).filter(Array.isArray).map(path=>{const points=path.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' '),data=[rectangles,freeform].filter(Boolean).join(' ');return data?'<path fill-rule="evenodd" fill="'+safe(layer.fill||'none')+'" stroke="none" opacity="'+Math.max(0,Math.min(1,layer.opacity??1))+'" d="'+data+'"/>':'';}).join('');

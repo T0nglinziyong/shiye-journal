@@ -4,432 +4,576 @@
     {
       "id": "ac-01",
       "file": "ac-01.png",
-      "kind": "template-interpretation",
-      "sha256": "0aea4c1bef2729dabdd9fb73fe2ae7e849e9ac960b7228c8d43389c6c221574b",
+      "kind": "rendered-template-commands",
+      "sha256": "a1d13f9ee8a9e1855c90b526b0d3fe143a3976cf92ddcac064989ff3c25d8ac8",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-02",
       "file": "ac-02.png",
-      "kind": "template-interpretation",
-      "sha256": "f90decec4f5131dad8c8fd7d7849de26d1e32eae33a4997ee09e6f5063e7f6ef",
+      "kind": "rendered-template-commands",
+      "sha256": "7ec73eefd8bfe9a17911f58ff99bca39a1159793a2e65037105bd1b15c1fb223",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-03",
       "file": "ac-03.png",
-      "kind": "template-interpretation",
-      "sha256": "ecef9fae02bc8df23f3b1b74bf672d832b8cf0b14854f42af4a443f9d3512a7e",
+      "kind": "rendered-template-commands",
+      "sha256": "dd991043e5b4cfc4403d7fe93ebcbf777488f74f3ab225a1d531ed475cf807e4",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-04",
       "file": "ac-04.png",
-      "kind": "template-interpretation",
-      "sha256": "d2cf4fdf784570445d347d60b4cd4b21463ec9d738b0069b9bcba9583f324bda",
+      "kind": "rendered-template-commands",
+      "sha256": "617785ee33a4d7161196c59c375be704a32b8b4bf941689df5264c39a808282f",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-05",
       "file": "ac-05.png",
-      "kind": "template-interpretation",
-      "sha256": "bf30086370d3429b339299ca8340d1caa6afc501915f68f29eee58d4fdcd8180",
+      "kind": "rendered-template-commands",
+      "sha256": "e843112ae6a0d3aeb85e76d9d2c120b5b4a083b474b8ee6bf5447a3f9bf4999f",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-06",
       "file": "ac-06.png",
-      "kind": "template-interpretation",
-      "sha256": "ebdb03faac35cd607521edb7778144a8d4afae403c149ac34a60de47ee21246c",
+      "kind": "rendered-template-commands",
+      "sha256": "8c4c979c0e990633d224de22a444ede7c507f5dbf80ad264da5b0fde6fe28bb9",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-07",
       "file": "ac-07.png",
-      "kind": "template-interpretation",
-      "sha256": "65a3bb9ba254f709df03ac18eed4bfb2c8a7291cbb61884ff9f2bb7ceedd6d7d",
+      "kind": "rendered-template-commands",
+      "sha256": "fc593317fbe5c7e29aa79de1fd673f37a84fe4a4bec4ff668cbd9d5754d8e680",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-08",
       "file": "ac-08.png",
-      "kind": "template-interpretation",
-      "sha256": "75f298072f5359c93c2dde35a11e412738ab641defa53684b894d4aa2278a3d9",
+      "kind": "rendered-template-commands",
+      "sha256": "6880a35fd5436b8b65f8cb586bb746f56c8c522356090d48b211f9d7a930fea4",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-09",
       "file": "ac-09.png",
-      "kind": "template-interpretation",
-      "sha256": "b0ef8e3a0594ebb7596ab489362f3b8ebbf5488bad72624e4be76b97c78e1468",
+      "kind": "rendered-template-commands",
+      "sha256": "ab922fce90e04a56f32283f0deae8b3b4d26dfa7c024cf0b930821eca4bb56ba",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-10",
       "file": "ac-10.png",
-      "kind": "template-interpretation",
-      "sha256": "3a7cf550efd936141a25b84f5e86bce41388980b0a53c42b28c9e64f07a8e9a4",
+      "kind": "rendered-template-commands",
+      "sha256": "08bd8b39939f00d6b203bb7fcfa089ec084d5d6049e4451e3029cd70b2a11321",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-11",
       "file": "ac-11.png",
-      "kind": "template-interpretation",
-      "sha256": "3cc48e48cb94a4d6f8d74515834aaf694ccd6e325729715cbf602ce7d4b078d2",
+      "kind": "rendered-template-commands",
+      "sha256": "6b2701028d47e8664dc9af3c3b1c41834879d856bf6b918456ed71aa62b9b6c2",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-12",
       "file": "ac-12.png",
-      "kind": "template-interpretation",
-      "sha256": "b4de442d05373d7c94bad2589e2d61e0f759f100c9d10c426577f31eec9dd349",
+      "kind": "rendered-template-commands",
+      "sha256": "9fcc1595d29d16b2d2f18a43c824698c1e0b661cc7202803822efa08b9f30500",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-13",
       "file": "ac-13.png",
-      "kind": "template-interpretation",
-      "sha256": "4d7288f390132a72ff44129502409833364f8364308ea9b2bc4511a6e03da801",
+      "kind": "rendered-template-commands",
+      "sha256": "af84c1d0de41bc722bae9605b2fe14f27c29b3a4ed32c66feaa5fcccdadbdacd",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-14",
       "file": "ac-14.png",
-      "kind": "template-interpretation",
-      "sha256": "a53b6bdf3db41a21dac2052c3864820ef8d1fdfb31e0c65460a1451f9e0bc5dc",
+      "kind": "rendered-template-commands",
+      "sha256": "3e046807f8fc4b372cb7e3ec4befa21e2acef50f64231a98cefc2ee3cd74ec93",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-15",
       "file": "ac-15.png",
-      "kind": "template-interpretation",
-      "sha256": "8370c1fcdf39e80711a8f79d273ce4a0f0410d95c93487c5afd2dce823c889be",
+      "kind": "rendered-template-commands",
+      "sha256": "d5e8d5a1d8b868e7d4457cc3c421c807d720056c999db2c485fbdcd1c507666b",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-16",
       "file": "ac-16.png",
-      "kind": "template-interpretation",
-      "sha256": "93ec864bf6194167dcd97c9d76829d389e500bacd34b048d06b386189cea10bf",
+      "kind": "rendered-template-commands",
+      "sha256": "4c731dc7b06b2ebcd6896b8ec699bfacd9ffe3235214cd8c2c5f2d0f05ef87a2",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-17",
       "file": "ac-17.png",
-      "kind": "template-interpretation",
-      "sha256": "4ec3c8bbeac00cbc8a0d07204fdff2437bcbd6631477bd7bee6a21d3235ce1fe",
+      "kind": "rendered-template-commands",
+      "sha256": "8cc8e0a08ddfae52faa47e999721d7eb0732419c73f914b95555fdee66bdbcd2",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-18",
       "file": "ac-18.png",
-      "kind": "template-interpretation",
-      "sha256": "0e7a56666c81467a12f03cd0e7eb7fcf0700016217d5f3ccef8d819d1bc651c4",
+      "kind": "rendered-template-commands",
+      "sha256": "ae25f86cec5b142797c2cc84bb1c8b986f314664f9350f54a1ea69ef798ef229",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-19",
       "file": "ac-19.png",
-      "kind": "template-interpretation",
-      "sha256": "a005fe18c45a92e47677f2ca8435a052fcc78c3d6ee52003b4e77cf626880463",
+      "kind": "rendered-template-commands",
+      "sha256": "164afc6ac9b34d35b94e2d1a6850891162bba9a7a22fb41ad8f9274297f27a82",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-20",
       "file": "ac-20.png",
-      "kind": "template-interpretation",
-      "sha256": "e50f9563dcbf202509dd8653dfbd1a7f109bfde56c8a5089f815bbdee889ce6b",
+      "kind": "rendered-template-commands",
+      "sha256": "b6a5ef8f2e507935e7672b40be5b73a0e70ecd839c8552b8e83e6c4749aa8896",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-21",
       "file": "ac-21.png",
-      "kind": "template-interpretation",
-      "sha256": "c1df280c1dba8bda0c68571bf23c27073ab6d853b35257ae550dea134d793286",
+      "kind": "rendered-template-commands",
+      "sha256": "ed5e8fd74145516b842b64bfdf7d357984cbd2d3511be83dc9c8cb930d8f6fcd",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-22",
       "file": "ac-22.png",
-      "kind": "template-interpretation",
-      "sha256": "19acbdaa1b614b5cbcbb6bd7ddb4502fc321024714999179f003e65159c5e12d",
+      "kind": "rendered-template-commands",
+      "sha256": "6ffbe487f55b22e51c94dd2d4c9aaff4ddb6087262064a7f5e66e01a6f79a7db",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-23",
       "file": "ac-23.png",
-      "kind": "template-interpretation",
-      "sha256": "fb477c6db536cd5663305873f3d040611d7df7ed67a388774165822518f3a3ea",
+      "kind": "rendered-template-commands",
+      "sha256": "937705e828aca135b3df967112e882a0354f874fe4dbd222228afdab913eb73d",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-24",
       "file": "ac-24.png",
-      "kind": "template-interpretation",
-      "sha256": "78b68a0a5b161bdb08bfa1766d97abe4e9ba807923b32c7af28db5ed746d3773",
+      "kind": "rendered-template-commands",
+      "sha256": "97a927da4b6bd08c392de60891cdb58cdb102c7a243353acb0a7180e4f4440db",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-25",
       "file": "ac-25.png",
-      "kind": "template-interpretation",
-      "sha256": "e07d0dd6599e7082bfa74b57e0b907cb1d0e215f2c981e383e504a0ef498dbc3",
+      "kind": "rendered-template-commands",
+      "sha256": "8da85ee8e098cdf3c407c0bf5e40b324028e4747b4343d92a2584973ef473f09",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-26",
       "file": "ac-26.png",
-      "kind": "template-interpretation",
-      "sha256": "5b725b9419f06b416e1a3e8219a243d7d1fb6d4a18b0c1645dd292a60d813429",
+      "kind": "rendered-template-commands",
+      "sha256": "5a50ddee81c8b3e37c277c249c6d274fe58453af9bb90950475b2e8d7300c748",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-27",
       "file": "ac-27.png",
-      "kind": "template-interpretation",
-      "sha256": "505294546d4b2063b668abcb801768bdba285ff4eb2659d70475470edef481c3",
+      "kind": "rendered-template-commands",
+      "sha256": "529f0b5077e9289304cee029b1d9f5fa98898f19274c69eb472a08876e27c60b",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-28",
       "file": "ac-28.png",
-      "kind": "template-interpretation",
-      "sha256": "48864af4308524aba2605f31cfe115af8554e169bca2fd02e76a0cad9faec90d",
+      "kind": "rendered-template-commands",
+      "sha256": "2001c0f7262cae007bd6baeb73c434f4e7419703c54e6324f3f05b57e00d5b9f",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-29",
       "file": "ac-29.png",
-      "kind": "template-interpretation",
-      "sha256": "a51167b38b3aea2b4f4377302ada32b8796d0cbfecff6a9241de5558e44b7976",
+      "kind": "rendered-template-commands",
+      "sha256": "8b932825e6bf47b1f96d3fa3597e52c444fbcc6c1d75166fcba1e7d84f4491c1",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-30",
       "file": "ac-30.png",
-      "kind": "template-interpretation",
-      "sha256": "7f439d31770067b80d91cd67baceb02ba24b9c3b69e97b6afdd08c27c17ba17c",
+      "kind": "rendered-template-commands",
+      "sha256": "3ee6153765628814ba9b9e869af91961573c16ec38308d23b73abbd9c3e8a3aa",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-31",
       "file": "ac-31.png",
-      "kind": "template-interpretation",
-      "sha256": "c017e2bffb232d6e9885d6adbca1579b9d8207f01be54702448dd0ed1b8920a8",
+      "kind": "rendered-template-commands",
+      "sha256": "c80c3517db24b2cf1ed5185835deaccfd1109e38a65e574e73d768ea434ce4a7",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-32",
       "file": "ac-32.png",
-      "kind": "template-interpretation",
-      "sha256": "042dec8eb38d403291c02ecb80d305aa08f57a02a472876c9cf1c67477e43a1b",
+      "kind": "rendered-template-commands",
+      "sha256": "bc4cfa77e08fb477fae722e780e0f9e650667173c167e058509cf84a17298043",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-33",
       "file": "ac-33.png",
-      "kind": "template-interpretation",
-      "sha256": "d4b4b67cd267316a73ce192487596717f85bf70b40578872e9db43814f785fb9",
+      "kind": "rendered-template-commands",
+      "sha256": "583288e26904f5a0a6e8f5b9e82e939b48bf43f46527c463e4a4ddf92beac6f9",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-34",
       "file": "ac-34.png",
-      "kind": "template-interpretation",
-      "sha256": "3fa25ffea2de4710dde1b50f0405b89f8d03a9b97c41153a85ca570d38e54f16",
+      "kind": "rendered-template-commands",
+      "sha256": "0a4255e6a16cfff2dfcb7c2268f5129046af3b4eebf05e95f0866cc27156be58",
       "width": 240,
       "height": 308
     },
     {
       "id": "ac-35",
       "file": "ac-35.png",
-      "kind": "template-interpretation",
-      "sha256": "9a35d4a7cbb3dc0b62910e273394ef859bf0ecc90c4c6607c66783d7900bcd37",
+      "kind": "rendered-template-commands",
+      "sha256": "662c9238ab618b1bd6638344cf705a109266dabe1f90a105eec5a1b7018272c5",
       "width": 240,
       "height": 308
     },
     {
       "id": "single-01",
       "file": "single-01.png",
-      "kind": "template-interpretation",
-      "sha256": "c3d7a81a3b08d28ec6739071c7d9354e1b9ec0d34e1dfdcc2a32a4c4b307f2ba",
+      "kind": "rendered-template-commands",
+      "sha256": "bff46997fbc2c8c1ff06d731bbb36b3609cc3f2731bcc671160bb01a4ee1fab2",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-02",
       "file": "single-02.png",
-      "kind": "template-interpretation",
-      "sha256": "6dbf7a2a9a6fb8e724d19be2727464d7c466a8d69668c5d8d6956d027ca822d6",
+      "kind": "rendered-template-commands",
+      "sha256": "62d38c46eacd5f6ed0ca207ffd75347876e5b3389ef7049ab23a8c42bfcf0b64",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-03",
       "file": "single-03.png",
-      "kind": "template-interpretation",
-      "sha256": "4e497b7d25705921fc981932f6e1e6c321e6d0dea36435df44a7456379bd5727",
+      "kind": "rendered-template-commands",
+      "sha256": "184b7f891f3a32be39b3afd1458107e847615c225ab26e8f04370081b3a978b3",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-04",
       "file": "single-04.png",
-      "kind": "template-interpretation",
-      "sha256": "7180886cb8b91b5c2d33beb0ba1dc19342e6c858e0a8e1cbef4925706defe85b",
+      "kind": "rendered-template-commands",
+      "sha256": "23fd1bfdcdef9025f3f38fbd32675616d9c12d0b93ddb4ebb81bf01c2148482a",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-05",
       "file": "single-05.png",
-      "kind": "template-interpretation",
-      "sha256": "2d643d088aab9c117257e0252f76709c26015005607e0b8456e01eca67f6237d",
+      "kind": "rendered-template-commands",
+      "sha256": "1fe7e805629f5379dc764094c9771651fcab5c22317702c627428b65a147c1a6",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-06",
       "file": "single-06.png",
-      "kind": "template-interpretation",
-      "sha256": "5cfd5b0ef3b73647d19f6eb6c79fc4e5222d1b91061cf6038506e0033b266bac",
+      "kind": "rendered-template-commands",
+      "sha256": "f4f2324fae7508708e45ed9d3981cfdf168fa2df27106ce494418d4cb27d58ea",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-07",
       "file": "single-07.png",
-      "kind": "template-interpretation",
-      "sha256": "0527978c65a6090c33da6c58cc135c53fbf9286cbf461b429e2f67c22162bb8a",
+      "kind": "rendered-template-commands",
+      "sha256": "b00402132c17ef90a8b675424ab8218420700029ccd8d3880ee9ba3340457cc2",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-08",
       "file": "single-08.png",
-      "kind": "template-interpretation",
-      "sha256": "a787578d1fcde37e65148f199be506260789ebbaa2a64c14ae0011f1b782f80b",
+      "kind": "rendered-template-commands",
+      "sha256": "b1b5d1083e95df9fd9352afe7cb1138df4b21efcba9280123128597b8a1ec5c7",
       "width": 240,
       "height": 334
     },
     {
       "id": "single-09",
       "file": "single-09.png",
-      "kind": "template-interpretation",
-      "sha256": "e1499c3c19d60da21a559a61f0d01256e9ea2e5a5c36ac0ae8e2674c9dad2357",
+      "kind": "rendered-template-commands",
+      "sha256": "91d36a25371d24e9aef97ca7bbfdecae3056b86a0506bf4531656adf87c3f93c",
       "width": 240,
       "height": 334
     },
     {
       "id": "center-1",
       "file": "center-1.png",
-      "kind": "template-interpretation",
-      "sha256": "79a912d8272918f433a9c13db775769af3bb6cb3cd5419de535838f251890bcb",
+      "kind": "rendered-template-commands",
+      "sha256": "6b30b251cbf6b24025c69deb25f42a8069c4c3b4bc3f1220e2643f00f6e39564",
       "width": 240,
       "height": 337
     },
     {
       "id": "center-2",
       "file": "center-2.png",
-      "kind": "template-interpretation",
-      "sha256": "82f1178744bc5a89a15f75200b14b97eb7d5cc0c7e7a4fd752c1b5bf566286be",
+      "kind": "rendered-template-commands",
+      "sha256": "601b13bdfce11e33d1a736cf68365fb1ae3957b70bd90bbce9c2ce4d70cfe500",
       "width": 240,
       "height": 337
     },
     {
       "id": "center-3",
       "file": "center-3.png",
-      "kind": "template-interpretation",
-      "sha256": "d9f87fd8b771491e3732c4365c633968a61d5d00460b76c71db86ad7a8902538",
+      "kind": "rendered-template-commands",
+      "sha256": "02b439fd45b6f970ff3647f1b0b3cdb7671bd14337147da93b832556ae864cb7",
       "width": 240,
       "height": 337
     },
     {
       "id": "center-4",
       "file": "center-4.png",
-      "kind": "template-interpretation",
-      "sha256": "2444e9bca8969c6823af4f0013ed7f772f278f6b826e4365d73faeadded5491f",
+      "kind": "rendered-template-commands",
+      "sha256": "adef8c614ce62c8f09be7b4a4ce5cb7184edecc47feb479af71b79be3c75049c",
       "width": 240,
       "height": 337
     },
     {
       "id": "s-four-1",
       "file": "s-four-1.png",
-      "kind": "template-interpretation",
-      "sha256": "58693182ec095fd80e92818c931eec5b65760a452e99d0c332b7b70ce404ca33",
+      "kind": "rendered-template-commands",
+      "sha256": "7b59203153e7be2161ba921e74a4bb248840e91d98a7461ee9695d6f440ee552",
       "width": 240,
       "height": 337
     },
     {
       "id": "s-four-2",
       "file": "s-four-2.png",
-      "kind": "template-interpretation",
-      "sha256": "a9b204aebe8556b5bae5f5c9035b7782b20a84321dbca67c734a7bae3de32099",
+      "kind": "rendered-template-commands",
+      "sha256": "b687948a94e3137ab779d82c30eebb7b33b67dadb46b388d957bf9cdfae5e8eb",
       "width": 240,
       "height": 337
     },
     {
       "id": "s-four-3",
       "file": "s-four-3.png",
-      "kind": "template-interpretation",
-      "sha256": "2b618cba2be9f5cfcc4a35e5e9a6e56182d3831bfbf784e1d2f2d55dceaa7e15",
+      "kind": "rendered-template-commands",
+      "sha256": "a50f9162f0240a29ebcf17608ecb8cc9e483dcc87eac19001a68a8cca406f702",
       "width": 240,
       "height": 337
     },
     {
       "id": "s-four-4",
       "file": "s-four-4.png",
-      "kind": "template-interpretation",
-      "sha256": "97ac3963402d98e04261b666c47fd0e4d760c7e7615ee9892babc7932dae1ed9",
+      "kind": "rendered-template-commands",
+      "sha256": "b0172803c972893d4f97bd1f10bb2dbc80bfd9a567f437a28e25f3a0ee31ba78",
       "width": 240,
       "height": 337
+    },
+    {
+      "id": "moon-01",
+      "file": "moon-01.png",
+      "kind": "rendered-template-commands",
+      "sha256": "68c42905550cecc91c56aa592e1bfa0746f14f521fc946c412983e9ccd35ca04",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-02",
+      "file": "moon-02.png",
+      "kind": "rendered-template-commands",
+      "sha256": "65f214b73958119fe8b7399eeabdccced46db13d2f6d0a8cc0a1c9bb4421f4d5",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-03",
+      "file": "moon-03.png",
+      "kind": "rendered-template-commands",
+      "sha256": "202724bb6d276744ef069a2c525a36e104ed5eb5d3354403bd81be5b67dc78c4",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-04",
+      "file": "moon-04.png",
+      "kind": "rendered-template-commands",
+      "sha256": "d83e6bdf9a4747e9fc651872220af6d69178e6040e1022f820ab15d1c10138bb",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-05",
+      "file": "moon-05.png",
+      "kind": "rendered-template-commands",
+      "sha256": "f60627abeb858bb81ccf8e7bbfa1328fbec5c47269827e204b91bdc7cc48a936",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-06",
+      "file": "moon-06.png",
+      "kind": "rendered-template-commands",
+      "sha256": "b3aefe566a8b6b923cabd071410922267322fa83ae07f59152c8c060fed6b7c8",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-07",
+      "file": "moon-07.png",
+      "kind": "rendered-template-commands",
+      "sha256": "4e5a5006965d1edbd962195f6d798c23ee86d6b5935468b5c92e1d4fa1f91a3c",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-08",
+      "file": "moon-08.png",
+      "kind": "rendered-template-commands",
+      "sha256": "be93363081f4afb6f81021f32a41004c70c323f85ab76e9cdabd26ed794e36e6",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-09",
+      "file": "moon-09.png",
+      "kind": "rendered-template-commands",
+      "sha256": "cd7853cdc1d566401ec341152e5596e33ba4890a28767cb5c55c3fa8a9e27d4e",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-10",
+      "file": "moon-10.png",
+      "kind": "rendered-template-commands",
+      "sha256": "3e30e553186c0a64a065fb98a04626de98f44fe7c3ccd51807f7a00455762c82",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-11",
+      "file": "moon-11.png",
+      "kind": "rendered-template-commands",
+      "sha256": "111cff581f9f84ecd24b2acd69cdde345e3d7ecd5472357f67f9e6c6bc98e269",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-12",
+      "file": "moon-12.png",
+      "kind": "rendered-template-commands",
+      "sha256": "b4951e1c025b357cedb99003a987b6460496f1f63aa5964aa854bccea2d396ad",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-13",
+      "file": "moon-13.png",
+      "kind": "rendered-template-commands",
+      "sha256": "0b0f068932f93076183b79e30de054386050a674f1001852975c90b61955d8f0",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "moon-14",
+      "file": "moon-14.png",
+      "kind": "rendered-template-commands",
+      "sha256": "e7e94bf9c2605bc3604a685c72ed685ce984eba056139ab73f211b83060fe677",
+      "width": 240,
+      "height": 411
+    },
+    {
+      "id": "thirds-01",
+      "file": "thirds-01.png",
+      "kind": "rendered-template-commands",
+      "sha256": "ffca833b069d2906007d82c0b02f7918c24810f28604cc372157b6c63ae5e005",
+      "width": 240,
+      "height": 320
+    },
+    {
+      "id": "writing-01",
+      "file": "writing-01.png",
+      "kind": "rendered-template-commands",
+      "sha256": "bb02c6be827159c487209ed9dc97db82f5031e4f8327807d6ffd1c1a8c49ec61",
+      "width": 240,
+      "height": 389
+    },
+    {
+      "id": "writing-02",
+      "file": "writing-02.png",
+      "kind": "rendered-template-commands",
+      "sha256": "21520c11bf338ebaa337f84358d9e8c97425dc02204bdf32bbc7b955b83763c9",
+      "width": 240,
+      "height": 353
+    },
+    {
+      "id": "writing-03",
+      "file": "writing-03.png",
+      "kind": "rendered-template-commands",
+      "sha256": "5db6bdfc4356371d6232d138983152c8071276b4da000dae45573e0148c7e49b",
+      "width": 240,
+      "height": 366
     },
     {
       "id": "title-underline",
       "file": "title-underline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "03209cdbad687ce7ed9c7ac971cdac65ce11739a857ee883b6339afc7baae14b",
+      "sha256": "f25aec651067ea60f477832ce4b2c5adbeef81a5fd9690f1e7f940a3ea01b0f2",
       "width": 360,
-      "height": 94
+      "height": 136
     },
     {
       "id": "title-outline",
       "file": "title-outline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "333d3582b2bd5b5b307fee1c1ee2d9d6ea15a874bf931c86a13f98cccbe3681a",
+      "sha256": "f22edcb122b0bf31bbf66c694f2c834e0ad8d046f4f43d6a6dc1488a8a267d47",
       "width": 360,
       "height": 128
     },
@@ -437,39 +581,39 @@
       "id": "title-highlight",
       "file": "title-highlight.png",
       "kind": "rendered-editable-commands",
-      "sha256": "356afd8da8d91e77b15442547e0182d7596b66b6324ae150fdf14d77d09a1db3",
+      "sha256": "4b32d5d21f3a69228ed841d209bd6060f22a8c3dc46d601e0a0786d0743d8e1a",
       "width": 360,
-      "height": 125
+      "height": 113
     },
     {
       "id": "title-stack",
       "file": "title-stack.png",
       "kind": "rendered-editable-commands",
-      "sha256": "91e2efc05110ac4f1a1d7a08928b403eb6ae79ebd86fe02290b19a14eb496b86",
-      "width": 194,
-      "height": 300
+      "sha256": "bc2406993fd777be654e1585c4ba8405b495fb2377ec88c688eb222fc17cadb6",
+      "width": 360,
+      "height": 238
     },
     {
       "id": "title-vertical",
       "file": "title-vertical.png",
       "kind": "rendered-editable-commands",
-      "sha256": "b78f011d7e25ded1d1ec41aa2814c754f92c91e7c94e2983a049204c61c8f690",
-      "width": 86,
+      "sha256": "c75c545dcf2b1b818635a4c32d95f0f6ae9d851994f3ed50b0179cc143439503",
+      "width": 87,
       "height": 300
     },
     {
       "id": "title-stagger",
       "file": "title-stagger.png",
       "kind": "rendered-editable-commands",
-      "sha256": "21da0f4d116dcf6f838c8d9b1d84c1d4788d671b9aadd576850265b2ca393ec5",
+      "sha256": "267dc2f84e541b2c22b6fc9bf5333fb15184e5cfe2bdef7dde984b5f9985e16a",
       "width": 360,
-      "height": 110
+      "height": 173
     },
     {
       "id": "title-label",
       "file": "title-label.png",
       "kind": "rendered-editable-commands",
-      "sha256": "356afd8da8d91e77b15442547e0182d7596b66b6324ae150fdf14d77d09a1db3",
+      "sha256": "8a7448e1756190a80b7f636226d1246e44083ca17341c9cbc2ea0a96b489e233",
       "width": 360,
       "height": 125
     },
@@ -477,17 +621,17 @@
       "id": "title-curve",
       "file": "title-curve.png",
       "kind": "rendered-editable-commands",
-      "sha256": "0c0c71aba7ba071a5ef04820ac2f583fea31658c21cbc53c946e991b5cfe40ba",
+      "sha256": "8a8edbb0b97d9419a96929337758f822cddbc1910d627e8715ebcf500ea006dd",
       "width": 360,
-      "height": 153
+      "height": 160
     },
     {
       "id": "paper-underlay",
       "file": "paper-underlay.png",
       "kind": "rendered-editable-commands",
-      "sha256": "1faff92ac453e7bb987134d538b22744a5291ea2084018c0a919138ba981c28e",
-      "width": 360,
-      "height": 296
+      "sha256": "450f0a81180aac6102ca13417f26944494c6ef95bc95116ec537320352594814",
+      "width": 300,
+      "height": 300
     },
     {
       "id": "paper-peek",
@@ -557,65 +701,65 @@
       "id": "graphic-loop",
       "file": "graphic-loop.png",
       "kind": "rendered-editable-commands",
-      "sha256": "2da349c7819a00ceaa2dcc1d68a95bb04d6b2ad75c516777bba76dc8c3c66c42",
+      "sha256": "4b5d14e31267e29ed545aad7afb9f2d528dd5b6b33125dbf3af113ada4c04441",
       "width": 360,
-      "height": 214
+      "height": 217
     },
     {
       "id": "graphic-route",
       "file": "graphic-route.png",
       "kind": "rendered-editable-commands",
-      "sha256": "7eb0540e57a7f6fa378648424ba3f4af72ada803b47b7bec7d9da5dfd68f2192",
+      "sha256": "9c1bce3af26e9dbe746710823b18ed4952169fe6f14d3d65b1963d3d5236d994",
       "width": 360,
-      "height": 80
+      "height": 81
     },
     {
       "id": "graphic-corner",
       "file": "graphic-corner.png",
       "kind": "rendered-editable-commands",
-      "sha256": "fb1ceb49816b03574f598dd2fb49db8ba85bac938c369eabc492623235bca162",
+      "sha256": "af99efd9fca5b91dcd41b2f2f9d045d0c362118cbd9c908743be399cdcdcc845",
       "width": 360,
-      "height": 217
+      "height": 219
     },
     {
       "id": "graphic-rays",
       "file": "graphic-rays.png",
       "kind": "rendered-editable-commands",
-      "sha256": "82a118a14b46f8309848a1751ba95d4565f2d4d7900d8c6df06cfa66de526397",
+      "sha256": "e4dd3bdc907d455d44e32f6cb54f76cdab628aabae2b517583a5af83d2e579b8",
       "width": 360,
-      "height": 217
+      "height": 218
     },
     {
       "id": "pattern-dots",
       "file": "pattern-dots.png",
       "kind": "rendered-editable-commands",
-      "sha256": "b27da98c41c01fc2880a1b16f2e25ae05dcb47bfaa2c814a62c8b1cbd47e13a1",
+      "sha256": "8febb699e6c17f21ecea010d2f2a9b9ed22e8315afc27c1bf29ba3ec6a164c3f",
       "width": 360,
-      "height": 162
+      "height": 177
     },
     {
       "id": "pattern-stripes",
       "file": "pattern-stripes.png",
       "kind": "rendered-editable-commands",
-      "sha256": "839480cc579af933dc1824483c0f6a379df0e83d8d41806cf3f20d2ef022da44",
+      "sha256": "67b148f03eb4f38a8f7b2194a1b5d06985f928d61933983f8575bf06b145f04a",
       "width": 360,
-      "height": 212
+      "height": 171
     },
     {
       "id": "pattern-grid",
       "file": "pattern-grid.png",
       "kind": "rendered-editable-commands",
-      "sha256": "a59ac80a6e80e468bf4dcb8a00709880f2121a5f9fb2ac0989f712089f812cba",
+      "sha256": "cfed4a19c18272080ca67fdbf1e8d1d4ed052d1d8a32aa91b11169de6f2b020f",
       "width": 360,
-      "height": 217
+      "height": 218
     },
     {
       "id": "pattern-scallop",
       "file": "pattern-scallop.png",
       "kind": "rendered-editable-commands",
-      "sha256": "7b3784d51ab8f8ff0eae34a4ad2343b18f7d802cd8a49b9d8465e7759dd62fd2",
+      "sha256": "10d26be04395651972d0bff005a565a118221f32276514e78163af446cfdd184",
       "width": 360,
-      "height": 70
+      "height": 72
     },
     {
       "id": "tape-fix",
@@ -653,7 +797,7 @@
       "id": "record-timeline",
       "file": "record-timeline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "120a10196e6b1f93a33aadc67e80894634c249602fa2a1c017632aa24b252067",
+      "sha256": "04aabfa9b16f39266dd34dbf666f93758387ccd1af27aa64f871cb0331d8e228",
       "width": 283,
       "height": 300
     },
@@ -685,25 +829,25 @@
       "id": "quiet-pair",
       "file": "quiet-pair.png",
       "kind": "rendered-editable-commands",
-      "sha256": "06161312477cf406d70cf64a06b6835656cea6e985d10f4c924013048bdf88a8",
-      "width": 360,
-      "height": 296
+      "sha256": "f0a212cf4beed3b384eeda91c1305412ef333b6372b849a819785de162f353ae",
+      "width": 271,
+      "height": 300
     },
     {
       "id": "quiet-note",
       "file": "quiet-note.png",
       "kind": "rendered-editable-commands",
-      "sha256": "99b3dcdfde63857536d0dc8cbf983480476a1c0dc462d0cb4343baa12906750d",
-      "width": 360,
-      "height": 181
+      "sha256": "e4f3e1e5627a40c4e42cca9c642e1f1467e1ee8ba0a9a65fc55c5353497485da",
+      "width": 170,
+      "height": 300
     },
     {
       "id": "layered-center",
       "file": "layered-center.png",
       "kind": "rendered-editable-commands",
-      "sha256": "1faff92ac453e7bb987134d538b22744a5291ea2084018c0a919138ba981c28e",
-      "width": 360,
-      "height": 296
+      "sha256": "2235449c288bcdfd25042377db8fbe87d74d411507a37fe808733709505280d2",
+      "width": 276,
+      "height": 300
     },
     {
       "id": "layered-diagonal",
@@ -725,15 +869,15 @@
       "id": "magazine-headline",
       "file": "magazine-headline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "0cd3eea3281b6f701db268b43cf3ad70e98bcd2ab39e8e09dad709b437def7e5",
-      "width": 183,
+      "sha256": "afadaf9ef1e73d265dda44723cd917f23e2b71c1cf8432d528018b8c4723cccc",
+      "width": 269,
       "height": 300
     },
     {
       "id": "playful-bubble",
       "file": "playful-bubble.png",
       "kind": "rendered-editable-commands",
-      "sha256": "4a0ce92767c44e61a1e0ce1a68f331fd4bd63016b85d3af2ed57bffa13ab8922",
+      "sha256": "8dc56733517ba8339de3610d4bee1ee3d8c7d60f8c435c9074ab507af4b244a7",
       "width": 360,
       "height": 125
     },
@@ -749,17 +893,17 @@
       "id": "vintage-ticket",
       "file": "vintage-ticket.png",
       "kind": "rendered-editable-commands",
-      "sha256": "366690666cb8d23c04d2f47bf04240afd874b92691fdbb19ee6a88ac37cb7f1b",
-      "width": 360,
-      "height": 180
+      "sha256": "7c8caa56c7c7d47dd3589981e3fad609b64112a5f2b8f6d961e96752e22e924f",
+      "width": 292,
+      "height": 300
     },
     {
       "id": "vintage-postmark",
       "file": "vintage-postmark.png",
       "kind": "rendered-editable-commands",
-      "sha256": "42f876458c78ad26649ff9e159e10234e09be2d15d8582a18edb9d9600c8a866",
+      "sha256": "907c464400cf31d9a9ad93f09c07a5868a7c3241c79d3c63a9015af9cddf64a6",
       "width": 360,
-      "height": 116
+      "height": 139
     },
     {
       "id": "composition-triangle",
@@ -775,6 +919,142 @@
       "kind": "rendered-editable-commands",
       "sha256": "c703dd41a2b707cfb109c68578184b3fbf60faf311e5b277c9995ba273ea85ee",
       "width": 149,
+      "height": 300
+    },
+    {
+      "id": "title-shadow",
+      "file": "title-shadow.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "b947bd32a3f1e3564bca35aa35f7398a700cfff37fe5a5518470733202d57c27",
+      "width": 360,
+      "height": 130
+    },
+    {
+      "id": "title-offset-outline",
+      "file": "title-offset-outline.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "90c02a8ff42d68a1f5775db39420d9faed273266f2f4cfb9b8d5b7d73469215f",
+      "width": 360,
+      "height": 131
+    },
+    {
+      "id": "title-gradient",
+      "file": "title-gradient.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "4e892489424b581f7d8786fdcfad439ba39f6f71798c1363e98d3d1dda4f92ac",
+      "width": 360,
+      "height": 126
+    },
+    {
+      "id": "title-gradient-outline",
+      "file": "title-gradient-outline.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "954227bd0b5f9ec3ada88b414336c6c40f822d52f82c916e37594eceaec574a8",
+      "width": 360,
+      "height": 125
+    },
+    {
+      "id": "title-phrases",
+      "file": "title-phrases.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "5f718bf509bad7aa03fdb4e71276d844211ee2ff9d0011197f56732ac4e5475a",
+      "width": 360,
+      "height": 288
+    },
+    {
+      "id": "title-circle",
+      "file": "title-circle.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "10847b4bed83ad69880378513635f8917b5ff0d39dad8b6c03123c6b2fba4f68",
+      "width": 360,
+      "height": 136
+    },
+    {
+      "id": "title-caption",
+      "file": "title-caption.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "5a40c41955d07880e7800b3c6476665269a6aa36f159137f48a450403342da25",
+      "width": 360,
+      "height": 164
+    },
+    {
+      "id": "graphic-flower",
+      "file": "graphic-flower.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "2a3e23fa810e36d194dd41b7ee44060f273b86e7f20964dbf320e0359fa07462",
+      "width": 309,
+      "height": 300
+    },
+    {
+      "id": "graphic-star",
+      "file": "graphic-star.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "b52563d6627bee2506356463851185d0c275d05aadfb445926c1d80d4e80dd6f",
+      "width": 309,
+      "height": 300
+    },
+    {
+      "id": "graphic-arrow",
+      "file": "graphic-arrow.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "5b724ac7f836f608ae1dcd721d5a3a04963f68a65110be92c9634b377236ec40",
+      "width": 360,
+      "height": 138
+    },
+    {
+      "id": "graphic-arch",
+      "file": "graphic-arch.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "167c5e57372de51f4c2e624185082aa2511e3dbb7000b8d4b59f88c68fafdcfc",
+      "width": 234,
+      "height": 300
+    },
+    {
+      "id": "graphic-scallop-frame",
+      "file": "graphic-scallop-frame.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "21e6831cdae03511b82530632263d030f2f2ee9cf694165ccbc5500649ef6666",
+      "width": 360,
+      "height": 263
+    },
+    {
+      "id": "graphic-paperclip",
+      "file": "graphic-paperclip.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "d37abbf07f35cda6e16169304df01fa658800a150aa5f48d280ffab4b4e18bf7",
+      "width": 135,
+      "height": 300
+    },
+    {
+      "id": "graphic-wave",
+      "file": "graphic-wave.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "f024817df646d606ca3d70f0aeb4cc6abe95512f37e267a2bace8a80edad480b",
+      "width": 360,
+      "height": 51
+    },
+    {
+      "id": "graphic-zigzag",
+      "file": "graphic-zigzag.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "0792c38084faf775fe3db779a671945a264d73e725067e4217b1763b58e4ac14",
+      "width": 360,
+      "height": 60
+    },
+    {
+      "id": "graphic-bubble",
+      "file": "graphic-bubble.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "69d1e7031a8245944a82f95f04f921891cf4e61880cdf8575ce09a713628c7e3",
+      "width": 360,
+      "height": 245
+    },
+    {
+      "id": "record-on-material",
+      "file": "record-on-material.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "98073cdbca6ea3ef9ec76502b4148c1d77d6806c9ec2ce446c29c63e1d27254f",
+      "width": 358,
       "height": 300
     }
   ]
