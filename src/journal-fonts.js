@@ -1,6 +1,4 @@
-// One preset/default vocabulary for editor, online AI and offline commands.
-// The hosted app loads its licensed dependency on demand. Exported task ZIPs
-// contain font names only and must use fonts actually installed in the host.
+import {journalFontDependencies} from './journal-font-catalog.js';
 export const DEFAULT_TEXT_PRESET='hand';
 export const journalFontPresets=Object.freeze([
  ['hand','艺术手写'],['serif','文艺宋体'],['rounded','圆润字体'],['sans','清晰黑体']
@@ -15,16 +13,21 @@ export function journalFontFamily(node){
  const preset=node.style||DEFAULT_TEXT_PRESET;
  const names=journalFontCandidates[preset]||journalFontCandidates.hand;
  const generic=preset==='serif'?'serif':preset==='hand'?'cursive':'sans-serif';
- return [...new Set([node.fontName,...names].filter(Boolean))].map(name=>JSON.stringify(name)).join(',')+','+generic;
+ return [...new Set([node.fontName,...journalFontDependencies(node).slice(1).map(f=>f.family),...names].filter(Boolean))].map(name=>JSON.stringify(name)).join(',')+','+generic;
 }
-let webFontLoader,webFontReady;
-export function configureJournalFontLoader(loader){webFontLoader=loader;webFontReady=undefined;}
+let webFontLoader;
+const webFonts=new Map();
+export function configureJournalFontLoader(loader){webFontLoader=loader;webFonts.clear();}
 export async function prepareJournalFont(node){
- const usesHand=(!node.fontName&&(node.style||DEFAULT_TEXT_PRESET)==='hand')||node.fontName==='Ma Shan Zheng';
+ const dependencies=journalFontDependencies(node);
  let status='system-fonts';
- if(usesHand&&webFontLoader){
-  webFontReady||=Promise.resolve().then(webFontLoader).catch(error=>{webFontReady=undefined;throw error;});
-  try{await webFontReady;status='web-artistic-ready';}catch{status='web-artistic-unavailable';}
+ if(dependencies.length&&webFontLoader){
+  try{
+   await Promise.all(dependencies.map(({family})=>{
+    if(!webFonts.has(family))webFonts.set(family,Promise.resolve().then(()=>webFontLoader(family)).catch(error=>{webFonts.delete(family);throw error;}));
+    return webFonts.get(family);
+   }));status='web-artistic-ready';
+  }catch{status='web-artistic-unavailable';}
  }
  const fonts=globalThis.document?.fonts;
  if(fonts){const spec=`${node.italic?'italic ':''}${node.bold?'bold ':''}${node.fontSize||32}px ${journalFontFamily(node)}`;

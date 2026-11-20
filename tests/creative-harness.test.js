@@ -21,7 +21,7 @@ async function fixture(t){
   const render=async doc=>({pngHash,sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='});
   return {document,skills,journal,render,state:initialHarnessState({document,skills,brief:{title:'测试'}})};
 }
-const plan=()=>call('creation_plan',{intent:'图文共同构图',steps:[{task:'试摆并看图',status:'active'}]});
+const plan=()=>call('creation_plan',{intent:'图文共同构图',steps:[{task:'试摆并看图',status:'in_progress'}]});
 const skill=()=>call('read_skill',{name:'journal-composition'});
 const add=doc=>call('creation_apply',{protocolVersion:2,transactionId:'first',baseSceneRevision:creationSceneRevision(doc),operations:[{op:'text.add',id:'text',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]});
 const lastScene=messages=>{
@@ -37,7 +37,7 @@ test('harness restores after an actual render failure without replaying model or
     const p=lastScene(messages);
     assert.equal(messages.filter(m=>m.role==='assistant').length,1);
     assert.equal(messages.find(m=>m.role==='assistant').reasoning_content,'test');
-    return answer(call('creation_review',{...p,approved:true,observations:'测试预览已查看',issues:[]}),call('creation_finish',{sceneRevision:p.sceneRevision}));
+    return answer(call('creation_review',{...p,approved:true,observations:'测试预览已查看',issues:[]}),call('creation_finish',{}));
   };
   const first=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),render:async()=>{throw Error('renderer offline');}});
   await assert.rejects(first.run({id:'restore',state:f.state}),/renderer offline/);
@@ -52,7 +52,7 @@ test('finish cannot pass when a new edit invalidates a viewed preview',async t=>
   const f=await fixture(t);let n=0;
   const model=async({messages})=>{
     if(++n===1)return answer(skill(),plan(),add(f.document));
-    if(n===2){const p=lastScene(messages);return answer(call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]}),call('creation_finish',{sceneRevision:p.sceneRevision}));}
+    if(n===2){const p=lastScene(messages);return answer(call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]}),call('creation_finish',{}));}
     const replies=messages.filter(m=>m.role==='tool').slice(-3).map(m=>JSON.parse(m.content));
     assert.equal(replies[0].ok,true);assert.equal(replies[1].ok,false);assert.equal(replies[2].ok,false);
     throw Error('verified stale guard');
@@ -86,6 +86,19 @@ test('cancellation cannot mark a result finished',async t=>{
   assert.notEqual((await harness.state('cancel'))?.status,'completed');
 });
 
+test('truncated output requests a smaller recovery call without executing or losing state',async t=>{
+  const f=await fixture(t);let n=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,recoveringFromTruncation})=>{
+    if(++n===1){assert.equal(recoveringFromTruncation,false);return {truncated:true};}
+    if(n===2){assert.equal(recoveringFromTruncation,true);assert.match(messages.at(-1).content,/一个完整的小工具调用/);return answer(plan(),add(f.document));}
+    assert.equal(recoveringFromTruncation,true);
+    return answer(call('creation_finish',{review:{observations:'检查当前完整预览',issues:[]}}));
+  }});
+  const result=await harness.run({id:'recover-truncated',state:f.state});
+  assert.equal(result.status,'completed');assert.equal(result.document.page.layers.length,1);
+  assert.equal(result.usage[0].truncated,true);
+});
+
 test('DeepSeek adapter enables thinking and round-trips reasoning without exposing credentials in errors',async()=>{
   const messages=[{role:'assistant',reasoning_content:'earlier reasoning',content:null,tool_calls:[]}];let payload;
   const model=createDeepSeekCreativeModel({key:'private-key',fetcher:async(url,request)=>{
@@ -95,6 +108,8 @@ test('DeepSeek adapter enables thinking and round-trips reasoning without exposi
   const result=await model({messages,tools:[],remainingMs:1000});
   assert.deepEqual(payload.thinking,{type:'enabled'});assert.equal(payload.reasoning_effort,'high');assert.deepEqual(payload.messages,messages);
   assert.equal(result.message.reasoning_content,'new reasoning');
+  await model({messages,tools:[],remainingMs:1000,recoveringFromTruncation:true});
+  assert.equal(payload.reasoning_effort,'low');assert.deepEqual(payload.thinking,{type:'enabled'});
   const failing=createDeepSeekCreativeModel({key:'private-key',fetcher:async()=>new Response('private-key',{status:401})});
   await assert.rejects(failing({messages,tools:[],remainingMs:1000}),e=>!e.message.includes('private-key')&&e.code==='CREATIVE_MODEL_HTTP');
 });
@@ -107,9 +122,9 @@ test('automatic bootstrap allows first-turn editing and combined visual review/f
     if(++n===1)return answer(plan(),add(f.document));
     const p=lastScene(messages),feedback=messages.at(-1).content[0].text;
     assert.match(feedback,/自动交付检查/);assert.match(feedback,/自动视觉检查任务/);
-    return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'文字清晰，已检查最新图',issues:[]}}));
+    return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
   }});
-  const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
+  const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
 });
 
 test('combined finish rejects unseen edits and nonempty blocking issues',async t=>{
@@ -117,8 +132,8 @@ test('combined finish rejects unseen edits and nonempty blocking issues',async t
   const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
     if(++n===1)return answer(plan(),add(f.document));
     const p=lastScene(messages);
-    if(n===2)return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'发现问题',issues:['文字遮挡']}}));
-    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'旧图',issues:[]}}));}
+    if(n===2)return answer(call('creation_finish',{review:{observations:'发现问题',issues:['文字遮挡']}}));
+    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{review:{observations:'旧图',issues:[]}}));}
     assert.ok(messages.filter(m=>m.role==='tool').map(m=>JSON.parse(m.content)).some(v=>v.detail==='请先查看当前版本的真实预览'));throw Error('stale inline verified');
   }});
   await assert.rejects(harness.run({id:'inline-stale',state:f.state}),/stale inline verified/);
@@ -130,7 +145,50 @@ test('unchanged preview reuses the current render without another upload',async 
     if(++n===1)return answer(plan(),add(f.document));
     if(n===2)return answer(call('creation_preview',{}));
     assert.equal(JSON.parse(messages.at(-1).content).data.reused,true);
-    const p=lastScene(messages);return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'同版本预览',issues:[]}}));
+    const p=lastScene(messages);return answer(call('creation_finish',{review:{observations:'同版本预览',issues:[]}}));
   }});
   assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
+});
+
+test('recipe discovery is paged, image-backed and does not resend the overview',async t=>{
+ const f=await fixture(t);let n=0;
+ const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++n===1)return answer(call('read_skill',{name:'journal-lettering',level:'methods'}));
+  const result=JSON.parse(messages.findLast(m=>m.role==='tool').content);assert.equal(result.ok,true);assert.equal(result.data.methods.length,8);assert.equal(messages.at(-1).content.filter(p=>p.type==='image_url').length,8);
+  assert.ok(result.data.methods.every(m=>m.tool.name==='creation_recipe'));assert.equal(result.data.guidance,f.skills.read('journal-lettering').content);throw Error('library discovery verified');
+ }});
+ await assert.rejects(harness.run({id:'method-gallery',state:f.state}),/library discovery verified/);
+});
+test('recipe edits render automatically and repeated transaction IDs never duplicate groups',async t=>{
+ const f=await fixture(t);let n=0,renders=0;
+ const args={kind:'technique',recipeId:'title-label',transactionId:'recipe-once',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'title',text:'今天的小记'}};
+ const harness=createCreativeHarness({...f,render:async d=>{renders++;return f.render(d);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++n===1)return answer(plan(),call('creation_recipe',args));
+  if(n===2)return answer(call('creation_recipe',args));
+  assert.equal(JSON.parse(messages.at(-1).content).data.replayed,true);
+  return answer(call('creation_finish',{review:{observations:'已查看标题组合',issues:[]}}));
+ }});
+ const done=await harness.run({id:'recipe-replay',state:f.state});assert.equal(done.status,'completed');assert.equal(done.document.page.layers.length,1);assert.equal(renders,1);
+});
+test('recipe failure is atomic and cannot be accepted as a finished artwork',async t=>{
+ const f=await fixture(t);let n=0;
+ const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++n===1)return answer(plan(),call('creation_recipe',{kind:'technique',recipeId:'paper-tear',transactionId:'bad',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'tear',target:'other-account',path:{points:[[0,.5],[1,.5]],unit:'ratio'}}}));
+  assert.equal(JSON.parse(messages.at(-1).content).ok,false);throw Error('recipe isolation verified');
+ }});
+ await assert.rejects(harness.run({id:'recipe-isolation',state:f.state}),/recipe isolation verified/);assert.equal((await harness.state('recipe-isolation')).document.page.layers.length,0);
+});
+
+test('deferred template lookup explains the limitation without loading its image or executable recipe',async t=>{
+  const f=await fixture(t);let n=0,baseline=0;
+  const imageCount=messages=>messages.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++n===1){baseline=imageCount(messages);return answer(call('read_template',{id:'ac-26'}));}
+    const reply=JSON.parse(messages.findLast(m=>m.role==='tool').content);
+    assert.equal(reply.ok,true);assert.equal(reply.data.available,false);assert.equal(reply.data.tool,undefined);
+    assert.equal(imageCount(messages),baseline);
+    throw Error('verified deferred lookup');
+  }});
+  await assert.rejects(harness.run({id:'deferred-lookup',state:f.state}),/verified deferred lookup/);
+  assert.equal((await harness.state('deferred-lookup')).document.page.layers.length,0);
 });

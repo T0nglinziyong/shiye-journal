@@ -1,3 +1,4 @@
+import {templateMarginalScores} from './creation-library/matcher.js';
 import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 import {classifyJournalMaterial,relevantJournalFamilies} from './journal-case-study.js';
 const purposeKinds={
@@ -104,8 +105,9 @@ export function scoreRecommendationCandidates({assets=[],basket=[],styles=[],pur
  const purposeKindsSet=new Set(purposes.flatMap(p=>purposeKinds[p]||[]));
  const styleWords=uniq(styles.flatMap(s=>styleTerms[s]||[s])),purposeWords=uniq(purposes.flatMap(p=>purposeTerms[p]||[]));
  const basketTerms=new Set(selected.flatMap(contentTerms)),intentText=String(intent).toLowerCase(),intentMotifs=new Set(motifTerms(intentText));
- return assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&usableForMatching(a)&&!a.isProjectInternal&&a.usageStatus!=='used')
-  .map(a=>{
+ const candidates=assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&usableForMatching(a)&&!a.isProjectInternal&&a.usageStatus!=='used');
+ const templateScores=pageSize?templateMarginalScores({selected,candidates,paper:pageSize,styles,content:[intent,...purposes]}):new Map();
+ return candidates.map(a=>{
    const scores=Object.fromEntries(Object.keys(recommendationWeights).map(key=>[key,0]));
    const evidence=Object.fromEntries(Object.keys(recommendationWeights).map(key=>[key,[]]));
    const add=(key,points,reason)=>{if(points>0){scores[key]+=points;evidence[key].push(reason);}};
@@ -137,6 +139,8 @@ export function scoreRecommendationCandidates({assets=[],basket=[],styles=[],pur
    if(area){const ratios=selected.map(b=>Number(b.physicalWidthMM)*Number(b.physicalHeightMM)).filter(Boolean).map(other=>Math.max(area,other)/Math.min(area,other));
     if(ratios.length){const ratio=Math.min(...ratios);if(ratio>=1.8&&ratio<=12)add('尺寸节奏',9,'形成大小层次');else if(ratio>12)add('尺寸节奏',4,'小件点缀');}
     if(selected.some(b=>{const bw=Number(b.physicalWidthMM),bh=Number(b.physicalHeightMM);return bw&&bh&&((a.physicalWidthMM>a.physicalHeightMM)!==(bw>bh));}))add('尺寸节奏',3,'横竖形态互补');}
+   const templateFit=templateScores.get(a.id);
+   if(templateFit?.utility>0){add('结构补足',Math.min(4,templateFit.utility*.25),'补足'+templateFit.title+'的版式位置');add('尺寸节奏',Math.min(3,templateFit.utility*.18),'真实尺寸更贴合版式');}
    let penalty=0;const reasons=[];
    if(pageSize&&a.kind!=='tape'&&area){const w=a.physicalWidthMM,h=a.physicalHeightMM,pw=pageSize.width-8,ph=pageSize.height-8;
     if(!((w<=pw&&h<=ph)||(h<=pw&&w<=ph))){penalty-=6;reasons.push('整件偏大，需裁取');}}
@@ -144,7 +148,7 @@ export function scoreRecommendationCandidates({assets=[],basket=[],styles=[],pur
    for(const key of Object.keys(scores))scores[key]=Math.min(10,scores[key]);
    const score=Object.entries(recommendationWeights).reduce((sum,[key,weight])=>sum+scores[key]*weight,0)*2+penalty;
    const topDirections=Object.keys(scores).sort((x,y)=>scores[y]*recommendationWeights[y]-scores[x]*recommendationWeights[x]);
-   return {asset:a,score,reasons:uniq([...topDirections.flatMap(key=>evidence[key]),...reasons]),directionScores:scores,directionReasons:evidence,penalty,penaltyReasons:reasons};
+   return {asset:a,score,templateFit,reasons:uniq([...topDirections.flatMap(key=>evidence[key]),...reasons]),directionScores:scores,directionReasons:evidence,penalty,penaltyReasons:reasons};
   });
 }
 export function rankRecommendationCandidates(scored,direction='全部'){

@@ -1,7 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,preloadCreationSkills,iterationAdvice} from '../compute-server/harness/context.mjs';
+import {modelContext,preloadCreationSkills,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
+
+test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
+ const source={textMode:'none',materials:[{alias:'long-paper',assetID:'a'},{alias:'real-tape',assetID:'b'}],sourceSnapshots:[{assetID:'a',kind:'paper',title:'胶带图案长条纸'},{assetID:'b',kind:'tape',title:'花纹'}]};
+ assert.deepEqual(initialToolGuide({source}).tapeAliases,['real-tape']);
+ source.materials.pop();
+ const guide=initialToolGuide({source});assert.deepEqual(guide.tapeAliases,[]);assert.ok(guide.notes.some(n=>n.includes('本次没有胶带')));
+});
+
+test('an outdated task contract fails before any model invocation',async()=>{
+  const {createCreationDocument}=await import('../src/creation-document.js');
+  const {draft}=await import('../src/domain.js');
+  const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
+  const {taskFingerprint}=await import('../src/task-fingerprint.js');
+  const document=await createCreationDocument({draft:draft(),assets:[]});
+  document.source.schemaHash='sha256:'+'0'.repeat(64);
+  document.source.taskHash=await taskFingerprint(document.source);
+  assert.throws(()=>initialHarnessState({document,skills:{catalog(){throw Error('must not load');}},brief:{}}),/合同已变化/);
+});
 
 test('only superseded automatic previews are pruned; sources, tool pairs and reasoning remain unchanged',()=>{
   const source={role:'user',content:[{type:'image_url',image_url:{url:'source'}}]};
@@ -17,7 +35,7 @@ test('only superseded automatic previews are pruned; sources, tool pairs and rea
 test('skill routing uses explicit direction and respects no-text tasks',async()=>{
   const skills=await loadCreationSkills();
   const selected=preloadCreationSkills(skills,{source:{textMode:'none',styles:[]}},{styles:['童趣可爱'],intent:'复古旧物'}).map(s=>s.name);
-  assert.deepEqual(selected,['journal-composition','paper-layering','playful-journal']);
+  assert.deepEqual(selected,['journal-composition','paper-layering','journal-accents','playful-journal']);
   assert.ok(!selected.includes('vintage-journal'));
   assert.ok(preloadCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='vintage-journal'));
 });
@@ -44,4 +62,9 @@ test('failed parameter validation supplies targeted help without changing the op
   const guide=failureGuidance('creation_apply',args,{path:'/operations/0/style/shadow/color'});
   assert.equal(guide.operation.descriptions[0].name,'material.add');assert.equal(guide.fieldDefinitions.Color.pattern,'^#[0-9A-Fa-f]{6}$');assert.equal(JSON.stringify(args),before);
   assert.ok(failureGuidance('creation_help',{},{}).available.topics.includes('place'));
+});
+
+test('invalid stroke styling reports all mismatched fields and valid alternatives together',async()=>{
+  const {styleFor}=await import('../src/scene-node-properties.js');
+  assert.throws(()=>styleFor('ink',{fill:null,strokeOpacity:.5},{canvas:{height:100},physicalPageHeightMM:100}),error=>/style.fill/.test(error.message)&&/style.strokeOpacity/.test(error.message)&&/可用：.*opacity/.test(error.message));
 });

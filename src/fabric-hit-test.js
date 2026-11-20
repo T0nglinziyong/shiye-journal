@@ -1,10 +1,11 @@
+import {Point} from 'fabric';
 // Member frames are a cheap rejection test before painted-pixel hit testing.
 // The active frame separately permits dragging through transparent gaps.
 export function fabricMemberAt(object,point){
   if(object.visible===false)return false;
   if(object.sceneType==='group'&&object.getObjects)
     return object.getObjects().some(child=>fabricMemberAt(child,point));
-  return object.containsPoint(point);
+  return object.containsPoint(new Point(point.x,point.y));
 }
 export function selectableFabricObjectAt(canvas,object,point,viewport,{includeInk=false}={}){
   const ink=includeInk&&object.sceneType==='ink';

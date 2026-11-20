@@ -4,6 +4,7 @@ import {localDeviceRecords} from './local-device-records.js';
 import {boundedMap} from './bounded-map.js';
 import {validateCreativeJobPackage,CREATIVE_JOB_FORMAT} from './creative-job-package.js';
 import {validateV3SceneDocument} from './v3-scene-schema.js';
+import {creationResourceVersion} from './generated/creation-resources.js';
 
 const prefix='creative-upload-v1:';
 const uuid=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -21,7 +22,7 @@ export function createCloudCreativeJobs({client=cloudClient,storage=cloudStorage
         if(!(blob instanceof Blob)||blob.type!=='image/png'||!blob.size||blob.size>20*1024*1024)throw Error('创作素材必须是有效 PNG');
         const sha256=await hash(blob);return {alias,sha256,path:`${owner}/creative/${id}/assets/${sha256.slice(7)}.png`,blob};
       });
-      const input=validateCreativeJobPackage({format:CREATIVE_JOB_FORMAT,document,brief,images:blobs.map(({blob,...item})=>item)},{userID:owner,jobID:id});
+      const input=validateCreativeJobPackage({format:CREATIVE_JOB_FORMAT,document,brief:{...brief,resourceVersion:creationResourceVersion},images:blobs.map(({blob,...item})=>item)},{userID:owner,jobID:id});
       await account(owner);
       await device.put(owner,{id:prefix+id,jobID:id,projectID,input,blobs});
       return {id,owner,projectID};

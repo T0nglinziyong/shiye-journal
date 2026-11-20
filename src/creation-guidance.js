@@ -17,7 +17,7 @@ export const creationMethods={
   transparency:{title:'透明叠贴',operations:['material.add','layer.update','layer.mask'],advice:'先核对真实透明通道和材质，再让透光层连接两块内容、承载日期条或隔开区域。底纸与上层书写分别调透明度，避免整组变淡后正文难读。opacity 与混合模式按真实预览调整；白纸不能因名称像 PET 就被当成透明膜。显示蒙版不创造实体余料，静态层叠不等于可交互翻页。'},
   color:{title:'色块配色',operations:['graphic.add','text.add','layer.update'],advice:'从本次素材选主色、陪衬色和小面积强调色，不平均分配颜色。异形色块可承载书写，也可衬托角色；深底浅字、浅底深字按预览判断。完成内容后再加回应词意的点线、描边或小图案，不把圆点、动物或同一套配色变成每页公式。'},
   portrait:{title:'人物层级',operations:['material.add','material.cut','layer.update','text.add'],advice:'仅在人物主题适合时，比较完整照片与裁剪轮廓的职责。让大小、朝向、遮挡和文字条共同建立重点；不要遮住脸、动作或重要印刷字。普通实体不能复制或放大来制造多个人像，只有合法的多份或数字来源才能重复。没有人物时改用当前素材的轮廓与可写面，不强造人像模板。'},
-  cutwork:{title:'裁片取用',operations:['material.cut','material.split','material.window','material.weave','material.edge'],advice:'只为明确的轮廓、接缝或图文关系加工。保留人物动作和重要印刷字，真正裁片共用来源占用账本；余料不重叠才再用。需要穿插先造窗口再穿条，几何失败就换可实现构图，不用伪预览掩饰。'}
+  cutwork:{title:'裁片取用',operations:['material.cut','material.tear','material.split','material.window','material.weave','material.edge'],advice:'只为明确的轮廓、接缝或图文关系加工。保留人物动作和重要印刷字，真正裁片共用来源占用账本；余料不重叠才再用。需要穿插先造窗口再穿条，几何失败就换可实现构图，不用伪预览掩饰。'}
 };
 
 const styleMethods={

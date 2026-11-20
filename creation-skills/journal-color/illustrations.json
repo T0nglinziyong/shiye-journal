@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "blue-lilac-layout",
+      "file": "blue-lilac-layout.png",
+      "caption": "低饱和蓝紫色块、黑色焦点与两种文字方向的成品/块面对应。",
+      "author": "爱生活的番茄",
+      "title": "A6p｜拼贴教学大集合第一弹🌪️带拆解图💙",
+      "sourceURL": "https://www.xiaohongshu.com/explore/69bd040d0000000021005a13",
+      "observation": "已阅读全3张图及正文，2026-11-20",
+      "sha256": "8ca675de15d9f99c5b156d2fccc9f34d48bc8f56c6fed8790eb14e7dde9d763a",
+      "reviewed": true
+    },
+    {
+      "id": "blue-tone-rhythm",
+      "file": "blue-tone-rhythm.png",
+      "caption": "深蓝结构块与浅蓝承载区交错，文字与角色贴纸连接两个区域。",
+      "author": "爱生活的番茄",
+      "title": "A6p｜拼贴教学大集合第一弹🌪️带拆解图💙",
+      "sourceURL": "https://www.xiaohongshu.com/explore/69bd040d0000000021005a13",
+      "observation": "已阅读全3张图及正文，2026-11-20",
+      "sha256": "7a7b91c270d2d2ae964bcfa8f6d9b4edd86f4ec792eb403168508e121f1b95e7",
+      "reviewed": true
+    }
+  ]
+}

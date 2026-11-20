@@ -1,3 +1,4 @@
+import {offlineBundledFonts,offlineResourceRoot} from './offline-bundled-fonts.mjs';
 import {findOfflineChromium,renderChromiumPNG} from './offline-chromium-preview.mjs';
 import {sceneLayerEntries} from './scene-v2.js';
 import {renderSceneCanvas} from './scene-renderer.js';
@@ -6,7 +7,7 @@ import {previewImageFormat} from './offline-preview.js';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
 import {existsSync} from 'node:fs';
-const require=createRequire(resolve(process.cwd(),'package.json'));
+const require=createRequire(resolve(offlineResourceRoot,'package.json'));
 const registeredFonts=new Set();
 
 function identifyCanvasBackend(module){
@@ -23,12 +24,11 @@ export async function loadOfflineCanvas(){
  if(requested!=='browser')try{
   const module=await import('canvas');
   if(typeof module.createCanvas!=='function'||typeof module.loadImage!=='function')throw Error('canvas 接口不完整');
-  const handFontPath=resolve(process.cwd(),'fonts/MaShanZheng-Regular.ttf');
-  if(existsSync(handFontPath)&&!registeredFonts.has(handFontPath)){
-   module.registerFont(handFontPath,{family:'Ma Shan Zheng'});
-   registeredFonts.add(handFontPath);
+  const fonts=offlineBundledFonts();
+  for(const font of fonts)if(!registeredFonts.has(font.path)){
+   module.registerFont(font.path,{family:font.family});registeredFonts.add(font.path);
   }
-  return {...module,rendererBackend:identifyCanvasBackend(module),bundledHandFont:registeredFonts.has(handFontPath)};
+  return {...module,rendererBackend:identifyCanvasBackend(module),bundledHandFont:fonts.some(f=>f.family==='Ma Shan Zheng'),bundledFonts:fonts.map(f=>f.family)};
  }catch(error){reason=error.message;if(requested==='node')throw Error('Node Canvas 不可用。执行 npm install 后运行 node runtime/shiye.cjs self-test；'+reason);}
  const browser=findOfflineChromium();
  if(browser)return {...browser,renderPNG:(draft,source,images)=>renderChromiumPNG(draft,source,images,browser)};
@@ -48,5 +48,5 @@ export async function renderOfflinePNG(draft,source,previews,canvasModule,{decod
   loadMaterialImage:id=>{if(!decoded.has(id))decoded.set(id,loadImage(Buffer.from(sources.get(id))));return decoded.get(id);}
  });
  const png=result.canvas.toBuffer('image/png'),geometry=auditOfflineCanvasDraft(draft,{createCanvas:()=>createCanvas(1,1)});
- return {png,report:{...result.report,...geometry,visibleSourceCount:used.length,decodedSourceCount:decoded.size,visualReview:'manual-required',fontReview:canvasModule.bundledHandFont?'Ma Shan Zheng (bundled)':'environment-dependent',rendererBackend:canvasModule.rendererBackend||'unverified-canvas-adapter'}};
+ return {png,report:{...result.report,...geometry,visibleSourceCount:used.length,decodedSourceCount:decoded.size,visualReview:'manual-required',fontReview:canvasModule.bundledFonts?.length?canvasModule.bundledFonts.join(', ')+' (bundled)':canvasModule.bundledHandFont?'Ma Shan Zheng (bundled)':'environment-dependent',rendererBackend:canvasModule.rendererBackend||'unverified-canvas-adapter'}};
 }

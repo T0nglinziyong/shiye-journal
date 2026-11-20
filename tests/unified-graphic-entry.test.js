@@ -34,7 +34,7 @@ async function setup(){
 }
 const node=(d,id='g')=>findSceneNode(d.page,id);
 test('one create entry, no decoration namespace, no old operations or duplicate placement vocabulary',()=>{
- assert.equal(Object.keys(creationCommandRegistry).length,30);assert.ok(creationCommandRegistry['graphic.add']);
+ assert.equal(Object.keys(creationCommandRegistry).length,31);assert.ok(creationCommandRegistry['graphic.add']);
  for(const op of ['shape.add','vector.add','ink.add','draw.decorate','graphic.decorate']){assert.equal(creationCommandRegistry[op],undefined);assert.throws(()=>validateCreationV2Commands(tx([{op}])));assert.throws(()=>describeCreationCommand(op));}
  for(const prop of [{target:'title'},{placement:'top-right'},{kind:'star'},{color:'#123456'}])assert.throws(()=>validateCreationV2Commands(tx([{...graphic(),...prop}])));
  assert.throws(()=>validateCreationV2Commands(tx([graphic({kind:'shape',shape:'star'})])));

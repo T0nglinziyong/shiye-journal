@@ -1,3 +1,4 @@
+import {Rect} from 'fabric';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {selectableFabricObjectAt,installSelectionFramePriority} from '../src/fabric-hit-test.js';
@@ -42,4 +43,10 @@ test('active frame uses cached event targets without recalculating control corne
     getActiveObject:()=>{throw Error('must not recalculate controls');}};
   installSelectionFramePriority(canvas);
   assert.equal(canvas.findTarget({}),cached);
+});
+
+test('real Fabric objects accept plain pointer coordinates in the painted hit-test path',()=>{
+ const object=new Rect({left:0,top:0,width:30,height:30});object.sceneType='text';object.setCoords();
+ assert.equal(selectableFabricObjectAt({isTargetTransparent:()=>false},object,{x:12,y:12},{x:12,y:12}),true);
+ assert.equal(selectableFabricObjectAt({isTargetTransparent:()=>true},object,{x:80,y:80},{x:80,y:80}),false);
 });

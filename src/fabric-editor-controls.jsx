@@ -1,3 +1,4 @@
+import {journalBundledFonts} from './journal-font-catalog.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {NewLetteringForm} from './react-editor-lettering.jsx';
@@ -17,6 +18,8 @@ import {materialSizeLabel} from './material-size-label.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',tape:'tape',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',tape:'胶带',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
+const shapeLabels=new Map([...commonShapes,...advancedShapes]);
+const shapeLabel=kind=>kind==='vector'?'自定义图形':shapeLabels.get(kind==='rect'?'rectangle':kind)||'图形';
 const palette=['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969'];
 const slotDefaults={pen:{width:[.3,.5,1],color:['#171717','#2b5245','#167ad9']},highlighter:{width:[1,2,4],color:['#fb8795','#f5cf45','#57bd4b']},eraser:{width:[2,4,8]}};
 
@@ -120,7 +123,7 @@ function ShapePicker({draft,onPick}){
   const [tab,setTab]=useState('common');
   const picked=useRef(false);
   const choices=tab==='used'?(draft.layers||[]).filter(node=>node.type==='shape'&&!node.hidden)
-    .map(node=>[node.id,node.kind==='vector'?'自定义图形':node.kind,node]):
+    .map(node=>[node.id,shapeLabel(node.kind),node]):
     tab==='advanced'?advancedShapes:commonShapes;
   return <><div className="swift-segments">
     {[['used','已使用图形'],['common','基础图形'],['advanced','高级图形']].map(([id,label])=><button key={id}
@@ -246,7 +249,7 @@ function LayerTree({draft,state,materials,onAction,collapsed,setCollapsed}){
     .filter(entry=>entry.value.isParked&&entry.kind!=='material');
   const label=node=>node.type==='group'?node.name||'未命名组合':
     node.type==='material'?names.get(node.assetID)||'素材':node.type==='text'?node.content?.slice(0,27)||'文字':
-    node.type==='ink'?'手写笔迹':node.kind||'图形';
+    node.type==='ink'?'手写笔迹':shapeLabel(node.kind);
   const visit=(nodes,level=1)=>[...(nodes||[])].filter(listed)
     .sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)).map(node=>{
     const locked=!!(node.locked||node.isLocked);
@@ -414,8 +417,10 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           title={slotIndex(activeTool,'color')===index?'再次点击可修改颜色':''}
           onClick={event=>toggleSlot(activeTool,'color',index,event)}/>):null}
       </>:textMode?<>
-        <div className="canvas-text-format"><select aria-label="字体" value={text.style||'hand'} onChange={event=>textProperty('style',event.target.value)}>
+        <div className="canvas-text-format"><select aria-label="字体" value={text.fontName?'font:'+text.fontName:text.style||'hand'} onChange={event=>event.target.value.startsWith('font:')?textProperty('fontName',event.target.value.slice(5)):textProperty('style',event.target.value)}>
           {journalFontPresets.map(([id,label])=><option key={id} value={id}>{label}</option>)}
+          {journalBundledFonts.map(font=><option key={font.family} value={'font:'+font.family}>{font.label}</option>)}
+          {text.fontName&&!journalBundledFonts.some(font=>font.family===text.fontName)?<option value={'font:'+text.fontName}>{text.fontName}</option>:null}
         </select><div className="canvas-font-size-stepper" aria-label="调整字号">
           <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
           <FontSizeInput key={selectedNode?.id||'new-text'} value={text.fontSize||40}

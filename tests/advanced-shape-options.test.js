@@ -17,7 +17,7 @@ test('each parametric preset exposes bounded editable controls',()=>{
     ['rows','columns','showOuterBorder']);
   assert.doesNotThrow(()=>validateShapeOptions('grid',{spacing:18}),
     'existing saved grids keep their spacing until explicitly reconfigured');
-  assert.deepEqual([...advancedShapeOptionKinds].sort(),advancedShapes.map(([kind])=>kind).filter(kind=>kind!=='vector').sort());
+  assert.deepEqual([...advancedShapeOptionKinds].sort(),[...advancedShapes.map(([kind])=>kind).filter(kind=>kind!=='vector'),'flower','star','arrow'].sort());
   for(const kind of advancedShapeOptionKinds){
     const controls=advancedShapeControls(kind);assert.ok(controls.length>0,kind);
     const base={kind,id:'control-'+kind,width:150,height:100,fill:null,stroke:'#75918d',lineWidth:2};
@@ -38,7 +38,8 @@ test('resizing repeats keeps their count, while changing count keeps the cell pi
   for(const kind of ['dots','stripes']){
     const pattern=configureShape({id:kind},kind);
     assert.deepEqual(pattern.shapeOptions,{rows:6,columns:8});
-    assert.match(shapeSVG({...pattern,width:pattern.width*2}),/width="0\.125" height="0\.16666666666666666"/);
+    if(kind==='dots')assert.match(shapeSVG({...pattern,width:pattern.width*2}),/width="0\.125" height="0\.16666666666666666"/);
+    else assert.equal((shapeSVG(pattern).match(/ L/g)||[]).length,(shapeSVG({...pattern,width:pattern.width*2}).match(/ L/g)||[]).length);
     assert.equal(shapeRepeatCountPatch(pattern,'columns',12).width,pattern.width*12/8);
   }
   const columns=shapeRepeatCountPatch(grid,'columns',12);
@@ -74,7 +75,7 @@ test('table and pattern fills, strokes and opacity are reflected in rendered SVG
 });
 
 test('paperclip and border graphics remain hollow and use the selected outline color',async()=>{
-  for(const kind of ['paperclip','postageFrame','ticketFrame']){
+  for(const kind of ['paperclip','postageFrame','ticketFrame','archFrame','scallopFrame']){
     const node=configureShape({id:kind},kind);
     assert.equal(node.fill,null,kind);
     node.stroke='#e06048';
@@ -147,4 +148,53 @@ test('table cells and border options are preserved in Scene commands and raster'
   const colors=[];for(let i=0;i<data.length;i+=4)if(data[i+3]>200)colors.push([data[i],data[i+1],data[i+2]]);
   assert.ok(colors.length>200);
   assert.ok(colors.some(([r,g,b])=>g>r&&b>r),'table must render in the chosen tint, not black');
+});
+
+
+test('structural parameters stay editable after Scene updates without changing the outside size',async()=>{
+  const asset=creativePresetAssets[0];
+  const handoff=await createOfflineHandoff({project:project('花边与花瓣'),assets:[asset],aliases:{m1:asset.id},
+    previews:[{alias:'m1',bytes:new Uint8Array(await readFile('public'+asset.staticPath))}]});
+  const document=webSceneDocument(handoff.source,handoff.source.baseDraft,'花边与花瓣');
+  const changes=[['flower',{petals:8,petalDepth:.18}],['star',{points:7,innerRatio:.55}],
+    ['arrow',{headLength:.2,shaftWidth:.15}],['archFrame',{archRise:.65,frameInset:.12}],
+    ['scallopFrame',{lobes:8,lobeDepth:.045,frameInset:.06}]];
+  const operations=changes.map(([kind],index)=>({op:'graphic.add',id:'param-'+kind,geometry:{kind},
+    place:{reference:'page',at:[25+index*30,40],unit:'mm'},size:{width:24,height:30,unit:'mm'},
+    style:{fill:null,stroke:'#547064',strokeWidthMm:.5}}));
+  operations.push(...changes.map(([kind,options])=>({op:'layer.update',target:'param-'+kind,geometry:{kind,options}})));
+  const result=applyCreationV2Batch(document,{protocolVersion:2,transactionId:'structural-controls',
+    baseSceneRevision:'sha256:'+'0'.repeat(64),operations},
+    handoff.source.sourceSnapshots.map(snapshot=>assetFromSourceSnapshot(snapshot,{frozenRevision:true})));
+  const scale=result.page.canvas.height/result.page.physicalPageHeightMM;
+  for(const [kind,options] of changes){
+    const node=result.page.layers.find(layer=>layer.id==='param-'+kind);
+    assert.deepEqual(node.shapeOptions,options);
+    assert.ok(Math.abs(node.width-24*scale)<1e-6,kind);
+    assert.ok(Math.abs(node.height-30*scale)<1e-6,kind);
+    assert.equal(node.svgPaths,undefined);assert.equal(node.vectorPaths,undefined);
+    assert.equal(shapeSVG(JSON.parse(JSON.stringify(node))),shapeSVG(node),'save/reload preserves the parametric rendering');
+  }
+  assert.throws(()=>validateShapeOptions('flower',{petals:3.5}),/范围/);
+  assert.throws(()=>validateShapeOptions('archFrame',{archRise:.99}),/范围/);
+  assert.throws(()=>validateShapeOptions('star',{petals:5}),/不支持/);
+});
+
+test('new curves remain inside the selectable bounds at extreme parameter values',async()=>{
+  for(const kind of ['flower','star','arrow','archFrame','scallopFrame'])for(const endpoint of ['min','max']){
+    const shape=configureShape({id:kind},kind);
+    shape.fill='#e06048';shape.lineWidth=0;
+    shape.shapeOptions=Object.fromEntries(advancedShapeControls(kind).filter(c=>c.type!=='boolean').map(c=>[c.key,c[endpoint]]));
+    const svg=shapeSVG(shape);
+    if(['flower','scallopFrame','archFrame'].includes(kind))assert.match(svg,/[CQA]/);
+    const image=await loadImage(Buffer.from(svg.replace('<svg ','<svg width="300" height="300" ')));
+    const canvas=createCanvas(300,300);canvas.getContext('2d').drawImage(image,0,0);
+    const data=canvas.getContext('2d').getImageData(0,0,300,300).data;
+    let ink=0;
+    for(let y=0;y<300;y++)for(let x=0;x<300;x++){
+      const alpha=data[(y*300+x)*4+3];if(alpha)ink++;
+      if(x<4||y<4||x>=296||y>=296)assert.equal(alpha,0,`${kind}.${endpoint} clips at the frame edge`);
+    }
+    assert.ok(ink>1000,`${kind}.${endpoint} produces visible geometry`);
+  }
 });

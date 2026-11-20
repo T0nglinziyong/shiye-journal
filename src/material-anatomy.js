@@ -30,9 +30,11 @@ export function sameMaterialCutoutAndSize(exported,current){
    craftDigest([a.processingRecord,a.sourceSilhouette,a.orientation])===
    craftDigest([b.processingRecord,b.sourceSilhouette,b.orientation]);
 }
+const semanticFields=['kindDetail','secondaryRoles','contentCategories','layoutFits','contentTags','themeTags','styleTags','colorTags','materialTags','moodTags','description'];
+const semanticMetadata=value=>Object.fromEntries(semanticFields.filter(key=>value[key]!==undefined).map(key=>[key,structuredClone(value[key])]));
 export function materialSourceSnapshot(asset){
  return {assetID:asset.id,sourceRevision:assetSourceRevision(asset),descriptor:assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,
-  kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],
+  kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],...semanticMetadata(asset),
   ...(asset.isCreativePreset?{isCreativePreset:true}:{}),
   tapeAxis:asset.tapeAxis??null,tapeFlatCrop:asset.tapeFlatCrop??null,tapeRepeatMode:asset.tapeRepeatMode??null,tapeRepeatPeriodMM:asset.tapeRepeatPeriodMM??null,
   tapeRepeatStartMM:asset.tapeRepeatStartMM??null,tapeRepeatEndMM:asset.tapeRepeatEndMM??null};
@@ -40,7 +42,7 @@ export function materialSourceSnapshot(asset){
 export function assetFromSourceSnapshot(snapshot,{frozenRevision=false}={}){
  const d=snapshot.descriptor;
  craftAssert(d&&d.assetID===snapshot.assetID,'INVALID_SOURCE_SNAPSHOT','素材来源快照缺失或编号不一致');
- const asset={id:snapshot.assetID,title:snapshot.title,kind:snapshot.kind,role:snapshot.role,tags:snapshot.tags,
+ const asset={id:snapshot.assetID,title:snapshot.title,kind:snapshot.kind,role:snapshot.role,tags:snapshot.tags,...semanticMetadata(snapshot),
   ...(snapshot.isCreativePreset?{isCreativePreset:true}:{}),
   blobId:d.blobId,originalBlobId:d.originalBlobId,staticPath:d.staticPath,physicalWidthMM:d.widthMM,physicalHeightMM:d.heightMM,
   imageSize:d.imageSize,processingRecord:d.processingRecord,sourceSilhouette:d.sourceSilhouette,imageHash:d.imageHash,orientation:d.orientation,

@@ -1,3 +1,4 @@
+import {physicalSVGPath} from './svg-paint-geometry.js';
 import {withGraphicEffects,graphicGradientID,graphicPaintFrame,hasGraphicEffects} from './graphic-effects.js';
 import {journalFontFamily} from './journal-fonts.js';
 import {textEffectInsets,textContentWidth,textFillStyle,paintTextGlyphs} from './text-effects.js';
@@ -6,7 +7,7 @@ import {pressureInkOutline} from './pressure-ink.js';
 import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
 export const defaultTools={penStyle:'fountain',penWidth:4,penColor:'#2b5245',markerWidth:4,markerColor:'#2b5245',markerStraight:false,eraserWidth:20,eraserStyle:'standard',eraserOnlyHighlighter:false,wholeStroke:true,returnToPen:false,pencil:true};
 export const commonShapes=[['rectangle','色块'],['roundedRectangle','圆角色块'],['ellipse','圆形／椭圆'],['line','线条／下划线'],['frame','空心边框'],['star','星形'],['heart','爱心'],['raindrop','雨滴'],['cloud','云朵'],['sun','太阳'],['moon','月亮'],['flower','小花'],['leaf','树叶'],['sparkle','闪光'],['arrow','箭头'],['checkbox','勾选框'],['triangle','三角形'],['diamond','菱形'],['hexagon','六边形']];
-export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['linedNote','横线便笺'],['checklistTable','勾选清单'],['weeklyTable','一周计划表'],['habitTracker','习惯打卡表'],['calendarTable','月历格'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['ticketFrame','票根边框'],['postage','邮票齿边'],['postageFrame','邮票边框'],['washi','手帐胶带'],['bracket','括号'],['paperclip','回形针'],['vector','自由图形']];
+export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['linedNote','横线便笺'],['checklistTable','勾选清单'],['weeklyTable','一周计划表'],['habitTracker','习惯打卡表'],['calendarTable','月历格'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['ticketFrame','票根边框'],['postage','邮票齿边'],['postageFrame','邮票边框'],['filmFrame','胶片边框'],['archFrame','拱形边框'],['scallopFrame','波浪边框'],['washi','手帐胶带'],['bracket','括号'],['paperclip','回形针'],['vector','自由图形']];
 const polygons={triangle:[[.5,.04],[.96,.95],[.04,.95]],diamond:[[.5,.03],[.97,.5],[.5,.97],[.03,.5]],hexagon:[[.25,.04],[.75,.04],[.98,.5],[.75,.96],[.25,.96],[.02,.5]],ribbon:[[.02,.1],[.98,.1],[.84,.5],[.98,.9],[.02,.9],[.16,.5]],tag:[[.03,.03],[.78,.03],[.98,.5],[.78,.97],[.03,.97]],bubble:[[.04,.05],[.96,.05],[.96,.72],[.47,.72],[.23,.97],[.25,.72],[.04,.72]],chevron:[[.03,.03],[.63,.03],[.98,.5],[.63,.97],[.03,.97],[.38,.5]],ticket:[[.04,.05],[.4,.05],[.5,.15],[.6,.05],[.96,.05],[.96,.95],[.6,.95],[.5,.85],[.4,.95],[.04,.95]],washi:[[.02,.05],[.10,.14],[.02,.23],[.10,.32],[.02,.41],[.10,.5],[.02,.59],[.10,.68],[.02,.77],[.10,.86],[.02,.95],[.98,.95],[.90,.86],[.98,.77],[.90,.68],[.98,.59],[.90,.5],[.98,.41],[.90,.32],[.98,.23],[.90,.14],[.98,.05]]};
 const radial=(n,radii,offset=-Math.PI/2)=>Array.from({length:n},(_,i)=>{const a=offset+2*Math.PI*i/n,r=radii(i,a);return [.5+Math.cos(a)*r,.5+Math.sin(a)*r];});
 const postageEdge=()=>{
@@ -18,8 +19,39 @@ const postageEdge=()=>{
  return pts;
 };
 export function shapePaths(kind){return polygons[kind]?[polygons[kind]]:kind==='star'?[radial(10,i=>i%2?.2:.47)]:kind==='burst'?[radial(32,i=>i%2?.35:.47)]:kind==='sparkle'?[radial(8,i=>i%2?.08:.47,Math.PI/4)]:kind==='sun'?[radial(32,i=>i%2?.36:.48)]:kind==='flower'?[radial(160,(_,a)=>.34+.13*Math.cos(a*6))]:kind==='postage'?[postageEdge()]:kind==='scallop'?[radial(160,(_,a)=>.43+.04*Math.cos(a*10))]:null;}
-export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes','linedNote','checklistTable','weeklyTable','habitTracker','calendarTable','paperclip','postageFrame','ticketFrame'].includes(kind)?null:'#e7eef7',stroke:kind==='paperclip'?'#b9985f':'#547da4',lineWidth:kind==='paperclip'?3.5:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});if(['grid','dots','stripes'].includes(kind))shape.shapeOptions={rows:6,columns:8};const paths=shapePaths(kind);if(paths&&!advancedShapeControls(kind).length)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage','postageFrame'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','ticketFrame','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;if(kind==='calendarTable')shape.height=125;if(kind==='paperclip'){shape.width=48;shape.height=120;}return shape;}
+export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes','linedNote','checklistTable','weeklyTable','habitTracker','calendarTable','paperclip','postageFrame','ticketFrame','archFrame','scallopFrame'].includes(kind)?null:'#e7eef7',stroke:kind==='paperclip'?'#b9985f':'#547da4',lineWidth:kind==='paperclip'?3.5:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});if(['grid','dots','stripes'].includes(kind))shape.shapeOptions={rows:6,columns:8};const paths=shapePaths(kind);if(paths&&!advancedShapeControls(kind).length)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage','postageFrame'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','ticketFrame','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;if(kind==='calendarTable')shape.height=125;if(kind==='paperclip'){shape.width=48;shape.height=120;}return shape;}
+function archOutline(rise,inset=0){
+  const left=.03+inset,right=.97-inset,top=.03+inset,bottom=.97-inset,height=rise*(bottom-top),spring=top+height;
+  return `M${left} ${bottom} V${spring} A${(right-left)/2} ${height} 0 0 1 ${right} ${spring} V${bottom} Z`;
+}
+function flowerOutline(o){
+  const steps=o.petals*4,dt=2*Math.PI/steps;
+  const point=t=>{const a=t-Math.PI/2,r=.47-o.petalDepth/2+o.petalDepth/2*Math.cos(o.petals*t),dr=-o.petalDepth/2*o.petals*Math.sin(o.petals*t);
+    return {x:.5+r*Math.cos(a),y:.5+r*Math.sin(a),dx:dr*Math.cos(a)-r*Math.sin(a),dy:dr*Math.sin(a)+r*Math.cos(a)};};
+  const f=n=>Number(n.toFixed(6));let a=point(0),path=`M${f(a.x)} ${f(a.y)}`;
+  for(let i=1;i<=steps;i++){const b=point(i*dt);path+=` C${f(a.x+a.dx*dt/3)} ${f(a.y+a.dy*dt/3)} ${f(b.x-b.dx*dt/3)} ${f(b.y-b.dy*dt/3)} ${f(b.x)} ${f(b.y)}`;a=b;}
+  return path+' Z';
+}
 function parametricOutline(kind,o){
+  if(kind==='filmFrame'){
+    const rect=(x,y,w,h)=>`M${x} ${y}h${w}v${h}h${-w}Z`,cell=(1-2*o.frameInset)/o.columns,holes=[];
+    for(let i=0;i<o.columns;i++)holes.push(rect((i+o.frameInset)/o.columns,o.frameInset,cell,1-2*o.frameInset));
+    for(let i=0;i<o.count;i++)for(const y of [o.frameInset*.275,1-o.frameInset*.725])holes.push(rect((i+.275)/o.count,y,.45/o.count,o.frameInset*.45));
+    return rect(0,0,1,1)+' '+holes.join(' ');
+  }
+  if(kind==='flower')return flowerOutline(o);
+  if(kind==='star')return radial(o.points*2,i=>i%2?.47*o.innerRatio:.47).map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z';
+  if(kind==='arrow')return `M.03 ${.5-o.shaftWidth/2} H${.97-o.headLength} V.08 L.97 .5 L${.97-o.headLength} .92 V${.5+o.shaftWidth/2} H.03 Z`;
+  if(kind==='archFrame')return archOutline(o.archRise);
+  if(kind==='scallopFrame'){
+    const lo=.03+o.lobeDepth,hi=1-lo,span=hi-lo;let path=`M${lo} ${lo}`;
+    for(let side=0;side<4;side++)for(let i=0;i<o.lobes;i++){
+      const mid=lo+span*(i+.5)/o.lobes,end=lo+span*(i+1)/o.lobes,peak=lo-2*o.lobeDepth;
+      const coords=[[mid,peak,end,lo],[1-peak,mid,hi,end],[1-mid,1-peak,1-end,hi],[peak,1-mid,lo,1-end]][side];
+      path+=' Q'+coords.join(' ');
+    }
+    return path+' Z';
+  }
   if(kind==='postage'){
     const pts=[],inset=Math.min(.16,.04+o.depth);
     for(let i=0;i<=o.count*2;i++)pts.push([.05+.90*i/(o.count*2),i%2?inset:.05]);
@@ -52,12 +84,13 @@ function baseShapeSVG(s){
  if(Array.isArray(s.svgPaths)){
   const [x,y,w,h]=s.svgViewBox||[0,0,1,1];
   if(![x,y,w,h].every(Number.isFinite)||w<=0||h<=0||s.svgPaths.length>64)throw Error('SVG 路径边界无效');
+  const width=Math.max(.01,s.width||100),height=Math.max(.01,s.height||100);
   const paths=s.svgPaths.map(path=>{
    if(typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d))throw Error('SVG 路径包含不支持的字符');
    const pathFill=safe((Object.hasOwn(path,'fill')?path.fill:s.fill)??'none'),pathStroke=safe((Object.hasOwn(path,'stroke')?path.stroke:s.stroke)??'none');
-   return '<path d="'+path.d+'" fill="'+pathFill+'" stroke="'+pathStroke+'" fill-rule="'+(path.fillRule==='evenodd'?'evenodd':'nonzero')+'" stroke-width="'+Math.max(0,(s.lineWidth??2)*w/Math.max(1,s.width))+'" opacity="'+Math.max(0,Math.min(1,path.opacity??1))+'"/>';
+   return '<path d="'+physicalSVGPath(path.d,{sx:width/w,sy:height/h,tx:-x*width/w,ty:-y*height/h})+'" fill="'+pathFill+'" stroke="'+pathStroke+'" fill-rule="'+(path.fillRule==='evenodd'?'evenodd':'nonzero')+'" stroke-width="'+Math.max(0,s.lineWidth??2)+'" stroke-linecap="round" stroke-linejoin="round" fill-opacity="'+fillOpacity+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(dash==='dash'?(s.lineWidth??2)*5+' '+(s.lineWidth??2)*3:dash==='dot'?(s.lineWidth??2)+' '+(s.lineWidth??2)*2.5:'none')+'" opacity="'+Math.max(0,Math.min(1,path.opacity??1))+'"/>';
   }).join('');
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+[x,y,w,h].join(' ')+'" preserveAspectRatio="none" style="width:100%;height:100%">'+paths+'</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="width:100%;height:100%">'+paths+'</svg>';
  }
  if(Array.isArray(s.vectorLayers)){
   const geometry=s.vectorLayers.map(layer=>{const rectangles=(layer.rects||[]).filter(r=>Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[2]>0&&r[3]>0).map(([x,y,w,h])=>'M'+x+' '+y+'h'+w+'v'+h+'h-'+w+'Z').join(' '),freeform=(layer.paths||[]).filter(Array.isArray).map(path=>{const points=path.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' '),data=[rectangles,freeform].filter(Boolean).join(' ');return data?'<path fill-rule="evenodd" fill="'+safe(layer.fill||'none')+'" stroke="none" opacity="'+Math.max(0,Math.min(1,layer.opacity??1))+'" d="'+data+'"/>':'';}).join('');
@@ -67,8 +100,27 @@ function baseShapeSVG(s){
  // Shallow line boxes must not make their stroke sub-pixel.
  if(s.kind==='line')return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%"><path d="M1 50 H99" fill="none" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(dash==='dash'?'7 4':dash==='dot'?'1 3':'none')+'" stroke-width="'+Math.max(1,Number(s.lineWidth)||2)+'" vector-effect="non-scaling-stroke" stroke-linecap="round"/></svg>';
  const opts=advancedShapeControls(s.kind).length?resolvedShapeOptions(s.kind,s.shapeOptions||{}):{};
+ if(s.kind==='stripes'){
+  const width=Math.max(.01,s.width||100),height=Math.max(.01,s.height||100),lineWidth=Math.max(0,s.lineWidth??2);
+  const angle=opts.angle*Math.PI/180,nx=-Math.sin(angle),ny=Math.cos(angle);
+  const projections=[0,nx*width,ny*height,nx*width+ny*height],lo=Math.min(...projections),hi=Math.max(...projections);
+  const count=Math.max(1,Math.ceil(Math.abs(nx)*opts.columns+Math.abs(ny)*opts.rows)),paths=[];
+  for(let i=0;i<count;i++){
+   const t=lo+(i+.5)*(hi-lo)/count,points=[];
+   const add=(x,y)=>{if(x>=-1e-7&&x<=width+1e-7&&y>=-1e-7&&y<=height+1e-7&&!points.some(p=>Math.hypot(p[0]-x,p[1]-y)<1e-7))points.push([Math.max(0,Math.min(width,x)),Math.max(0,Math.min(height,y))]);};
+   if(Math.abs(ny)>1e-8){add(0,t/ny);add(width,(t-nx*width)/ny);}
+   if(Math.abs(nx)>1e-8){add(t/nx,0);add((t-ny*height)/nx,height);}
+   if(points.length===2)paths.push('M'+points[0].join(' ')+' L'+points[1].join(' '));
+  }
+  const dashes=dash==='dash'?lineWidth*5+' '+lineWidth*3:dash==='dot'?lineWidth+' '+lineWidth*2.5:'none';
+  const border=opts.showOuterBorder?'<rect x="'+lineWidth/2+'" y="'+lineWidth/2+'" width="'+Math.max(0,width-lineWidth)+'" height="'+Math.max(0,height-lineWidth)+'" fill="none"/>':'';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" fill="'+fill+'" fill-opacity="'+fillOpacity+'" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-width="'+lineWidth+'" stroke-dasharray="'+dashes+'">'+(fill!=='none'?'<rect width="'+width+'" height="'+height+'" stroke="none"/>':'')+'<path d="'+paths.join(' ')+'" fill="none"/>'+border+'</svg>';
+ }
  const outline=parametricOutline(s.kind==='postageFrame'?'postage':s.kind==='ticketFrame'?'ticket':s.kind,opts);
  const paths=outline?null:Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(outline){geometry='<path fill-rule="evenodd" d="'+outline+'"/>';
+  if(s.kind==='flower'&&opts.showCenter)geometry+=`<circle cx=".5" cy=".5" r="${opts.centerRadius}" fill="none"/>`;
+  if(s.kind==='archFrame'&&opts.showInnerBorder)geometry+=`<path d="${archOutline(opts.archRise,opts.frameInset)}" fill="none"/>`;
+  if(s.kind==='scallopFrame'&&opts.showInnerBorder){const inset=.03+opts.lobeDepth+opts.frameInset;geometry+=`<rect x="${inset}" y="${inset}" width="${1-2*inset}" height="${1-2*inset}" rx=".02" fill="none"/>`;}
   if(['postageFrame','ticketFrame'].includes(s.kind)&&opts.showInnerBorder)geometry+='<rect x=".15" y=".17" width=".70" height=".66" rx="'+(s.kind==='ticketFrame'?opts.radius:0)+'" fill="none"/>';}
  else if(paths){const data=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');geometry=data?'<path fill-rule="evenodd" d="'+data+'"/>':'';}
  else if(s.kind==='raindrop')geometry='<path d="M.5 .03 C.37 .22 .12 .50 .12 .68 A.38 .31 0 0 0 .88 .68 C.88 .5 .63 .22 .5 .03 Z"/>';
@@ -84,7 +136,6 @@ function baseShapeSVG(s){
  }
  else if(s.kind==='ellipse')geometry='<ellipse cx=".5" cy=".5" rx=".48" ry=".48"/>';
  else if(s.kind==='heart')geometry='<path d="M.5 .95 C-.1 .55 -.05 .05 .25 .05 C.4 .05 .5 .2 .5 .25 C.5 .2 .6 .05 .75 .05 C1.05 .05 1.1 .55 .5 .95 Z"/>';
- else if(s.kind==='arrow')geometry='<path d="M.03 .35 H.62 V.08 L.97 .5 L.62 .92 V.65 H.03 Z"/>';
  else if(['linedNote','checklistTable','weeklyTable','habitTracker','calendarTable'].includes(s.kind)){
   const lines=[];
   const grid=(cols,rows,{left=.04,top=.08,right=.96,bottom=.94}={})=>{
@@ -109,10 +160,10 @@ function baseShapeSVG(s){
     (opts.showOuterBorder?'<rect x=".04" y=".08" width=".92" height=".86" rx=".018" fill="none" stroke="'+stroke+'"/>':'')+
     '<path d="'+lines.join(' ')+'" fill="none" stroke="'+stroke+'" stroke-linecap="round"/>';
  }
- else if(['grid','dots','stripes'].includes(s.kind)){
+ else if(['grid','dots'].includes(s.kind)){
   const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,'');
   const px=1/opts.columns,py=1/opts.rows;
-  geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+opts.dotSize*Math.min(px,py)/18+'" fill="'+stroke+'" fill-opacity="'+strokeOpacity+'"/>':s.kind==='stripes'?'<path d="M0 '+py/2+' H'+px+'" transform="rotate('+opts.angle+' '+px/2+' '+py/2+')" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>')+'</pattern></defs>'+(fill!=='none'?'<rect width="1" height="1" fill="'+fill+'" stroke="none"/>':'')+'<rect width="1" height="1" fill="url(#'+id+')" fill-opacity="1" stroke="none"/>'+(opts.showOuterBorder?'<rect x=".005" y=".005" width=".99" height=".99" fill="none" stroke="'+stroke+'"/>':'');
+  geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+opts.dotSize*Math.min(px,py)/18+'" fill="'+stroke+'" fill-opacity="'+strokeOpacity+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none" stroke="'+stroke+'" stroke-width="'+sw+'"/>')+'</pattern></defs>'+(fill!=='none'?'<rect width="1" height="1" fill="'+fill+'" stroke="none"/>':'')+'<rect width="1" height="1" fill="url(#'+id+')" fill-opacity="1" stroke="none"/>'+(opts.showOuterBorder?'<rect x=".005" y=".005" width=".99" height=".99" fill="none" stroke="'+stroke+'"/>':'');
  }
  else geometry='<rect x=".015" y=".015" width=".97" height=".97" rx="'+(['roundedRectangle','frame','checkbox'].includes(s.kind)?Math.max(0,Math.min(.5,s.cornerRadius??.1)):'0')+'"/>';
  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%" fill="'+fill+'" fill-opacity="'+fillOpacity+'" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(strokeDashes||'none')+'" stroke-width="'+sw+'">'+geometry+'</svg>';

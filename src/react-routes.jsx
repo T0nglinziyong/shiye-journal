@@ -9,6 +9,7 @@ import {inspectorSelection,inspectorPenStyles} from './editor-inspector-model.js
 import {SeriesArtwork} from './react-series-artwork.jsx';
 import {seriesCoverModes} from './series-cover-layout.js';
 import {journalFontPresets} from './journal-fonts.js';
+import {journalFontChoices} from './journal-font-catalog.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {EditorShapeOptions} from './react-editor-shape-options.jsx';
 import {EditorVectorPanel} from './react-editor-vector.jsx';
@@ -1191,7 +1192,8 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
         onChange={event=>onChange('inspector-text',event.target.value)}/></label>
       <div className="form-grid">
-        {choice('inspector-font','字体',item.style||'hand',journalFontPresets)}
+        {choice('inspector-font','字体风格',item.style||'hand',journalFontPresets)}
+        {choice('inspector-font-name','手写字体',item.fontName||'',[...journalFontChoices,...(item.fontName&&!journalFontChoices.some(([name])=>name===item.fontName)?[[item.fontName,item.fontName]]:[])])}
         {field('inspector-font-size','字号',item.fontSize,'range',{min:5,max:400,step:1})}
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
@@ -1206,7 +1208,6 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         {field('inspector-paragraph-spacing','段距',item.paragraphSpacing??0,'range',{min:0,max:80,step:.5})}
         {choice('inspector-fixed-line-height','行高',item.fixedLineHeight??'',[
           ['','自动'],...([1,1.2,1.5,2].map(ratio=>[Math.round((item.fontSize||40)*ratio),`${ratio} 倍`]))])}
-        {field('inspector-font-name','指定字体',item.fontName||'','text',{placeholder:'留空使用上方字体'})}
       </div>
     </>:null}
     {selected.kind==='shape'?<>

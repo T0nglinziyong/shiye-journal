@@ -8,7 +8,7 @@ try{
  await b.wait('.series-grid');await b.click('[data-route="works"]','.works-grid');await b.click('#work-create','#blank-create-confirm');await b.click('#blank-create-confirm','.upper-canvas');
  await b.click('[data-val="shape"]','[data-shape-kind="rectangle"]');await b.click('[data-shape-kind="rectangle"]');
  await b.click('[data-val="shape"]','[data-shape-kind="ellipse"]');await b.click('[data-shape-kind="ellipse"]');
- await b.click('[data-val="layers"]','[data-layer-pick]');await button('多选');await button('◇rectangle');await button('组合所选');await b.click('[data-val="layers"]');
+ await b.click('[data-val="layers"]','[data-layer-pick]');await button('多选');await button('◇色块');await button('组合所选');await b.click('[data-val="layers"]');
  await b.click('[aria-label="编辑组合"]','#inspector-group-name');
  for(let i=0;i<40&&!await saved();i++)await b.sleep(100);const before=await saved();assert.ok(before?.children.length===2);assert.equal(before.localTransform?.length,6,'manual group uses a persisted local frame');assert.ok(before.layoutBox?.width>0&&before.layoutBox?.height>0,'manual group is immediately referenceable');
  await set('#inspector-group-name','标题与圈注');await set('#inspector-opacity','.65');await b.click('#inspector-group-shadow-enabled');await b.wait('#inspector-group-shadow-color');await set('#inspector-group-shadow-color','#745539');await set('#inspector-group-shadow-blur','2');

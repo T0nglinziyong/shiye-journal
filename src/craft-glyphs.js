@@ -5,7 +5,7 @@ import {normalizeGeometry,geometryUnion,geometryDifference,geometryBounds,transf
 // Read a caller-provided font; return numeric outlines only. The font bytes
 // and user text never leave this local function or enter a repository.
 export function glyphCutGeometry(bytes,text,{fontSizeMM=12,toleranceMM=.025,bridges=[]}={}){
- craftAssert(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=16_000_000,'INVALID_FONT','字体文件需小于 16 MB');
+ craftAssert(bytes instanceof Uint8Array&&bytes.byteLength>0&&bytes.byteLength<=32_000_000,'INVALID_FONT','字体文件需小于 32 MB');
  craftAssert(typeof text==='string'&&Array.from(text).length>0&&Array.from(text).length<=32,'GLYPH_BUDGET','镂空文字需为 1–32 个字符');
  craftAssert(Number.isFinite(fontSizeMM)&&fontSizeMM>=2&&fontSizeMM<=100&&Number.isFinite(toleranceMM)&&toleranceMM>=.005&&toleranceMM<=.1,'INVALID_GLYPH_SIZE','字体毫米尺寸或轮廓精度无效');
  const font=parseFont(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
