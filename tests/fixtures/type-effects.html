@@ -17,6 +17,11 @@ for(let i=0;i<modes.length;i++){
  const sample=document.createElement('canvas');sample.width=300;sample.height=160;const x=sample.getContext('2d');x.translate(150,80);drawSceneText(x,{...base,...modes[i]});window.__typePixels.push([...x.getImageData(0,0,300,160).data]);
  const left=30+(i%3)*290,top=20+Math.floor(i/3)*220;ctx.fillStyle='#FFFFFF';ctx.fillRect(left,top,270,190);if(i===5){ctx.fillStyle='#CAE4DA';for(let k=0;k<9;k++)ctx.fillRect(left+k*30,top,15,160);}ctx.drawImage(sample,left-15,top);ctx.fillStyle='#30463D';ctx.font='14px sans-serif';ctx.fillText(['Plain','Outline','Offset outline','Gradient','Gradient + outline','Transparent hollow'][i],left+15,top+175);
 }
+{
+ const sample=document.createElement('canvas');sample.width=300;sample.height=160;const x=sample.getContext('2d');x.translate(150,80);
+ drawSceneText(x,{...base,textOutline:{...outline,width:2},fillOpacity:1});
+ window.__typePixels.push([...x.getImageData(0,0,300,160).data]);
+}
 const node={...base,textOutline:outline,textGradient:gradient},page={sceneVersion:2,canvas:{width:480,height:200},physicalPageHeightMM:100,layers:[node],pageMode:'single',pageRatio:'a5'};
 const canvas=new fabric.Canvas('editor',{width:480,height:200}),bridge=createFabricSceneBridge(fabric),object=await bridge.fromNode(node);canvas.add(object);canvas.renderAll();
 window.__typeTest={page,node,object,canvas,bridge,applySceneNodeChange,policy:USER_SCENE_POLICY,renderSceneCanvas};
