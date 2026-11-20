@@ -5,7 +5,9 @@ export const exampleMaterials=[
  {id:'example-tape',alias:'m4',title:'示意胶带',kind:'tape',role:'connector',physicalWidthMM:100,physicalHeightMM:6,tapeAxis:'horizontal',supply:{quantity:1}},
  {id:'example-ticket',alias:'m5',title:'示意票根（非真实票据）',kind:'ticket',role:'secondary',physicalWidthMM:22,physicalHeightMM:46,supply:{quantity:1}},
  {id:'example-note',alias:'m6',title:'示意空白便签',kind:'note',role:'information',physicalWidthMM:42,physicalHeightMM:32,supply:{quantity:1}},
- {id:'example-strip',alias:'m7',title:'示意纸条',kind:'paper',role:'connector',physicalWidthMM:60,physicalHeightMM:4,supply:{quantity:1}}
+ {id:'example-strip',alias:'m7',title:'示意纸条',kind:'paper',role:'connector',physicalWidthMM:60,physicalHeightMM:4,supply:{quantity:1}},
+ {id:'example-photo-two',alias:'m8',title:'示意窗景照片',kind:'photo',role:'secondary',physicalWidthMM:25,physicalHeightMM:32,supply:{quantity:1}},
+ {id:'example-photo-three',alias:'m9',title:'示意山景照片',kind:'photo',role:'secondary',physicalWidthMM:30,physicalHeightMM:36,supply:{quantity:1}}
 ];
 export function techniqueExample(method){
  const p={id:'demo',at:[72,88]},before=[];
@@ -13,7 +15,24 @@ export function techniqueExample(method){
  if(method.recipe==='accent'&&method.defaults.motif==='materials')p.aliases=['m1','m2'];
  if(method.recipe==='film'){p.aliases=['m1','m2','m3'];p.at=[74,88];}
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
+ if(method.skill==='photo-story'&&['materials','film'].includes(method.recipe))p.aliases=['m1','m8','m9'];
  if(method.id==='magazine-offset'){p.aliases=['m1','m2','m5'];p.caption='示意图注';}
+ if(method.id==='graphic-loop'){
+  p.at=[73,78];p.widthMm=17;p.heightMm=17;
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[70,88],unit:'mm'}});
+ }
+ if(method.id==='graphic-route'){
+  p.widthMm=70;p.heightMm=38;p.waypoints=[[.34,.26],[.69,.62]];
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[49,82],unit:'mm'}},{op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[96,96],unit:'mm'}});
+ }
+ if(method.id==='graphic-corner'){
+  p.at=[73,88];p.widthMm=50;p.heightMm=40;
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[74,81],unit:'mm'}});
+ }
+ if(method.id==='graphic-rays'){
+  p.widthMm=34;p.heightMm=34;
+  before.push({op:'graphic.add',id:'focal',geometry:{kind:'star',options:{points:5,innerRatio:.5}},place:{reference:'page',at:[72,88],unit:'mm'},size:{width:7,height:7,unit:'mm'},style:{fill:'#E6B45E',stroke:'#3D6871',strokeWidthMm:.25}});
+ }
  if(method.recipe==='tape'){
   p.aliases=['m4'];
   if(method.id==='tape-fix')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,107],unit:'mm'}});

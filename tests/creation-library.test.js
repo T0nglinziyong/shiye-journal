@@ -114,6 +114,22 @@ test('quiet pair stays spaced apart while layered diagonal is connected',()=>{
  const a=exampleMaterials[0],b=exampleMaterials[1],dx=Math.abs(quiet[1].place.at[0]-quiet[0].place.at[0]);
  assert.ok(dx>=(a.physicalWidthMM+b.physicalWidthMM)/2);
 });
+test('graphic lesson examples show their focal objects and route requires real waypoints',()=>{
+ const route=describeTechnique('graphic-route');
+ assert.equal(route.parameters.waypoints.required,true);
+ assert.equal(route.example.prepare.filter(op=>op.op==='material.add').length,2);
+ assert.equal(route.tool.arguments.parameters.waypoints.length,2);
+ assert.throws(()=>compileTechnique({methodId:'graphic-route',parameters:{id:'route'}}),/需要两个以上真实焦点/);
+ assert.throws(()=>compileTechnique({methodId:'graphic-route',parameters:{id:'route',waypoints:[[.2,.2],[1.2,.8]]}}),/区域内比例坐标/);
+ for(const id of ['graphic-loop','graphic-corner','graphic-rays'])assert.ok(describeTechnique(id).example.prepare.length,id+' missing focal example');
+});
+test('photo-story examples use photographs for every material slot',()=>{
+ for(const method of techniqueCatalog.methods.filter(m=>m.skill==='photo-story'&&['materials','film'].includes(m.recipe))){
+  const aliases=techniqueExample(method).parameters.aliases;
+  assert.ok(aliases.length>=2,method.id);
+  for(const alias of aliases)assert.equal(exampleMaterials.find(asset=>asset.alias===alias)?.kind,'photo',method.id+'/'+alias);
+ }
+});
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
  const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
  assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);

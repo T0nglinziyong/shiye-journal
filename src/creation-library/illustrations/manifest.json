@@ -749,65 +749,65 @@
       "id": "photo-row",
       "file": "photo-row.png",
       "kind": "rendered-editable-commands",
-      "sha256": "b7c2a7f3f1116dfce2f6f180dcd21d6988da8c1f726bd7e97a5227d24ab42e8d",
+      "sha256": "d30c93e7377276cae53377f5c9ea0cce5145cf0168f8e12452f99313bd1f2083",
       "width": 360,
-      "height": 153
+      "height": 167
     },
     {
       "id": "photo-grid",
       "file": "photo-grid.png",
       "kind": "rendered-editable-commands",
-      "sha256": "17492a0a14089dca581b954c27797804d8ed63d59b5d88f1e32fe5ccf4fe82dd",
-      "width": 278,
+      "sha256": "04d34d9f60fb8c3528e600f30841809c86d1862c0aa7bf41be97f23d095a1700",
+      "width": 234,
       "height": 300
     },
     {
       "id": "photo-stagger",
       "file": "photo-stagger.png",
       "kind": "rendered-editable-commands",
-      "sha256": "50c587cd72b3fc08d0fb1ced5552f91508918a865e178764a7f8c21fe0c8268f",
+      "sha256": "5413267f16431a3352189bb9172baa45e4b9f1ff5d60278ca066ee957e59984e",
       "width": 360,
-      "height": 153
+      "height": 172
     },
     {
       "id": "photo-caption",
       "file": "photo-caption.png",
       "kind": "rendered-editable-commands",
-      "sha256": "31cb28d4ff80464bbaf6f5b98189022119c9c4d58fad274d61521a0cd7a45484",
+      "sha256": "4c41128a86fb6ace767eb20d4feae728ea2cb4420c8f083f9a4d517ae2b23b92",
       "width": 360,
-      "height": 180
+      "height": 197
     },
     {
       "id": "graphic-loop",
       "file": "graphic-loop.png",
       "kind": "rendered-editable-commands",
-      "sha256": "4b5d14e31267e29ed545aad7afb9f2d528dd5b6b33125dbf3af113ada4c04441",
-      "width": 360,
-      "height": 217
+      "sha256": "d9a481acedc30bff5f1cb351795ecdfe2dece56a8a88285b226297906200c24c",
+      "width": 234,
+      "height": 300
     },
     {
       "id": "graphic-route",
       "file": "graphic-route.png",
       "kind": "rendered-editable-commands",
-      "sha256": "9c1bce3af26e9dbe746710823b18ed4952169fe6f14d3d65b1963d3d5236d994",
+      "sha256": "b31a345a08815d100b8c77b62af1afac5afa47a44b1cc0852c243da44ac517cc",
       "width": 360,
-      "height": 81
+      "height": 241
     },
     {
       "id": "graphic-corner",
       "file": "graphic-corner.png",
       "kind": "rendered-editable-commands",
-      "sha256": "af99efd9fca5b91dcd41b2f2f9d045d0c362118cbd9c908743be399cdcdcc845",
+      "sha256": "f069bbb3bca8c9c32fda34a7c752159376411684a7144161e6fa6f60dd1d1ad3",
       "width": 360,
-      "height": 219
+      "height": 300
     },
     {
       "id": "graphic-rays",
       "file": "graphic-rays.png",
       "kind": "rendered-editable-commands",
-      "sha256": "e4dd3bdc907d455d44e32f6cb54f76cdab628aabae2b517583a5af83d2e579b8",
-      "width": 360,
-      "height": 218
+      "sha256": "82ef4565e1c8aa804f28c31ae9fbe3733e6cb15dd18237cbc3d35e292fbb79a3",
+      "width": 300,
+      "height": 300
     },
     {
       "id": "pattern-dots",
@@ -1141,9 +1141,9 @@
       "id": "photo-film",
       "file": "photo-film.png",
       "kind": "rendered-editable-commands",
-      "sha256": "2e5df2d077b3abc65cae30546c188bc001212ea8c9711bd4f60dfbef1ae26eee",
+      "sha256": "0004ad6b37178879a5b1794be7f502487fb374336696c9ede6742b8104b5d91d",
       "width": 360,
-      "height": 155
+      "height": 164
     },
     {
       "id": "graphic-film-frame",

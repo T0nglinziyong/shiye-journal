@@ -33,12 +33,13 @@ export function describeTechnique(id){
  const names=methodFields(method),help={...fieldHelp,...titleHelp,...(method.recipe==='accent'?{count:'数字点缀候选数量 1–24；指定 positions 时以其长度为准；避让可能减少实际数量',widthMm:'点缀组局部范围宽度，毫米；不会缩放实体',heightMm:'点缀组局部范围高度，毫米；不会缩放实体'}:{}),...(method.recipe==='tape'?{widthMm:'胶带摆放范围宽度，毫米；不会缩放实体',heightMm:'胶带摆放范围高度，毫米；不会缩放实体'}:{}),corePlace:'可选窗芯位置，使用 layer.update.place 的完整结构。传入时显示并定位窗芯；不传则隐藏保留。位置按裁下窗芯的外接框定位，保留原图裁切来源',strip:'已经放置并对准孔位的真实纸条节点 ID；不缩放或自动拉长',through:'按穿行顺序给 2–16 项 {target,sideAfter:"front"|"back",region? ,window?}；region 用 material.window 的 Region 开新孔，window 引用已有孔 ID，二选一。新孔窗芯隐藏保留；输出报告列出替代后的框与窗芯 ID',...(method.recipe==='write'?{box:'素材局部可写区域 [x,y,width,height]，各值为比例；需先观察图片，避开重要图案',text:'完整正文，最多 500 字；不截断，实际高度需看预览'}:{})};
  if(method.id==='magazine-offset')help.caption='主图下方的可选短图注，仅对应 aliases 首项；不自动编造';
  const example=techniqueExample(method);
- return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
+ return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
 }
 function validate(method,params){
  libraryID(params.id);const allowed=new Set(methodFields(method));
  for(const key of Object.keys(params))if(!allowed.has(key))throw Error('该方法不支持参数：'+key);
  for(const key of required[method.recipe])if(params[key]===undefined)throw Error('缺少参数：'+key);
+ if(method.id==='graphic-route'&&params.waypoints===undefined)throw Error('转折阅读线需要两个以上真实焦点的 waypoints');
  if(method.defaults.reuseCore&&!params.corePlace)throw Error('复用窗芯需要给出 corePlace');
  for(const key of ['widthMm','heightMm','fontSizePt','strokeWidthMm','lengthMm','periodMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<=0||params[key]>1000))throw Error('尺寸参数无效：'+key);
  for(const key of ['gapMm','amountMm','depthMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<0||params[key]>200))throw Error('间距参数无效：'+key);
@@ -54,6 +55,7 @@ function validate(method,params){
  if(params.pattern!==undefined&&!['plain','dots','stripes','grid'].includes(params.pattern))throw Error('未知背景花纹');
  if(params.items&&(!Array.isArray(params.items)||!params.items.length||params.items.length>12||params.items.some(t=>typeof t!=='string'||!t.trim()||t.length>180)))throw Error('条目格式无效');
  if(params.aliases&&(!Array.isArray(params.aliases)||!params.aliases.length||params.aliases.length>8||new Set(params.aliases).size!==params.aliases.length))throw Error('素材列表无效或重复');
+ if(params.waypoints!==undefined&&(!Array.isArray(params.waypoints)||params.waypoints.length<2||params.waypoints.length>6||params.waypoints.some(point=>!Array.isArray(point)||point.length!==2||point.some(n=>!Number.isFinite(n)||n<0||n>1))))throw Error('阅读线路点须为 2–6 个区域内比例坐标');
  if(params.parts!==undefined&&(!Number.isInteger(params.parts)||params.parts<2||params.parts>8))throw Error('分裁数量为 2–8');
  if(params.gapRatio!==undefined&&(!Number.isFinite(params.gapRatio)||params.gapRatio<0||params.gapRatio>.05))throw Error('余料间隔比例为 0–0.05');
 }
