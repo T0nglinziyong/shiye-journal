@@ -69,6 +69,6 @@ export async function loadCreationSkills(root=fileURLToPath(new URL('../../creat
     return structuredClone(pictures.get(name));
   },async methodImageParts(name,options){
     if(!registry.has(name))throw Error('未知创作 Skill：'+name);
-    return recipeImages(methodsFor(name,options).map(m=>m.id));
+    return recipeImages(methodsFor(name,options).filter(m=>m.illustration).map(m=>m.id));
   }};
 }

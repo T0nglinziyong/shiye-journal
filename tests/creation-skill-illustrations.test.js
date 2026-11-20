@@ -70,3 +70,11 @@ test('preloaded and requested skills deliver actual image parts once, with separ
   }});
   await assert.rejects(harness.run({id:'images',state}),/image delivery verified/);assert.equal(turns,3);
 });
+
+test('basic method details remain readable without loading a method image',async()=>{
+  const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
+  const detail=skills.read('paper-layering',{level:'detail',methodId:'paper-window'});
+  assert.equal(detail.methods[0].id,'paper-window');
+  assert.deepEqual(await skills.methodImageParts('paper-layering',{level:'detail',methodId:'paper-window'}),[]);
+  assert.equal((await skills.methodImageParts('photo-story',{level:'detail',methodId:'photo-grid'})).length,2);
+});

@@ -1,4 +1,4 @@
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,unlink,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {loadOfflineCanvas,renderOfflinePNG} from '../src/offline-node-preview.mjs';
@@ -11,6 +11,7 @@ import {compileTemplate} from '../src/creation-library/compiler.js';
 import {templateFixture,resolveTemplateStyle} from '../src/creation-library/template-elements.js';
 import {exampleMaterials,techniqueExample} from '../src/creation-library/examples.js';
 const root=resolve(import.meta.dirname,'../src/creation-library/illustrations');await mkdir(root,{recursive:true});
+const previous=JSON.parse(await readFile(resolve(root,'manifest.json'),'utf8').catch(()=>'{}'));
 const canvas=await loadOfflineCanvas(),manifest={version:1,images:[]};
 async function save(id,image,kind){const bytes=image.toBuffer('image/png');await writeFile(resolve(root,id+'.png'),bytes);manifest.images.push({id,file:id+'.png',kind,sha256:createHash('sha256').update(bytes).digest('hex'),width:image.width,height:image.height});}
 const palette=['#72A8B7','#E5B456','#96BAB6','#D59076'];
@@ -65,6 +66,7 @@ for(const [i,a] of exampleMaterials.entries()){
  images[a.alias]=c.toBuffer('image/png');
 }
 for(const method of techniqueCatalog.methods){
+ if(!method.illustration)continue;
  const {before,parameters}=techniqueExample(method),compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
  const doc=await createCreationDocument({draft:draft({ratio:'a5'}),assets:exampleMaterials,aliases:Object.fromEntries(exampleMaterials.map(a=>[a.alias,a.id]))});
  const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'illustration-'+method.id,baseSceneRevision:creationSceneRevision(doc),operations:[...before,...compiled.operations]},exampleMaterials).document;
@@ -76,4 +78,6 @@ for(const method of techniqueCatalog.methods){
  const scale=Math.min(360/(right-left),300/(bottom-top)),out=canvas.createCanvas(Math.round((right-left)*scale),Math.round((bottom-top)*scale));out.getContext('2d').drawImage(im,left,top,right-left,bottom-top,0,0,out.width,out.height);
  await save(method.id,out,'rendered-editable-commands');
 }
+const currentIds=new Set(manifest.images.map(item=>item.id));
+for(const item of previous.images||[])if(!currentIds.has(item.id)&&/^[a-z0-9-]+\.png$/.test(item.file))await unlink(resolve(root,item.file)).catch(error=>{if(error.code!=='ENOENT')throw error;});
 await writeFile(resolve(root,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify({templates:templateCatalog.templates.length,techniques:techniqueCatalog.methods.length,images:manifest.images.length}));

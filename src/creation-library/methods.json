@@ -327,10 +327,6 @@
       "defaults": {
         "relation": "peek"
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "paper-peek"
-      },
       "lesson": {
         "principle": "让一张已有纸片从另一件素材的指定边探出。",
         "steps": [
@@ -357,10 +353,6 @@
       "recipe": "tear",
       "when": "沿自定轨迹形成毛边并保留余料",
       "defaults": {},
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "paper-tear"
-      },
       "lesson": {
         "principle": "沿局部轨迹撕出真实裁片，保留另一侧余料。",
         "steps": [
@@ -387,10 +379,6 @@
       "recipe": "window",
       "when": "通过窗口露出下层材料，窗芯可再用",
       "defaults": {},
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "paper-window"
-      },
       "lesson": {
         "principle": "切开真实纸面中央，外框与挖下的内芯分别保留。",
         "steps": [
@@ -446,10 +434,6 @@
           "guide": "creation-skills/paper-layering/SKILL.md",
           "scope": "纸张工艺的工具组合为拾页归纳实现，不声称复刻外部教程的全部步骤。"
         }
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "paper-window-reuse"
       }
     },
     {
@@ -476,10 +460,6 @@
           "guide": "creation-skills/paper-layering/SKILL.md",
           "scope": "纸张工艺的工具组合为拾页归纳实现，不声称复刻外部教程的全部步骤。"
         }
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "paper-weave"
       }
     },
     {
@@ -489,10 +469,6 @@
       "recipe": "split",
       "when": "将同一纸片分成不重叠材料再组合",
       "defaults": {},
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "paper-split"
-      },
       "lesson": {
         "principle": "把一张材料拆成多段，让各段成为可再次组合的实体。",
         "steps": [
@@ -650,10 +626,6 @@
       "defaults": {
         "motif": "loop"
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-loop"
-      },
       "lesson": {
         "principle": "用轻手绘圈线指向一处内容，不填满圈内。",
         "steps": [
@@ -681,10 +653,6 @@
       "when": "连接两到六个实际焦点",
       "defaults": {
         "motif": "trail"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-route"
       },
       "lesson": {
         "principle": "通过两到六个实际焦点规划转折阅读线。",
@@ -714,10 +682,6 @@
       "defaults": {
         "motif": "corner"
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-corner"
-      },
       "lesson": {
         "principle": "用少量角线界定一个内容区，保持边框开放。",
         "steps": [
@@ -745,10 +709,6 @@
       "defaults": {
         "motif": "rays"
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-rays"
-      },
       "lesson": {
         "principle": "在小焦点外侧放射短线，强调一次视觉停顿。",
         "steps": [
@@ -775,10 +735,6 @@
       "when": "留白区用疏密建立节奏",
       "defaults": {
         "pattern": "dots"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "pattern-dots"
       },
       "lesson": {
         "principle": "局部点阵与相邻留白形成疏密对比，行列数控制点的密度。",
@@ -818,10 +774,6 @@
       "defaults": {
         "pattern": "stripes"
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "pattern-stripes"
-      },
       "lesson": {
         "principle": "斜线作为局部底纹，为纯色区增加方向。",
         "steps": [
@@ -859,10 +811,6 @@
       "defaults": {
         "pattern": "grid"
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "pattern-grid"
-      },
       "lesson": {
         "principle": "少量横竖线形成可读的记录感底纹。",
         "steps": [
@@ -898,10 +846,6 @@
       "when": "围绕便签或图文区做轻装饰",
       "defaults": {
         "motif": "scallop"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "pattern-scallop"
       },
       "lesson": {
         "principle": "手绘波浪短边回应便签的柔和轮廓。",
@@ -1121,7 +1065,11 @@
       "when": "从实际素材选色，在周围重复少量色点",
       "defaults": {
         "pattern": "echo",
-        "colors": ["#3D6871", "#E6B45E", "#D59076"]
+        "colors": [
+          "#3D6871",
+          "#E6B45E",
+          "#D59076"
+        ]
       },
       "illustration": {
         "kind": "executable-schematic",
@@ -1864,10 +1812,6 @@
           "showCenter": true
         }
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-flower"
-      },
       "example": {
         "widthMm": 24,
         "heightMm": 24,
@@ -1879,16 +1823,16 @@
         }
       },
       "lesson": {
-        "principle": "用 flower 数字几何表达回应素材中的花卉或圆形轮廓，结构参数保持可编辑。",
+        "principle": "在已有花卉或圆形素材旁放一朵可编辑的数字花，重复轮廓语言而不复制实体素材。",
         "steps": [
-          "先设置宽高",
-          "通过 options 调整petals、petalDepth、centerRadius、showCenter",
-          "再设线色、填充和透明度。"
+          "观察相邻素材的花瓣数量与外形，选择放置位置和宽高",
+          "用 petals、petalDepth 调花瓣，用 centerRadius、showCenter 调花心",
+          "按素材颜色设置线色、填充与透明度"
         ],
         "check": [
-          "修改结构参数后轮廓仍正确",
-          "空心区域透明",
-          "不会用缩放代替结构调整。"
+          "数字花与参照素材有形状呼应，但不盖住原图案",
+          "空心区域透明，花瓣与花心仍可通过参数调整",
+          "原实体素材的尺寸和来源不变"
         ],
         "source": {
           "kind": "project-synthesis",
@@ -1912,10 +1856,6 @@
           "innerRatio": 0.5
         }
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-star"
-      },
       "example": {
         "widthMm": 22,
         "heightMm": 22,
@@ -1925,16 +1865,16 @@
         }
       },
       "lesson": {
-        "principle": "用 star 数字几何表达在关键词或焦点附近作单点强调，结构参数保持可编辑。",
+        "principle": "在关键词或焦点旁用一颗可编辑星形作单点强调。",
         "steps": [
-          "先设置宽高",
-          "通过 options 调整points、innerRatio",
-          "再设线色、填充和透明度。"
+          "选择需要强调的词或图像细节，并在旁边留出星形位置",
+          "用 points 调尖角数，用 innerRatio 调星角深度",
+          "设置线色、填充和透明度，按整页比例检查大小"
         ],
         "check": [
-          "修改结构参数后轮廓仍正确",
-          "空心区域透明",
-          "不会用缩放代替结构调整。"
+          "星形没有盖住需要阅读的文字或图像细节",
+          "结构参数改变后仍是清楚的单点强调",
+          "空心设置仍保持透明"
         ],
         "source": {
           "kind": "project-synthesis",
@@ -1957,10 +1897,6 @@
           "headLength": 0.3,
           "shaftWidth": 0.16
         }
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-arrow"
       },
       "example": {
         "widthMm": 42,
@@ -2004,10 +1940,6 @@
           "frameInset": 0.06,
           "showInnerBorder": true
         }
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-arch"
       },
       "example": {
         "widthMm": 44,
@@ -2054,10 +1986,6 @@
           "showInnerBorder": true
         }
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-scallop-frame"
-      },
       "example": {
         "widthMm": 52,
         "heightMm": 40,
@@ -2102,10 +2030,6 @@
           "innerLength": 0.6
         }
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-paperclip"
-      },
       "example": {
         "widthMm": 9,
         "heightMm": 22,
@@ -2148,10 +2072,6 @@
           "depth": 0.12
         }
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-wave"
-      },
       "example": {
         "widthMm": 55,
         "heightMm": 7,
@@ -2193,10 +2113,6 @@
           "count": 7,
           "depth": 0.15
         }
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-zigzag"
       },
       "example": {
         "widthMm": 55,
@@ -2241,10 +2157,6 @@
           "radius": 0.1
         }
       },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-bubble"
-      },
       "example": {
         "widthMm": 45,
         "heightMm": 28,
@@ -2281,10 +2193,6 @@
       "recipe": "write",
       "when": "便签、纸片或照片具有清楚的空白，可承载与素材相关的短段落",
       "defaults": {},
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "record-on-material"
-      },
       "lesson": {
         "principle": "先观察素材中真正可以写字的空白，选择局部比例区域，让段落与素材一起移动，保留记录功能和图文关系。",
         "steps": [
@@ -2357,10 +2265,6 @@
           "frameInset": 0.16
         },
         "strokeWidthMm": 0.1
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "graphic-film-frame"
       },
       "lesson": {
         "principle": "使用带透明照片窗和齿孔的原生数字几何，格数、齿孔数和边带比例均可独立修改。",

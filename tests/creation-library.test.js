@@ -48,7 +48,7 @@ for(const template of templateCatalog.templates)test('template compiles through 
 });
 for(const method of techniqueCatalog.methods)test('technique transaction is executable: '+method.id,async()=>{
  const {parameters,before}=techniqueExample(method),doc=await document(exampleMaterials),compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
- const result=apply(doc,[...before,...compiled.operations],exampleMaterials);assert.equal(result.changed,true);assert.equal(describeTechnique(method.id).illustration.id,method.id);
+ const result=apply(doc,[...before,...compiled.operations],exampleMaterials);assert.equal(result.changed,true);assert.equal(describeTechnique(method.id).illustration?.id,method.illustration?.id);
  if(!compiled.report.groupId)return;
  const page=result.document.page,group=page.layers.find(node=>node.id===compiled.report.groupId),box=worldBox(page,group.id),angle=box.rotation*Math.PI/180;
  const pageHalfX=(Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h)/2;
@@ -63,6 +63,16 @@ for(const method of techniqueCatalog.methods)test('technique transaction is exec
   const dy=(Math.abs(Math.sin(relative))*cb.w+Math.abs(Math.cos(relative))*cb.h)/2;
   assert.ok(x-dx>=-box.w/2-.5&&x+dx<=box.w/2+.5,method.id+'/'+child.id+' group width');
   assert.ok(y-dy>=-box.h/2-.5&&y+dy<=box.h/2+.5,method.id+'/'+child.id+' group height');
+ }
+});
+test('basic tools keep executable examples without illustration assets',()=>{
+ const basicRecipes=new Set(['graphic','relate','tear','window','split','weave','write']);
+ const basicPatterns=new Set(['pattern-dots','pattern-stripes','pattern-grid','pattern-scallop']);
+ for(const method of techniqueCatalog.methods.filter(method=>basicRecipes.has(method.recipe)||basicPatterns.has(method.id))){
+  const detail=describeTechnique(method.id);
+  assert.equal(detail.illustration,undefined,method.id);
+  assert.ok(detail.tool.arguments.parameters.id,method.id);
+  assert.ok(compileTechnique({methodId:method.id,parameters:detail.tool.arguments.parameters,materials:exampleMaterials}).operations.length,method.id);
  }
 });
 test('missing slots remain empty; unknown source and repeated material are rejected',()=>{

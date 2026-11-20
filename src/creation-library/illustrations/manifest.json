@@ -698,54 +698,6 @@
       "height": 300
     },
     {
-      "id": "paper-peek",
-      "file": "paper-peek.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "7ad672bac4601a78a625eac0bf13dec60d6653fe7b65c3e9fc45056dc007ebb0",
-      "width": 360,
-      "height": 286
-    },
-    {
-      "id": "paper-tear",
-      "file": "paper-tear.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "226f49e7edbd61647252ffe7e57da14b5663be9107520f7cdabb3b405e999f65",
-      "width": 360,
-      "height": 205
-    },
-    {
-      "id": "paper-window",
-      "file": "paper-window.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "8e34592eb324a9e2e1fc24996a309ba911f9b4289296190d91a6f7eae2a99a66",
-      "width": 360,
-      "height": 286
-    },
-    {
-      "id": "paper-window-reuse",
-      "file": "paper-window-reuse.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "83c5444b6ba929d12e8532f8152557e636bfcc5ea8faa906ee7dfb76743f1e88",
-      "width": 360,
-      "height": 177
-    },
-    {
-      "id": "paper-weave",
-      "file": "paper-weave.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "80d34194ce9a1418700039ffaeb66ee084f1ddc65320ffb182c635d34b240143",
-      "width": 360,
-      "height": 210
-    },
-    {
-      "id": "paper-split",
-      "file": "paper-split.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "6aa04987a22ee1a6511f96405a8c184aa31705dffaf64fbbefce260ec111a9f6",
-      "width": 360,
-      "height": 285
-    },
-    {
       "id": "photo-row",
       "file": "photo-row.png",
       "kind": "rendered-editable-commands",
@@ -776,70 +728,6 @@
       "sha256": "4c41128a86fb6ace767eb20d4feae728ea2cb4420c8f083f9a4d517ae2b23b92",
       "width": 360,
       "height": 197
-    },
-    {
-      "id": "graphic-loop",
-      "file": "graphic-loop.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "d9a481acedc30bff5f1cb351795ecdfe2dece56a8a88285b226297906200c24c",
-      "width": 234,
-      "height": 300
-    },
-    {
-      "id": "graphic-route",
-      "file": "graphic-route.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "b31a345a08815d100b8c77b62af1afac5afa47a44b1cc0852c243da44ac517cc",
-      "width": 360,
-      "height": 241
-    },
-    {
-      "id": "graphic-corner",
-      "file": "graphic-corner.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "f069bbb3bca8c9c32fda34a7c752159376411684a7144161e6fa6f60dd1d1ad3",
-      "width": 360,
-      "height": 300
-    },
-    {
-      "id": "graphic-rays",
-      "file": "graphic-rays.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "82ef4565e1c8aa804f28c31ae9fbe3733e6cb15dd18237cbc3d35e292fbb79a3",
-      "width": 300,
-      "height": 300
-    },
-    {
-      "id": "pattern-dots",
-      "file": "pattern-dots.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "309e5950f3eb9ea7224ff8692e7c9f08d93d9a2bf63dbf2ba0060aedfd26dfda",
-      "width": 360,
-      "height": 125
-    },
-    {
-      "id": "pattern-stripes",
-      "file": "pattern-stripes.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "b79d26365b8118b8d877a283a0d0810cc3cba069d03dabcc4c41241953d5f50b",
-      "width": 360,
-      "height": 184
-    },
-    {
-      "id": "pattern-grid",
-      "file": "pattern-grid.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "609ea90f59adb52d13c1d3261777b22b17ad3c28cd96d576aefd0a2b2832e3b3",
-      "width": 360,
-      "height": 122
-    },
-    {
-      "id": "pattern-scallop",
-      "file": "pattern-scallop.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "6bd7633add7cff83eb3c73dab93ef6b9bbb4fb1a1bc0034b0f2f436ba03d1f27",
-      "width": 348,
-      "height": 300
     },
     {
       "id": "tape-fix",
@@ -1058,100 +946,12 @@
       "height": 164
     },
     {
-      "id": "graphic-flower",
-      "file": "graphic-flower.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "2a3e23fa810e36d194dd41b7ee44060f273b86e7f20964dbf320e0359fa07462",
-      "width": 309,
-      "height": 300
-    },
-    {
-      "id": "graphic-star",
-      "file": "graphic-star.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "b52563d6627bee2506356463851185d0c275d05aadfb445926c1d80d4e80dd6f",
-      "width": 309,
-      "height": 300
-    },
-    {
-      "id": "graphic-arrow",
-      "file": "graphic-arrow.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "b69dd12c990863b10ee2e37641603a1da2f54d32747bf29e343b316236027375",
-      "width": 360,
-      "height": 156
-    },
-    {
-      "id": "graphic-arch",
-      "file": "graphic-arch.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "9fcf4c85d44aec2c90db88f1d7f6d5da488f652ffd9397bfdddb470907d6bf2f",
-      "width": 236,
-      "height": 300
-    },
-    {
-      "id": "graphic-scallop-frame",
-      "file": "graphic-scallop-frame.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "7f3ba1ffe2b3a72b5811b62b3d293aa8abb564b7c3a84cd70498c3e735691456",
-      "width": 360,
-      "height": 287
-    },
-    {
-      "id": "graphic-paperclip",
-      "file": "graphic-paperclip.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "f9b668029fbce1eb78407f6938e2f1a27fde4a2200653f4ab6074ccfde21cb34",
-      "width": 334,
-      "height": 300
-    },
-    {
-      "id": "graphic-wave",
-      "file": "graphic-wave.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "6238d76f35a256267d65752e4b72c7ad59eec56acf8e8dfa06e86382e59cdf0d",
-      "width": 360,
-      "height": 173
-    },
-    {
-      "id": "graphic-zigzag",
-      "file": "graphic-zigzag.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "0cda797ae774aef30b20a422a5c25853cae4001739c19a531a7d3509271f92d5",
-      "width": 360,
-      "height": 172
-    },
-    {
-      "id": "graphic-bubble",
-      "file": "graphic-bubble.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "84dd1ebf747fd0067340eca90efa03cce63607bf1dd0c25feee1055bfc79f905",
-      "width": 210,
-      "height": 300
-    },
-    {
-      "id": "record-on-material",
-      "file": "record-on-material.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "98073cdbca6ea3ef9ec76502b4148c1d77d6806c9ec2ce446c29c63e1d27254f",
-      "width": 358,
-      "height": 300
-    },
-    {
       "id": "photo-film",
       "file": "photo-film.png",
       "kind": "rendered-editable-commands",
       "sha256": "0004ad6b37178879a5b1794be7f502487fb374336696c9ede6742b8104b5d91d",
       "width": 360,
       "height": 164
-    },
-    {
-      "id": "graphic-film-frame",
-      "file": "graphic-film-frame.png",
-      "kind": "rendered-editable-commands",
-      "sha256": "d913028ca5760734eecfc7c2611980cabc5e982f149fd65e194b729c37e4b5de",
-      "width": 360,
-      "height": 166
     },
     {
       "id": "accent-spark",
