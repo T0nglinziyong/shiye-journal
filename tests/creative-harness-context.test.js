@@ -35,7 +35,7 @@ test('only superseded automatic previews are pruned; sources, tool pairs and rea
 test('skill routing uses explicit direction and respects no-text tasks',async()=>{
   const skills=await loadCreationSkills();
   const selected=preloadCreationSkills(skills,{source:{textMode:'none',styles:[]}},{styles:['童趣可爱'],intent:'复古旧物'}).map(s=>s.name);
-  assert.deepEqual(selected,['journal-composition','paper-layering','playful-journal']);
+  assert.deepEqual(selected,['journal-composition','paper-layering','journal-accents','playful-journal']);
   assert.ok(!selected.includes('vintage-journal'));
   assert.ok(preloadCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='vintage-journal'));
 });

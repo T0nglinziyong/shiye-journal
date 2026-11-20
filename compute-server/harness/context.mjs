@@ -5,7 +5,7 @@ import {validateWebScene} from '../../src/web-scene-workbench.js';
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 
 export function preloadCreationSkills(skills,document,brief={}){
-  const names=['journal-composition','paper-layering'];
+  const names=['journal-composition','paper-layering','journal-accents'];
   if(document.source.textMode!=='none')names.push('journal-lettering');
   const styles=new Set([...(brief.styles||[]),...(document.source.styles||[]),brief.style]);
   const routes={'童趣可爱':'playful-journal','复古旧物':'vintage-journal','清新淡雅':'quiet-photo-journal','极简留白':'quiet-photo-journal','疏朗留白':'quiet-photo-journal','丰富层叠':'layered-journal','美式拼贴':'magazine-journal','杂志排版':'magazine-journal','日系文具':'functional-journal'};

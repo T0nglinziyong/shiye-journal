@@ -6,8 +6,8 @@
 
 | 要求 | 当前证据 | 结论 |
 | --- | --- | --- |
-| 每个现有方法有原理、步骤、检查点和完整调用 | methods.json 的 lesson；describeTechnique 的 example.prepare 与完整 parameters；creation-library.test.js 逐项执行 | 已覆盖当前 66 项；不代表所有教程方法已经穷尽 |
-| 示意与可执行工具一致 | build-creation-library-illustrations.mjs 运行真实 Scene，manifest 校验 66 张方法图；查看全表及标题细图 | 当前方法已生成并查看；需要真实创作复验 |
+| 每个现有方法有原理、步骤、检查点和完整调用 | methods.json 的 lesson；describeTechnique 的 example.prepare 与完整 parameters；creation-library.test.js 逐项执行 | 已覆盖当前 72 项；不代表所有教程方法已经穷尽 |
+| 示意与可执行工具一致 | build-creation-library-illustrations.mjs 运行真实 Scene，manifest 校验 72 张方法图；查看全表及标题细图 | 当前方法已生成并查看；需要真实创作复验 |
 | 结构参数可修改 | 图形直接使用 geometry.options；标题共用 style、runs、emphasis；编辑与导出共用绘制 | 已实现并有针对测试 |
 | 不臃肿、按需检索 | read_skill 每页 8 项；统一 creation_recipe；题目目录预载而非所有图片常驻 | 保持 |
 | 模板数量与结构 | templates.json 为 78 个独立来源面板 | 用户确认数量暂时足够，不再增加；逐项质量验收继续 |
@@ -22,6 +22,7 @@
 
 | 专题 | 方法 |
 | --- | --- |
+| journal-accents | accent-spark, accent-sprig, accent-stitch, accent-rings, accent-confetti, accent-materials |
 | journal-lettering | title-underline, title-outline, title-highlight, title-stack, title-vertical, title-stagger, title-label, title-curve, title-shadow, title-offset-outline, title-gradient, title-gradient-outline, title-phrases, title-circle, title-caption |
 | paper-layering | paper-underlay, paper-peek, paper-tear, paper-window, paper-window-reuse, paper-weave, paper-split |
 | photo-story | photo-row, photo-grid, photo-stagger, photo-caption, photo-film, graphic-film-frame |
@@ -97,3 +98,14 @@
 - 三件私有真实素材的直排与弧形示例均在本机生成并查看；素材保持原尺寸，没有上传或调用模型。结果保存在研究目录的“胶片方法真实素材复验”。
 - **尚未完成**：立体卷曲胶片中的照片像素变形、连续折返带及对应模板 ac-26 的完整重建。现有方法是平面图组，不能将它计为卷曲复原。模板仍为 78 个，逐项描述仍为 49 个。
 - 验证：首轮完整测试有一个 V8 内部进程崩溃；重跑后 1901 项通过、1 项跳过、0 失败，UI smoke、React 流程与 7 视口路由通过。最终格数宽度修正与云存储的 97 项定向测试通过。144 张示意图哈希一致，目录四种屏宽无溢出。未上线，未做实体手机验收。
+
+
+## 点缀与细节能力核查
+
+- 缺口是局部组合与放置规则：已有单个星形、花朵、胶带和图案，不足以表达纸边细节、主次点缀簇、与真实小物的语义呼应。新增 journal-accents，并预加载其原则与方法目录；六张示意及具体参数仍由 read_skill 分层读取，沿用 creation_recipe，无平行工具入口。
+- 六种方法均有适用条件、步骤、检查点、实际 Scene 渲染图。局部范围、位置、数量、尺寸、颜色、线宽、透明度可调；数字图形和真实材料分别处理。枝叶和针脚是生成的路径，不宣称原生形状结构控制；改变生成参数时重新调用配方。
+- 布置器按实际外框避让用户/模型指定的保护框、其他单元与组边界；被省略项有原因，完全没有空间时拒绝。自动布局计算了单元外接范围，避免边缘枝叶被意外裁掉。真实材料不缩小、不复制、不生成假库存。
+- 本机真实素材生成留白、层叠两组前后对照及完整参数记录。初稿图案过散，调整为贴近纸边并减少同页图案种类。对照证明工具组合可用，不代表模型自主选择已达到同等质量；本轮没有调用远程模型、上传素材或修改线上 App。
+- 保留局限：保护框不是语义识别，也不自动读取页外对象；跨组遮挡和整体审美继续由自动预览后的模型视觉检查负责。模板仍为 78 个，当前没有宣称所有原始案例的点缀均已逐项复刻。
+
+- 本轮验收：完整测试 1911 通过、1 跳过、0 失败；UI smoke、React 页面流程和 7 视口路由通过。自动边缘布置最终修正后定向回归 231 项通过；目录在 390/768/1024/1440 宽无横向溢出，六张点缀图均已加载。未进行实体 iOS 或远程模型自主创作验收。

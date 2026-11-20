@@ -2375,6 +2375,270 @@
           "scope": "依据已核对的胶片照片叙事示意归纳为平面可编辑图形；不宣称能让实体照片弯曲变形。"
         }
       }
+    },
+    {
+      "id": "accent-spark",
+      "skill": "journal-accents",
+      "title": "角落光芒",
+      "recipe": "accent",
+      "when": "标题与照片接触处需要轻量强调",
+      "defaults": {
+        "motif": "spark",
+        "arrangement": "corner",
+        "widthMm": 48,
+        "heightMm": 30,
+        "motifSizeMm": 6,
+        "count": 5,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-spark"
+      },
+      "lesson": {
+        "principle": "沿局部转角排列大小不同的光芒，保留中央主体与大段空白。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-sprig",
+      "skill": "journal-accents",
+      "title": "枝叶陪衬",
+      "recipe": "accent",
+      "when": "自然主题需要一两枝细线陪衬",
+      "defaults": {
+        "motif": "sprig",
+        "arrangement": "edge",
+        "widthMm": 35,
+        "heightMm": 30,
+        "motifSizeMm": 7,
+        "count": 2,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-sprig"
+      },
+      "lesson": {
+        "principle": "用疏朗枝叶形成侧边陪衬，让笔触呼应植物或安静的主题。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-stitch",
+      "skill": "journal-accents",
+      "title": "边缘针脚",
+      "recipe": "accent",
+      "when": "纸边或标签需要手工细节",
+      "defaults": {
+        "motif": "stitch",
+        "arrangement": "edge",
+        "widthMm": 60,
+        "heightMm": 10,
+        "motifSizeMm": 6,
+        "count": 7,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-stitch"
+      },
+      "lesson": {
+        "principle": "只沿一段纸边绘制短针脚，线色与纸面保持适度对比。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-rings",
+      "skill": "journal-accents",
+      "title": "空心圈呼应",
+      "recipe": "accent",
+      "when": "两个内容簇需要颜色和视线上的连接",
+      "defaults": {
+        "motif": "rings",
+        "arrangement": "arc",
+        "widthMm": 55,
+        "heightMm": 30,
+        "motifSizeMm": 6,
+        "count": 5,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-rings"
+      },
+      "lesson": {
+        "principle": "用有大小差异的透明圈形成轻微弧形节奏，让底层纹理透出。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-confetti",
+      "skill": "journal-accents",
+      "title": "局部碎点",
+      "recipe": "accent",
+      "when": "活泼主题需要局部色彩节奏",
+      "defaults": {
+        "motif": "confetti",
+        "arrangement": "corner",
+        "widthMm": 40,
+        "heightMm": 28,
+        "motifSizeMm": 3,
+        "count": 7,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-confetti"
+      },
+      "lesson": {
+        "principle": "把色块和圆点集中在转角，远离正文并留下没有碎点的区域。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-materials",
+      "skill": "journal-accents",
+      "title": "真实小物配组",
+      "recipe": "accent",
+      "when": "现有小贴纸、邮票或票根需要组合",
+      "defaults": {
+        "motif": "materials",
+        "arrangement": "edge",
+        "widthMm": 84,
+        "heightMm": 58,
+        "motifSizeMm": 6,
+        "count": 2,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-materials"
+      },
+      "lesson": {
+        "principle": "先核对真实尺寸和主题，用不重叠的小物组建立语义联系，不复制唯一库存。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      },
+      "example": {
+        "positions": [
+          [
+            0.25,
+            0.5
+          ],
+          [
+            0.75,
+            0.5
+          ]
+        ]
+      }
     }
   ]
 }
