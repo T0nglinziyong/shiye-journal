@@ -29,7 +29,7 @@
       "id": "ac-04",
       "file": "ac-04.png",
       "kind": "rendered-template-commands",
-      "sha256": "5bfdb9afc68e6c7bcca2e981e5c5c44930225822bbf95e126a02bc5713bd6697",
+      "sha256": "0b631fc95341665411a5d04eec96314f3a5c56c04be622f1cd907894e30f7487",
       "width": 240,
       "height": 308
     },
@@ -101,7 +101,7 @@
       "id": "ac-13",
       "file": "ac-13.png",
       "kind": "rendered-template-commands",
-      "sha256": "af84c1d0de41bc722bae9605b2fe14f27c29b3a4ed32c66feaa5fcccdadbdacd",
+      "sha256": "664268719259c9210c210f41a0c602d9946ddc46737de443c435744ceb4547b4",
       "width": 240,
       "height": 308
     },
@@ -109,7 +109,7 @@
       "id": "ac-14",
       "file": "ac-14.png",
       "kind": "rendered-template-commands",
-      "sha256": "3e046807f8fc4b372cb7e3ec4befa21e2acef50f64231a98cefc2ee3cd74ec93",
+      "sha256": "c1b9cce7ae36f055cd7488943aefc4519664c2632a170509e310edc6b6fca275",
       "width": 240,
       "height": 308
     },
@@ -117,7 +117,7 @@
       "id": "ac-15",
       "file": "ac-15.png",
       "kind": "rendered-template-commands",
-      "sha256": "b622c934ab39b6bf960abd9aa14014e75d1f8e06bbc73bb38ebf76082bcba272",
+      "sha256": "4be87f79c0e65f76fb3b3bfbcca663aa294d493492847530d16eee087683463c",
       "width": 240,
       "height": 307
     },
@@ -125,7 +125,7 @@
       "id": "ac-16",
       "file": "ac-16.png",
       "kind": "rendered-template-commands",
-      "sha256": "4c731dc7b06b2ebcd6896b8ec699bfacd9ffe3235214cd8c2c5f2d0f05ef87a2",
+      "sha256": "1d4973fe669cc0e5dc06cad9323aece740d18ee62c841cea6ddc258bba036f7b",
       "width": 240,
       "height": 308
     },
@@ -133,7 +133,7 @@
       "id": "ac-17",
       "file": "ac-17.png",
       "kind": "rendered-template-commands",
-      "sha256": "8cc8e0a08ddfae52faa47e999721d7eb0732419c73f914b95555fdee66bdbcd2",
+      "sha256": "0f7a3fc9c4875b830a0c9f6873dad6414d5b4e44aeccce4aeaf71b6c0d302e65",
       "width": 240,
       "height": 308
     },
@@ -157,7 +157,7 @@
       "id": "ac-20",
       "file": "ac-20.png",
       "kind": "rendered-template-commands",
-      "sha256": "04a3f1bc3b601d931ca32d7bacb0dada709f02c1bb0f506962d066c120120160",
+      "sha256": "33e26fbd81162cd954f5b84d5da26a9d8bc170dd440dc75f5960e1161ac35dc5",
       "width": 240,
       "height": 307
     },
@@ -165,7 +165,7 @@
       "id": "ac-21",
       "file": "ac-21.png",
       "kind": "rendered-template-commands",
-      "sha256": "ed5e8fd74145516b842b64bfdf7d357984cbd2d3511be83dc9c8cb930d8f6fcd",
+      "sha256": "fd67b6c18051d27876ccb7a01c371363100f1e6fdef90e1a7f858889218ec114",
       "width": 240,
       "height": 308
     },
@@ -173,7 +173,7 @@
       "id": "ac-22",
       "file": "ac-22.png",
       "kind": "rendered-template-commands",
-      "sha256": "6ffbe487f55b22e51c94dd2d4c9aaff4ddb6087262064a7f5e66e01a6f79a7db",
+      "sha256": "660c68d1618df9ea6f8e9168aeaa2c44b77bc06be4e27a984955118f5df16367",
       "width": 240,
       "height": 308
     },
@@ -181,7 +181,7 @@
       "id": "ac-23",
       "file": "ac-23.png",
       "kind": "rendered-template-commands",
-      "sha256": "09959a7cb4a12285ba5c8a30242e9288001dfd2bd9d678e782ba76b53b7edc8b",
+      "sha256": "4f0151448b05870846e9bfe250e8f3a3f72565eaf8216e351192e2ee56fa0b14",
       "width": 240,
       "height": 307
     },
@@ -189,7 +189,7 @@
       "id": "ac-24",
       "file": "ac-24.png",
       "kind": "rendered-template-commands",
-      "sha256": "97a927da4b6bd08c392de60891cdb58cdb102c7a243353acb0a7180e4f4440db",
+      "sha256": "b9f4e7836092fc1aed02476e0e19b72e06fd9c0f68639ec54f812b4a83449ad7",
       "width": 240,
       "height": 308
     },
@@ -213,7 +213,7 @@
       "id": "ac-27",
       "file": "ac-27.png",
       "kind": "rendered-template-commands",
-      "sha256": "42050783b146a1bf005710cb4d79c4cfeaa0d33be3cfc2035c6bc0eb455bd105",
+      "sha256": "fe9160a54a297e9513e01b5a57d7c4f02c851d860c675d513d6951ef5555b3dd",
       "width": 240,
       "height": 307
     },
@@ -221,7 +221,7 @@
       "id": "ac-28",
       "file": "ac-28.png",
       "kind": "rendered-template-commands",
-      "sha256": "f45687c88efc365fde4752ad3f281eb5d0f98944883f1b9f97ed258951594107",
+      "sha256": "6773bc0adbfd200a49d272f00f3a790e48878165018a7965db3a864b913a68e6",
       "width": 240,
       "height": 307
     },
@@ -229,7 +229,7 @@
       "id": "ac-29",
       "file": "ac-29.png",
       "kind": "rendered-template-commands",
-      "sha256": "8b932825e6bf47b1f96d3fa3597e52c444fbcc6c1d75166fcba1e7d84f4491c1",
+      "sha256": "d018556a1b97a2268088195752e273c23d5a0d690dcbf26da0c093b8e7248d54",
       "width": 240,
       "height": 308
     },
@@ -261,7 +261,7 @@
       "id": "ac-33",
       "file": "ac-33.png",
       "kind": "rendered-template-commands",
-      "sha256": "03a34042af1fd87b3405b910e1c28d0c903a95827306624408f8569f3e2402da",
+      "sha256": "13c6aba0b9549cdc12db9b7436828dde0e1cf2dbeff6b5b4a7446e14981f05c3",
       "width": 240,
       "height": 307
     },
@@ -269,7 +269,7 @@
       "id": "ac-34",
       "file": "ac-34.png",
       "kind": "rendered-template-commands",
-      "sha256": "0a4255e6a16cfff2dfcb7c2268f5129046af3b4eebf05e95f0866cc27156be58",
+      "sha256": "7a129619f7d3972784c388fd8a63c16b941b666b6c24752e44334afdd2077bae",
       "width": 240,
       "height": 308
     },
@@ -357,7 +357,7 @@
       "id": "center-1",
       "file": "center-1.png",
       "kind": "rendered-template-commands",
-      "sha256": "23df2c374068c7c44a7546de96bbd5afeac35daffca30d8146448757fcfca1ca",
+      "sha256": "1a8ead8470f0b80ab4b0c9245baed74a4d7c5771a92312dc2564301ef4f65b46",
       "width": 240,
       "height": 337
     },
@@ -365,7 +365,7 @@
       "id": "center-2",
       "file": "center-2.png",
       "kind": "rendered-template-commands",
-      "sha256": "e1af1ee828c1b2951c10b0cfc74fd619bd75c276760194cb0f959c67b7392a73",
+      "sha256": "bb0fc6a3dde86a4ebecc3bf67f61390897d6eec10e4eeb6b4a03e5ebaacc90ed",
       "width": 240,
       "height": 337
     },
@@ -373,7 +373,7 @@
       "id": "center-3",
       "file": "center-3.png",
       "kind": "rendered-template-commands",
-      "sha256": "e3070fbea5c63ae82c26c95d6c953d2ff1edb4d85124802be44203e0b987c79e",
+      "sha256": "c4f317ca1f5c8546c19af692fe4036c6293203f2290e44a7e23fd260c722d96a",
       "width": 240,
       "height": 337
     },
@@ -381,7 +381,7 @@
       "id": "center-4",
       "file": "center-4.png",
       "kind": "rendered-template-commands",
-      "sha256": "adef8c614ce62c8f09be7b4a4ce5cb7184edecc47feb479af71b79be3c75049c",
+      "sha256": "be3b26a46d4ea562e3d7b3c6050337901174e72cfdca23193279f8c9de4c8e10",
       "width": 240,
       "height": 337
     },
@@ -405,7 +405,7 @@
       "id": "s-four-3",
       "file": "s-four-3.png",
       "kind": "rendered-template-commands",
-      "sha256": "3ea1e07aeb9f099b343a5f5d382751eece828bba54656ef4b74b4f78cb848b5a",
+      "sha256": "c97cb19df1b5845d55a250e3c33a057c42f997d84a3931958c59f872e1ac0ea2",
       "width": 240,
       "height": 343
     },
@@ -429,7 +429,7 @@
       "id": "moon-02",
       "file": "moon-02.png",
       "kind": "rendered-template-commands",
-      "sha256": "65f214b73958119fe8b7399eeabdccced46db13d2f6d0a8cc0a1c9bb4421f4d5",
+      "sha256": "1594603a11f8097bec78eef839fb1107f1f7f102514a88ff6a15c179de8a3aef",
       "width": 240,
       "height": 411
     },
@@ -437,7 +437,7 @@
       "id": "moon-03",
       "file": "moon-03.png",
       "kind": "rendered-template-commands",
-      "sha256": "202724bb6d276744ef069a2c525a36e104ed5eb5d3354403bd81be5b67dc78c4",
+      "sha256": "8cedca4e5bd6df978b5eb48d71fe3e386630aa6882da1a056e4103c40e244539",
       "width": 240,
       "height": 411
     },
@@ -445,7 +445,7 @@
       "id": "moon-04",
       "file": "moon-04.png",
       "kind": "rendered-template-commands",
-      "sha256": "d83e6bdf9a4747e9fc651872220af6d69178e6040e1022f820ab15d1c10138bb",
+      "sha256": "4bf1998cbb0505c61e2715db193136b2e2920e7a10f1270ef3a58a2fff3c78a6",
       "width": 240,
       "height": 411
     },
@@ -453,7 +453,7 @@
       "id": "moon-05",
       "file": "moon-05.png",
       "kind": "rendered-template-commands",
-      "sha256": "f60627abeb858bb81ccf8e7bbfa1328fbec5c47269827e204b91bdc7cc48a936",
+      "sha256": "f1aa82db7cfb7c132f769a1929c9f2250d0ae60168b45bf576c7a5deb0b41057",
       "width": 240,
       "height": 411
     },
@@ -461,7 +461,7 @@
       "id": "moon-06",
       "file": "moon-06.png",
       "kind": "rendered-template-commands",
-      "sha256": "b3aefe566a8b6b923cabd071410922267322fa83ae07f59152c8c060fed6b7c8",
+      "sha256": "ed6b3b07c32f3dbc66fee1d83061b0590b69bbe99643f24a579dbc4dd1992d4a",
       "width": 240,
       "height": 411
     },
@@ -469,7 +469,7 @@
       "id": "moon-07",
       "file": "moon-07.png",
       "kind": "rendered-template-commands",
-      "sha256": "4e5a5006965d1edbd962195f6d798c23ee86d6b5935468b5c92e1d4fa1f91a3c",
+      "sha256": "da49dbe6029d141dd3b43efdf479c27d5862e6d7bfb592437aa9df923b4396f0",
       "width": 240,
       "height": 411
     },
@@ -477,7 +477,7 @@
       "id": "moon-08",
       "file": "moon-08.png",
       "kind": "rendered-template-commands",
-      "sha256": "be93363081f4afb6f81021f32a41004c70c323f85ab76e9cdabd26ed794e36e6",
+      "sha256": "3291181e91267b9424bad52572e6c6c0e3b785d7c299af07458979cc8626cbfe",
       "width": 240,
       "height": 411
     },
@@ -485,7 +485,7 @@
       "id": "moon-09",
       "file": "moon-09.png",
       "kind": "rendered-template-commands",
-      "sha256": "cd7853cdc1d566401ec341152e5596e33ba4890a28767cb5c55c3fa8a9e27d4e",
+      "sha256": "05e54b7192e13959eac6ff330df85c03c925da00f6cd26d2f9248fc32de0a363",
       "width": 240,
       "height": 411
     },
@@ -493,7 +493,7 @@
       "id": "moon-10",
       "file": "moon-10.png",
       "kind": "rendered-template-commands",
-      "sha256": "3e30e553186c0a64a065fb98a04626de98f44fe7c3ccd51807f7a00455762c82",
+      "sha256": "93704c3b5f6989ec9b7635bd975265a0b6bff5419d198dcda757ae3476d0a3bf",
       "width": 240,
       "height": 411
     },
@@ -501,7 +501,7 @@
       "id": "moon-11",
       "file": "moon-11.png",
       "kind": "rendered-template-commands",
-      "sha256": "111cff581f9f84ecd24b2acd69cdde345e3d7ecd5472357f67f9e6c6bc98e269",
+      "sha256": "502bbf778cba727ad1b5a9389dbe171bf5da4db1d8cac22ae25c2f6385e5add0",
       "width": 240,
       "height": 411
     },
@@ -509,7 +509,7 @@
       "id": "moon-12",
       "file": "moon-12.png",
       "kind": "rendered-template-commands",
-      "sha256": "b4951e1c025b357cedb99003a987b6460496f1f63aa5964aa854bccea2d396ad",
+      "sha256": "0b82d9ac152be4db984fda56a4ef84d9d69656bca9bec17cea011ef9868ee334",
       "width": 240,
       "height": 411
     },
@@ -517,7 +517,7 @@
       "id": "moon-13",
       "file": "moon-13.png",
       "kind": "rendered-template-commands",
-      "sha256": "0b0f068932f93076183b79e30de054386050a674f1001852975c90b61955d8f0",
+      "sha256": "c24fae4f20e45dbdeb2493918eafe9a1c0f88d12b6c419f6f2e43dce6ee5ca13",
       "width": 240,
       "height": 411
     },
@@ -525,7 +525,7 @@
       "id": "moon-14",
       "file": "moon-14.png",
       "kind": "rendered-template-commands",
-      "sha256": "e7e94bf9c2605bc3604a685c72ed685ce984eba056139ab73f211b83060fe677",
+      "sha256": "0bfead0ba5b25de16834b0bb066627cb6bb0c6a2c763550b9b5b96df34ca7457",
       "width": 240,
       "height": 411
     },

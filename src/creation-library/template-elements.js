@@ -21,6 +21,6 @@ export function templateFixture(template){
  const paper=template.example?.paper||{width:148,height:148/template.aspect};
  const materials=template.elements.filter(isMaterialSlot).map((slot,i)=>({id:'fixture-'+slot.id,alias:'m'+(i+1),title:'合成示意 '+slot.id,kind:slot.accepts[0],role:slot.role,physicalWidthMM:paper.width*slot.box[2],physicalHeightMM:paper.height*slot.box[3],supply:{quantity:1}}));
  const bindings=template.elements.filter(isMaterialSlot).map((slot,i)=>({slotId:slot.id,alias:materials[i].alias}));
- const texts=template.example?.texts||Object.fromEntries(template.elements.filter(isTextSlot).map(s=>[s.id,s.role==='title'?'日常小记':'留下一段小记']));
+ const texts={...(template.example?.texts||Object.fromEntries(template.elements.filter(isTextSlot).map(s=>[s.id,s.role==='title'?'日常小记':'留下一段小记'])))};
  return {paper,materials,bindings,texts};
 }

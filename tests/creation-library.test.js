@@ -15,7 +15,7 @@ const apply=(doc,operations,assets)=>applyCreationTransaction(doc,{protocolVersi
 test('at least fifty independently sourced, reviewed diagrams have usable typed elements',()=>{
  assert.ok(templateCatalog.templates.length>=50);const panels=new Set();
  for(const t of templateCatalog.templates){assert.equal(t.reviewed,true);assert.ok(templateCatalog.sources.some(s=>s.id===t.sourceId));assert.ok(t.elements.length>2);assert.ok(materialSlots(t).length);assert.ok(t.aspect>0);panels.add(t.sourcePanel.sha256);
-  for(const e of t.elements){assert.equal(e.box.length,4);assert.ok(e.box.every(Number.isFinite));assert.ok(e.box[2]>0&&e.box[3]>0);assert.ok(isGraphicElement(e)?e.render.geometry.kind:e.accepts.length);}}
+  for(const e of t.elements){assert.equal(e.box.length,4);assert.ok(e.box.every(Number.isFinite));assert.ok(e.box[2]>0&&e.box[3]>0);assert.ok(isGraphicElement(e)?e.render.geometry.kind:e.accepts.length);if(e.render?.textBox)assert.ok(e.render.textBox.every(Number.isFinite)&&e.render.textBox[2]>0&&e.render.textBox[3]>0,t.id+'/'+e.id+' writing bounds');}}
  assert.equal(panels.size,templateCatalog.templates.length);
 });
 test('optimal assignment beats a greedy slot choice and permits omission',()=>{
@@ -158,7 +158,8 @@ test('template palette and omissions are explicit, preserve input assets, and ca
  const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t),before=structuredClone(fixture.materials);
  const compiled=compileTemplate({templateId:t.id,id:'partial',paper:fixture.paper,materials:fixture.materials.slice(0,1),colors:{orange:'#123456'},omit:['dot-top','e2']});
  assert.ok(compiled.report.missingElements.includes('e2'));assert.ok(compiled.report.missingElements.includes('dot-top'));
- assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-date-card').style.fill,t.palette.yellow);
+ assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-date-card'),undefined);
+ assert.equal(compiled.report.slots.find(s=>s.slotId==='date-card').reason,'content-missing');
  assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-small-tab').style.fill,'#123456');
  assert.deepEqual(fixture.materials,before);assert.equal(compiled.operations[0].children.filter(n=>n.op==='material.add').length,1);
  assert.equal(apply(await document(fixture.materials),compiled.operations,fixture.materials).changed,true);
@@ -169,6 +170,7 @@ test('template palette and omissions are explicit, preserve input assets, and ca
 test('an existing title keeps the template stacking position rather than always becoming the top layer',async()=>{
  const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t);let doc=await document(fixture.materials);
  doc=apply(doc,compileTechnique({methodId:'title-outline',parameters:{id:'heading',text:'日常'}}).operations,fixture.materials).document;
+ delete fixture.texts.e7;
  const compiled=compileTemplate({...fixture,templateId:t.id,id:'joined',bindings:[...fixture.bindings,{slotId:'e7',node:'heading'}],nodes:[{id:'heading'}]});
  const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'join-template',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},fixture.materials).document;
  assert.deepEqual(done.page.layers.find(n=>n.id==='joined').children.map(n=>n.creativePieceID||n.id),t.elements.map(e=>e.id==='e7'?'heading':'joined-'+e.id));
@@ -243,4 +245,65 @@ test('standalone angled titles keep their authored page anchor outside the circl
  const title=result.operations[0].children.find(e=>e.id==='circle-heading-heading');
  assert.deepEqual(title.place.at,[slot.box[0]*fixture.paper.width,slot.box[1]*fixture.paper.height]);
  assert.equal(title.place.rotationDeg,-28);
+});
+
+test('explicit empty and partial bindings never silently auto-fill other material positions',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='center-1'),f=templateFixture(t),slot=materialSlots(t)[0];
+ const empty=compileTemplate({...f,templateId:t.id,id:'empty',bindings:[],texts:{}});
+ assert.equal(empty.report.assignmentMode,'explicit');assert.deepEqual(empty.report.used,[]);
+ assert.ok(empty.report.slots.filter(s=>s.status==='material').length===0);
+ const single=compileTemplate({...f,templateId:t.id,id:'chosen',bindings:[{slotId:slot.id,alias:f.materials[0].alias}],texts:{}});
+ const doc=apply(await document(f.materials),single.operations,f.materials).document;
+ const group=doc.page.layers.find(n=>n.id==='chosen');
+ assert.equal(group.children.filter(n=>n.assetID).length,1);
+ assert.equal(single.report.slots.find(s=>s.slotId===slot.id).source,f.materials[0].alias);
+ const blank=single.report.slots.find(s=>s.slotId===materialSlots(t)[1].id);assert.equal(blank.status,'blank');assert.equal(blank.reason,'unassigned');
+ assert.throws(()=>compileTemplate({...f,templateId:t.id,id:'conflict',bindings:[{slotId:'e7',alias:f.materials[0].alias}]}),/同时/);
+});
+
+test('digital writing regions can keep guides, accept text, or be omitted without substitute cards',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='ac-04'),f=templateFixture(t),slot=t.elements.find(e=>e.role==='text'&&isGraphicElement(e));
+ const args={...f,templateId:t.id,id:'choices',bindings:[],texts:{}};
+ assert.equal(compileTemplate(args).report.slots.find(s=>s.slotId===slot.id).status,'writing-guide');
+ assert.equal(compileTemplate({...args,texts:{[slot.id]:'一段短记'}}).report.slots.find(s=>s.slotId===slot.id).status,'text');
+ assert.equal(compileTemplate({...args,omit:[slot.id]}).report.slots.find(s=>s.slotId===slot.id).reason,'omitted');
+});
+
+test('all authored sample text fits its declared region and typography scales with paper',()=>{
+ for(const t of templateCatalog.templates){
+  const f=templateFixture(t),normal=compileTemplate({...f,templateId:t.id,id:'fit'});
+  assert.deepEqual(normal.report.warnings,[],t.id+' text overflows');
+ }
+ const t=templateCatalog.templates.find(t=>t.id==='ac-04'),f=templateFixture(t);
+ const small=compileTemplate({...f,templateId:t.id,id:'small'}),large=compileTemplate({...f,templateId:t.id,id:'large',paper:{width:f.paper.width*1.5,height:f.paper.height*1.5}});
+ const a=small.operations[0].children.find(x=>x.op==='text.add'),b=large.operations[0].children.find(x=>x.id===a.id.replace('small-','large-'));
+ assert.ok(Math.abs(b.style.fontSizePt/a.style.fontSizePt-1.5)<.001);
+});
+
+test('overlong text is preserved and reported instead of silently clipped or shrunk into unreadable type',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='ac-04'),slot=t.elements.find(e=>e.role==='title'),text='这段文字需要重新安排区域。'.repeat(80);
+ const r=compileTemplate({templateId:t.id,id:'overflow',paper:{width:148,height:210},bindings:[],texts:{[slot.id]:text}});
+ assert.equal(r.operations[0].children.find(o=>o.id==='overflow-'+slot.id).content,text);
+ assert.ok(r.report.warnings.some(w=>w.slotId===slot.id));
+ assert.ok(r.report.textLayout.find(w=>w.slotId===slot.id).fontSizePt>=6);
+});
+
+test('the generic title uses the declared main heading, never punctuation, numbers or dates',()=>{
+ for(const [templateId,slotId] of [['ac-04','page-heading'],['ac-33','heading'],['moon-02','heading'],['center-3','card-title']]){
+  const result=compileTemplate({templateId,id:'main',paper:{width:148,height:210},bindings:[],title:'春日小记'});
+  const texts=result.operations[0].children.filter(n=>n.op==='text.add');
+  assert.deepEqual(texts.map(n=>[n.id,n.content]),[['main-'+slotId,'春日小记']]);
+ }
+ const r=compileTemplate({templateId:'ac-04',id:'occupied',paper:{width:148,height:210},bindings:[],title:'不要挤进引号',texts:{'page-heading':'已有标题'}});
+ assert.equal(r.operations[0].children.filter(n=>n.op==='text.add').length,1);
+ assert.ok(r.report.warnings.some(w=>w.reason.includes('title 未放置')));
+});
+
+test('per-position typography is explicit physical type and validates unknown slots and style values',()=>{
+ const args={templateId:'ac-04',id:'style',paper:{width:210,height:297},bindings:[],texts:{'upper-writing':'两行文字\n清楚可读'},textStyles:{'upper-writing':{fontSizePt:12,textAlign:'center',lineHeight:1.5}}};
+ const r=compileTemplate(args),text=r.operations[0].children.find(x=>x.id==='style-upper-writing');
+ assert.equal(text.style.fontSizePt,12);assert.equal(text.style.textAlign,'center');
+ assert.throws(()=>compileTemplate({...args,textStyles:{missing:{fontSizePt:12}}}),/位置/);
+ assert.throws(()=>compileTemplate({...args,textStyles:{'upper-writing':{fontSizePt:0}}}),/样式值/);
+ assert.throws(()=>compileTemplate({...args,textStyles:{'upper-writing':{fill:'red'}}}),/样式参数/);
 });
