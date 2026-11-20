@@ -10,7 +10,7 @@ export function compileTemplate({templateId,id,paper,materials=[],bindings=[],te
  const match=scoreTemplate({...template,elements:template.elements.filter(e=>!omit.includes(e.id))},materials,paper),assignment=bindings.length?bindings:match.assignments;
  const bound=new Map(),seenSources=new Set(),children=[],existing=[],used=[],ordered=[],rendered=[];
  for(const b of assignment){
-  const slot=template.elements.find(e=>e.id===b.slotId);if(!slot||bound.has(b.slotId)||omit.includes(b.slotId)||isGraphicElement(slot))throw Error('模板位置无效或重复');
+  const slot=template.elements.find(e=>e.id===b.slotId);if(!slot||bound.has(b.slotId)||omit.includes(b.slotId)||(isGraphicElement(slot)&&!isTextSlot(slot)))throw Error('模板位置无效或重复');
   if(Boolean(b.alias)===Boolean(b.node))throw Error('模板位置只能指定素材或已有组合之一');
   const key=b.alias||b.node;if(seenSources.has(key))throw Error('同一实体或组合不能重复分配');seenSources.add(key);
   if(b.alias&&!materials.some(m=>m.alias===b.alias||m.id===b.alias))throw Error('素材不在本次授权范围');

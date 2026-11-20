@@ -80,6 +80,20 @@ test('taxonomy and open semantic tags remain available in frozen matching source
  const doc=await document([asset]);assert.deepEqual(doc.source.sourceSnapshots[0].styleTags,['手绘']);
 });
 
+test('a title group replaces a template writing guide and retains editable text and foreground order',async()=>{
+ let doc=await document([]);
+ doc=apply(doc,compileTechnique({methodId:'title-shadow',parameters:{id:'heading',text:'留住片刻'}}).operations,[]).document;
+ const t=templateCatalog.templates.find(t=>t.id==='cream6-08');
+ const compiled=compileTemplate({templateId:t.id,id:'spread',paper:{width:240,height:149},bindings:[{slotId:'headline',node:'heading'}],nodes:[{id:'heading'}],texts:{'middle-writing':'留一点时间，慢慢看。'}});
+ const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'place-heading',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},[]).document;
+ const group=result.page.layers.find(n=>n.id==='spread');
+ assert.deepEqual(group.children.map(n=>n.id),['heading','spread-middle-writing']);
+ const heading=group.children.find(n=>n.id==='heading');
+ assert.equal(heading.children.find(n=>n.type==='text').content,'留住片刻');
+ assert.ok(!group.children.some(n=>n.id==='spread-headline'));
+ assert.ok(compiled.report.renderedElements.includes('headline'));
+});
+
 test('every method exposes a complete example and distinct construction/review guidance',async()=>{
  for(const method of techniqueCatalog.methods){
   const info=describeTechnique(method.id);

@@ -562,6 +562,70 @@
       "height": 366
     },
     {
+      "id": "cream6-01",
+      "file": "cream6-01.png",
+      "kind": "rendered-template-commands",
+      "sha256": "f4787108523bb23afe7d06e98527ad14abb5579863fb16d31a437736e3d47433",
+      "width": 240,
+      "height": 154
+    },
+    {
+      "id": "cream6-02",
+      "file": "cream6-02.png",
+      "kind": "rendered-template-commands",
+      "sha256": "2ae696fa7bbb9849a5b45b4185f091276755d0bfa072d0c7a250cf17ac754734",
+      "width": 240,
+      "height": 145
+    },
+    {
+      "id": "cream6-03",
+      "file": "cream6-03.png",
+      "kind": "rendered-template-commands",
+      "sha256": "e925b16cf069e13b1f04c545d008452bdda8dcec6456c9ab3a70cc8bf7725573",
+      "width": 240,
+      "height": 155
+    },
+    {
+      "id": "cream6-04",
+      "file": "cream6-04.png",
+      "kind": "rendered-template-commands",
+      "sha256": "e4b1e1534c75c9f200d5bfe6c35f32a68c8dd9ee3236559e32ce136338772dea",
+      "width": 240,
+      "height": 145
+    },
+    {
+      "id": "cream6-05",
+      "file": "cream6-05.png",
+      "kind": "rendered-template-commands",
+      "sha256": "fca0ee24cdd52cd8ab3c06e2d0ada3b609b895047a3cbf5b901d1bb754a7c8b8",
+      "width": 240,
+      "height": 149
+    },
+    {
+      "id": "cream6-06",
+      "file": "cream6-06.png",
+      "kind": "rendered-template-commands",
+      "sha256": "e398b1520b967ed9d8494b3e95e780595d129aa6b12f565bf70d9930a9ae2098",
+      "width": 240,
+      "height": 143
+    },
+    {
+      "id": "cream6-07",
+      "file": "cream6-07.png",
+      "kind": "rendered-template-commands",
+      "sha256": "90d21c799838c1264016283054f548d7955c3971a697ade3096d78f1e03a4b62",
+      "width": 240,
+      "height": 146
+    },
+    {
+      "id": "cream6-08",
+      "file": "cream6-08.png",
+      "kind": "rendered-template-commands",
+      "sha256": "9635ebe2c084a89a4f6f8aa2ef5b13c8bb77d26f6b8213c45a74ce411a456c0e",
+      "width": 240,
+      "height": 149
+    },
+    {
       "id": "title-underline",
       "file": "title-underline.png",
       "kind": "rendered-editable-commands",
