@@ -39,6 +39,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
  const colors=p.colors||['#3D6871','#E6B45E','#F1E8D5'],fontSize=p.style?.fontSizePt??p.fontSizePt??18,accent=colors[1]||colors[0],ground=colors[2]||'#F1E8D5';
  let width=p.widthMm||70;
  if(p.treatment==='stack'&&!widthExplicit)width=Math.max(28,Math.min(70,extent(p.text,fontSize)/2+10));
+ if(p.treatment==='seal'&&!widthExplicit)width=Math.max(34,Math.min(70,extent(p.text,fontSize)+16));
  if(p.treatment==='vertical')width=Math.max(16,fontSize*pt+10);
  if(width<=10)throw Error('标题宽度须大于 10 mm');
  const style={fontFamily:p.fontFamily||'Xiaolai',fontSizePt:fontSize,color:colors[0]};
@@ -82,14 +83,21 @@ export function compileTitle(p,{widthExplicit=false}={}){
    if(widthExplicit&&needed>width)throw Error('弧形标题文字超出宽度；增大 widthMm 或减小 fontSizePt，不会自动丢字');
    width=Math.max(width,needed);style.curveHeightMm=p.curveHeightMm??style.curveHeightMm??5;
   }
-  const t=addText(content,5,5,width-10,style);
+  const t=addText(content,5,5,width-10,p.treatment==='seal'?{...style,textAlign:'center'}:style);
+  if(p.treatment==='seal'){
+   if(t.inkHeight>width-10)throw Error('邮戳圈记文字超出圆形范围；缩短标签或增大 widthMm');
+   const dy=Math.max(0,(width-t.inkHeight)/2-t.y);
+   t.y+=dy;t.op.place.at[1]+=dy;
+   for(const line of t.inkLines)line.y+=dy;
+  }
   if(['highlight','circle'].includes(p.treatment))notes.push('未给强调词或主词组，本次保留普通标题；请指定 emphasis 或 runs 中的 primary。');
   if(p.treatment==='stagger')notes.push('未提供词组，保留连续读序；不自动随机旋转每字。');
  }
  const mainTexts=texts.slice();
  let height=Math.max(p.heightMm||14,...texts.map(t=>t.y+t.h+5));
- if(p.caption){const y=Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
- if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
+ if(p.treatment==='seal')height=Math.max(height,width);
+ if(p.caption){const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
+ if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,p.treatment==='seal'?width:height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
  if(p.treatment==='underline'){
   const last=mainTexts.at(-1),bottom=last.y+last.inkHeight;
   const sameRow=last.lineCount===1?mainTexts.filter(t=>t.lineCount===1&&Math.abs(t.y-last.y)<1):[last];

@@ -90,6 +90,30 @@ test('underline follows the final wrapped line and remains valid when the captio
  assert.ok(underline.place.at.every(Number.isFinite));
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
 });
+test('postmark lesson renders a circular editable label, with caption outside the ring',()=>{
+ const result=compileTechnique({methodId:'vintage-postmark',parameters:{id:'seal',text:'旅途',caption:'小记'}});
+ const children=result.operations[0].children,ring=children.find(op=>op.op==='graphic.add'),label=children.find(op=>op.op==='text.add'&&op.content==='旅途'),caption=children.find(op=>op.op==='text.add'&&op.content==='小记');
+ assert.equal(ring.geometry.kind,'ellipse');assert.equal(ring.size.width,ring.size.height);
+ assert.equal(label.style.textAlign,'center');assert.ok(label.place.at[1]>ring.size.height*.2);
+ assert.ok(caption.place.at[1]>ring.size.height);
+ assert.throws(()=>compileTechnique({methodId:'vintage-postmark',parameters:{id:'seal',text:'这一行长到放不进圆里',widthMm:18}}),/超出圆形范围/);
+});
+test('diagonal layer lesson forms a connected cluster without scaling real materials',()=>{
+ const compiled=compileTechnique({methodId:'layered-diagonal',parameters:{id:'layers',aliases:['m1','m2','m3']},materials:exampleMaterials});
+ const children=compiled.operations[0].children.filter(op=>op.op==='material.add');
+ for(let i=1;i<children.length;i++){
+  const a=exampleMaterials.find(asset=>asset.alias===children[i-1].asset),b=exampleMaterials.find(asset=>asset.alias===children[i].asset);
+  const dx=Math.abs(children[i].place.at[0]-children[i-1].place.at[0]),dy=Math.abs(children[i].place.at[1]-children[i-1].place.at[1]);
+  assert.ok(dx<(a.physicalWidthMM+b.physicalWidthMM)/2);
+  assert.ok(dy<(a.physicalHeightMM+b.physicalHeightMM)/2);
+  assert.equal(children[i].size,undefined);
+ }
+});
+test('quiet pair stays spaced apart while layered diagonal is connected',()=>{
+ const quiet=compileTechnique({methodId:'quiet-pair',parameters:{id:'quiet',aliases:['m1','m2']},materials:exampleMaterials}).operations[0].children;
+ const a=exampleMaterials[0],b=exampleMaterials[1],dx=Math.abs(quiet[1].place.at[0]-quiet[0].place.at[0]);
+ assert.ok(dx>=(a.physicalWidthMM+b.physicalWidthMM)/2);
+});
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
  const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
  assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);

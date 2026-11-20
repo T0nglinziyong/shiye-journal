@@ -107,7 +107,8 @@ export function compileTechnique({methodId,parameters,materials=[]}){
    if(p.arrangement==='stagger'){x=previous?previous.x+rows[i-1].w+gap:0;y=i%2?maxH*.2:0;}
    if(p.arrangement==='magazine'){x=i?rows[0].w+gap:0;y=i===0?0:i===1?rows[0].h*.12:previous.y+rows[i-1].h+gap;}
    if(p.arrangement==='stack'){x=i*gap;y=i*gap;}
-   if(p.arrangement==='diagonal'){x=i*(maxW*.65+gap);y=i*(maxH*.55+gap);}
+   if(p.arrangement==='diagonal'&&previous){x=previous.x+rows[i-1].w*.58+gap*.45;y=previous.y+rows[i-1].h*.52+gap*.45;}
+   if(p.arrangement==='diagonal-open'){x=i*(maxW*.65+gap);y=i*(maxH*.55+gap);}
    if(p.arrangement==='triangle'){x=(i%3===1?maxW+gap:i%3===2?(maxW+gap)/2:0);y=Math.floor(i/3)*(maxH*2+gap)+(i%3===2?maxH+gap:0);}
    if(p.arrangement==='s-route'){x=(Math.sin(i*1.5)+1)*maxW*.4;y=i*(maxH*.75+gap);}
    positions.push({x,y});right=Math.max(right,x+a.w);bottom=Math.max(bottom,y+a.h);

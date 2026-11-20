@@ -1184,7 +1184,7 @@
       "recipe": "materials",
       "when": "两件素材足以承载焦点",
       "defaults": {
-        "arrangement": "diagonal",
+        "arrangement": "diagonal-open",
         "gapMm": 12
       },
       "illustration": {
@@ -1511,6 +1511,9 @@
       "when": "围绕短标签组织圆形印记",
       "defaults": {
         "treatment": "seal"
+      },
+      "example": {
+        "text": "旅途"
       },
       "illustration": {
         "kind": "executable-schematic",

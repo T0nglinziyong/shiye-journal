@@ -933,9 +933,9 @@
       "id": "layered-diagonal",
       "file": "layered-diagonal.png",
       "kind": "rendered-editable-commands",
-      "sha256": "90e2a565cc05ce3f977cbcc2517dc350095d5cb260f968c156458e8f6f372633",
-      "width": 360,
-      "height": 288
+      "sha256": "e1ea91cd0bfd0334b505d8c1bf92fc153680d28366c24d2b953582edbd57613d",
+      "width": 323,
+      "height": 300
     },
     {
       "id": "magazine-offset",
@@ -981,9 +981,9 @@
       "id": "vintage-postmark",
       "file": "vintage-postmark.png",
       "kind": "rendered-editable-commands",
-      "sha256": "6520ed50c19a7a0a840c24da1c519c1b4db5714a31acccd2516688883852f92d",
-      "width": 360,
-      "height": 129
+      "sha256": "7d1c00a03a822706290c0658d93f48ff0102b2ef51d4de32dd7a82c66b9d2682",
+      "width": 300,
+      "height": 300
     },
     {
       "id": "composition-triangle",
