@@ -49,6 +49,21 @@ for(const template of templateCatalog.templates)test('template compiles through 
 for(const method of techniqueCatalog.methods)test('technique transaction is executable: '+method.id,async()=>{
  const {parameters,before}=techniqueExample(method),doc=await document(exampleMaterials),compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
  const result=apply(doc,[...before,...compiled.operations],exampleMaterials);assert.equal(result.changed,true);assert.equal(describeTechnique(method.id).illustration.id,method.id);
+ if(!compiled.report.groupId)return;
+ const page=result.document.page,group=page.layers.find(node=>node.id===compiled.report.groupId),box=worldBox(page,group.id),angle=box.rotation*Math.PI/180;
+ const pageHalfX=(Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h)/2;
+ const pageHalfY=(Math.abs(Math.sin(angle))*box.w+Math.abs(Math.cos(angle))*box.h)/2;
+ assert.ok(box.cx-pageHalfX>=-.25&&box.cx+pageHalfX<=page.canvas.width+.25,method.id+' page width');
+ assert.ok(box.cy-pageHalfY>=-.25&&box.cy+pageHalfY<=page.canvas.height+.25,method.id+' page height');
+ for(const child of group.children){
+  const cb=worldBox(page,child.id),relative=(cb.rotation-box.rotation)*Math.PI/180;
+  const x=(cb.cx-box.cx)*Math.cos(angle)+(cb.cy-box.cy)*Math.sin(angle);
+  const y=-(cb.cx-box.cx)*Math.sin(angle)+(cb.cy-box.cy)*Math.cos(angle);
+  const dx=(Math.abs(Math.cos(relative))*cb.w+Math.abs(Math.sin(relative))*cb.h)/2;
+  const dy=(Math.abs(Math.sin(relative))*cb.w+Math.abs(Math.cos(relative))*cb.h)/2;
+  assert.ok(x-dx>=-box.w/2-.5&&x+dx<=box.w/2+.5,method.id+'/'+child.id+' group width');
+  assert.ok(y-dy>=-box.h/2-.5&&y+dy<=box.h/2+.5,method.id+'/'+child.id+' group height');
+ }
 });
 test('missing slots remain empty; unknown source and repeated material are rejected',()=>{
  const t=templateCatalog.templates[0],paper={width:148,height:210},s=materialSlots(t);

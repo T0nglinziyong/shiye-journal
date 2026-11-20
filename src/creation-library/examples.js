@@ -11,7 +11,7 @@ export function techniqueExample(method){
  const p={id:'demo',at:[72,88]},before=[];
  if(method.recipe==='title')p.text='收集小美好';
  if(method.recipe==='accent'&&method.defaults.motif==='materials')p.aliases=['m1','m2'];
- if(method.recipe==='film')p.aliases=['m1','m2','m3'];
+ if(method.recipe==='film'){p.aliases=['m1','m2','m3'];p.at=[74,88];}
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
  if(method.recipe==='tape'){
   p.aliases=['m4'];
