@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,preloadCreationSkills,iterationAdvice} from '../compute-server/harness/context.mjs';
+import {modelContext,preloadCreationSkills,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
+
+test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
+ const source={textMode:'none',materials:[{alias:'long-paper',assetID:'a'},{alias:'real-tape',assetID:'b'}],sourceSnapshots:[{assetID:'a',kind:'paper',title:'胶带图案长条纸'},{assetID:'b',kind:'tape',title:'花纹'}]};
+ assert.deepEqual(initialToolGuide({source}).tapeAliases,['real-tape']);
+ source.materials.pop();
+ const guide=initialToolGuide({source});assert.deepEqual(guide.tapeAliases,[]);assert.ok(guide.notes.some(n=>n.includes('本次没有胶带')));
+});
 
 test('an outdated task contract fails before any model invocation',async()=>{
   const {createCreationDocument}=await import('../src/creation-document.js');
