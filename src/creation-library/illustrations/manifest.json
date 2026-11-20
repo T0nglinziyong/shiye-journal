@@ -629,15 +629,15 @@
       "id": "title-underline",
       "file": "title-underline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "f25aec651067ea60f477832ce4b2c5adbeef81a5fd9690f1e7f940a3ea01b0f2",
+      "sha256": "8f3763fecc13ddad77f9651b7bd04aec464c999ece83c97272f89367e55d210b",
       "width": 360,
-      "height": 136
+      "height": 139
     },
     {
       "id": "title-outline",
       "file": "title-outline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "f22edcb122b0bf31bbf66c694f2c834e0ad8d046f4f43d6a6dc1488a8a267d47",
+      "sha256": "bc0d1c0402a1a288f10c176dd350c0910410bc83fcea403d4055247272d1ff9a",
       "width": 360,
       "height": 128
     },
@@ -645,7 +645,7 @@
       "id": "title-highlight",
       "file": "title-highlight.png",
       "kind": "rendered-editable-commands",
-      "sha256": "4b32d5d21f3a69228ed841d209bd6060f22a8c3dc46d601e0a0786d0743d8e1a",
+      "sha256": "91b775d5330881d064ed1cfe661489d969433d1b23df81efe52fddb087426273",
       "width": 360,
       "height": 113
     },
@@ -653,7 +653,7 @@
       "id": "title-stack",
       "file": "title-stack.png",
       "kind": "rendered-editable-commands",
-      "sha256": "bc2406993fd777be654e1585c4ba8405b495fb2377ec88c688eb222fc17cadb6",
+      "sha256": "d0b098be8694101ddef8c0740b8de24f6c2b6406be3a3f9ae410f41e5975255f",
       "width": 360,
       "height": 238
     },
@@ -661,7 +661,7 @@
       "id": "title-vertical",
       "file": "title-vertical.png",
       "kind": "rendered-editable-commands",
-      "sha256": "c75c545dcf2b1b818635a4c32d95f0f6ae9d851994f3ed50b0179cc143439503",
+      "sha256": "786a39bf1f1c429e273b5a0aa91a6f405857da6bf8e83cbc7297596cc06151d4",
       "width": 87,
       "height": 300
     },
@@ -669,7 +669,7 @@
       "id": "title-stagger",
       "file": "title-stagger.png",
       "kind": "rendered-editable-commands",
-      "sha256": "267dc2f84e541b2c22b6fc9bf5333fb15184e5cfe2bdef7dde984b5f9985e16a",
+      "sha256": "1cf29c607dbc2bd2ac326b7841cd4ebc256187a689bd9de1d0e143d0d36df4e0",
       "width": 360,
       "height": 173
     },
@@ -677,17 +677,17 @@
       "id": "title-label",
       "file": "title-label.png",
       "kind": "rendered-editable-commands",
-      "sha256": "8a7448e1756190a80b7f636226d1246e44083ca17341c9cbc2ea0a96b489e233",
+      "sha256": "3db9fa62c16d163eaceeded6d475636729e454ddab8b0f1e8237df812f0449ef",
       "width": 360,
-      "height": 125
+      "height": 126
     },
     {
       "id": "title-curve",
       "file": "title-curve.png",
       "kind": "rendered-editable-commands",
-      "sha256": "8a8edbb0b97d9419a96929337758f822cddbc1910d627e8715ebcf500ea006dd",
+      "sha256": "ce2ee5fd25e1b9b44c83095ed59ee29df9be0e6adfa0900b60491f445d759f46",
       "width": 360,
-      "height": 160
+      "height": 158
     },
     {
       "id": "paper-underlay",
@@ -949,7 +949,7 @@
       "id": "magazine-headline",
       "file": "magazine-headline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "afadaf9ef1e73d265dda44723cd917f23e2b71c1cf8432d528018b8c4723cccc",
+      "sha256": "d6280afc2e8c6e5a9e8edd0a1f1e1ab01e4672e914a84a9f6e2a0c284f3fcd22",
       "width": 269,
       "height": 300
     },
@@ -957,9 +957,9 @@
       "id": "playful-bubble",
       "file": "playful-bubble.png",
       "kind": "rendered-editable-commands",
-      "sha256": "8dc56733517ba8339de3610d4bee1ee3d8c7d60f8c435c9074ab507af4b244a7",
+      "sha256": "790a96b88ee580ed2c85b750e155570da924eb5985f3f943929cb559b2db6522",
       "width": 360,
-      "height": 125
+      "height": 126
     },
     {
       "id": "playful-number",
@@ -981,9 +981,9 @@
       "id": "vintage-postmark",
       "file": "vintage-postmark.png",
       "kind": "rendered-editable-commands",
-      "sha256": "907c464400cf31d9a9ad93f09c07a5868a7c3241c79d3c63a9015af9cddf64a6",
+      "sha256": "6520ed50c19a7a0a840c24da1c519c1b4db5714a31acccd2516688883852f92d",
       "width": 360,
-      "height": 139
+      "height": 129
     },
     {
       "id": "composition-triangle",
@@ -1005,31 +1005,31 @@
       "id": "title-shadow",
       "file": "title-shadow.png",
       "kind": "rendered-editable-commands",
-      "sha256": "b947bd32a3f1e3564bca35aa35f7398a700cfff37fe5a5518470733202d57c27",
+      "sha256": "ea684bb5c9e60b89e068c5ad1a6612874f510067a57e92345b23e65c0be04021",
       "width": 360,
-      "height": 130
+      "height": 132
     },
     {
       "id": "title-offset-outline",
       "file": "title-offset-outline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "90c02a8ff42d68a1f5775db39420d9faed273266f2f4cfb9b8d5b7d73469215f",
+      "sha256": "fed31baa7c0409036fc3c36a7325ef401ee1f69f8d916717df6e9f8518193d45",
       "width": 360,
-      "height": 131
+      "height": 133
     },
     {
       "id": "title-gradient",
       "file": "title-gradient.png",
       "kind": "rendered-editable-commands",
-      "sha256": "4e892489424b581f7d8786fdcfad439ba39f6f71798c1363e98d3d1dda4f92ac",
+      "sha256": "93e724000a4e2752f49f7c01a394e6ae97094fa4c44f472efc40352f8499d001",
       "width": 360,
-      "height": 126
+      "height": 124
     },
     {
       "id": "title-gradient-outline",
       "file": "title-gradient-outline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "954227bd0b5f9ec3ada88b414336c6c40f822d52f82c916e37594eceaec574a8",
+      "sha256": "b6d83da5f685306765c4e26718aae841df00aae1304cf0b62b4e8193613f39c4",
       "width": 360,
       "height": 125
     },
@@ -1037,7 +1037,7 @@
       "id": "title-phrases",
       "file": "title-phrases.png",
       "kind": "rendered-editable-commands",
-      "sha256": "5f718bf509bad7aa03fdb4e71276d844211ee2ff9d0011197f56732ac4e5475a",
+      "sha256": "ece7cf3d9f8547ba4f93e30cfde58f1a286e8aba7acc5a607a5a896d472d8b03",
       "width": 360,
       "height": 288
     },
@@ -1045,7 +1045,7 @@
       "id": "title-circle",
       "file": "title-circle.png",
       "kind": "rendered-editable-commands",
-      "sha256": "10847b4bed83ad69880378513635f8917b5ff0d39dad8b6c03123c6b2fba4f68",
+      "sha256": "dbb96eddc8ce9b6eb36c56ce8f6b117531fdd08fc54cad5864d4f401b6bd8ee7",
       "width": 360,
       "height": 136
     },
@@ -1053,7 +1053,7 @@
       "id": "title-caption",
       "file": "title-caption.png",
       "kind": "rendered-editable-commands",
-      "sha256": "5a40c41955d07880e7800b3c6476665269a6aa36f159137f48a450403342da25",
+      "sha256": "7061844b79d4a42db7b74a877a7b4dc674d2a4d09d521f98d476751446d41978",
       "width": 360,
       "height": 164
     },

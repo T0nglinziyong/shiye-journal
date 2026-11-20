@@ -65,6 +65,16 @@ test('long titles retain their full content and unsupported parameters are expli
  const doc=await document([]);assert.equal(apply(doc,compiled.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'x',text:'你好',dangerous:1}}),/不支持/);
 });
+test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
+ const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};
+ const compiled=compileTechnique({methodId:'title-underline',parameters});
+ const children=compiled.operations[0].children,underline=children.find(o=>o.id==='under-underline');
+ const text=children.find(o=>o.op==='text.add');
+ assert.equal(text.content,parameters.text);
+ assert.ok(underline.geometry.points.at(-1).x<15,'underline should use the short last line');
+ assert.ok(underline.place.at.every(Number.isFinite));
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+});
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
  const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
  assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);

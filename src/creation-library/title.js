@@ -1,3 +1,5 @@
+import {textLines} from '../editor-tools-model.js';
+
 const pt=25.4/72;
 const segments=text=>[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)].map(s=>s.segment);
 const extent=(text,fontSize)=>segments(text).reduce((sum,ch)=>sum+fontSize*pt*(/^[\u0000-\u00ff]+$/u.test(ch)?.65:1),0);
@@ -49,11 +51,12 @@ export function compileTitle(p,{widthExplicit=false}={}){
  const children=[],texts=[],background=[],notes=[];let next=0;
  const shape=(kind,x,y,w,h,paint={})=>({op:'graphic.add',id:p.id+'-mark'+(++next),geometry:{kind},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:accent,...paint}});
  const addText=(content,x,y,w,s)=>{
-  const rowHeight=(s.fontSizePt||fontSize)*pt*(s.lineHeight||1.6),lineWidth=Math.max(1,w-1);
-  const lines=content.split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(extent(line,s.fontSizePt||fontSize)/lineWidth)),0);
-  const h=lines*rowHeight+Math.abs(s.curveHeightMm||0)+2;
+  const size=s.fontSizePt||fontSize,rowHeight=size*pt*(s.lineHeight||1.3),lineWidth=Math.max(1,w-1);
+  const layout=textLines({content,width:lineWidth,fontSize:size*pt,fixedLineHeight:rowHeight},value=>extent(value,size));
+  const lines=layout.lines.length,h=lines*rowHeight+Math.abs(s.curveHeightMm||0)+2;
   const op={op:'text.add',id:p.id+'-text'+(++next),content,place:at(x,y),size:{width:w,unit:'mm'},style:s};
-  texts.push({op,x,y,w,h,inkHeight:(lines-1)*rowHeight+(s.fontSizePt||fontSize)*pt*1.1,inkWidth:Math.min(w,Math.max(...content.split('\n').map(line=>extent(line,s.fontSizePt||fontSize))))});return texts.at(-1);
+  const lastLine=[...layout.lines].reverse().find(line=>line.text.trim())?.text||'';
+  texts.push({op,x,y,w,h,inkHeight:(lines-1)*rowHeight+size*pt*1.1,inkWidth:Math.min(w,Math.max(...layout.lines.map(line=>extent(line.text,size)))),lastLineWidth:Math.min(w,extent(lastLine,size)),lineCount:lines,rowHeight});return texts.at(-1);
  };
  let runs=p.runs;
  if(!runs&&p.emphasis){const pieces=p.text.split(p.emphasis);runs=[];pieces.forEach((part,i)=>{if(part)runs.push({text:part});if(i<pieces.length-1)runs.push({text:p.emphasis,role:'primary'});});}
@@ -82,12 +85,16 @@ export function compileTitle(p,{widthExplicit=false}={}){
   if(['highlight','circle'].includes(p.treatment))notes.push('未给强调词或主词组，本次保留普通标题；请指定 emphasis 或 runs 中的 primary。');
   if(p.treatment==='stagger')notes.push('未提供词组，保留连续读序；不自动随机旋转每字。');
  }
+ const mainTexts=texts.slice();
  let height=Math.max(p.heightMm||14,...texts.map(t=>t.y+t.h+5));
  if(p.caption){const y=Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
  if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
  if(p.treatment==='underline'){
-  const main=texts.filter(t=>t.op.content!==p.caption),bottom=Math.max(...main.map(t=>t.y+t.inkHeight)),lineWidth=Math.min(width-10,Math.max(...main.map(t=>t.inkWidth)));
-  children.push({op:'graphic.add',id:p.id+'-underline',geometry:{kind:'stroke',unit:'mm',points:Array.from({length:9},(_,i)=>({x:i*lineWidth/8,y:Math.sin(i*.8)*.22,pressure:.6}))},place:at(5,bottom+1),style:{stroke:accent,strokeWidthMm:.55,penStyle:'fountain'}});
+  const last=mainTexts.at(-1),bottom=last.y+last.inkHeight;
+  const sameRow=last.lineCount===1?mainTexts.filter(t=>t.lineCount===1&&Math.abs(t.y-last.y)<1):[last];
+  const left=Math.min(...sameRow.map(t=>t.x)),right=Math.max(...sameRow.map(t=>t.x+t.lastLineWidth));
+  const lineWidth=Math.max(1,Math.min(width-left,right-left));
+  children.push({op:'graphic.add',id:p.id+'-underline',geometry:{kind:'stroke',unit:'mm',points:Array.from({length:9},(_,i)=>({x:i*lineWidth/8,y:Math.sin(i*.8)*.22,pressure:.6}))},place:at(left,bottom+1),style:{stroke:accent,strokeWidthMm:.55,penStyle:'fountain'}});
   height=Math.max(height,bottom+5);
  }
  if(p.pattern&&p.pattern!=='plain'){
