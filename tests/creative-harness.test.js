@@ -21,7 +21,7 @@ async function fixture(t){
   const render=async doc=>({pngHash,sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='});
   return {document,skills,journal,render,state:initialHarnessState({document,skills,brief:{title:'测试'}})};
 }
-const plan=()=>call('creation_plan',{intent:'图文共同构图',steps:[{task:'试摆并看图',status:'active'}]});
+const plan=()=>call('creation_plan',{intent:'图文共同构图',steps:[{task:'试摆并看图',status:'in_progress'}]});
 const skill=()=>call('read_skill',{name:'journal-composition'});
 const add=doc=>call('creation_apply',{protocolVersion:2,transactionId:'first',baseSceneRevision:creationSceneRevision(doc),operations:[{op:'text.add',id:'text',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]});
 const lastScene=messages=>{

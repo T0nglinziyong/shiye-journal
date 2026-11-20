@@ -1,4 +1,4 @@
-import {offlineBundledFonts} from './offline-bundled-fonts.mjs';
+import {offlineBundledFonts,offlineResourceRoot} from './offline-bundled-fonts.mjs';
 import {findOfflineChromium,renderChromiumPNG} from './offline-chromium-preview.mjs';
 import {sceneLayerEntries} from './scene-v2.js';
 import {renderSceneCanvas} from './scene-renderer.js';
@@ -7,7 +7,7 @@ import {previewImageFormat} from './offline-preview.js';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
 import {existsSync} from 'node:fs';
-const require=createRequire(resolve(process.cwd(),'package.json'));
+const require=createRequire(resolve(offlineResourceRoot,'package.json'));
 const registeredFonts=new Set();
 
 function identifyCanvasBackend(module){

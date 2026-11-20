@@ -8,6 +8,15 @@ import {offlineBundledFonts} from '../src/offline-bundled-fonts.mjs';
 import {loadOfflineCanvas} from '../src/offline-node-preview.mjs';
 import {localGlyphOutline} from '../src/creation-font-resolver.mjs';
 import {geometryArea} from '../src/craft-topology.js';
+import {execFileSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+test('font discovery and renderer identity do not depend on the launch directory',()=>{
+ const fonts=new URL('../src/offline-bundled-fonts.mjs',import.meta.url).href,renderer=new URL('../src/offline-node-preview.mjs',import.meta.url).href;
+ const script=`const {offlineBundledFonts}=await import(${JSON.stringify(fonts)});const {loadOfflineCanvas}=await import(${JSON.stringify(renderer)});const c=await loadOfflineCanvas();console.log(JSON.stringify({count:offlineBundledFonts().length,backend:c.rendererBackend}));`;
+ const result=JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',script],{cwd:tmpdir(),encoding:'utf8'}));
+ assert.equal(result.count,journalBundledFonts.length);assert.equal(result.backend,'node-canvas@3.2.3');
+ assert.throws(()=>offlineBundledFonts('/missing-shiye-font-root'),/预装字体缺失/);
+});
 test('handwriting assets have pinned checksums and redistribution notices',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../src/assets/fonts/manifest.json',import.meta.url),'utf8'));
  for(const font of manifest.fonts){

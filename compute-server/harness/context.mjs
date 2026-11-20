@@ -15,7 +15,7 @@ export function preloadCreationSkills(skills,document,brief={}){
 }
 
 export function initialToolGuide(document){
-  const topics=['material.add','layer.update','page.update','graphic.add','place','size','order'];
+  const topics=['material.add','layer.update','page.update','graphic.add','place','size','order','geometry','shapeOptions','region'];
   if(document.source.textMode!=='none')topics.push('text.add','text.lettering');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   return {catalog:creationHelp(),common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
