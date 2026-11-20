@@ -155,7 +155,7 @@ test('recipe discovery is paged, image-backed and does not resend the overview',
  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
   if(++n===1)return answer(call('read_skill',{name:'journal-lettering',level:'methods'}));
   const result=JSON.parse(messages.findLast(m=>m.role==='tool').content);assert.equal(result.ok,true);assert.equal(result.data.methods.length,8);assert.equal(messages.at(-1).content.filter(p=>p.type==='image_url').length,8);
-  assert.ok(result.data.methods.every(m=>m.tool.name==='creation_recipe'));throw Error('library discovery verified');
+  assert.ok(result.data.methods.every(m=>m.tool.name==='creation_recipe'));assert.equal(result.data.guidance,f.skills.read('journal-lettering').content);throw Error('library discovery verified');
  }});
  await assert.rejects(harness.run({id:'method-gallery',state:f.state}),/library discovery verified/);
 });

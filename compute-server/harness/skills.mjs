@@ -62,7 +62,7 @@ export async function loadCreationSkills(root=fileURLToPath(new URL('../../creat
   return {catalog:()=>[...registry.values()].map(({content,illustrations,...summary})=>({...summary,illustrationCount:illustrations.filter(i=>i.available).length,methodCount:techniqueCatalog.methods.filter(m=>m.skill===summary.name).length})),read(name,options={}){
     if(!registry.has(name))throw Error('未知创作 Skill：'+name);
     const entry=structuredClone(registry.get(name)),all=techniqueCatalog.methods.filter(m=>m.skill===name),selected=methodsFor(name,options);
-    if(options.level&&options.level!=='overview')return {name,version:entry.version,level:options.level,page:options.page||0,total:all.length,nextPage:(options.page||0)*8+8<all.length?(options.page||0)+1:null,methods:selected.map(m=>describeTechnique(m.id))};
+    if(options.level&&options.level!=='overview')return {name,version:entry.version,guidance:entry.content,level:options.level,page:options.page||0,total:all.length,nextPage:(options.page||0)*8+8<all.length?(options.page||0)+1:null,methods:selected.map(m=>describeTechnique(m.id))};
     return {...entry,methodCatalog:all.map(({id,title,when})=>({id,title,when})),readMore:{name,level:'methods',page:0}};
   },imageParts(name){
     if(!pictures.has(name))throw Error('未知创作 Skill：'+name);
