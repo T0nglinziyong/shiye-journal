@@ -2299,6 +2299,82 @@
           "observed": "四图全部核对；第三图说明便签的留白书写与上下文呼应。工具为本项目实现。"
         }
       }
+    },
+    {
+      "id": "photo-film",
+      "skill": "photo-story",
+      "title": "胶片照片组",
+      "recipe": "film",
+      "when": "多张照片需要连续阅读次序，且希望保留各自真实尺寸",
+      "defaults": {
+        "bendMm": 10,
+        "frameInset": 0.1,
+        "holesPerFrame": 6,
+        "gapMm": 3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-film"
+      },
+      "lesson": {
+        "principle": "按实物尺寸为每张照片生成有透明齿孔的数字边框，再通过平移和旋转形成直排或弧形次序。",
+        "steps": [
+          "按阅读次序提供素材别名，先看尺寸能否放进纸面",
+          "用 bendMm 控制排布起伏、gapMm 控制相邻外接框间距",
+          "用 frameInset 和 holesPerFrame 调整胶片边带与齿孔，再整体放入页面"
+        ],
+        "check": [
+          "照片未缩放、拉伸或裁切，重要主体仍完整",
+          "边带和齿孔真正透明，不靠白色方块遮盖",
+          "图组没有超出可用纸面，缺少照片时减少输入别名而不复制实物"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "依据已核对的胶片照片叙事示意归纳为平面可编辑图形；不宣称能让实体照片弯曲变形。"
+        }
+      }
+    },
+    {
+      "id": "graphic-film-frame",
+      "skill": "photo-story",
+      "title": "可调胶片边框",
+      "recipe": "graphic",
+      "when": "已有照片组需要胶片边带，或需要可编辑的多格图文框架",
+      "defaults": {
+        "shape": "filmFrame",
+        "widthMm": 90,
+        "heightMm": 30,
+        "fill": "#343A37",
+        "options": {
+          "columns": 3,
+          "count": 16,
+          "frameInset": 0.16
+        },
+        "strokeWidthMm": 0.1
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "graphic-film-frame"
+      },
+      "lesson": {
+        "principle": "使用带透明照片窗和齿孔的原生数字几何，格数、齿孔数和边带比例均可独立修改。",
+        "steps": [
+          "设置宽高与 columns，先确认照片窗的布局",
+          "用 count 调每边齿孔数，frameInset 调边带宽度",
+          "选择填充颜色并把边框放在照片组上方，核对图片边缘"
+        ],
+        "check": [
+          "透明窗口能看到底层内容，页面换色后仍正常",
+          "格数与实际照片对应，修改结构后再次检查对齐",
+          "数字边框不进入实体库存，也不自动改变照片尺寸"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "依据已核对的胶片照片叙事示意归纳为平面可编辑图形；不宣称能让实体照片弯曲变形。"
+        }
+      }
     }
   ]
 }

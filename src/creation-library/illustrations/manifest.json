@@ -1136,6 +1136,22 @@
       "sha256": "98073cdbca6ea3ef9ec76502b4148c1d77d6806c9ec2ce446c29c63e1d27254f",
       "width": 358,
       "height": 300
+    },
+    {
+      "id": "photo-film",
+      "file": "photo-film.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "05537319d38009bdb9753024f8c32b66e6b56a0600c8ab1ecc8fb9daf3ddb89f",
+      "width": 360,
+      "height": 155
+    },
+    {
+      "id": "graphic-film-frame",
+      "file": "graphic-film-frame.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "943c8dceb1d6df242290957a251706bfe90ad6b734296ed72d5c1ec91e0acb7e",
+      "width": 360,
+      "height": 139
     }
   ]
 }

@@ -7,7 +7,7 @@ import {pressureInkOutline} from './pressure-ink.js';
 import {advancedShapeControls,resolvedShapeOptions} from './advanced-shape-options.js';
 export const defaultTools={penStyle:'fountain',penWidth:4,penColor:'#2b5245',markerWidth:4,markerColor:'#2b5245',markerStraight:false,eraserWidth:20,eraserStyle:'standard',eraserOnlyHighlighter:false,wholeStroke:true,returnToPen:false,pencil:true};
 export const commonShapes=[['rectangle','色块'],['roundedRectangle','圆角色块'],['ellipse','圆形／椭圆'],['line','线条／下划线'],['frame','空心边框'],['star','星形'],['heart','爱心'],['raindrop','雨滴'],['cloud','云朵'],['sun','太阳'],['moon','月亮'],['flower','小花'],['leaf','树叶'],['sparkle','闪光'],['arrow','箭头'],['checkbox','勾选框'],['triangle','三角形'],['diamond','菱形'],['hexagon','六边形']];
-export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['linedNote','横线便笺'],['checklistTable','勾选清单'],['weeklyTable','一周计划表'],['habitTracker','习惯打卡表'],['calendarTable','月历格'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['ticketFrame','票根边框'],['postage','邮票齿边'],['postageFrame','邮票边框'],['archFrame','拱形边框'],['scallopFrame','波浪边框'],['washi','手帐胶带'],['bracket','括号'],['paperclip','回形针'],['vector','自由图形']];
+export const advancedShapes=[['grid','方格'],['dots','点阵'],['stripes','条纹'],['linedNote','横线便笺'],['checklistTable','勾选清单'],['weeklyTable','一周计划表'],['habitTracker','习惯打卡表'],['calendarTable','月历格'],['ribbon','缎带'],['tag','标签'],['bubble','对话框'],['chevron','折角'],['burst','爆炸星'],['scallop','花边'],['wave','波浪线'],['zigzag','折线'],['ticket','票根'],['ticketFrame','票根边框'],['postage','邮票齿边'],['postageFrame','邮票边框'],['filmFrame','胶片边框'],['archFrame','拱形边框'],['scallopFrame','波浪边框'],['washi','手帐胶带'],['bracket','括号'],['paperclip','回形针'],['vector','自由图形']];
 const polygons={triangle:[[.5,.04],[.96,.95],[.04,.95]],diamond:[[.5,.03],[.97,.5],[.5,.97],[.03,.5]],hexagon:[[.25,.04],[.75,.04],[.98,.5],[.75,.96],[.25,.96],[.02,.5]],ribbon:[[.02,.1],[.98,.1],[.84,.5],[.98,.9],[.02,.9],[.16,.5]],tag:[[.03,.03],[.78,.03],[.98,.5],[.78,.97],[.03,.97]],bubble:[[.04,.05],[.96,.05],[.96,.72],[.47,.72],[.23,.97],[.25,.72],[.04,.72]],chevron:[[.03,.03],[.63,.03],[.98,.5],[.63,.97],[.03,.97],[.38,.5]],ticket:[[.04,.05],[.4,.05],[.5,.15],[.6,.05],[.96,.05],[.96,.95],[.6,.95],[.5,.85],[.4,.95],[.04,.95]],washi:[[.02,.05],[.10,.14],[.02,.23],[.10,.32],[.02,.41],[.10,.5],[.02,.59],[.10,.68],[.02,.77],[.10,.86],[.02,.95],[.98,.95],[.90,.86],[.98,.77],[.90,.68],[.98,.59],[.90,.5],[.98,.41],[.90,.32],[.98,.23],[.90,.14],[.98,.05]]};
 const radial=(n,radii,offset=-Math.PI/2)=>Array.from({length:n},(_,i)=>{const a=offset+2*Math.PI*i/n,r=radii(i,a);return [.5+Math.cos(a)*r,.5+Math.sin(a)*r];});
 const postageEdge=()=>{
@@ -33,6 +33,12 @@ function flowerOutline(o){
   return path+' Z';
 }
 function parametricOutline(kind,o){
+  if(kind==='filmFrame'){
+    const rect=(x,y,w,h)=>`M${x} ${y}h${w}v${h}h${-w}Z`,cell=(1-2*o.frameInset)/o.columns,holes=[];
+    for(let i=0;i<o.columns;i++)holes.push(rect((i+o.frameInset)/o.columns,o.frameInset,cell,1-2*o.frameInset));
+    for(let i=0;i<o.count;i++)for(const y of [o.frameInset*.275,1-o.frameInset*.725])holes.push(rect((i+.275)/o.count,y,.45/o.count,o.frameInset*.45));
+    return rect(0,0,1,1)+' '+holes.join(' ');
+  }
   if(kind==='flower')return flowerOutline(o);
   if(kind==='star')return radial(o.points*2,i=>i%2?.47*o.innerRatio:.47).map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z';
   if(kind==='arrow')return `M.03 ${.5-o.shaftWidth/2} H${.97-o.headLength} V.08 L.97 .5 L${.97-o.headLength} .92 V${.5+o.shaftWidth/2} H.03 Z`;

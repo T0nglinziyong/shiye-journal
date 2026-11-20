@@ -6,8 +6,8 @@
 
 | 要求 | 当前证据 | 结论 |
 | --- | --- | --- |
-| 每个现有方法有原理、步骤、检查点和完整调用 | methods.json 的 lesson；describeTechnique 的 example.prepare 与完整 parameters；creation-library.test.js 逐项执行 | 已覆盖当前 64 项；不代表所有教程方法已经穷尽 |
-| 示意与可执行工具一致 | build-creation-library-illustrations.mjs 运行真实 Scene，manifest 校验 64 张方法图；查看全表及标题细图 | 当前方法已生成并查看；需要真实创作复验 |
+| 每个现有方法有原理、步骤、检查点和完整调用 | methods.json 的 lesson；describeTechnique 的 example.prepare 与完整 parameters；creation-library.test.js 逐项执行 | 已覆盖当前 66 项；不代表所有教程方法已经穷尽 |
+| 示意与可执行工具一致 | build-creation-library-illustrations.mjs 运行真实 Scene，manifest 校验 66 张方法图；查看全表及标题细图 | 当前方法已生成并查看；需要真实创作复验 |
 | 结构参数可修改 | 图形直接使用 geometry.options；标题共用 style、runs、emphasis；编辑与导出共用绘制 | 已实现并有针对测试 |
 | 不臃肿、按需检索 | read_skill 每页 8 项；统一 creation_recipe；题目目录预载而非所有图片常驻 | 保持 |
 | 模板数量与结构 | templates.json 为 78 个独立来源面板 | 用户确认数量暂时足够，不再增加；逐项质量验收继续 |
@@ -24,7 +24,7 @@
 | --- | --- |
 | journal-lettering | title-underline, title-outline, title-highlight, title-stack, title-vertical, title-stagger, title-label, title-curve, title-shadow, title-offset-outline, title-gradient, title-gradient-outline, title-phrases, title-circle, title-caption |
 | paper-layering | paper-underlay, paper-peek, paper-tear, paper-window, paper-window-reuse, paper-weave, paper-split |
-| photo-story | photo-row, photo-grid, photo-stagger, photo-caption |
+| photo-story | photo-row, photo-grid, photo-stagger, photo-caption, photo-film, graphic-film-frame |
 | journal-graphics | graphic-loop, graphic-route, graphic-corner, graphic-rays, graphic-flower, graphic-star, graphic-arrow, graphic-arch, graphic-scallop-frame, graphic-paperclip, graphic-wave, graphic-zigzag, graphic-bubble |
 | pattern-and-doodle | pattern-dots, pattern-stripes, pattern-grid, pattern-scallop |
 | tape-and-vellum | tape-fix, tape-corners, tape-divider |
@@ -88,3 +88,12 @@
 - ac-15 用八件已授权素材在本机试排，保留真实毫米尺寸和透明轮廓，缺失素材留空，未调用模型或上传图片。正文与素材遮挡已看图检查；这是部分库存验证，不能视为繁复风格成品验收。私有结果保存在研究目录的“照片动线模板真实素材复验”。
 - 当前 49 个模板有逐项描述，其中 27 个为 `structure-reviewed`、22 个早期记录仍待复核；其余 29 个只有主要结构。
 - 完整测试 1896 项通过、1 项跳过、0 失败；UI smoke、React 页面流程与 7 视口路由通过。目录详情在 390/768/1024/1440 宽度无横向溢出，78 个来源面板及 142 张示意图均通过哈希校验。未部署，未做实体设备验收。
+
+## 胶片图形与照片组能力
+
+- 核对 ac-26 高清来源后发现胶片的结构编辑能力缺失。新增原生 `filmFrame`，支持照片格数、每边齿孔数、边带比例；照片窗及齿孔均为真实透明几何，编辑器、Scene 命令与导出共用。
+- 新增 `graphic-film-frame` 与 `photo-film` 两项方法，均有原理、步骤、检查点、完整参数示例、可执行工具与实际渲染示意图。照片组按真实毫米尺寸建立各自边框，支持正负弧形排布与间距，不改变照片像素或透明轮廓。
+- 隔离浏览器编辑器实测插入一件胶片，将照片格数改为 4、每边齿孔数改为 18、边带改为 20%，保存后再次打开仍一致；手机宽度 390 无横向溢出。齿孔密度调整不会改变边框外形，图层使用中文图形名称。
+- 三件私有真实素材的直排与弧形示例均在本机生成并查看；素材保持原尺寸，没有上传或调用模型。结果保存在研究目录的“胶片方法真实素材复验”。
+- **尚未完成**：立体卷曲胶片中的照片像素变形、连续折返带及对应模板 ac-26 的完整重建。现有方法是平面图组，不能将它计为卷曲复原。模板仍为 78 个，逐项描述仍为 49 个。
+- 验证：首轮完整测试有一个 V8 内部进程崩溃；重跑后 1901 项通过、1 项跳过、0 失败，UI smoke、React 流程与 7 视口路由通过。最终格数宽度修正与云存储的 97 项定向测试通过。144 张示意图哈希一致，目录四种屏宽无溢出。未上线，未做实体手机验收。

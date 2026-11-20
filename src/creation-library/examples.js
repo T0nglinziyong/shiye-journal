@@ -10,6 +10,7 @@ export const exampleMaterials=[
 export function techniqueExample(method){
  const p={id:'demo',at:[72,88]},before=[];
  if(method.recipe==='title')p.text='收集小美好';
+ if(method.recipe==='film')p.aliases=['m1','m2','m3'];
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
  if(method.recipe==='tape')p.aliases=['m4'];
  if(method.recipe==='record')p.items=['留下一片颜色','写下一句短记','收好今天的小物'];

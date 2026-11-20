@@ -35,7 +35,8 @@ const fields={
   paperclip:['clipGap','innerLength'],
   postageFrame:['count','depth','showInnerBorder'],ticketFrame:['depth','radius','showInnerBorder'],
   flower:['petals','petalDepth','centerRadius','showCenter'],star:['points','innerRatio'],arrow:['headLength','shaftWidth'],
-  archFrame:['archRise','frameInset','showInnerBorder'],scallopFrame:['lobes','lobeDepth','frameInset','showInnerBorder']
+  archFrame:['archRise','frameInset','showInnerBorder'],scallopFrame:['lobes','lobeDepth','frameInset','showInnerBorder'],
+  filmFrame:['columns','count','frameInset']
 };
 const defaults={rows:5,columns:7,showOuterBorder:true,showInnerLines:true,showInnerBorder:true,
   showHeader:true,showMarkers:true,spacing:18,dotSize:1.5,angle:45,
@@ -45,7 +46,7 @@ const defaults={rows:5,columns:7,showOuterBorder:true,showInnerLines:true,showIn
 const overrides={grid:{rows:6,columns:8},dots:{rows:6,columns:8},stripes:{rows:6,columns:8},linedNote:{rows:6},weeklyTable:{rows:3},habitTracker:{rows:5},calendarTable:{rows:6},
   wave:{count:4},zigzag:{count:5},burst:{count:16,depth:.12},scallop:{count:10,depth:.04},
   postage:{count:18,depth:.055},postageFrame:{count:10,depth:.055},
-  ticketFrame:{depth:.12,radius:.04},washi:{count:10,depth:.08}};
+  ticketFrame:{depth:.12,radius:.04},washi:{count:10,depth:.08},filmFrame:{columns:3,count:16,frameInset:.16}};
 const labels={
   ribbon:{depth:'燕尾切口'},tag:{depth:'尖端长度',radius:'左端圆角'},
   bubble:{tailPosition:'尾巴位置',depth:'尾巴宽度',radius:'框角圆度'},
@@ -55,7 +56,8 @@ const labels={
   postage:{count:'齿边数量',depth:'齿边深度'},washi:{count:'撕口数量',depth:'撕口深度'},
   bracket:{depth:'括号开口'},
   postageFrame:{count:'齿边数量',depth:'齿边深度'},
-  ticketFrame:{depth:'票根凹口',radius:'外角圆度'}
+  ticketFrame:{depth:'票根凹口',radius:'外角圆度'},
+  filmFrame:{columns:'照片格数',count:'每边齿孔数',frameInset:'边带宽度比例'}
 };
 export const advancedShapeOptionKinds=Object.freeze(Object.keys(fields));
 export function advancedShapeControls(kind){return (fields[kind]||[]).map(key=>({key,...shapeOptionFields[key],label:labels[kind]?.[key]||shapeOptionFields[key].label}));}
@@ -95,6 +97,7 @@ export function shapeRepeatCountPatch(shape,key,count){
   }
   validateShapeOptions(shape.kind,next);
   if(key==='count'){
+    if(shape.kind==='filmFrame')return {shapeOptions:next};
     // Horizontal motifs grow in length; washi teeth repeat vertically.
     // Perimeter and radial motifs retain their approximate tooth/lobe pitch.
     const axes=shape.kind==='washi'?['height']:
