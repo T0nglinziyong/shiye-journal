@@ -20,16 +20,18 @@ for(const t of templateCatalog.templates){
   const slot=t.elements.find(e=>e.id===fixture.bindings[i].slotId),style=resolveTemplateStyle(slot.example||{},t.palette||{});
   const c=canvas.createCanvas(400,Math.round(400*asset.physicalHeightMM/asset.physicalWidthMM)),ctx=c.getContext('2d');
   ctx.fillStyle=style.fill||palette[i%palette.length];
+  if(style.stroke&&!/^#[0-9a-f]{6}$/i.test(style.stroke))throw Error('合成素材描边无效：'+slot.id);
+  ctx.strokeStyle=style.stroke||'transparent';ctx.lineWidth=c.width*.007;
   if(style.shape==='path'){
    if(typeof style.path!=='string'||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(style.path)||!/^#[0-9a-f]{6}$/i.test(style.fill))throw Error('合成素材轮廓无效：'+slot.id);
-   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${style.path}" fill="${style.fill}"/></svg>`;
+   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${style.path}" fill="${style.fill}" stroke="${style.stroke||'none'}" stroke-width="0.7"/></svg>`;
    ctx.drawImage(await canvas.loadImage(Buffer.from(svg)),0,0,c.width,c.height);
-  }else if((style.shape||slot.shape)==='ellipse'){ctx.beginPath();ctx.ellipse(c.width/2,c.height/2,c.width/2,c.height/2,0,0,Math.PI*2);ctx.fill();}
+  }else if((style.shape||slot.shape)==='ellipse'){ctx.beginPath();ctx.ellipse(c.width/2,c.height/2,c.width/2,c.height/2,0,0,Math.PI*2);ctx.fill();if(style.stroke)ctx.stroke();}
   else if(style.shape==='star'){
    ctx.beginPath();const count=style.points||5;
    for(let k=0;k<count*2;k++){const angle=k*Math.PI/count-Math.PI/2,r=k%2?style.innerRatio||.5:1;const x=c.width/2*(1+r*Math.cos(angle)),y=c.height/2*(1+r*Math.sin(angle));k?ctx.lineTo(x,y):ctx.moveTo(x,y);}
    ctx.closePath();ctx.fill();
-  }else ctx.fillRect(0,0,c.width,c.height);
+  }else {ctx.fillRect(0,0,c.width,c.height);if(style.stroke)ctx.strokeRect(0,0,c.width,c.height);}
   images[asset.alias]=c.toBuffer('image/png');
  }
  const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;

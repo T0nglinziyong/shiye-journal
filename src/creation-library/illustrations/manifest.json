@@ -29,7 +29,7 @@
       "id": "ac-04",
       "file": "ac-04.png",
       "kind": "rendered-template-commands",
-      "sha256": "617785ee33a4d7161196c59c375be704a32b8b4bf941689df5264c39a808282f",
+      "sha256": "5bfdb9afc68e6c7bcca2e981e5c5c44930225822bbf95e126a02bc5713bd6697",
       "width": 240,
       "height": 308
     },
@@ -37,7 +37,7 @@
       "id": "ac-05",
       "file": "ac-05.png",
       "kind": "rendered-template-commands",
-      "sha256": "e843112ae6a0d3aeb85e76d9d2c120b5b4a083b474b8ee6bf5447a3f9bf4999f",
+      "sha256": "c564b94d440d4e2da7a86221c0c5cb2542d924eccc08443ffc64fe9cce816dd4",
       "width": 240,
       "height": 308
     },
@@ -45,7 +45,7 @@
       "id": "ac-06",
       "file": "ac-06.png",
       "kind": "rendered-template-commands",
-      "sha256": "8c4c979c0e990633d224de22a444ede7c507f5dbf80ad264da5b0fde6fe28bb9",
+      "sha256": "6b0ac915d774d9c3d44dd518f8c6507323ec46c3a4fd6e4fe04ff07c76695cb9",
       "width": 240,
       "height": 308
     },
