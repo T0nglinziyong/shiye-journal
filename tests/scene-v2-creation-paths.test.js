@@ -16,7 +16,7 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   const manual=draft();
   const [choice]=manualTemplateChoices(manual,assets,['paper']);
   assert.ok(choice);
-  assert.equal(applyManualTemplate(manual,assets,['paper'],choice.id).placed,1);
+  assert.equal((await applyManualTemplate(manual,assets,['paper'],choice.id)).placed,1);
   assert.equal(manual.layers.length,1);
   const project={drafts:[structuredClone(manual)]},expected=structuredClone(project.drafts[0]);
   const generated=applyToolCalls([{name:'upsert_text',arguments:{items:[{key:'story',
@@ -26,8 +26,8 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   commitAIDraft(project,{targetDraftID:manual.id,expectedDraft:expected,
     generatedDraft:generated.draft,newDraftID:'candidate'});
   const saved=attachSceneV2(project.drafts[0]);
-  assert.deepEqual(saved.layers.map(node=>node.type),['material','text']);
-  assert.equal(saved.layers[0].assetID,'paper');
+  assert.deepEqual(saved.layers.map(node=>node.type),['group','text']);
+  assert.ok(saved.layers[0].children.some(node=>node.type==='material'&&node.assetID==='paper'));
 
   const text=saved.layers.find(node=>node.type==='text');
   const bridge=createFabricSceneBridge(fabric);
@@ -35,7 +35,7 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   projected.set({text:'一页故事，继续编辑'});
   bridge.applyObject(testPage(text),projected,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(text.content,'一页故事，继续编辑');
-  assert.equal(saved.layers[0].assetID,'paper');
+  assert.ok(saved.layers[0].children.some(node=>node.type==='material'&&node.assetID==='paper'));
   assert.equal(validateSceneExtensions(saved),true);
   const serialized=JSON.parse(JSON.stringify(saved));
   assert.equal(serialized.sceneVersion,2);

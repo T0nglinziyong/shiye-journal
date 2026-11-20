@@ -46,7 +46,7 @@ import {searchableSeries} from './library-model.js';
 import {selectionActive,toggleSelected} from './library-selection-model.js';
 import {ReactFilterMenu} from './react-filter-menu.jsx';
 import {presetJournalTemplates,templateIndexText} from './journal-template-catalog.js';
-import {journalTemplateComposition} from './journal-template-composition.js';
+import {executableJournalTemplates,journalTemplateComposition} from './journal-template-composition.js';
 import {journalTemplateImageURL,saveJournalUserTemplate} from './journal-template-data.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
 import {loadJournalPresetPanel} from './journal-preset-images.js';
@@ -288,6 +288,8 @@ function JournalTemplateVisual({item,side='template',db,accountId,detail=false})
   useEffect(()=>{
     if(!visible)return;
     let active=true;
+    const staticPath=side==='case'?item.exampleImagePath:item.templateImagePath;
+    if(staticPath){setURL(staticPath);setError('');return;}
     const id=side==='case'?item.exampleBlobId:item.templateBlobId;
     const panel=journalTemplatePanel(item,side);
     if(!id&&!panel){setError('图片暂不可用');return;}
@@ -299,7 +301,7 @@ function JournalTemplateVisual({item,side='template',db,accountId,detail=false})
     return ()=>{active=false;};
   },[visible,attempt,item.id,side,db,accountId,detail]);
   return <div ref={host} className={detail?'journal-template-detail-image':'card-image'}>
-    {url?<img src={url} alt={`${item.title}${side==='case'?' 真实案例':' 抽象模板'}`}/>:error?
+    {url?<img src={url} alt={`${item.title}${side==='case'?(item.exampleIsReference?' 案例参考':' 真实案例'):' 抽象模板'}`}/>:error?
       <div className="journal-template-fallback"><strong>{item.title}</strong>
         <p>{item.structure}</p><small>{error}{detail?' · 可重试':' · 点击查看结构'}</small>
         {detail?<button type="button" className="btn mini"
@@ -307,6 +309,28 @@ function JournalTemplateVisual({item,side='template',db,accountId,detail=false})
       item.templateBlobId||side==='case'?<span className="journal-template-loading">
         {side==='case'?'载入对应案例…':'载入模板…'}</span>:
         <div className="journal-template-outline">{item.title}</div>}
+  </div>;
+}
+
+const templateRoleName={focal:'主视觉',secondary:'辅助图',background:'底纸',information:'信息区',
+  accent:'装饰',decoration:'图形装饰',material:'素材位',marker:'标记',connector:'连接',divider:'分隔',title:'标题',text:'正文'};
+const templateKindName={photo:'照片',sticker:'贴纸',paper:'纸张',card:'卡片',ticket:'票据',
+  note:'便签',tape:'胶带',stamp:'印章',text:'文字',decoration:'装饰'};
+function JournalTemplateElements({composition}){
+  return <div className="journal-template-detail-image journal-template-elements-view"
+    data-tool-template-id={composition.toolTemplateId}>
+    <div className="journal-template-elements-page" style={{aspectRatio:composition.aspect}}>
+      {composition.elements.map((element,index)=>{
+        const [x,y,w,h]=element.box,role=templateRoleName[element.role]||'素材';
+        const accepts=(element.accepts||[]).map(kind=>templateKindName[kind]||kind);
+        const label=element.role==='material'||element.role==='focal'||element.role==='accent'?
+          `${role}${accepts.length?` · ${accepts.slice(0,2).join('/')}`:''}`:role;
+        return <div key={element.id} className={`journal-template-element role-${element.role}`}
+          data-slot-id={element.id} title={`${role} · ${element.id}${accepts.length?` · 可放${accepts.join('、')}`:''}`}
+          style={{left:`${x*100}%`,top:`${y*100}%`,width:`${w*100}%`,height:`${h*100}%`,zIndex:index+1}}>
+          {w*h>.025?<span>{label}</span>:w*h>.014?<span>{role}</span>:null}</div>;
+      })}
+    </div><span className="journal-template-elements-caption">工具 {composition.toolTemplateId} · {composition.elements.length} 个元素</span>
   </div>;
 }
 
@@ -357,15 +381,16 @@ function JournalTemplateImport({db,onClose,onSaved,onError}){
 }
 
 export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
-  const [filters,setFilters]=useState(viewState.templateFilters||
-    {query:'',type:'all',status:'all',sort:'default-asc'});
+  const [filters,setFilters]=useState(()=>({query:'',type:'tool',status:'all',sort:'default-asc',
+    ...(viewState.templateFilters||{}),
+    type:viewState.templateFilters?.type==='preset'?'tool':viewState.templateFilters?.type||'tool'}));
   const [selectedID,setSelectedID]=useState(viewState.templateID||null);
   const [side,setSide]=useState(viewState.templateSide||'template');
   const [importOpen,setImportOpen]=useState(false);
   const [menu,setMenu]=useState(null);
   const [,forceRefresh]=useState(0);
   const accountID=state.accountId;
-  const catalog=[...presetJournalTemplates(),...(state.userTemplates||[])];
+  const catalog=[...executableJournalTemplates(),...presetJournalTemplates().map(item=>({...item,origin:'reference'})),...(state.userTemplates||[])];
   const selected=catalog.find(item=>item.id===selectedID);
   const change=next=>{
     const value={...filters,...next};setFilters(value);viewState.templateFilters=value;
@@ -375,9 +400,10 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
     setSide('template');viewState.templateSide='template';};
   const found=catalog.filter(item=>{
     const query=filters.query.trim().toLocaleLowerCase();
-    const typeOK=filters.type==='all'||filters.type==='preset'&&item.origin==='preset'||
-      filters.type==='user'&&item.origin!=='preset';
-    const hasCase=!!(item.exampleBlobId||item.exampleSourceNumbers?.length);
+    const typeOK=filters.type==='all'||filters.type==='tool'&&item.origin==='preset'||
+      filters.type==='reference'&&item.origin==='reference'||
+      filters.type==='user'&&item.origin==='user';
+    const hasCase=!!(item.exampleBlobId||item.exampleImagePath||item.exampleSourceNumbers?.length);
     const statusOK=filters.status==='all'||filters.status==='with-case'&&hasCase||
       filters.status==='without-case'&&!hasCase;
     return typeOK&&statusOK&&(!query||templateIndexText(item).includes(query));
@@ -389,7 +415,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
   const basis=filters.sort.startsWith('name')?'name':'default';
   const order=filters.sort.endsWith('asc')?'asc':'desc';
   const controls=[
-    ['类型','▦',filters.type,[['all','全部类型'],['preset','预设模板'],['user','我的模板']],
+    ['类型','▦',filters.type,[['tool','排版模板'],['reference','参考案例'],['user','我的模板'],['all','全部类型']],
       value=>change({type:value})],
     ['状态','☷',filters.status,[['all','全部状态'],['with-case','有对应案例'],
       ['without-case','暂无案例']],value=>change({status:value})],
@@ -398,12 +424,13 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
     ['排序顺序',order==='asc'?'↑':'↓',order,[['desc','降序'],['asc','升序']],
       value=>change({sort:basis+'-'+value})]
   ];
-  const available=selected&&!!(selected.exampleBlobId||selected.exampleSourceNumbers?.length);
+  const available=selected&&!!(selected.exampleBlobId||selected.exampleImagePath||selected.exampleSourceNumbers?.length);
   const showCase=side==='case'&&available;
-  return <div className="works-page"><div className="catalog-toolbar">
-    <PageHeading title={selected?'模板详情':'我的作品'}/>
-    {!selected?<CatalogTabs tabs={WORK_TABS} active="templates" onChange={onTabChange}/>:null}
-    {!selected?<div className="filters journal-template-filters" data-template-filters="true">
+  const composition=journalTemplateComposition(selected);
+  return <div className="works-page">{!selected?<div className="catalog-toolbar">
+    <PageHeading title="我的作品"/>
+    <CatalogTabs tabs={WORK_TABS} active="templates" onChange={onTabChange}/>
+    <div className="filters journal-template-filters" data-template-filters="true">
       <input type="search" id="work-search" placeholder="搜索模板名称或标签"
         aria-label="搜索模板" value={filters.query}
         onChange={event=>change({query:event.currentTarget.value})}/>
@@ -423,28 +450,38 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
           <span className="filter-width-reserve" aria-hidden="true">{longest}</span>
         </button>;
       })}</div>
-      <span className="catalog-total">{selected?`${catalog.length} 个模板`:
-        `${found.length} / ${catalog.length} 个模板`}</span>
-    </div>:null}</div>
+      <span className="catalog-total">{found.length} 个{filters.type==='reference'?'参考案例':'模板'}</span>
+    </div></div>:null}
     <div className={`grid works-grid journal-template-grid ${selected?'journal-template-detail':''}`}>
-      {selected?<article className="journal-template-detail-card"><div className="journal-template-detail-head">
-        <button type="button" className="btn" data-template-back onClick={()=>{
+      {selected?<article className="journal-template-detail-card detail-page">
+        <div className="detail-topline"><button type="button" className="detail-back" data-template-back onClick={()=>{
           setSelectedID(null);viewState.templateID=null;
-        }}>← 返回模板</button><h2>{selected.title}</h2></div>
-        <div className="journal-template-switch">
-          <button type="button" className={`btn ${showCase?'':'primary'}`}
+        }}>‹　返回模板</button><span className="detail-category">{selected.origin==='preset'?'排版模板':selected.origin==='reference'?'参考案例':'我的模板'}</span></div>
+        <section className="detail-columns"><div className="journal-template-preview">
+        <div className="journal-template-switch" role="tablist" aria-label="模板展示方式">
+          <button type="button" className={`btn ${side==='template'?'primary':''}`}
+            role="tab" aria-selected={side==='template'}
             data-template-side="template" onClick={()=>{setSide('template');viewState.templateSide='template';}}>
             抽象模板</button>
           <button type="button" className={`btn ${showCase?'primary':''}`}
+            role="tab" aria-selected={side==='case'}
             data-template-side="case" disabled={!available}
-            onClick={()=>{setSide('case');viewState.templateSide='case';}}>真实案例</button>
-        </div><JournalTemplateVisual key={`${selected.id}:${side}`} item={selected}
-          side={showCase?'case':'template'} db={db} accountId={state.accountId} detail/>
-        <section className="journal-template-composition"><h3>元素构成</h3><div className="journal-template-parts">
-          {journalTemplateComposition(selected).map(part=><div key={part.id} className="journal-template-part"><span>{part.label}</span><p>{part.text}</p></div>)}
-        </div></section><div className="journal-template-tags">
+            onClick={()=>{setSide('case');viewState.templateSide='case';}}>{selected.exampleIsReference?'案例参考':'真实案例'}</button>
+          <button type="button" className={`btn ${side==='elements'?'primary':''}`}
+            role="tab" aria-selected={side==='elements'} data-template-side="elements"
+            disabled={!composition} onClick={()=>{setSide('elements');viewState.templateSide='elements';}}>元素构成</button>
+        </div>{side==='elements'&&composition?<JournalTemplateElements composition={composition}/>:
+          <JournalTemplateVisual key={`${selected.id}:${side}`} item={selected}
+            side={showCase?'case':'template'} db={db} accountId={state.accountId} detail/>}
+        </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
+          <h1>{selected.title}</h1><p className="detail-description">{selected.structure}</p>
+          <div className="detail-facts"><div><small>模板类型</small><span>{selected.origin==='preset'?(selected.isCallable?'可编辑模板':'暂缓使用'):selected.origin==='reference'?'视觉参考':'自定义模板'}</span></div>
+          <div><small>元素</small><span>{composition?`${composition.elements.length} 个位置`:'尚未定义'}</span></div>
+          <div><small>适用风格</small><span>{selected.styles?.join('、')||'自由'}</span></div>
+          <div><small>适用内容</small><span>{selected.purposes?.join('、')||'不限'}</span></div></div>
+          <div className="journal-template-tags detail-tags">
           {(selected.tags||[]).map(tag=><span className="chip" key={tag}>{tag}</span>)}
-        </div></article>:<><button type="button" className="card work-entry journal-template-import-card"
+        </div></div></section></article>:<><button type="button" className="card work-entry journal-template-import-card"
           data-template-import onClick={()=>setImportOpen(true)}><div className="card-image">＋</div>
           <div className="card-body"><h3>导入模板与案例</h3><p>添加自己的模板图片</p></div>
         </button>
@@ -453,8 +490,8 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
           onClick={()=>choose(item)}>
           <JournalTemplateVisual item={item} db={db} accountId={state.accountId}/>
           <div className="card-body"><h3>{item.title}</h3>
-            <p>{item.origin==='preset'?'预设模板':'我的模板'}{' · '}
-              {item.exampleBlobId||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p>
+            <p>{item.origin==='preset'?(item.isCallable?'可编辑模板':'暂缓使用'):item.origin==='reference'?'参考案例':'我的模板'}{' · '}
+              {item.exampleIsReference?'有案例参考':item.exampleBlobId||item.exampleImagePath||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p>
             <div className="journal-template-tags">{item.tags.slice(0,3).map(tag=><span
               className="chip" key={tag}>{tag}</span>)}</div></div>
         </button>):<p className="empty">没有匹配的模板，试试其他标签。</p>}</>}
@@ -1061,7 +1098,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
-    <details className="panel match-direction"><summary><span><strong>确定方向</strong><small>{[styles.filter(name=>name!=='随材而定'&&name!=='自动安排').join(' · '),chosenPurposes.filter(name=>name!=='自由创作').join(' · ')].filter(Boolean).join(' · ')||'随素材自由创作'}</small></span><span className="match-direction-toggle">展开设置</span></summary>
+    <details className="panel match-direction"><summary className="match-panel-head"><span className="match-panel-title"><h2>确定方向</h2><small>{[styles.filter(name=>name!=='随材而定'&&name!=='自动安排').join(' · '),chosenPurposes.filter(name=>name!=='自由创作').join(' · ')].filter(Boolean).join(' · ')||'随素材自由创作'}</small></span></summary>
       <div className="match-direction-body">
       <div className="match-creative-controls">
         <DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/>

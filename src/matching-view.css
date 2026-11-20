@@ -46,6 +46,9 @@
 .manual-template-slot{position:absolute;box-sizing:border-box;border:1px dashed #aab8ac;border-radius:2px;overflow:hidden}
 .manual-template-slot.filled{border-style:solid;border-color:#63846d;background:#eef3eb}
 .manual-template-slot img{display:block;width:100%;height:100%;object-fit:contain}
+.manual-template-slot.graphic{border:0;background:transparent;overflow:visible}
+.manual-template-slot.graphic svg{display:block;width:100%;height:100%}
+.manual-template-slot.text{border-style:dotted;border-color:#b7bdaf;background:repeating-linear-gradient(0deg,transparent 0 5px,#e8ece3 5px 6px)}
 .manual-layout-sketch{position:relative;display:block;flex:0 0 60px;width:60px;height:76px;border:1px solid #dce2d7;border-radius:4px;background:repeating-linear-gradient(0deg,#fffefa 0 13px,#e4e9df 14px);overflow:hidden}
 .manual-layout-sketch i{position:absolute;display:block;background:#a7bfa9;border-radius:3px}
 .sketch-story i:nth-child(1){left:8px;top:11px;width:26px;height:30px}.sketch-story i:nth-child(2){right:7px;top:13px;width:12px;height:15px}.sketch-story i:nth-child(3){right:7px;bottom:13px;width:23px;height:12px}

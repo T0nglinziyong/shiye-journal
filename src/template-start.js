@@ -1,4 +1,3 @@
-import {itemFromAsset} from './domain.js';
 import {attachSceneV2} from './scene-v2.js';
 import {materialSlots,rankTemplates,scoreTemplate,templateCatalog,templateEnabled} from './creation-library/matcher.js';
 
@@ -20,21 +19,27 @@ export function manualTemplateChoices(draft,assets,basket,{styles=[],purposes=[]
   });
 }
 
-export function applyManualTemplate(draft,assets,basket,templateID){
+export async function applyManualTemplate(draft,assets,basket,templateID){
   attachSceneV2(draft);
   const template=simpleTemplates.find(item=>item.id===templateID);
   if(!template)throw Error('模板已不可用，请重新选择');
+  draft.layers=[];
+  attachSceneV2(draft);
   const selected=basket.map(id=>assets.find(asset=>asset.id===id)).filter(Boolean);
-  const choice=scoreTemplate(template,selected,paperOf(draft));
-  const byID=new Map(assets.map(asset=>[asset.id,asset]));
-  draft.items=choice.assignments.flatMap(({alias,box},index)=>{
-    const asset=byID.get(alias);if(!asset)return [];
-    const x=(box[0]+box[2]/2)*draft.canvas.width,y=(box[1]+box[3]/2)*draft.canvas.height;
-    const item=itemFromAsset(asset,draft,x,y,10+index,true);
-    item.generationBaseline={...item.generationBaseline,x:item.x,y:item.y};
-    return [item];
-  });
+  const paper=paperOf(draft),choice=scoreTemplate(template,selected,paper);
+  const [{compileTemplate},{createCreationDocument},{applyCreationTransaction,creationSceneRevision}]=await Promise.all([
+    import('./creation-library/compiler.js'),import('./creation-document.js'),import('./creation-transaction.js')]);
+  const document=await createCreationDocument({draft,assets:selected,
+    aliases:Object.fromEntries(selected.map(asset=>[asset.id,asset.id]))});
+  const compiled=compileTemplate({templateId:templateID,id:`manual-${draft.id}`,paper,
+    materials:selected,bindings:choice.assignments.map(({alias,slotId})=>({alias,slotId}))});
+  const result=applyCreationTransaction(document,{protocolVersion:2,
+    transactionId:`manual-${draft.id}`,baseSceneRevision:creationSceneRevision(document),
+    operations:compiled.operations},selected);
+  if(!result.changed)throw Error('模板未能生成可编辑画面');
+  draft.layers=result.document.page.layers;
+  attachSceneV2(draft);
   draft.startTemplateID=templateID;
-  return {placed:draft.items.length,remaining:basket.length-draft.items.length,
+  return {placed:choice.assignments.length,remaining:basket.length-choice.assignments.length,
     missing:choice.emptySlots.length,template:choice.title};
 }
