@@ -11,7 +11,14 @@ export const shapeOptionFields=Object.freeze({
   tailPosition:{label:'尾巴位置',type:'number',min:.15,max:.85},
   radius:{label:'圆角程度',type:'number',min:0,max:.3},
   clipGap:{label:'内圈宽度',type:'number',min:.12,max:.36},
-  innerLength:{label:'内圈长度',type:'number',min:.3,max:.72}
+  innerLength:{label:'内圈长度',type:'number',min:.3,max:.72},
+  petals:{label:'花瓣数量',type:'integer',min:3,max:16},
+  petalDepth:{label:'花瓣深度',type:'number',min:.04,max:.28},
+  centerRadius:{label:'花心大小',type:'number',min:.02,max:.16},showCenter:{label:'显示花心',type:'boolean'},
+  points:{label:'星角数量',type:'integer',min:3,max:16},innerRatio:{label:'内外半径比',type:'number',min:.1,max:.85},
+  headLength:{label:'箭头长度',type:'number',min:.1,max:.65},shaftWidth:{label:'箭杆宽度',type:'number',min:.06,max:.7},
+  archRise:{label:'拱顶高度',type:'number',min:.15,max:.8},frameInset:{label:'内框间距',type:'number',min:.02,max:.25},
+  lobes:{label:'每边花边数量',type:'integer',min:2,max:16},lobeDepth:{label:'花边深度',type:'number',min:.01,max:.08}
 });
 const fields={
   grid:['rows','columns','showOuterBorder'],dots:['rows','columns','dotSize','showOuterBorder'],
@@ -26,11 +33,15 @@ const fields={
   wave:['count','depth'],zigzag:['count','depth'],ticket:['depth','radius'],
   postage:['count','depth'],washi:['count','depth'],bracket:['depth'],
   paperclip:['clipGap','innerLength'],
-  postageFrame:['count','depth','showInnerBorder'],ticketFrame:['depth','radius','showInnerBorder']
+  postageFrame:['count','depth','showInnerBorder'],ticketFrame:['depth','radius','showInnerBorder'],
+  flower:['petals','petalDepth','centerRadius','showCenter'],star:['points','innerRatio'],arrow:['headLength','shaftWidth'],
+  archFrame:['archRise','frameInset','showInnerBorder'],scallopFrame:['lobes','lobeDepth','frameInset','showInnerBorder']
 };
 const defaults={rows:5,columns:7,showOuterBorder:true,showInnerLines:true,showInnerBorder:true,
   showHeader:true,showMarkers:true,spacing:18,dotSize:1.5,angle:45,
-  depth:.12,count:8,tailPosition:.25,radius:.04,clipGap:.22,innerLength:.62};
+  depth:.12,count:8,tailPosition:.25,radius:.04,clipGap:.22,innerLength:.62,
+  petals:6,petalDepth:.26,centerRadius:.09,showCenter:true,points:5,innerRatio:.2/.47,
+  headLength:.35,shaftWidth:.3,archRise:.45,frameInset:.08,lobes:6,lobeDepth:.03};
 const overrides={grid:{rows:6,columns:8},dots:{rows:6,columns:8},stripes:{rows:6,columns:8},linedNote:{rows:6},weeklyTable:{rows:3},habitTracker:{rows:5},calendarTable:{rows:6},
   wave:{count:4},zigzag:{count:5},burst:{count:16,depth:.12},scallop:{count:10,depth:.04},
   postage:{count:18,depth:.055},postageFrame:{count:10,depth:.055},
@@ -94,5 +105,5 @@ export function shapeRepeatCountPatch(shape,key,count){
   return {shapeOptions:next,[dimension]:shape[dimension]*count/oldCount};
 }
 export const shapeOptionsJSONSchema={type:'object',additionalProperties:false,properties:Object.fromEntries(
-  Object.entries(shapeOptionFields).map(([key,field])=>[key,field.type==='boolean'?{type:'boolean'}:
-    {type:field.type,minimum:field.min,maximum:field.max}]))};
+  Object.entries(shapeOptionFields).map(([key,field])=>[key,field.type==='boolean'?{type:'boolean',description:field.label}:
+    {type:field.type,minimum:field.min,maximum:field.max,description:field.label}]))};

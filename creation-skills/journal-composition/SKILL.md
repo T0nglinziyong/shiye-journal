@@ -16,9 +16,9 @@ description: 根据实际素材尺寸、文字量和单双页建立阅读路线�
 
 ## 操作
 
-先 creation_help 查询 material.add、text.add、place、size；用一批 creation_apply 试摆结构。位置按实际毫米或 page.left/page.right 锚点；组内用 parent。局部对齐可以让材料看起来经过安排；不要求所有边都平行，也不随机旋转全部材料。需要真实裁切再查询 material.cut/window，不用白色色块伪造裁片。
+常用 material.add、text.add、place、size 合同已在初始上下文提供，直接用一批 creation_apply 试摆结构。未提供的裁切或复杂工艺再查询 creation_help。位置按实际毫米或 page.left/page.right 锚点；组内用 parent。局部对齐可以让材料看起来经过安排；不要求所有边都平行，也不随机旋转全部材料。需要真实裁切再查询 material.cut/window，不用白色色块伪造裁片。
 
-收到预览后看：第一眼落在哪里？第二眼到哪里？标题是不是压倒所有材料？正文是否形成能读完的段落？材料之间是否只是互不相干的空隙？优先修改尺度关系、分组和写面，再加细节。creation_review 写具体位置和实际问题，避免只报“和谐、丰富”。
+收到自动预览后看：第一眼落在哪里？第二眼到哪里？标题是不是压倒所有材料？正文是否形成能读完的段落？材料之间是否只是互不相干的空隙？优先修改尺度关系、分组和写面，再加细节。最终 creation_finish.review 写具体位置和实际问题，不重复请求同一版本的预览，避免只报“和谐、丰富”。
 
 ## 来源与适用范围
 

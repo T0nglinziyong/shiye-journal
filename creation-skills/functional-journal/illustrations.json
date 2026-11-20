@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "tape-axis",
+      "file": "tape-axis.png",
+      "caption": "纵向条带组织左右条目，横向小线标出分段。只参考信息结构；原例黄色正文对比不足，实际创作应提高可读性。",
+      "author": "周末鱼块",
+      "title": "手帐tips｜一些胶带的基础用法",
+      "sourceURL": "https://www.xiaohongshu.com/explore/6958fc7b000000001e02d288",
+      "observation": "正文（标签）与全部10张原图，2026-11-20",
+      "sha256": "6c375444cafe4bba9e13635511eb41ab4db682838cd5b35889b08c730ebe9c15",
+      "reviewed": true
+    }
+  ]
+}

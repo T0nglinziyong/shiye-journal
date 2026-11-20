@@ -11,7 +11,7 @@ export function EditorShapeOptions({node,onChange}){
  const quantities=controls.filter(control=>control.type==='integer');
  const ranges=controls.filter(control=>control.type==='number');
  return <section className="editor-inspector-advanced editor-shape-options">
-  <h4>图形内容</h4><p className="muted">{controls.some(control=>control.key==='rows')?'拉伸时格子数量不变；增减行列时保留每格大小。':'在画布上缩放整体；这里调整图案细节。增减重复数量会相应调整外框。'}</p>
+  <h4>图形内容</h4><p className="muted">{controls.some(control=>control.key==='rows')?'拉伸时格子数量不变；增减行列时保留每格大小。':controls.some(control=>control.key==='count')?'增减重复数量会相应调整外框。':'调整图形结构时，外框大小不变。'}</p>
   <div className="shape-option-list">{controls.map(control=>{
    const value=options[control.key],id=`inspector-shape-option-${control.key}`;
    if(control.type==='boolean')return <label className="shape-option-check" key={control.key}>

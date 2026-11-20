@@ -36,6 +36,7 @@ export function createCreativeWorker({key,dns='system',samRoot,rpc,store,listChe
     }
   });
   return {
+    get busy(){return lanes.busy||active.size>0;},
     hint(id){if(!closed)lanes.hint(id);},
     async cancelHint(id){
       if(!active.has(id))return;

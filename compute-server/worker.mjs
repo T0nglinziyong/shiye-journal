@@ -1,7 +1,7 @@
 import mqtt from 'mqtt';
 import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile,rename,mkdir} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -206,8 +206,23 @@ client.on('message',(incoming,bytes)=>{
 });
 client.on('error',error=>console.error('MQTT connection unavailable:',error.message));
 let shuttingDown=false;
+let draining=false;
+const statusPath=env.SHIYE_RUNTIME_STATUS;
+async function runtimeStatus(){
+  if(!statusPath)return;
+  await mkdir(path.dirname(statusPath),{recursive:true});
+  const temp=statusPath+'.tmp';
+  await writeFile(temp,JSON.stringify({pid:process.pid,root:path.resolve(root,'..'),updatedAt:Date.now(),draining,busy:lanes.busy||Boolean(creative?.busy)}),{mode:0o600});
+  await rename(temp,statusPath);
+}
+const statusTimer=setInterval(()=>void runtimeStatus().catch(()=>{}),2000);statusTimer.unref();
+process.on('SIGUSR1',()=>{
+  if(draining)return;draining=true;
+  client.end(false,{},()=>void runtimeStatus());
+});
 async function shutdown(){
   if(shuttingDown)return;shuttingDown=true;
+  clearInterval(statusTimer);
   const timeout=setTimeout(()=>process.exit(0),20000);timeout.unref();
   await new Promise(resolve=>client.end(false,{},resolve));
   await creative?.close();

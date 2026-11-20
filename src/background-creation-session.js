@@ -7,6 +7,7 @@ import {boundedMap} from './bounded-map.js';
 
 const phases={queued:'已提交，等待计算服务器',loading:'正在读取素材',thinking:'正在构思与编辑',preview:'正在检查实际画面',completed:'创作完成',failed:'创作未完成，已保留后台检查点',cancelled:'已停止创作'};
 export function creativeJobProgress(job){
+  if(job.error_code==='CREATIVE_RESOURCE_VERSION')return '创作资源正在更新，请更新拾页后重试；原稿已保留';
   const stage=['completed','failed','cancelled','queued'].includes(job.status)?job.status:job.progress?.stage||'loading';
   return (phases[stage]||'后台创作中')+(job.progress?.turn?' · 第 '+job.progress.turn+' 轮':'');
 }

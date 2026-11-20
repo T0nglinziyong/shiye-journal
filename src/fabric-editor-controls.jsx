@@ -1,3 +1,4 @@
+import {journalBundledFonts} from './journal-font-catalog.js';
 import {journalFontPresets} from './journal-fonts.js';
 import {PaintEffectsPanel} from './react-text-effects.jsx';
 import {NewLetteringForm} from './react-editor-lettering.jsx';
@@ -414,8 +415,10 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           title={slotIndex(activeTool,'color')===index?'再次点击可修改颜色':''}
           onClick={event=>toggleSlot(activeTool,'color',index,event)}/>):null}
       </>:textMode?<>
-        <div className="canvas-text-format"><select aria-label="字体" value={text.style||'hand'} onChange={event=>textProperty('style',event.target.value)}>
+        <div className="canvas-text-format"><select aria-label="字体" value={text.fontName?'font:'+text.fontName:text.style||'hand'} onChange={event=>event.target.value.startsWith('font:')?textProperty('fontName',event.target.value.slice(5)):textProperty('style',event.target.value)}>
           {journalFontPresets.map(([id,label])=><option key={id} value={id}>{label}</option>)}
+          {journalBundledFonts.map(font=><option key={font.family} value={'font:'+font.family}>{font.label}</option>)}
+          {text.fontName&&!journalBundledFonts.some(font=>font.family===text.fontName)?<option value={'font:'+text.fontName}>{text.fontName}</option>:null}
         </select><div className="canvas-font-size-stepper" aria-label="调整字号">
           <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
           <FontSizeInput key={selectedNode?.id||'new-text'} value={text.fontSize||40}

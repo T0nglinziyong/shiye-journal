@@ -1,3 +1,4 @@
+import {journalBundledFonts} from './journal-font-catalog.js';
 import {creationPageRegions} from './creation-page-regions.js';
 import {offlineGraphicsSource} from './generated/offline-graphics-source.js';
 import {graphicsRequestSchema} from './graphics-contract.js';
@@ -10,16 +11,21 @@ import {creationFixedFiles,creationFixedReleaseId} from './generated/creation-fi
 import {creationV2RuntimeSchema,creationRecipes} from './creation-v2-contract.js';
 const encode=value=>strToU8(typeof value==='string'?value:JSON.stringify(value,null,2));
 const fingerprint=async bytes=>'sha256:'+await sha256Hex(bytes);
-async function bundledHandFont(){
- const font=new URL('./assets/fonts/MaShanZheng-Regular.ttf',import.meta.url);
- const license=new URL('./assets/fonts/OFL.txt',import.meta.url);
- if(typeof document!=='undefined'){
-  const results=await Promise.all([fetch(font),fetch(license)]);
-  if(results.some(response=>!response.ok))throw Error('无法读取创作包手写字体');
-  return Promise.all(results.map(async response=>new Uint8Array(await response.arrayBuffer())));
+let bundledFontsPromise;
+async function bundledFonts(){
+ return bundledFontsPromise||=(async()=>{
+ const files={};
+ for(const font of journalBundledFonts)for(const name of [font.file,font.license]){
+  const url=new URL(`./assets/fonts/${name}`,import.meta.url);
+  if(typeof document!=='undefined'){
+   const response=await fetch(url);if(!response.ok)throw Error('无法读取创作包字体：'+font.label);
+   files['fonts/'+name]=new Uint8Array(await response.arrayBuffer());
+  }else{
+   const {readFile}=await import('node:fs/promises');files['fonts/'+name]=new Uint8Array(await readFile(url));
+  }
  }
- const {readFile}=await import('node:fs/promises');
- return Promise.all([font,license].map(async url=>new Uint8Array(await readFile(url))));
+ return files;
+ })().catch(error=>{bundledFontsPromise=undefined;throw error;});
 }
 const materialHints=entry=>Object.fromEntries(
  ['tags','contentTags','themeTags','styleTags','colorTags','materialTags','moodTags',
@@ -82,7 +88,7 @@ async function physicalSizeMap(selected,chosen){
 export async function createV3PackageFiles({source,selected,chosen,work,guide,runtime,glyph}){
  const overviewBytes=await overview(selected,chosen);
  const sizeMapBytes=await physicalSizeMap(selected,chosen);
- const [handFont,handFontLicense]=await bundledHandFont();
+ const fontFiles=await bundledFonts();
  const entries=await Promise.all(selected.map(async item=>{
   const original=chosen.find(e=>e.alias===item.alias);if(!original)throw Error('缺少素材原图：'+item.alias);
   const format=previewImageFormat(original.bytes);if(!format)throw Error('素材图片格式无效：'+item.alias);
@@ -99,7 +105,7 @@ export async function createV3PackageFiles({source,selected,chosen,work,guide,ru
   'api/fixed-release.json':encode({releaseId:creationFixedReleaseId,protocolVersion:2,files:Object.keys(creationFixedFiles)}),'api/commands.schema.json':encode(creationV2RuntimeSchema),'api/scene.schema.json':encode(v3SceneSchema),
   'work/commands.json':encode({protocolVersion:2,transactionId:'initial-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[]}),
   'runtime/graphics.cjs':encode(offlineGraphicsSource),'api/graphics.schema.json':encode(graphicsRequestSchema),'runtime/shiye.cjs':encode(runtime),'runtime/glyphs.cjs':encode(glyph),
-  'fonts/MaShanZheng-Regular.ttf':handFont,'fonts/OFL.txt':handFontLicense,
+  ...fontFiles,
   'package.json':encode({name:'shiye-gpt-creation-v3',private:true,version:'3.0.0',dependencies:{canvas:'3.2.3'}}),'package-lock.json':encode(v3PackageLock)
  };
  for(const entry of entries)files[entry.image]=chosen.find(item=>item.alias===entry.alias).bytes;

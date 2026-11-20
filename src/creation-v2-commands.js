@@ -1,3 +1,4 @@
+import {tearRegionGeometry} from './creation-tear.js';
 import {assertPolicyOwnership} from './scene-edit-policy.js';
 import {initialGraphicNode} from './graphic-geometry.js';
 import {addLettering} from './creation-design-tools.js';
@@ -211,6 +212,16 @@ export function applyCreationV2Batch(document,input,assets,options={}){
     // Same geometry mode for rectangles, bands, paths and half planes.
     doc=processMaterial(doc,item.target,[{op:'cut_shape',shape:'geometry',mode:item.mode,unit:'ratio',geometry:local}],assets);
    }
+  }else if(item.op==='material.tear'){
+   const node=requireNode(doc,item.target);if(node.type!=='material'||node.tapeStrip)throw Error('material.tear 需要普通实体素材');
+   if(node.craftWindowIDs?.length)throw Error('命名开窗素材请先完成穿插或恢复，再进行撕纸');
+   const asset=assets.find(row=>row.id===node.assetID),crop=node.cropRect||{x:0,y:0,width:1,height:1};
+   const local=tearRegionGeometry(item.path,{width:crop.width*asset.physicalWidthMM,height:crop.height*asset.physicalHeightMM,keep:item.keep,depthMm:item.depthMm,periodMm:item.periodMm,seed:item.seed});
+   const region=transformGeometry(local,p=>[crop.x*asset.physicalWidthMM+p[0],crop.y*asset.physicalHeightMM+p[1]]);
+   const source=itemSourceGeometry(node,asset),result=geometryIntersection(source,region),remaining=geometryDifference(source,result);
+   if(geometryArea(result)<=1e-6||geometryArea(remaining)<=1e-6)throw Error('撕纸轨迹没有将当前素材分开');
+   const bounds=geometryBounds(result);if(Math.min(bounds.width,bounds.height)<2-1e-7)throw Error('实体裁片短边不能小于 2 mm');
+   doc=physicalCut(doc,{target:item.target,regions:[{id:item.resultId,geometry:result}],keepRemainders:item.keepRemainder!==false},assets,input.transactionId,index);
   }else if(item.op==='material.split')doc=splitPhysicalPiece(doc,item,assets,input.transactionId,index);
   else if(item.op==='material.tape'){
    const asset=assetFor(doc,assets,item.asset);if(asset.kind!=='tape')throw Error('material.tape 需要胶带素材');

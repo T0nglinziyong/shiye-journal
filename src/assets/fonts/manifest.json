@@ -1,0 +1,157 @@
+{
+  "version": "handwriting-2026-11-20-v2",
+  "fonts": [
+    {
+      "name": "MaShanZheng-Regular",
+      "version": "existing-bundled",
+      "source": "https://github.com/googlefonts/mashanzheng",
+      "license": "OFL.txt",
+      "files": [
+        {
+          "file": "MaShanZheng-Regular.ttf",
+          "sha256": "2a14c9fc971b521e8e85f06a2dfe136bd954506dab5d14e6ecfd750f760315e8"
+        },
+        {
+          "file": "MaShanZheng-Regular.woff2",
+          "sha256": "75d4132a344b2576f0bb0884930f01d158674cc1151e1d0a39a6406e69c6e727"
+        }
+      ],
+      "family": "Ma Shan Zheng",
+      "label": "马善政 · 毛笔",
+      "coverage": "简体中文、英文",
+      "file": "MaShanZheng-Regular.ttf",
+      "webFile": "MaShanZheng-Regular.woff2",
+      "fallbacks": []
+    },
+    {
+      "name": "Xiaolai-Regular",
+      "version": "3.126",
+      "source": "https://github.com/lxgw/kose-font/releases/tag/v3.126",
+      "license": "Xiaolai-OFL.txt",
+      "files": [
+        {
+          "file": "Xiaolai-Regular.ttf",
+          "sha256": "e2f68daf0e72777a8cf58bc83de1b98634b251e537ddbfca24b0ae50d1802da2"
+        },
+        {
+          "file": "Xiaolai-Regular.woff2",
+          "sha256": "a07d733612a1d80b4aba3895877af6ef09faa627d4400783d3f88ff6f9e3ab4a"
+        }
+      ],
+      "family": "Xiaolai",
+      "label": "小赖 · 日常手写",
+      "coverage": "简繁中文、日文、英文",
+      "file": "Xiaolai-Regular.ttf",
+      "webFile": "Xiaolai-Regular.woff2",
+      "fallbacks": []
+    },
+    {
+      "name": "Sophora-Book",
+      "version": "5.0.0",
+      "source": "https://github.com/MihailJP/Sophora/releases/tag/5.0.0",
+      "license": "Sophora-LICENSE.txt",
+      "files": [
+        {
+          "file": "Sophora-Book.ttf",
+          "sha256": "28d3857d696292a9ceba9703dd0d3027629e5e27ac3f33b5080641c59a50ff8b"
+        },
+        {
+          "file": "Sophora-Book.woff2",
+          "sha256": "884fc46b281c949ba45ef63a218eaa5f193f057e32357d9f53c44ba5b3d3e558"
+        }
+      ],
+      "family": "Sophora",
+      "label": "Sophora Book · 随笔",
+      "coverage": "部分中文、日文、英文",
+      "file": "Sophora-Book.ttf",
+      "webFile": "Sophora-Book.woff2",
+      "fallbacks": [
+        "Xiaolai"
+      ]
+    },
+    {
+      "name": "Otsutome",
+      "version": "3.20",
+      "source": "https://font.sleepcows.com/",
+      "license": "Otsutome-OFL.txt",
+      "files": [
+        {
+          "file": "Otsutome.ttf",
+          "sha256": "d0afc192b2ab1d893ce70dcfa207e2b917a3523268356b71049b4b1efdc63f3f"
+        },
+        {
+          "file": "Otsutome.woff2",
+          "sha256": "811a1542ea073d75175515c63d6ca8ef2c03ce52e9a1533414048e2ed48b94ab"
+        }
+      ],
+      "family": "Otsutome",
+      "label": "Otsutome · 笔刷",
+      "coverage": "日文、英文、部分中文",
+      "file": "Otsutome.ttf",
+      "webFile": "Otsutome.woff2",
+      "fallbacks": [
+        "Xiaolai"
+      ]
+    },
+    {
+      "name": "HongLeiZhuoShu",
+      "family": "HongLeiZhuoShu",
+      "label": "鸿雷拙书 · 拙趣大字",
+      "coverage": "简体中文、英文",
+      "file": "HongLeiZhuoShu.otf",
+      "webFile": "HongLeiZhuoShu.otf",
+      "fallbacks": [
+        "Xiaolai"
+      ],
+      "version": "1.000",
+      "source": "https://mp.weixin.qq.com/s/aAR8H_zzcqrngcHG1ZenfQ",
+      "license": "HongLeiZhuoShu-NOTICE.txt",
+      "files": [
+        {
+          "file": "HongLeiZhuoShu.otf",
+          "sha256": "aa9acda893029add8d8827d53f32ba9bc413655871961ef8e2747e60860dc0b5"
+        }
+      ]
+    },
+    {
+      "name": "FontQuSmile",
+      "family": "FontQu Smile",
+      "label": "喜脉喜欢 · 随性连笔",
+      "coverage": "简体中文、英文",
+      "file": "FontQuSmile.ttf",
+      "webFile": "FontQuSmile.ttf",
+      "fallbacks": [
+        "Xiaolai"
+      ],
+      "version": "1.0",
+      "source": "https://www.maoken.com/freefonts/22002.html",
+      "license": "FontQuSmile-NOTICE.txt",
+      "files": [
+        {
+          "file": "FontQuSmile.ttf",
+          "sha256": "c58efc62318fd681c59ad88689200fb766905a63b91d72bd9b4a1016844cf85b"
+        }
+      ]
+    },
+    {
+      "name": "LikeJianJian",
+      "family": "Like JianJian",
+      "label": "栗壳坚坚 · 青春手记",
+      "coverage": "简体中文、英文",
+      "file": "LikeJianJian.ttf",
+      "webFile": "LikeJianJian.ttf",
+      "fallbacks": [
+        "Xiaolai"
+      ],
+      "version": "2.000",
+      "source": "https://oneleekr.com/archives/passage1",
+      "license": "LikeJianJian-NOTICE.txt",
+      "files": [
+        {
+          "file": "LikeJianJian.ttf",
+          "sha256": "8074e624c7f3a31fb763605b6f3992cf172abac32b91d7a40d3b56748b7885a5"
+        }
+      ]
+    }
+  ]
+}

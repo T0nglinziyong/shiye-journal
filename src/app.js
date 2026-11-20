@@ -7,7 +7,7 @@ import {inspectorSelection,applyInkInspectorChange,applyGroupInspectorChange} fr
 import {canStartCreation} from './creation-methods.js';
 import {configureJournalFontLoader} from './journal-fonts.js';
 import {styleFor} from './scene-node-properties.js';
-configureJournalFontLoader(()=>import('@fontsource/ma-shan-zheng/chinese-simplified-400.css'));
+configureJournalFontLoader(family=>import('./journal-web-fonts.js').then(module=>module.loadJournalWebFont(family)));
 import {commitSceneEditSession} from './scene-edit-session.js';
 import {editMaterialGeometry,restoreMaterialBaseline,replaceEditableMaterial,reshapeEditableTape} from './scene-material-edit.js';
 import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditableScene} from './scene-structure-edit.js';
@@ -1736,10 +1736,11 @@ async function runAppAction(action,id,value){try{
     render();break;
   }
   case 'fabric-text-property':{
-    const allowed=['style','fontSize','color','alignment','bold','italic','underline','strikethrough'];
+    const allowed=['style','fontName','fontSize','color','alignment','bold','italic','underline','strikethrough'];
     if(!allowed.includes(id))break;
     let next=value;
     if(id==='style'&&!['serif','sans','rounded','hand'].includes(next))break;
+    if(id==='fontName'&&(typeof next!=='string'||next.length>120))break;
     if(id==='alignment'&&!['left','center','right'].includes(next))break;
     if(id==='color'&&!/^#[0-9a-f]{6}$/i.test(next))break;
     if(id==='fontSize'){next=Number(next);if(!Number.isFinite(next))break;next=Math.max(5,Math.min(400,next));}

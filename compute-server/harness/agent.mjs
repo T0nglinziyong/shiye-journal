@@ -1,3 +1,5 @@
+import fontManifest from '../../src/assets/fonts/manifest.json' with {type:'json'};
+import {offlineBundledFonts} from '../../src/offline-bundled-fonts.mjs';
 import {Annotation,StateGraph,START,END} from '@langchain/langgraph';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
 import {applyCreationTransaction,creationSceneRevision} from '../../src/creation-transaction.js';
@@ -16,7 +18,7 @@ const custom=(name,description,parameters)=>({type:'function',function:{name,des
 export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)),
   custom('segment_material','在真实素材上给出 0–1 比例 xyxy 框，调用 SAM 查看候选裁片。只提议，不修改作品；先看彩色轮廓，再用 creation_apply_crops 裁切。',object({alias:{type:'string'},box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['alias','box'])),
   custom('creation_apply_crops','把已查看的分割提议批量应用到对应来源的已放置素材。与普通编辑一样原子校验、保留真实来源。',object({transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:string,cuts:{type:'array',minItems:1,maxItems:12,items:object({proposalId:string,target:string,mode:{enum:['keep','remove']},resultId:string,keepRemainder:{type:'boolean'}},['proposalId','target','mode'])}},['transactionId','baseSceneRevision','cuts'])),
-  custom('read_skill','按名字读取创作 Skill；只加载与本页有关的专题。',object({name:{type:'string',pattern:'^[a-z0-9-]{1,64}$'}},['name'])),
+  custom('read_skill','按名字读取创作 Skill 及已安装的教程示意图；只加载与本页有关的专题。',object({name:{type:'string',pattern:'^[a-z0-9-]{1,64}$'}},['name'])),
   custom('creation_plan','记录本次构图意图、素材分工与下一步；允许看图后改变方案。',object({intent:string,steps:{type:'array',minItems:1,maxItems:8,items:object({task:string,status:{enum:['pending','active','done']}},['task','status'])}},['intent','steps'])),
   custom('inspect_materials','查看本次授权来源的真实图像。',object({keys:{type:'array',minItems:1,maxItems:8,items:{type:'string'}}},['keys'])),
   custom('creation_finish','看过最新自动预览后直接提交视觉检查和成品；无需先单独调用 review。必须是本轮最后调用。',object({sceneRevision:string,summary:{type:'string',maxLength:1200},review:object({pngHash:string,observations:string,issues:{type:'array',maxItems:12,items:string}},['pngHash','observations','issues'])},['sceneRevision'])),
@@ -33,14 +35,17 @@ creation_apply 使用协议 2：transactionId、最新 baseSceneRevision、opera
 图片可完整使用或合法裁切，文字、线条、笔迹与纸片共同组织页面。尽量让关键图像和文字之间有内容关系，避免整齐商品陈列、空标题卡、随机装饰与统一厚阴影。极简可以有意留白；丰富风格需要阅读路线。不同风格在版式、字形、色彩、叠压和节奏上作出实际差异。
 每批成功编辑后，真实预览、Scene、必用素材清单和交付校验自动返回；不要额外请求预览或重复查询 Scene。下一轮先看最新图，直接合批修复明确问题；已满足任务时用 creation_finish 的 review 字段记录所见并交付，不必单独占一轮调用 creation_review。issues 只填必须修复的问题，可接受的取舍写在 observations。修改使旧审阅失效，同一轮修改后不能交付。避免围绕同一短句反复试字号和位置；根据整页阅读效果合批调整，消除具体问题后及时交付。模型工具不会访问未授权素材、任意网址、文件或 shell。`;
 
-export function initialHarnessState({document,skills,brief,images=[],startedAt=Date.now(),deadlineAt=startedAt+570000}){
+export function initialHarnessState({document,skills,brief,images=[],startedAt=Date.now(),deadlineAt=startedAt+570000,resourceVersion=null}){
   validateV3SceneDocument(document);
   if(images.some(image=>!/^data:image\/(png|jpeg|webp);base64,/.test(image.url)))throw Error('创作图像必须是已授权的本次图像');
   const loaded=preloadCreationSkills(skills,document,brief);
-  return {document:structuredClone(document),startedAt,deadlineAt,turns:0,status:'running',plan:null,loadedSkills:loaded.map(({name,version})=>({name,version})),observedTools:[],proposals:[],review:null,preview:null,noProgress:0,results:[],usage:[],
-    messages:[{role:'system',content:system+'\n可按需读取的 Skill：'+JSON.stringify(skills.catalog())+'\n已自动加载的 Skill（无需再次读取）：'+JSON.stringify(loaded)+'\n常用工具合同：'+JSON.stringify(initialToolGuide(document))},
+  const fonts=offlineBundledFonts().map(({family,label,coverage})=>({family,label,coverage}));
+  const resources={release:resourceVersion,fontVersion:fontManifest.version,skills:skills.catalog().map(({name,version})=>({name,version})),protocolVersion:2};
+  return {resources,document:structuredClone(document),startedAt,deadlineAt,turns:0,status:'running',plan:null,loadedSkills:loaded.map(({name,version})=>({name,version})),observedTools:[],proposals:[],review:null,preview:null,noProgress:0,results:[],usage:[],
+    messages:[{role:'system',content:system+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai；无需上传或下载）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify(resources)+'\n可按需读取的 Skill：'+JSON.stringify(skills.catalog())+'\n已自动加载的 Skill（无需再次读取）：'+JSON.stringify(loaded)+'\n常用工具合同：'+JSON.stringify(initialToolGuide(document))},
       {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials)+'\n素材来源与尺寸：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))},
-        ...images.flatMap(image=>[{type:'text',text:'素材 '+image.alias},{type:'image_url',image_url:{url:image.url}}])]}]};
+        ...images.flatMap(image=>[{type:'text',text:'素材 '+image.alias},{type:'image_url',image_url:{url:image.url}}]),
+        ...loaded.flatMap(skill=>skills.imageParts(skill.name))]}]};
 }
 
 export function createCreativeHarness({model,skills,render,inspectMaterials,segmentMaterial,checkpointer,capabilities={},clock=Date.now,onProgress=()=>{}}){
@@ -78,7 +83,7 @@ export function createCreativeHarness({model,skills,render,inspectMaterials,segm
           if(!availableTools.some(t=>t.function.name===name))throw Error('工具不可用：'+name);
           args=JSON.parse(call.function.arguments||'{}');validateValue(args,schemas.get(name));let data;
           if(name==='read_skill'){
-            data=skills.read(args.name);if(loadedSkills.some(v=>v.name===data.name&&v.version===data.version)){data={name:data.name,version:data.version,alreadyLoaded:true,note:'正文已在上下文中，请直接使用。'};}else{loadedSkills.push({name:data.name,version:data.version});progress=true;}
+            data=skills.read(args.name);if(loadedSkills.some(v=>v.name===data.name&&v.version===data.version)){data={name:data.name,version:data.version,alreadyLoaded:true,note:'正文与可用示意图已在上下文中，请直接使用。'};}else{images.push(...skills.imageParts(args.name));loadedSkills.push({name:data.name,version:data.version});progress=true;}
           }else if(name==='creation_plan'){plan=args;data={saved:true};progress=progress||JSON.stringify(plan)!==JSON.stringify(s.plan);}
           else if(name==='creation_help'){
             const tools=(args.topics||[]).filter(topic=>schemas.has(topic));

@@ -39,7 +39,7 @@ export function createJobLanePool({slots,claim,process,notifyFailed,onError}){
       drain();
     }
   }
-  return {hint(id){
+  return {get busy(){return activeLanes.size>0||pendingHints.size>0;},hint(id){
     if(processingJobs.has(id)||claimingHints.has(id))return;
     pendingHints.add(id);drain();
   }};
