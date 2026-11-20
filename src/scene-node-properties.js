@@ -18,10 +18,11 @@ export function styleFor(type,style,page,node={}){
  if(['shape','ink'].includes(type))Object.assign(mapping,{outline:'graphicOutline',gradient:'graphicGradient'});
  if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{stroke:'color',strokeWidthMm:'width',penStyle:'penStyle'});
+ const unsupported=Object.keys(style).filter(key=>!Object.hasOwn(mapping,key));
+ if(unsupported.length)throw Error(type+' 不支持 '+unsupported.map(key=>'style.'+key).join('、')+'；可用：'+Object.keys(mapping).join('、'));
  const result={};
  if(type==='text'&&Object.hasOwn(style,'fontPreset')&&!Object.hasOwn(style,'fontFamily'))result.fontName=null;
  for(const [key,value] of Object.entries(style)){
-  if(!Object.hasOwn(mapping,key))throw Error(type+' 不支持 style.'+key);
   if(type==='ink'&&(key==='stroke'&&value===null||key==='strokeWidthMm'&&!(value>0)))throw Error('笔迹需要非空 stroke 和正 strokeWidthMm');
   result[mapping[key]]=key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
    key==='lineHeight'?value*(style.fontSizePt===undefined?(node.fontSize||12*25.4/72*s):style.fontSizePt*25.4/72*s):

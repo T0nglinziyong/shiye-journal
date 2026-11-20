@@ -37,7 +37,7 @@ test('harness restores after an actual render failure without replaying model or
     const p=lastScene(messages);
     assert.equal(messages.filter(m=>m.role==='assistant').length,1);
     assert.equal(messages.find(m=>m.role==='assistant').reasoning_content,'test');
-    return answer(call('creation_review',{...p,approved:true,observations:'测试预览已查看',issues:[]}),call('creation_finish',{sceneRevision:p.sceneRevision}));
+    return answer(call('creation_review',{...p,approved:true,observations:'测试预览已查看',issues:[]}),call('creation_finish',{}));
   };
   const first=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),render:async()=>{throw Error('renderer offline');}});
   await assert.rejects(first.run({id:'restore',state:f.state}),/renderer offline/);
@@ -52,7 +52,7 @@ test('finish cannot pass when a new edit invalidates a viewed preview',async t=>
   const f=await fixture(t);let n=0;
   const model=async({messages})=>{
     if(++n===1)return answer(skill(),plan(),add(f.document));
-    if(n===2){const p=lastScene(messages);return answer(call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]}),call('creation_finish',{sceneRevision:p.sceneRevision}));}
+    if(n===2){const p=lastScene(messages);return answer(call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]}),call('creation_finish',{}));}
     const replies=messages.filter(m=>m.role==='tool').slice(-3).map(m=>JSON.parse(m.content));
     assert.equal(replies[0].ok,true);assert.equal(replies[1].ok,false);assert.equal(replies[2].ok,false);
     throw Error('verified stale guard');
@@ -107,9 +107,9 @@ test('automatic bootstrap allows first-turn editing and combined visual review/f
     if(++n===1)return answer(plan(),add(f.document));
     const p=lastScene(messages),feedback=messages.at(-1).content[0].text;
     assert.match(feedback,/自动交付检查/);assert.match(feedback,/自动视觉检查任务/);
-    return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'文字清晰，已检查最新图',issues:[]}}));
+    return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
   }});
-  const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
+  const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
 });
 
 test('combined finish rejects unseen edits and nonempty blocking issues',async t=>{
@@ -117,8 +117,8 @@ test('combined finish rejects unseen edits and nonempty blocking issues',async t
   const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
     if(++n===1)return answer(plan(),add(f.document));
     const p=lastScene(messages);
-    if(n===2)return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'发现问题',issues:['文字遮挡']}}));
-    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'旧图',issues:[]}}));}
+    if(n===2)return answer(call('creation_finish',{review:{observations:'发现问题',issues:['文字遮挡']}}));
+    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{review:{observations:'旧图',issues:[]}}));}
     assert.ok(messages.filter(m=>m.role==='tool').map(m=>JSON.parse(m.content)).some(v=>v.detail==='请先查看当前版本的真实预览'));throw Error('stale inline verified');
   }});
   await assert.rejects(harness.run({id:'inline-stale',state:f.state}),/stale inline verified/);
@@ -130,7 +130,7 @@ test('unchanged preview reuses the current render without another upload',async 
     if(++n===1)return answer(plan(),add(f.document));
     if(n===2)return answer(call('creation_preview',{}));
     assert.equal(JSON.parse(messages.at(-1).content).data.reused,true);
-    const p=lastScene(messages);return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'同版本预览',issues:[]}}));
+    const p=lastScene(messages);return answer(call('creation_finish',{review:{observations:'同版本预览',issues:[]}}));
   }});
   assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
 });

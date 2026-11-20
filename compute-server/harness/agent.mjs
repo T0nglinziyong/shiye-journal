@@ -19,9 +19,9 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
   custom('segment_material','在真实素材上给出 0–1 比例 xyxy 框，调用 SAM 查看候选裁片。只提议，不修改作品；先看彩色轮廓，再用 creation_apply_crops 裁切。',object({alias:{type:'string'},box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['alias','box'])),
   custom('creation_apply_crops','把已查看的分割提议批量应用到对应来源的已放置素材。与普通编辑一样原子校验、保留真实来源。',object({transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:string,cuts:{type:'array',minItems:1,maxItems:12,items:object({proposalId:string,target:string,mode:{enum:['keep','remove']},resultId:string,keepRemainder:{type:'boolean'}},['proposalId','target','mode'])}},['transactionId','baseSceneRevision','cuts'])),
   custom('read_skill','按名字读取创作 Skill 及已安装的教程示意图；只加载与本页有关的专题。',object({name:{type:'string',pattern:'^[a-z0-9-]{1,64}$'}},['name'])),
-  custom('creation_plan','记录本次构图意图、素材分工与下一步；允许看图后改变方案。',object({intent:string,steps:{type:'array',minItems:1,maxItems:8,items:object({task:string,status:{enum:['pending','active','done']}},['task','status'])}},['intent','steps'])),
+  custom('creation_plan','记录本次构图意图、素材分工与下一步；允许看图后改变方案。步骤状态只用 pending（待办）、active（进行中）、done（完成）。',object({intent:string,steps:{type:'array',minItems:1,maxItems:8,items:object({task:string,status:{enum:['pending','active','done']}},['task','status'])}},['intent','steps'])),
   custom('inspect_materials','查看本次授权来源的真实图像。',object({keys:{type:'array',minItems:1,maxItems:8,items:{type:'string'}}},['keys'])),
-  custom('creation_finish','看过最新自动预览后直接提交视觉检查和成品；无需先单独调用 review。必须是本轮最后调用。',object({sceneRevision:string,summary:{type:'string',maxLength:1200},review:object({pngHash:string,observations:string,issues:{type:'array',maxItems:12,items:string}},['pngHash','observations','issues'])},['sceneRevision'])),
+  custom('creation_finish','看过最新自动预览后直接提交检查意见和成品，后台自动绑定该预览。必须是本轮最后调用。',object({summary:{type:'string',maxLength:1200},review:object({observations:string,issues:{type:'array',maxItems:12,items:string}},['observations','issues'])})),
   custom('creation_preview','渲染当前可编辑 Scene，返回真实预览和版本，用于检查构图。',object({})),
   custom('creation_review','实际看过本轮收到的预览后，记录具体审阅结果；有问题应先修改。',object({pngHash:string,sceneRevision:string,approved:{type:'boolean'},observations:string,issues:{type:'array',maxItems:12,items:string}},['pngHash','sceneRevision','approved','observations','issues']))
 ];
@@ -37,6 +37,7 @@ creation_apply 使用协议 2：transactionId、最新 baseSceneRevision、opera
 
 export function initialHarnessState({document,skills,brief,images=[],startedAt=Date.now(),deadlineAt=startedAt+570000,resourceVersion=null}){
   validateV3SceneDocument(document);
+  validateWebScene(document.page,document.source,document.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true})),{final:false});
   if(images.some(image=>!/^data:image\/(png|jpeg|webp);base64,/.test(image.url)))throw Error('创作图像必须是已授权的本次图像');
   const loaded=preloadCreationSkills(skills,document,brief);
   const fonts=offlineBundledFonts().map(({family,label,coverage})=>({family,label,coverage}));
@@ -118,11 +119,11 @@ export function createCreativeHarness({model,skills,render,inspectMaterials,segm
           }else if(name==='creation_finish'){
             if(index!==s.calls.length-1||results.some(r=>!r.ok))throw Error('完成必须是最后调用，前面的工具须全部成功');
             if(args.review){
-              if(needsRender||!s.preview||s.preview.sceneRevision!==revision(document)||args.sceneRevision!==revision(document)||args.review.pngHash!==s.preview.pngHash)throw Error('请先查看当前版本的真实预览');
+              if(needsRender||!s.preview||s.preview.sceneRevision!==revision(document))throw Error('请先查看当前版本的真实预览');
               if(args.review.issues.length)throw Error('存在未解决的问题，不能标为审阅通过');
-              review={...args.review,sceneRevision:args.sceneRevision,approved:true,turn:s.turns};
+              review={...args.review,pngHash:s.preview.pngHash,sceneRevision:s.preview.sceneRevision,approved:true,turn:s.turns};
             }
-            if(needsRender||!review?.approved||review.sceneRevision!==revision(document)||args.sceneRevision!==revision(document))throw Error('当前 Scene 尚未看图审阅通过');
+            if(needsRender||!review?.approved||review.sceneRevision!==revision(document))throw Error('当前 Scene 尚未看图审阅通过');
             if(!document.page.layers.length)throw Error('作品为空');
             validateWebScene(document.page,document.source,assets,{final:true});status='completed';data={sceneRevision:revision(document),pngHash:s.preview.pngHash,summary:args.summary||''};
           }
@@ -131,7 +132,7 @@ export function createCreativeHarness({model,skills,render,inspectMaterials,segm
             if(!observedTools.includes(key)){observedTools.push(key);progress=true;}
           }
           results.push({name,ok:true,data});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:true,data})});
-        }catch(e){results.push({name,ok:false,code:e.code||'TOOL_ERROR',detail:e.message});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:false,code:e.code||'TOOL_ERROR',detail:e.message,sceneRevision:revision(document),guidance:failureGuidance(name,args,e)})});}
+        }catch(e){results.push({name,ok:false,code:e.code||'TOOL_ERROR',detail:e.message});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:false,code:e.code||'TOOL_ERROR',detail:e.message,sceneRevision:revision(document),guidance:failureGuidance(name,args,e)||{tool:availableTools.find(t=>t.function.name===name)}})});}
       }
       live(s,config);
       if(images.length)messages.push({role:'user',content:images});

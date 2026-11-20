@@ -31,7 +31,7 @@ test('cloud worker commits hash-verified editable output after real rendering an
       const visual=messages.findLast(m=>Array.isArray(m.content)&&m.content[0]?.text?.startsWith('当前真实画面：'));
       assert.ok(visual.content[1].image_url.url.startsWith('data:image/jpeg;base64,'));
       const preview=JSON.parse(visual.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
-      return reply(call('creation_review',{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,approved:true,observations:'测试图像已渲染，非审美验收',issues:[]}),call('creation_finish',{sceneRevision:preview.sceneRevision}));
+      return reply(call('creation_review',{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,approved:true,observations:'测试图像已渲染，非审美验收',issues:[]}),call('creation_finish',{}));
     }});
   assert.ok(entries.length>4);assert.ok(notifications>=2);assert.ok(updates.some(v=>v.p_progress?.stage==='preview'));
   const output=JSON.parse(objects.get(result.resultPath));assert.equal(output.page.layers[0].content,'一页新的想法');
