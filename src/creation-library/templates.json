@@ -4650,16 +4650,18 @@
       "title": "胶带固定照片组",
       "sourceId": "ac36",
       "sourcePanel": {
-        "file": "ac36-1.webp",
+        "file": "ac36-6.webp",
         "rect": [
-          0.17962962962962964,
-          0.5010845986984815,
-          0.16111111111111112,
-          0.16124367317425886
+          0,
+          0,
+          1,
+          1
         ],
-        "sha256": "7ea5b076a419b733f2f1671bce9fb23ba5c49c2e8575f329dc85bf4182b2a6c6"
+        "sha256": "83013122f3c4e1fa3cad3d4a100c3222e5fd82aed78f7115ddef51f18700cb10",
+        "sourceSha256": "2cc6ed938701b18977ee4466968d1365fcd6470d582d47c5ac73a4ed83fdf3f1",
+        "extraction": "使用与总览格对应的高清展开图；同一模板不重复计数。"
       },
-      "aspect": 0.7802690582959642,
+      "aspect": 0.7809110629067245,
       "family": "photo-cluster",
       "styles": [
         "丰富层叠",
@@ -4672,329 +4674,1968 @@
       ],
       "elements": [
         {
-          "id": "e1",
-          "role": "material",
+          "id": "reading-route",
+          "role": "accent",
           "box": [
-            0.59,
-            0.04,
-            0.12,
-            0.11
+            0.0,
+            0.0,
+            0.555556,
+            0.448301
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.25,
           "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
+          "accepts": [],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 94 0 C 106 20 96 38 80 51 C 59 63 75 71 71 80 C 68 96 37 95 0 80"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.22,
+              "strokeDash": "dash"
+            }
+          }
         },
         {
-          "id": "e2",
-          "role": "material",
+          "id": "first-heading-ground",
+          "role": "accent",
           "box": [
-            0.74,
-            0.04,
-            0.12,
-            0.11
+            0.183333,
+            0.067968,
+            0.342593,
+            0.052784
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.25,
           "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
+          "accepts": [],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band",
+              "cornerRadiusRatio": 0.25
+            }
+          }
         },
         {
-          "id": "e3",
-          "role": "material",
-          "box": [
-            0.87,
-            0.04,
-            0.12,
-            0.11
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e4",
-          "role": "material",
-          "box": [
-            0.1,
-            0.22,
-            0.26,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e5",
-          "role": "material",
-          "box": [
-            0.12,
-            0.43,
-            0.21,
-            0.14
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e6",
-          "role": "material",
-          "box": [
-            0.54,
-            0.33,
-            0.43,
-            0.17
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e7",
-          "role": "material",
-          "box": [
-            0.54,
-            0.53,
-            0.27,
-            0.19
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e8",
-          "role": "focal",
-          "box": [
-            0.06,
-            0.63,
-            0.23,
-            0.36
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "card",
-            "paper"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e9",
-          "role": "material",
-          "box": [
-            0.39,
-            0.82,
-            0.15,
-            0.13
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e10",
-          "role": "material",
-          "box": [
-            0.56,
-            0.81,
-            0.23,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e11",
-          "role": "material",
-          "box": [
-            0.81,
-            0.81,
-            0.14,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e12",
-          "role": "text",
-          "box": [
-            0.51,
-            0.24,
-            0.42,
-            0.07
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "note",
-            "card"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e13",
-          "role": "text",
-          "box": [
-            0.32,
-            0.68,
-            0.42,
-            0.1
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "note",
-            "card"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e14",
+          "id": "first-heading",
           "role": "title",
           "box": [
-            0.13,
-            0.06,
-            0.41,
-            0.05
+            0.197222,
+            0.072307,
+            0.319444,
+            0.044107
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.6,
           "optional": true,
           "accepts": [
             "text"
           ],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 18,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "first-heading-number",
+          "role": "title",
+          "box": [
+            0.060185,
+            0.044107,
+            0.116667,
+            0.076645
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 36,
+              "color": "$ink",
+              "lineHeight": 1.3,
+              "fillOpacity": 0,
+              "outline": {
+                "color": "$ink",
+                "widthMm": 0.3
+              }
+            }
+          }
+        },
+        {
+          "id": "first-writing-ground",
+          "role": "accent",
+          "box": [
+            0.031481,
+            0.133044,
+            0.397222,
+            0.088214
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$note",
+              "cornerRadiusRatio": 0.04
+            }
+          }
+        },
+        {
+          "id": "first-writing",
+          "role": "text",
+          "box": [
+            0.031481,
+            0.133044,
+            0.397222,
+            0.088214
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 50.0 L 96 50.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.040741,
+              0.140275,
+              0.378704,
+              0.073753
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "top-caption-ground",
+          "role": "accent",
+          "box": [
+            0.70463,
+            0.023138,
+            0.264815,
+            0.025307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "top-caption",
+          "role": "title",
+          "box": [
+            0.712037,
+            0.024584,
+            0.25,
+            0.022415
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "top-photo-1",
+          "role": "material",
+          "box": [
+            0.581481,
+            0.060014,
+            0.125,
+            0.08026
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "top-photo-2",
+          "role": "material",
+          "box": [
+            0.712037,
+            0.060014,
+            0.125926,
+            0.099783
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "top-photo-3",
+          "role": "material",
+          "box": [
+            0.843519,
+            0.060014,
+            0.125926,
+            0.08026
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "top-photo-caption-ground",
+          "role": "accent",
+          "box": [
+            0.842593,
+            0.143167,
+            0.132407,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "top-photo-caption",
+          "role": "title",
+          "box": [
+            0.85,
+            0.144613,
+            0.117593,
+            0.020969
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "second-heading-ground",
+          "role": "accent",
+          "box": [
+            0.691667,
+            0.17209,
+            0.278704,
+            0.052061
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band",
+              "cornerRadiusRatio": 0.25
+            }
+          }
+        },
+        {
+          "id": "second-heading",
+          "role": "title",
+          "box": [
+            0.705556,
+            0.176428,
+            0.255556,
+            0.043384
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 18,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "second-heading-number",
+          "role": "title",
+          "box": [
+            0.550926,
+            0.154736,
+            0.12963,
+            0.071584
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 36,
+              "color": "$ink",
+              "lineHeight": 1.3,
+              "fillOpacity": 0,
+              "outline": {
+                "color": "$ink",
+                "widthMm": 0.3
+              }
+            }
+          }
+        },
+        {
+          "id": "second-writing-ground",
+          "role": "accent",
+          "box": [
+            0.526852,
+            0.239335,
+            0.442593,
+            0.086768
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$note",
+              "cornerRadiusRatio": 0.04
+            }
+          }
+        },
+        {
+          "id": "second-writing",
+          "role": "text",
+          "box": [
+            0.526852,
+            0.239335,
+            0.442593,
+            0.086768
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 50.0 L 96 50.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.536111,
+              0.246565,
+              0.424074,
+              0.072307
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "left-photo-1",
+          "role": "material",
+          "box": [
+            0.063889,
+            0.235719,
+            0.139815,
+            0.125813
+          ],
+          "shape": "rect",
+          "rotation": -15,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "left-photo-2",
+          "role": "material",
+          "box": [
+            0.185185,
+            0.253073,
+            0.185185,
+            0.119306
+          ],
+          "shape": "rect",
+          "rotation": -2,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "first-tape",
+          "role": "material",
+          "box": [
+            0.096296,
+            0.215474,
+            0.022222,
+            0.037599
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "tape"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "second-tape",
+          "role": "material",
+          "box": [
+            0.260185,
+            0.227043,
+            0.025,
+            0.026753
+          ],
+          "shape": "rect",
+          "rotation": 10,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "tape"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "accent-1",
+          "role": "material",
+          "box": [
+            0.37037,
+            0.22632,
+            0.12963,
+            0.041938
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$note",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "accent-2",
+          "role": "material",
+          "box": [
+            0.392593,
+            0.275488,
+            0.07963,
+            0.065076
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$note",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "accent-3",
+          "role": "material",
+          "box": [
+            0.857407,
+            0.30658,
+            0.075926,
+            0.065799
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$note",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "accent-4",
+          "role": "material",
+          "box": [
+            0.525926,
+            0.428055,
+            0.084259,
+            0.062184
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$note",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "accent-5",
+          "role": "material",
+          "box": [
+            0.333333,
+            0.532176,
+            0.168519,
+            0.037599
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$note",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "accent-6",
+          "role": "material",
+          "box": [
+            0.268519,
+            0.942878,
+            0.168519,
+            0.036876
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$note",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "middle-photo-1",
+          "role": "material",
+          "box": [
+            0.431481,
+            0.334779,
+            0.143519,
+            0.126537
+          ],
+          "shape": "rect",
+          "rotation": -17,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-photo-2",
+          "role": "material",
+          "box": [
+            0.558333,
+            0.352856,
+            0.184259,
+            0.119306
+          ],
+          "shape": "rect",
+          "rotation": -3,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-photo-3",
+          "role": "material",
+          "box": [
+            0.692593,
+            0.337672,
+            0.15,
+            0.119306
+          ],
+          "shape": "rect",
+          "rotation": 10,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-photo-4",
+          "role": "material",
+          "box": [
+            0.819444,
+            0.367317,
+            0.149074,
+            0.109906
+          ],
+          "shape": "rect",
+          "rotation": -3,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-tape-1",
+          "role": "material",
+          "box": [
+            0.468519,
+            0.316703,
+            0.023148,
+            0.03543
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "tape"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-tape-2",
+          "role": "material",
+          "box": [
+            0.630556,
+            0.328272,
+            0.028704,
+            0.033261
+          ],
+          "shape": "rect",
+          "rotation": 12,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "tape"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-tape-3",
+          "role": "material",
+          "box": [
+            0.773148,
+            0.320318,
+            0.025,
+            0.039046
+          ],
+          "shape": "rect",
+          "rotation": 15,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "tape"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "food-cutout-1",
+          "role": "material",
+          "box": [
+            -0.00463,
+            0.375271,
+            0.171296,
+            0.133767
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "food-cutout-2",
+          "role": "material",
+          "box": [
+            0.161111,
+            0.393348,
+            0.166667,
+            0.130152
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "food-cutout-3",
+          "role": "material",
+          "box": [
+            0.296296,
+            0.408532,
+            0.146296,
+            0.101952
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "food-cutout-4",
+          "role": "material",
+          "box": [
+            -0.002778,
+            0.4859,
+            0.169444,
+            0.130152
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "food-caption-1-ground",
+          "role": "accent",
+          "box": [
+            0.003704,
+            0.359364,
+            0.149074,
+            0.02603
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "food-caption-1",
+          "role": "title",
+          "box": [
+            0.011111,
+            0.36081,
+            0.134259,
+            0.023138
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "food-caption-2-ground",
+          "role": "accent",
+          "box": [
+            0.336111,
+            0.483008,
+            0.148148,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "food-caption-2",
+          "role": "title",
+          "box": [
+            0.343519,
+            0.484454,
+            0.133333,
+            0.020969
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "food-caption-3-ground",
+          "role": "accent",
+          "box": [
+            0.151852,
+            0.517715,
+            0.225926,
+            0.024584
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "food-caption-3",
+          "role": "title",
+          "box": [
+            0.159259,
+            0.519161,
+            0.211111,
+            0.021692
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "small-route",
+          "role": "accent",
+          "box": [
+            0.591667,
+            0.468547,
+            0.205556,
+            0.019523
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 0 40 Q 8 0 16 40 T 32 40 T 48 40 T 64 40 T 80 40 L 96 40 M 90 20 L 98 40 L 90 60"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$band",
+              "strokeWidthMm": 0.22
+            }
+          }
+        },
+        {
+          "id": "middle-caption-ground",
+          "role": "accent",
+          "box": [
+            0.507407,
+            0.4953,
+            0.462037,
+            0.024584
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band"
+            }
+          }
+        },
+        {
+          "id": "middle-caption",
+          "role": "title",
+          "box": [
+            0.514815,
+            0.496746,
+            0.447222,
+            0.021692
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "lower-photo-1",
+          "role": "material",
+          "box": [
+            0.513889,
+            0.528561,
+            0.217593,
+            0.194505
+          ],
+          "shape": "rect",
+          "rotation": -2,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "lower-photo-2",
+          "role": "material",
+          "box": [
+            0.715741,
+            0.532899,
+            0.191667,
+            0.145336
+          ],
+          "shape": "rect",
+          "rotation": 10,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "lower-tape",
+          "role": "material",
+          "box": [
+            0.59537,
+            0.507592,
+            0.025926,
+            0.042661
+          ],
+          "shape": "rect",
+          "rotation": 14,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "tape"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "third-heading-ground",
+          "role": "accent",
+          "box": [
+            0.184259,
+            0.583514,
+            0.321296,
+            0.052784
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band",
+              "cornerRadiusRatio": 0.25
+            }
+          }
+        },
+        {
+          "id": "third-heading",
+          "role": "title",
+          "box": [
+            0.198148,
+            0.587852,
+            0.298148,
+            0.044107
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 18,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "third-heading-number",
+          "role": "title",
+          "box": [
+            0.048148,
+            0.566884,
+            0.125926,
+            0.075199
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 36,
+              "color": "$ink",
+              "lineHeight": 1.3,
+              "fillOpacity": 0,
+              "outline": {
+                "color": "$ink",
+                "widthMm": 0.3
+              }
+            }
+          }
+        },
+        {
+          "id": "lower-writing-ground",
+          "role": "accent",
+          "box": [
+            0.264815,
+            0.650036,
+            0.562963,
+            0.141721
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 0 0 L 42 0 L 42 57 L 100 57 L 100 100 L 0 100 Z"
+                }
+              ]
+            },
+            "style": {
+              "fill": "$note"
+            }
+          }
+        },
+        {
+          "id": "lower-short-writing",
+          "role": "text",
+          "box": [
+            0.267593,
+            0.652205,
+            0.230556,
+            0.075199
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 50.0 L 96 50.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.276852,
+              0.659436,
+              0.212037,
+              0.060738
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "lower-wide-writing",
+          "role": "text",
+          "box": [
+            0.267593,
+            0.733912,
+            0.559259,
+            0.057122
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.276852,
+              0.741142,
+              0.540741,
+              0.042661
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "left-portrait",
+          "role": "focal",
+          "box": [
+            0.016667,
+            0.650036,
+            0.228704,
+            0.335503
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 2,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "right-portrait",
+          "role": "material",
+          "box": [
+            0.837037,
+            0.571222,
+            0.162963,
+            0.417209
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "photo-rail",
+          "role": "accent",
+          "box": [
+            0.25,
+            0.80188,
+            0.585185,
+            0.008677
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "rail-tab-1",
+          "role": "accent",
+          "box": [
+            0.30463,
+            0.807664,
+            0.013889,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "rail-tab-2",
+          "role": "accent",
+          "box": [
+            0.414815,
+            0.807664,
+            0.013889,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "rail-tab-3",
+          "role": "accent",
+          "box": [
+            0.587963,
+            0.807664,
+            0.013889,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "rail-tab-4",
+          "role": "accent",
+          "box": [
+            0.762037,
+            0.807664,
+            0.013889,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "footer-photo-1",
+          "role": "material",
+          "box": [
+            0.25,
+            0.826464,
+            0.098148,
+            0.121475
+          ],
+          "shape": "rect",
+          "rotation": 12,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-2",
+          "role": "material",
+          "box": [
+            0.35,
+            0.834418,
+            0.146296,
+            0.112798
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-3",
+          "role": "material",
+          "box": [
+            0.498148,
+            0.842372,
+            0.186111,
+            0.113521
+          ],
+          "shape": "rect",
+          "rotation": 6,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-4",
+          "role": "material",
+          "box": [
+            0.7,
+            0.833695,
+            0.125,
+            0.115691
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
         }
       ],
-      "interpretation": "人工核对的结构示意；尺寸为参考比例，实例化保留素材真实毫米尺寸，不复刻原图纹理。",
-      "reviewed": true
+      "interpretation": "纸纹底色、水印和照片/贴纸等说明标签不作为页面内容；照片及实体装饰为可缺省素材位置，标题与书写为可编辑文字，路径及局部底形为数字图形。实际素材保留尺寸和轮廓。",
+      "reviewed": true,
+      "palette": {
+        "photo": "#8FB9CB",
+        "light": "#B4CFDC",
+        "note": "#F5DDA2",
+        "band": "#84B5CC",
+        "accent": "#ECD774",
+        "ink": "#3E5259"
+      },
+      "example": {
+        "paper": {
+          "width": 148,
+          "height": 189.5222222222222
+        },
+        "texts": {
+          "first-heading": "路上的小事",
+          "first-heading-number": "01",
+          "top-caption": "留下一点心情",
+          "top-photo-caption": "片刻",
+          "second-heading": "收集片刻",
+          "second-heading-number": "02",
+          "food-caption-1": "一口小满足",
+          "food-caption-2": "味道留在记忆里",
+          "food-caption-3": "下次还想再尝尝",
+          "middle-caption": "一些普通又喜欢的瞬间",
+          "third-heading": "慢慢记下来",
+          "third-heading-number": "03"
+        }
+      },
+      "reconstruction": {
+        "status": "structure-reviewed",
+        "scope": "按高清展开图逐项解析素材位置、标题、书写区域、局部底形、固定点及阅读路径；从空白页重建。",
+        "sourceElementCount": 68,
+        "checks": [
+          "总览格与高清展开图逐项比对",
+          "背景教学纸纹与说明标签排除",
+          "实体素材与数字图形分开"
+        ],
+        "knownDifferences": [
+          "字形使用已安装字体，不复制原图手写笔画",
+          "不复刻背景纸纹及水印；浅色底形为近似配色",
+          "照片示意为纯色轮廓，真实素材不强制改裁切轮廓",
+          "写字引导线用直线，输入正文后替换；正文过长需预览检查",
+          "示意照片的圆角及细描边未复刻；实际素材沿用自己的透明轮廓",
+          "编号比例和路径装饰为近似表达，非原图逐像素复刻"
+        ],
+        "sourceObservation": "三组编号标题与书写面沿弯曲路径连接；左侧食物抠图与右侧横向照片群形成主次，两侧竖图夹住底部照片排。胶带固定点是素材位置，不因缺少胶带而生成假实体。"
+      }
     },
     {
       "id": "ac-21",
@@ -5499,16 +7140,18 @@
       "title": "旅行路径四图",
       "sourceId": "ac36",
       "sourcePanel": {
-        "file": "ac36-1.webp",
+        "file": "ac36-5.webp",
         "rect": [
-          0.662962962962963,
-          0.5010845986984815,
-          0.16111111111111112,
-          0.16124367317425886
+          0,
+          0,
+          1,
+          1
         ],
-        "sha256": "0dbd23f8f46602740b6db86bb30ba762b743cd12fccda2ebea7aa39d703878bd"
+        "sha256": "f6d69acc874e444def32aa48bfa6aea7c34db1797e114180dffc2cef79e7917c",
+        "sourceSha256": "6710805514d058bc2dff90275f1cf93cfe8880e087093a74353deaf08e1c7399",
+        "extraction": "使用与总览格对应的高清展开图；同一模板不重复计数。"
       },
-      "aspect": 0.7802690582959642,
+      "aspect": 0.7809110629067245,
       "family": "route",
       "styles": [
         "丰富层叠",
@@ -5521,233 +7164,1102 @@
       ],
       "elements": [
         {
-          "id": "e1",
-          "role": "material",
+          "id": "upper-route",
+          "role": "accent",
           "box": [
-            0.04,
-            0.06,
-            0.28,
-            0.2
-          ],
-          "shape": "ellipse",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e2",
-          "role": "material",
-          "box": [
-            0.79,
-            0.08,
-            0.17,
-            0.15
+            0.257407,
+            0.0,
+            0.5,
+            0.491685
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.25,
           "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
+          "accepts": [],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 2 0 C 25 32 12 38 2 54 C -7 79 71 50 96 62 C 106 70 102 86 76 100"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.22,
+              "strokeDash": "dash"
+            }
+          }
         },
         {
-          "id": "e3",
-          "role": "material",
+          "id": "lower-route",
+          "role": "accent",
           "box": [
-            0.79,
-            0.25,
-            0.16,
-            0.12
+            0.253704,
+            0.527838,
+            0.409259,
+            0.472162
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.25,
           "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
+          "accepts": [],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 100 2 Q 93 -1 90 0 M 12 34 C 20 55 26 81 0 100"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.22,
+              "strokeDash": "dash"
+            }
+          }
         },
         {
-          "id": "e4",
-          "role": "material",
-          "box": [
-            0.05,
-            0.42,
-            0.28,
-            0.22
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e5",
-          "role": "material",
-          "box": [
-            0.35,
-            0.46,
-            0.24,
-            0.2
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e6",
-          "role": "material",
-          "box": [
-            0.03,
-            0.79,
-            0.26,
-            0.2
-          ],
-          "shape": "ellipse",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e7",
+          "id": "upper-circle",
           "role": "focal",
           "box": [
-            0.39,
-            0.77,
-            0.27,
-            0.23
+            0.033333,
+            0.04483,
+            0.269444,
+            0.197397
           ],
-          "shape": "rect",
+          "shape": "ellipse",
           "rotation": 0,
           "weight": 2,
           "optional": true,
           "accepts": [
             "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "upper-left-photo",
+          "role": "material",
+          "box": [
+            0.10463,
+            0.22632,
+            0.141667,
+            0.154736
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "left-sticker",
+          "role": "material",
+          "box": [
+            0.025926,
+            0.223427,
+            0.101852,
+            0.118583
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
             "sticker",
-            "card",
-            "paper"
+            "stamp",
+            "decoration"
           ],
           "content": [],
-          "styles": []
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
         },
         {
-          "id": "e8",
-          "role": "text",
+          "id": "first-heading-ground",
+          "role": "accent",
           "box": [
-            0.34,
-            0.16,
-            0.4,
-            0.18
+            0.482407,
+            0.074476,
+            0.282407,
+            0.053507
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.25,
           "optional": true,
-          "accepts": [
-            "note",
-            "card"
-          ],
+          "accepts": [],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band",
+              "cornerRadiusRatio": 0.25
+            }
+          }
         },
         {
-          "id": "e9",
-          "role": "text",
-          "box": [
-            0.6,
-            0.54,
-            0.34,
-            0.23
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "note",
-            "card"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e10",
+          "id": "first-heading",
           "role": "title",
           "box": [
-            0.41,
-            0.4,
-            0.48,
-            0.05
+            0.496296,
+            0.078814,
+            0.259259,
+            0.04483
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.6,
           "optional": true,
           "accepts": [
             "text"
           ],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 18,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "first-heading-number",
+          "role": "title",
+          "box": [
+            0.35463,
+            0.054953,
+            0.122222,
+            0.074476
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 36,
+              "color": "$ink",
+              "lineHeight": 1.3,
+              "fillOpacity": 0,
+              "outline": {
+                "color": "$ink",
+                "widthMm": 0.3
+              }
+            }
+          }
+        },
+        {
+          "id": "first-caption-ground",
+          "role": "accent",
+          "box": [
+            0.422222,
+            0.137383,
+            0.338889,
+            0.0282
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$photo"
+            }
+          }
+        },
+        {
+          "id": "first-caption",
+          "role": "title",
+          "box": [
+            0.42963,
+            0.138829,
+            0.324074,
+            0.025307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "first-writing",
+          "role": "text",
+          "box": [
+            0.344444,
+            0.199566,
+            0.417593,
+            0.087491
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 40.0 L 96 40.0"
+                },
+                {
+                  "d": "M 4 60.0 L 96 60.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.353704,
+              0.206797,
+              0.399074,
+              0.07303
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "upper-right-photo",
+          "role": "material",
+          "box": [
+            0.784259,
+            0.067968,
+            0.190741,
+            0.12726
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "upper-right-note",
+          "role": "material",
+          "box": [
+            0.783333,
+            0.206797,
+            0.191667,
+            0.12726
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "first-chevron",
+          "role": "accent",
+          "box": [
+            0.333333,
+            0.297903,
+            0.062963,
+            0.045553
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 0 0 L 45 45 L 0 100 L 20 47 Z M 55 18 L 92 47 L 55 80 L 70 47 Z"
+                }
+              ]
+            },
+            "style": {
+              "fill": "$accent"
+            }
+          }
+        },
+        {
+          "id": "second-heading-ground",
+          "role": "accent",
+          "box": [
+            0.606481,
+            0.341287,
+            0.331481,
+            0.052061
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band",
+              "cornerRadiusRatio": 0.25
+            }
+          }
+        },
+        {
+          "id": "second-heading",
+          "role": "title",
+          "box": [
+            0.62037,
+            0.345625,
+            0.308333,
+            0.043384
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 18,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "second-heading-number",
+          "role": "title",
+          "box": [
+            0.47037,
+            0.323933,
+            0.127778,
+            0.072307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 36,
+              "color": "$ink",
+              "lineHeight": 1.3,
+              "fillOpacity": 0,
+              "outline": {
+                "color": "$ink",
+                "widthMm": 0.3
+              }
+            }
+          }
+        },
+        {
+          "id": "second-caption-ground",
+          "role": "accent",
+          "box": [
+            0.487963,
+            0.410701,
+            0.45463,
+            0.026753
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$photo"
+            }
+          }
+        },
+        {
+          "id": "second-caption",
+          "role": "title",
+          "box": [
+            0.49537,
+            0.412148,
+            0.439815,
+            0.023861
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "middle-left-photo",
+          "role": "material",
+          "box": [
+            0.055556,
+            0.428778,
+            0.30463,
+            0.235719
+          ],
+          "shape": "rect",
+          "rotation": 8,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-photo",
+          "role": "material",
+          "box": [
+            0.337037,
+            0.474331,
+            0.30463,
+            0.177874
+          ],
+          "shape": "rect",
+          "rotation": -8,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "middle-sticker",
+          "role": "material",
+          "box": [
+            0.302778,
+            0.362979,
+            0.150926,
+            0.146782
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "second-writing",
+          "role": "text",
+          "box": [
+            0.684259,
+            0.487346,
+            0.291667,
+            0.138106
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 35.0 L 96 35.0"
+                },
+                {
+                  "d": "M 4 50.0 L 96 50.0"
+                },
+                {
+                  "d": "M 4 65.0 L 96 65.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.693519,
+              0.494577,
+              0.273148,
+              0.123644
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "second-chevron",
+          "role": "accent",
+          "box": [
+            0.618519,
+            0.453362,
+            0.062037,
+            0.052061
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 0 0 L 20 56 L 100 47 L 8 100 Z M 30 14 L 46 45 L 80 40 L 40 66 Z"
+                }
+              ]
+            },
+            "style": {
+              "fill": "$accent"
+            }
+          }
+        },
+        {
+          "id": "middle-photo-caption-ground",
+          "role": "accent",
+          "box": [
+            0.355556,
+            0.664497,
+            0.334259,
+            0.025307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$photo"
+            }
+          }
+        },
+        {
+          "id": "middle-photo-caption",
+          "role": "title",
+          "box": [
+            0.362963,
+            0.665944,
+            0.319444,
+            0.022415
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "lower-circle",
+          "role": "material",
+          "box": [
+            0.047222,
+            0.729573,
+            0.27037,
+            0.211858
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "lower-tall-photo",
+          "role": "material",
+          "box": [
+            0.708333,
+            0.668113,
+            0.266667,
+            0.331887
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "lower-wide-photo",
+          "role": "material",
+          "box": [
+            0.365741,
+            0.715112,
+            0.376852,
+            0.202458
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "lower-sticker-1",
+          "role": "material",
+          "box": [
+            0.064815,
+            0.679682,
+            0.149074,
+            0.054953
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "lower-sticker-2",
+          "role": "material",
+          "box": [
+            0.87963,
+            0.581345,
+            0.102778,
+            0.120029
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "lower-sticker-3",
+          "role": "material",
+          "box": [
+            0.031481,
+            0.920463,
+            0.148148,
+            0.047722
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "lower-chevron",
+          "role": "accent",
+          "box": [
+            0.30463,
+            0.741866,
+            0.04537,
+            0.047722
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 0 0 L 50 36 L 100 0 L 50 68 Z M 20 69 L 50 83 L 80 69 L 50 100 Z"
+                }
+              ]
+            },
+            "style": {
+              "fill": "$accent"
+            }
+          }
+        },
+        {
+          "id": "footer-caption-ground",
+          "role": "accent",
+          "box": [
+            0.226852,
+            0.939262,
+            0.457407,
+            0.028923
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$photo"
+            }
+          }
+        },
+        {
+          "id": "footer-caption",
+          "role": "title",
+          "box": [
+            0.234259,
+            0.940709,
+            0.442593,
+            0.02603
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
         }
       ],
-      "interpretation": "人工核对的结构示意；尺寸为参考比例，实例化保留素材真实毫米尺寸，不复刻原图纹理。",
-      "reviewed": true
+      "interpretation": "纸纹底色、水印和照片/贴纸等说明标签不作为页面内容；照片及实体装饰为可缺省素材位置，标题与书写为可编辑文字，路径及局部底形为数字图形。实际素材保留尺寸和轮廓。",
+      "reviewed": true,
+      "palette": {
+        "photo": "#EDB35F",
+        "light": "#F2D48C",
+        "note": "#F7E8BF",
+        "band": "#DE873F",
+        "accent": "#EAC26F",
+        "ink": "#4A514C"
+      },
+      "example": {
+        "paper": {
+          "width": 148,
+          "height": 189.5222222222222
+        },
+        "texts": {
+          "first-heading": "沿途拾光",
+          "first-heading-number": "03",
+          "first-caption": "记下一点发现",
+          "second-heading": "留下这一刻",
+          "second-heading-number": "04",
+          "second-caption": "平常日子也值得收藏",
+          "middle-photo-caption": "一张照片，一段回忆",
+          "footer-caption": "把喜欢的片刻慢慢收好"
+        }
+      },
+      "reconstruction": {
+        "status": "structure-reviewed",
+        "scope": "按高清展开图逐项解析素材位置、标题、书写区域、局部底形、固定点及阅读路径；从空白页重建。",
+        "sourceElementCount": 35,
+        "checks": [
+          "总览格与高清展开图逐项比对",
+          "背景教学纸纹与说明标签排除",
+          "实体素材与数字图形分开"
+        ],
+        "knownDifferences": [
+          "字形使用已安装字体，不复制原图手写笔画",
+          "不复刻背景纸纹及水印；浅色底形为近似配色",
+          "照片示意为纯色轮廓，真实素材不强制改裁切轮廓",
+          "写字引导线用直线，输入正文后替换；正文过长需预览检查",
+          "示意照片的圆角及细描边未复刻；实际素材沿用自己的透明轮廓",
+          "编号比例和路径装饰为近似表达，非原图逐像素复刻"
+        ],
+        "sourceObservation": "两组大编号和标题交替落在中上与右中，圆照片在左上和左下呼应；上下两段虚线路径贯穿图文，右下竖图在横图后方。"
+      }
     },
     {
       "id": "ac-24",
@@ -8514,16 +11026,18 @@
       "title": "圆图与横向照片排",
       "sourceId": "ac36",
       "sourcePanel": {
-        "file": "ac36-1.webp",
+        "file": "ac36-8.webp",
         "rect": [
-          0.34074074074074073,
-          0.8235719450469993,
-          0.16111111111111112,
-          0.16124367317425886
+          0,
+          0,
+          1,
+          1
         ],
-        "sha256": "4d92ede81bbca666bda3c66ed13e3a426b6e5336a9f705eaa721a5cb9585d1a4"
+        "sha256": "f7b22ecb6242e9301c1d7178e63d5eb2979a114f159da0d8ffd32158b538e070",
+        "sourceSha256": "e267d0f87142498ad6a19af18a919a8e1572a3473b41431eada8adb86990a19a",
+        "extraction": "使用与总览格对应的高清展开图；同一模板不重复计数。"
       },
-      "aspect": 0.7802690582959642,
+      "aspect": 0.7809110629067245,
       "family": "photo-cluster",
       "styles": [
         "丰富层叠",
@@ -8536,329 +11050,999 @@
       ],
       "elements": [
         {
-          "id": "e1",
-          "role": "focal",
+          "id": "heading-ground",
+          "role": "accent",
           "box": [
-            0.09,
-            0.3,
-            0.29,
-            0.22
-          ],
-          "shape": "ellipse",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "card",
-            "paper"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e2",
-          "role": "material",
-          "box": [
-            0.59,
-            0.07,
-            0.23,
-            0.17
+            0.236111,
+            0.080983,
+            0.342593,
+            0.048445
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.25,
           "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
+          "accepts": [],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$band",
+              "cornerRadiusRatio": 0.25
+            }
+          }
         },
         {
-          "id": "e3",
-          "role": "material",
-          "box": [
-            0.8,
-            0.14,
-            0.17,
-            0.15
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e4",
-          "role": "material",
-          "box": [
-            0.1,
-            0.54,
-            0.36,
-            0.17
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e5",
-          "role": "material",
-          "box": [
-            0.59,
-            0.56,
-            0.18,
-            0.17
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e6",
-          "role": "material",
-          "box": [
-            0.78,
-            0.57,
-            0.21,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e7",
-          "role": "material",
-          "box": [
-            0.06,
-            0.78,
-            0.18,
-            0.17
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e8",
-          "role": "material",
-          "box": [
-            0.25,
-            0.79,
-            0.18,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e9",
-          "role": "material",
-          "box": [
-            0.45,
-            0.8,
-            0.18,
-            0.15
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e10",
-          "role": "material",
-          "box": [
-            0.64,
-            0.79,
-            0.18,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e11",
-          "role": "material",
-          "box": [
-            0.83,
-            0.79,
-            0.16,
-            0.16
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "photo",
-            "sticker",
-            "paper",
-            "card",
-            "ticket",
-            "note"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e12",
-          "role": "text",
-          "box": [
-            0.1,
-            0.18,
-            0.42,
-            0.08
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "note",
-            "card"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e13",
-          "role": "text",
-          "box": [
-            0.47,
-            0.35,
-            0.51,
-            0.12
-          ],
-          "shape": "rect",
-          "rotation": 0,
-          "weight": 1,
-          "optional": true,
-          "accepts": [
-            "note",
-            "card"
-          ],
-          "content": [],
-          "styles": []
-        },
-        {
-          "id": "e14",
+          "id": "heading-number",
           "role": "title",
           "box": [
-            0.19,
-            0.06,
-            0.31,
-            0.08
+            0.074074,
+            0.054953,
+            0.148148,
+            0.073753
           ],
           "shape": "rect",
           "rotation": 0,
-          "weight": 1,
+          "weight": 0.6,
           "optional": true,
           "accepts": [
             "text"
           ],
           "content": [],
-          "styles": []
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 36,
+              "color": "$ink",
+              "lineHeight": 1.3,
+              "fillOpacity": 0,
+              "outline": {
+                "color": "$ink",
+                "widthMm": 0.3
+              }
+            }
+          }
+        },
+        {
+          "id": "heading-inset",
+          "role": "accent",
+          "box": [
+            0.262037,
+            0.086768,
+            0.288889,
+            0.036876
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light",
+              "cornerRadiusRatio": 0.2
+            }
+          }
+        },
+        {
+          "id": "heading",
+          "role": "title",
+          "box": [
+            0.25,
+            0.085322,
+            0.319444,
+            0.039769
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 18,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "top-caption-ground",
+          "role": "accent",
+          "box": [
+            0.042593,
+            0.146782,
+            0.521296,
+            0.0282
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "top-caption",
+          "role": "title",
+          "box": [
+            0.05,
+            0.148228,
+            0.506481,
+            0.025307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "upper-writing-ground",
+          "role": "accent",
+          "box": [
+            0.043519,
+            0.186551,
+            0.425926,
+            0.067968
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$note",
+              "cornerRadiusRatio": 0.04
+            }
+          }
+        },
+        {
+          "id": "upper-writing",
+          "role": "text",
+          "box": [
+            0.043519,
+            0.186551,
+            0.425926,
+            0.067968
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.052778,
+              0.193782,
+              0.407407,
+              0.053507
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "top-photo-1",
+          "role": "material",
+          "box": [
+            0.601852,
+            0.062184,
+            0.203704,
+            0.167751
+          ],
+          "shape": "rect",
+          "rotation": 9,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "top-photo-2",
+          "role": "material",
+          "box": [
+            0.761111,
+            0.122198,
+            0.210185,
+            0.164859
+          ],
+          "shape": "rect",
+          "rotation": -4,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "circle-photo",
+          "role": "focal",
+          "box": [
+            0.042593,
+            0.282719,
+            0.294444,
+            0.224873
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 2,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "upper-sticker-1",
+          "role": "material",
+          "box": [
+            0.290741,
+            0.261027,
+            0.147222,
+            0.05423
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "upper-sticker-2",
+          "role": "material",
+          "box": [
+            0.568519,
+            0.235719,
+            0.148148,
+            0.057122
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "upper-sticker-3",
+          "role": "material",
+          "box": [
+            0.347222,
+            0.331887,
+            0.084259,
+            0.097614
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "middle-writing-ground",
+          "role": "accent",
+          "box": [
+            0.438889,
+            0.303688,
+            0.525,
+            0.139552
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$note",
+              "cornerRadiusRatio": 0.04
+            }
+          }
+        },
+        {
+          "id": "middle-writing",
+          "role": "text",
+          "box": [
+            0.438889,
+            0.303688,
+            0.525,
+            0.139552
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                },
+                {
+                  "d": "M 4 35.0 L 96 35.0"
+                },
+                {
+                  "d": "M 4 50.0 L 96 50.0"
+                },
+                {
+                  "d": "M 4 65.0 L 96 65.0"
+                },
+                {
+                  "d": "M 4 80.0 L 96 80.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.448148,
+              0.310918,
+              0.506481,
+              0.12509
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "middle-caption-ground",
+          "role": "accent",
+          "box": [
+            0.322222,
+            0.456978,
+            0.641667,
+            0.0282
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "middle-caption",
+          "role": "title",
+          "box": [
+            0.32963,
+            0.458424,
+            0.626852,
+            0.025307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "row-caption-ground",
+          "role": "accent",
+          "box": [
+            0.561111,
+            0.505423,
+            0.410185,
+            0.0282
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$note",
+              "cornerRadiusRatio": 0.04
+            }
+          }
+        },
+        {
+          "id": "row-caption",
+          "role": "text",
+          "box": [
+            0.561111,
+            0.505423,
+            0.410185,
+            0.0282
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "path",
+              "viewBox": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "paths": [
+                {
+                  "d": "M 4 20.0 L 96 20.0"
+                }
+              ]
+            },
+            "style": {
+              "fill": null,
+              "stroke": "$ink",
+              "strokeWidthMm": 0.13
+            },
+            "textBox": [
+              0.57037,
+              0.512654,
+              0.391667,
+              0.013738
+            ],
+            "textStyle": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 10,
+              "color": "$ink",
+              "lineHeight": 1.5
+            }
+          }
+        },
+        {
+          "id": "row-left-photo",
+          "role": "material",
+          "box": [
+            0.058333,
+            0.522777,
+            0.380556,
+            0.174982
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "row-middle-photo",
+          "role": "material",
+          "box": [
+            0.561111,
+            0.544469,
+            0.202778,
+            0.15329
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "row-right-photo",
+          "role": "material",
+          "box": [
+            0.77037,
+            0.544469,
+            0.201852,
+            0.15329
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$light",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "row-sticker",
+          "role": "material",
+          "box": [
+            0.448148,
+            0.545192,
+            0.102778,
+            0.118583
+          ],
+          "shape": "ellipse",
+          "rotation": 0,
+          "weight": 0.65,
+          "optional": true,
+          "accepts": [
+            "sticker",
+            "stamp",
+            "decoration"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$accent",
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "lower-caption-ground",
+          "role": "accent",
+          "box": [
+            0.02037,
+            0.714389,
+            0.951852,
+            0.0282
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$note"
+            }
+          }
+        },
+        {
+          "id": "lower-caption",
+          "role": "title",
+          "box": [
+            0.027778,
+            0.715835,
+            0.937037,
+            0.025307
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
+        },
+        {
+          "id": "footer-photo-1",
+          "role": "material",
+          "box": [
+            0.021296,
+            0.759942,
+            0.186111,
+            0.151121
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-2",
+          "role": "material",
+          "box": [
+            0.212963,
+            0.759942,
+            0.186111,
+            0.151121
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-3",
+          "role": "material",
+          "box": [
+            0.40463,
+            0.759942,
+            0.186111,
+            0.151121
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-4",
+          "role": "material",
+          "box": [
+            0.596296,
+            0.759942,
+            0.186111,
+            0.151121
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-photo-5",
+          "role": "material",
+          "box": [
+            0.787963,
+            0.759942,
+            0.186111,
+            0.151121
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 1,
+          "optional": true,
+          "accepts": [
+            "photo",
+            "card"
+          ],
+          "content": [],
+          "styles": [],
+          "example": {
+            "fill": "$photo",
+            "shape": "rect"
+          }
+        },
+        {
+          "id": "footer-caption-ground",
+          "role": "accent",
+          "box": [
+            0.021296,
+            0.930586,
+            0.951852,
+            0.02603
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.25,
+          "optional": true,
+          "accepts": [],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "graphic",
+            "geometry": {
+              "kind": "rect"
+            },
+            "style": {
+              "fill": "$light"
+            }
+          }
+        },
+        {
+          "id": "footer-caption",
+          "role": "title",
+          "box": [
+            0.028704,
+            0.932032,
+            0.937037,
+            0.023138
+          ],
+          "shape": "rect",
+          "rotation": 0,
+          "weight": 0.6,
+          "optional": true,
+          "accepts": [
+            "text"
+          ],
+          "content": [],
+          "styles": [],
+          "render": {
+            "kind": "text",
+            "style": {
+              "fontFamily": "Xiaolai",
+              "fontSizePt": 11,
+              "color": "$ink",
+              "lineHeight": 1.3
+            }
+          }
         }
       ],
-      "interpretation": "人工核对的结构示意；尺寸为参考比例，实例化保留素材真实毫米尺寸，不复刻原图纹理。",
-      "reviewed": true
+      "interpretation": "纸纹底色、水印和照片/贴纸等说明标签不作为页面内容；照片及实体装饰为可缺省素材位置，标题与书写为可编辑文字，路径及局部底形为数字图形。实际素材保留尺寸和轮廓。",
+      "reviewed": true,
+      "palette": {
+        "photo": "#DE9A85",
+        "light": "#F0C7B6",
+        "note": "#F7DDA8",
+        "band": "#EDB6A2",
+        "accent": "#EDCB85",
+        "ink": "#42484B"
+      },
+      "example": {
+        "paper": {
+          "width": 148,
+          "height": 189.5222222222222
+        },
+        "texts": {
+          "heading": "今天的片刻",
+          "heading-number": "03",
+          "top-caption": "记下一点心情",
+          "middle-caption": "留下属于今天的小事",
+          "lower-caption": "照片旁边，留一点书写的位置",
+          "footer-caption": "日常随记"
+        }
+      },
+      "reconstruction": {
+        "status": "structure-reviewed",
+        "scope": "按高清展开图逐项解析素材位置、标题、书写区域、局部底形、固定点及阅读路径；从空白页重建。",
+        "sourceElementCount": 33,
+        "checks": [
+          "总览格与高清展开图逐项比对",
+          "背景教学纸纹与说明标签排除",
+          "实体素材与数字图形分开"
+        ],
+        "knownDifferences": [
+          "字形使用已安装字体，不复制原图手写笔画",
+          "不复刻背景纸纹及水印；浅色底形为近似配色",
+          "照片示意为纯色轮廓，真实素材不强制改裁切轮廓",
+          "写字引导线用直线，输入正文后替换；正文过长需预览检查",
+          "示意照片的圆角及细描边未复刻；实际素材沿用自己的透明轮廓",
+          "编号比例和路径装饰为近似表达，非原图逐像素复刻"
+        ],
+        "sourceObservation": "左侧圆图与上方倾斜双图构成第一组，第二组三图横向对照，底部五张同高照片组成照片排；四处短条串起文字和图片。"
+      }
     },
     {
       "id": "ac-34",
