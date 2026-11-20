@@ -5,7 +5,7 @@
       "id": "ac-01",
       "file": "ac-01.png",
       "kind": "rendered-template-commands",
-      "sha256": "a1d13f9ee8a9e1855c90b526b0d3fe143a3976cf92ddcac064989ff3c25d8ac8",
+      "sha256": "fa1d0f4d33e74c450bfbc48a38b28e7fd32db79eba07ebfec5519e199fc81fa3",
       "width": 240,
       "height": 308
     },
@@ -13,7 +13,7 @@
       "id": "ac-02",
       "file": "ac-02.png",
       "kind": "rendered-template-commands",
-      "sha256": "7ec73eefd8bfe9a17911f58ff99bca39a1159793a2e65037105bd1b15c1fb223",
+      "sha256": "f1c10a941239f5319bf6231c5fec8332a467d6cdcfd49f5a746a74ae96a25dd8",
       "width": 240,
       "height": 308
     },
@@ -21,7 +21,7 @@
       "id": "ac-03",
       "file": "ac-03.png",
       "kind": "rendered-template-commands",
-      "sha256": "dd991043e5b4cfc4403d7fe93ebcbf777488f74f3ab225a1d531ed475cf807e4",
+      "sha256": "cf362f00cf9c99910f64955bf4a0c59d7d43986c1f26b604c64f110c4f274c8e",
       "width": 240,
       "height": 308
     },

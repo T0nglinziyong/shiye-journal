@@ -18,9 +18,13 @@ export function compileTemplate({templateId,id,paper,materials=[],bindings=[],te
   bound.set(b.slotId,b);
  }
  for(const key of Object.keys(texts))if(!template.elements.some(s=>s.id===key&&isTextSlot(s)))throw Error('文字位置不存在');
+ const contentPresent=new Set([...bound.keys(),...Object.keys(texts).filter(key=>texts[key]&&!omit.includes(key))]);
+ const firstTitle=template.elements.find(s=>s.role==='title'&&!omit.includes(s.id)&&!bound.has(s.id));
+ if(title&&firstTitle)contentPresent.add(firstTitle.id);
+ for(const slot of template.elements)if(slot.contentFor&&!template.elements.some(s=>s.id===slot.contentFor&&(isTextSlot(s)||!isGraphicElement(s))))throw Error('模板装饰引用的内容位置无效');
  let titleUsed=false;
  for(const slot of template.elements){
-  if(omit.includes(slot.id))continue;
+  if(omit.includes(slot.id)||slot.contentFor&&!contentPresent.has(slot.contentFor))continue;
   const [x,y,w,h]=slot.box,childId=id+'-'+slot.id;
   const place={reference:'parent',at:[(x+w/2)*paper.width,(y+h/2)*paper.height],unit:'mm',rotationDeg:slot.rotation||0};
   const b=bound.get(slot.id);

@@ -52,7 +52,10 @@ for(const method of techniqueCatalog.methods)test('technique transaction is exec
 });
 test('missing slots remain empty; unknown source and repeated material are rejected',()=>{
  const t=templateCatalog.templates[0],paper={width:148,height:210},s=materialSlots(t);
- assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[]}),/没有可放置/);
+ const empty=compileTemplate({templateId:t.id,id:'g',paper,materials:[]});
+ assert.deepEqual(empty.report.used,[]);
+ assert.ok(empty.operations[0].children.every(n=>n.op==='graphic.add'));
+ assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[],omit:t.elements.filter(isGraphicElement).map(e=>e.id)}),/没有可放置/);
  assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[],bindings:[{slotId:s[0].id,alias:'secret'}]}),/授权/);
  assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[{alias:'m1'}],bindings:[{slotId:s[0].id,alias:'m1'},{slotId:s[1].id,alias:'m1'}]}),/重复/);
 });
@@ -200,4 +203,17 @@ test('writing on a material follows translation and rotation, and does not alter
  doc=edit([{op:'layer.update',target:'note',place:{reference:'page',at:[90,100],unit:'mm',rotationDeg:28}}]);
  assert.equal(doc.page.layers.find(n=>n.id==='demo').rotation,28);
  assert.throws(()=>compileTechnique({methodId:method.id,parameters:{...example.parameters,box:[.8,.1,.4,.5]},materials}),/可写区域/);
+});
+
+test('optional title backing follows actual supplied content and explicit omission',async()=>{
+ const base={templateId:'ac-01',id:'optional',paper:{width:148,height:190},texts:{'heading-one':'片刻'}};
+ const present=compileTemplate(base).operations[0].children;
+ assert.ok(present.some(n=>n.id==='optional-heading-one-ground'));
+ assert.ok(!present.some(n=>n.id==='optional-middle-caption-ground'));
+ const omitted=compileTemplate({...base,omit:['heading-one']}).operations[0].children;
+ assert.ok(!omitted.some(n=>n.id==='optional-heading-one-ground'));
+ const defaultTitle=compileTemplate({templateId:'ac-01',id:'default-title',paper:base.paper,title:'沿途'}).operations[0].children;
+ assert.ok(defaultTitle.some(n=>n.id==='default-title-heading-one-ground'));
+ const bound=compileTemplate({templateId:'ac-01',id:'bound-title',paper:base.paper,nodes:[{id:'existing-title'}],bindings:[{slotId:'heading-one',node:'existing-title'}]});
+ assert.ok(bound.operations[0].children.some(n=>n.id==='bound-title-heading-one-ground'));
 });
