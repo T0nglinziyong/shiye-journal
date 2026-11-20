@@ -217,3 +217,30 @@ test('optional title backing follows actual supplied content and explicit omissi
  const bound=compileTemplate({templateId:'ac-01',id:'bound-title',paper:base.paper,nodes:[{id:'existing-title'}],bindings:[{slotId:'heading-one',node:'existing-title'}]});
  assert.ok(bound.operations[0].children.some(n=>n.id==='bound-title-heading-one-ground'));
 });
+
+test('text replacing a rotated writing guide stays inside its backing at both paper sizes',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='ac-11');
+ for(const width of [148,210]){
+  const paper={width,height:width/t.aspect};
+  const page=draft({ratio:'a5'});page.physicalPageHeightMM=paper.height;page.canvas.width=page.canvas.height*paper.width/paper.height;
+  const doc=await createCreationDocument({draft:page,assets:[],aliases:{}});
+  const compiled=compileTemplate({templateId:t.id,id:'rotated-writing',paper,texts:{'slanted-writing':'留住片刻\n慢慢记下'}});
+  const done=apply(doc,compiled.operations,[]).document;
+  const text=worldBox(done.page,'rotated-writing-slanted-writing'),backing=worldBox(done.page,'rotated-writing-slanted-writing-ground');
+  assert.equal(text.rotation,backing.rotation);
+  const a=-backing.rotation*Math.PI/180,dx=text.cx-backing.cx,dy=text.cy-backing.cy;
+  const localX=dx*Math.cos(a)-dy*Math.sin(a),localY=dx*Math.sin(a)+dy*Math.cos(a);
+  assert.ok(localX-text.w/2>=-backing.w/2-1e-6,'left text inset survives rotation');
+  assert.ok(localX+text.w/2<=backing.w/2+1e-6,'right text inset survives rotation');
+  assert.ok(localY-text.h/2>=-backing.h/2-1e-6,'top text inset survives rotation');
+  assert.ok(localY+text.h/2<=backing.h/2+1e-6,'short paragraph fits the backing');
+ }
+});
+
+test('standalone angled titles keep their authored page anchor outside the circle',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='moon-04'),fixture=templateFixture(t),slot=t.elements.find(e=>e.id==='heading');
+ const result=compileTemplate({...fixture,templateId:t.id,id:'circle-heading'});
+ const title=result.operations[0].children.find(e=>e.id==='circle-heading-heading');
+ assert.deepEqual(title.place.at,[slot.box[0]*fixture.paper.width,slot.box[1]*fixture.paper.height]);
+ assert.equal(title.place.rotationDeg,-28);
+});

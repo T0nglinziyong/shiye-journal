@@ -34,7 +34,12 @@ export function compileTemplate({templateId,id,paper,materials=[],bindings=[],te
   }else if(isTextSlot(slot)&&(texts[slot.id]||(slot.role==='title'&&!titleUsed&&title))){
    const content=texts[slot.id]||title;if(slot.role==='title')titleUsed=true;
    const style=resolve(isGraphicElement(slot)?slot.render.textStyle||{}:slot.render?.style||{}),[tx,ty,tw]=slot.render?.textBox||slot.box;
-   children.push({op:'text.add',id:childId,content,place:{...place,at:[tx*paper.width,ty*paper.height],rotationDeg:slot.render?.textRotation??place.rotationDeg,anchor:'top-left'},size:{width:tw*paper.width,unit:'mm'},style:{fontFamily:'Xiaolai',fontSizePt:slot.role==='title'?20:11,color:'#394F4C',...style}});ordered.push(childId);
+   let at=[tx*paper.width,ty*paper.height];
+   if(isGraphicElement(slot)&&slot.render.textRotation===undefined&&place.rotationDeg){
+    const angle=place.rotationDeg*Math.PI/180,dx=at[0]-place.at[0],dy=at[1]-place.at[1];
+    at=[place.at[0]+dx*Math.cos(angle)-dy*Math.sin(angle),place.at[1]+dx*Math.sin(angle)+dy*Math.cos(angle)];
+   }
+   children.push({op:'text.add',id:childId,content,place:{...place,at,rotationDeg:slot.render?.textRotation??place.rotationDeg,anchor:'top-left'},size:{width:tw*paper.width,unit:'mm'},style:{fontFamily:'Xiaolai',fontSizePt:slot.role==='title'?20:11,color:'#394F4C',...style}});ordered.push(childId);
   }else if(isGraphicElement(slot)){
    children.push({op:'graphic.add',id:childId,geometry:structuredClone(slot.render.geometry),place,size:{width:w*paper.width,height:h*paper.height,unit:'mm'},style:resolve(slot.render.style||{})});ordered.push(childId);
   }else continue;

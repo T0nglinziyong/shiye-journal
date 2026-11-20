@@ -53,7 +53,7 @@
       "id": "ac-07",
       "file": "ac-07.png",
       "kind": "rendered-template-commands",
-      "sha256": "fc593317fbe5c7e29aa79de1fd673f37a84fe4a4bec4ff668cbd9d5754d8e680",
+      "sha256": "0c1d685d3af476ab550345fb2400180723fc76742e6f2a49913cc4035ed80294",
       "width": 240,
       "height": 308
     },
@@ -61,7 +61,7 @@
       "id": "ac-08",
       "file": "ac-08.png",
       "kind": "rendered-template-commands",
-      "sha256": "6880a35fd5436b8b65f8cb586bb746f56c8c522356090d48b211f9d7a930fea4",
+      "sha256": "02285c45ff7555c1d1767dbcc32020f85596ce2e63afd874cb806ab620bb71d9",
       "width": 240,
       "height": 308
     },
@@ -69,7 +69,7 @@
       "id": "ac-09",
       "file": "ac-09.png",
       "kind": "rendered-template-commands",
-      "sha256": "ab922fce90e04a56f32283f0deae8b3b4d26dfa7c024cf0b930821eca4bb56ba",
+      "sha256": "ac99455f5f0d4682e6254d1b1379974e192cac7b00a625bf7188801b0cb90f5d",
       "width": 240,
       "height": 308
     },
@@ -77,7 +77,7 @@
       "id": "ac-10",
       "file": "ac-10.png",
       "kind": "rendered-template-commands",
-      "sha256": "08bd8b39939f00d6b203bb7fcfa089ec084d5d6049e4451e3029cd70b2a11321",
+      "sha256": "d936684b773bd093f36753ba3b78d539ad39834fa02f78f2fecc0cf8ae3c2d05",
       "width": 240,
       "height": 308
     },
@@ -85,7 +85,7 @@
       "id": "ac-11",
       "file": "ac-11.png",
       "kind": "rendered-template-commands",
-      "sha256": "6b2701028d47e8664dc9af3c3b1c41834879d856bf6b918456ed71aa62b9b6c2",
+      "sha256": "6bccaaa8b8726d7a0f074ae7f26ba014c15857d02dc0bdb3b0806a59e70aa244",
       "width": 240,
       "height": 308
     },
@@ -93,7 +93,7 @@
       "id": "ac-12",
       "file": "ac-12.png",
       "kind": "rendered-template-commands",
-      "sha256": "9fcc1595d29d16b2d2f18a43c824698c1e0b661cc7202803822efa08b9f30500",
+      "sha256": "f6765aed14798d5399e9bafc23fde24a9c7db265a745a749f7aaa14a8864233c",
       "width": 240,
       "height": 308
     },
