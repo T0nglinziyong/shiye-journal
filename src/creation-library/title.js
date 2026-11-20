@@ -56,7 +56,8 @@ export function compileTitle(p,{widthExplicit=false}={}){
   const lines=layout.lines.length,h=lines*rowHeight+Math.abs(s.curveHeightMm||0)+2;
   const op={op:'text.add',id:p.id+'-text'+(++next),content,place:at(x,y),size:{width:w,unit:'mm'},style:s};
   const lastLine=[...layout.lines].reverse().find(line=>line.text.trim())?.text||'';
-  texts.push({op,x,y,w,h,inkHeight:(lines-1)*rowHeight+size*pt*1.1,inkWidth:Math.min(w,Math.max(...layout.lines.map(line=>extent(line.text,size)))),lastLineWidth:Math.min(w,extent(lastLine,size)),lineCount:lines,rowHeight});return texts.at(-1);
+  const inkLines=layout.lines.filter(line=>line.text.trim()).map(line=>({x,y:y+line.y,width:Math.min(w,extent(line.text,size)),height:size*pt*1.1}));
+  texts.push({op,x,y,w,h,inkHeight:(lines-1)*rowHeight+size*pt*1.1,lastLineWidth:Math.min(w,extent(lastLine,size)),lineCount:lines,inkLines});return texts.at(-1);
  };
  let runs=p.runs;
  if(!runs&&p.emphasis){const pieces=p.text.split(p.emphasis);runs=[];pieces.forEach((part,i)=>{if(part)runs.push({text:part});if(i<pieces.length-1)runs.push({text:p.emphasis,role:'primary'});});}
@@ -70,8 +71,8 @@ export function compileTitle(p,{widthExplicit=false}={}){
    const dx=run.offsetMm?.[0]||0,dy=run.offsetMm?.[1]||(primary?0:s.fontSizePt*pt*.18);
    const t=addText(run.text,x+dx,y+dy,w,s);
    if(run.rotationDeg)t.op.place.rotationDeg=run.rotationDeg;
-   if(p.treatment==='highlight'&&(p.emphasis?run.text===p.emphasis:primary))background.push(shape('rect',t.x-.7,t.y+t.inkHeight*.48,t.inkWidth+1.4,t.inkHeight*.52,{fill:accent,fillOpacity:.45}));
-   if(p.treatment==='circle'&&(p.emphasis?run.text===p.emphasis:primary))background.push(shape('ellipse',t.x-1,t.y-1,t.inkWidth+2,t.inkHeight+2,{fill:null,stroke:accent,strokeWidthMm:.45}));
+   if(p.treatment==='highlight'&&(p.emphasis?run.text===p.emphasis:primary))for(const line of t.inkLines)background.push(shape('rect',line.x-.7,line.y+line.height*.48,line.width+1.4,line.height*.52,{fill:accent,fillOpacity:.45}));
+   if(p.treatment==='circle'&&(p.emphasis?run.text===p.emphasis:primary))for(const line of t.inkLines)background.push(shape('ellipse',line.x-1,line.y-1,line.width+2,line.height+2,{fill:null,stroke:accent,strokeWidthMm:.45}));
    x+=w+(p.gapMm??1.2);lineH=Math.max(lineH,t.inkHeight+Math.abs(dy));
   }
  }else{

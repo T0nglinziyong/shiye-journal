@@ -133,6 +133,18 @@ test('keyword highlight is local, behind text, and transparent hollow titles do 
  assert.equal(hollow.length,1);assert.equal(hollow[0].style.fillOpacity,0);assert.ok(hollow[0].style.outline);
  assert.throws(()=>compileTechnique({methodId:'title-highlight',parameters:{id:'h',text:'留住日常',emphasis:'旅行'}}),/原|标题/);
 });
+test('wrapped emphasis marks each occupied line without spanning the empty line gap',async()=>{
+ const parameters={id:'long-mark',text:'春日去海边散步',emphasis:'春日去海边散步',widthMm:36,fontSizePt:20};
+ for(const methodId of ['title-highlight','title-circle']){
+  const compiled=compileTechnique({methodId,parameters}),children=compiled.operations[0].children;
+  const marks=children.filter(o=>o.op==='graphic.add'),written=children.filter(o=>o.op==='text.add');
+  assert.ok(marks.length>=3,methodId);
+  assert.equal(written.map(o=>o.content).join(''),parameters.text);
+  assert.ok(marks.every((mark,i)=>i===0||mark.place.at[1]>marks[i-1].place.at[1]),methodId);
+  assert.ok(marks.every(mark=>mark.size.height<14),methodId);
+  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ }
+});
 test('title effects compose in one editable text, while curve and grapheme constraints are explicit',async()=>{
  const gradient={angleDeg:45,stops:[{offset:0,color:'#112233'},{offset:1,color:'#445566'}]};
  const compiled=compileTechnique({methodId:'title-shadow',parameters:{id:'fx',text:'标题',style:{gradient,outline:{color:'#FFFFFF',widthMm:.3}}}});
