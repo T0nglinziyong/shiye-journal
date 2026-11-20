@@ -47,6 +47,19 @@ export function techniqueExample(method){
   before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,88],unit:'mm'}});
  }
  if(method.id==='graphic-bubble')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[80,121],unit:'mm'}});
+ if(method.id==='graphic-arrow')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[35,88],unit:'mm'}},{op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[108,88],unit:'mm'}});
+ if(['graphic-wave','graphic-zigzag'].includes(method.id)){
+  for(const [id,content,y] of [['first','一段短记',77],['second','另一段短记',95]])before.push({op:'text.add',id,content,place:{reference:'page',at:[45,y],unit:'mm',anchor:'top-left'},size:{width:54,unit:'mm'},style:{fontFamily:'Xiaolai',fontSizePt:11,color:'#3D6871'}});
+ }
+ if(method.id==='pattern-scallop'){
+  p.at=[72,102];p.widthMm=50;p.heightMm=9;
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,79],unit:'mm'}});
+ }
+ if(['pattern-dots','pattern-grid'].includes(method.id)){
+  p.at=[60,88];
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[118,88],unit:'mm'}});
+ }
+ if(method.id==='pattern-stripes')before.push({op:'graphic.add',id:'ground',geometry:{kind:'rect'},place:{reference:'page',at:[72,88],unit:'mm'},size:{width:58,height:28,unit:'mm'},style:{fill:'#F1E8D5',stroke:null}});
  if(method.recipe==='tape'){
   p.aliases=['m4'];
   if(method.id==='tape-fix')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,107],unit:'mm'}});

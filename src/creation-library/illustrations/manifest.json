@@ -813,33 +813,33 @@
       "id": "pattern-dots",
       "file": "pattern-dots.png",
       "kind": "rendered-editable-commands",
-      "sha256": "8febb699e6c17f21ecea010d2f2a9b9ed22e8315afc27c1bf29ba3ec6a164c3f",
+      "sha256": "309e5950f3eb9ea7224ff8692e7c9f08d93d9a2bf63dbf2ba0060aedfd26dfda",
       "width": 360,
-      "height": 177
+      "height": 125
     },
     {
       "id": "pattern-stripes",
       "file": "pattern-stripes.png",
       "kind": "rendered-editable-commands",
-      "sha256": "692a528ec4330b996ce80cf70579d3d0249ba09293d2ba71154dcb1230d702dd",
+      "sha256": "b79d26365b8118b8d877a283a0d0810cc3cba069d03dabcc4c41241953d5f50b",
       "width": 360,
-      "height": 196
+      "height": 184
     },
     {
       "id": "pattern-grid",
       "file": "pattern-grid.png",
       "kind": "rendered-editable-commands",
-      "sha256": "cfed4a19c18272080ca67fdbf1e8d1d4ed052d1d8a32aa91b11169de6f2b020f",
+      "sha256": "609ea90f59adb52d13c1d3261777b22b17ad3c28cd96d576aefd0a2b2832e3b3",
       "width": 360,
-      "height": 218
+      "height": 122
     },
     {
       "id": "pattern-scallop",
       "file": "pattern-scallop.png",
       "kind": "rendered-editable-commands",
-      "sha256": "10d26be04395651972d0bff005a565a118221f32276514e78163af446cfdd184",
-      "width": 360,
-      "height": 72
+      "sha256": "6bd7633add7cff83eb3c73dab93ef6b9bbb4fb1a1bc0034b0f2f436ba03d1f27",
+      "width": 348,
+      "height": 300
     },
     {
       "id": "tape-fix",
@@ -1077,9 +1077,9 @@
       "id": "graphic-arrow",
       "file": "graphic-arrow.png",
       "kind": "rendered-editable-commands",
-      "sha256": "5b724ac7f836f608ae1dcd721d5a3a04963f68a65110be92c9634b377236ec40",
+      "sha256": "b69dd12c990863b10ee2e37641603a1da2f54d32747bf29e343b316236027375",
       "width": 360,
-      "height": 138
+      "height": 156
     },
     {
       "id": "graphic-arch",
@@ -1109,17 +1109,17 @@
       "id": "graphic-wave",
       "file": "graphic-wave.png",
       "kind": "rendered-editable-commands",
-      "sha256": "f024817df646d606ca3d70f0aeb4cc6abe95512f37e267a2bace8a80edad480b",
+      "sha256": "6238d76f35a256267d65752e4b72c7ad59eec56acf8e8dfa06e86382e59cdf0d",
       "width": 360,
-      "height": 51
+      "height": 173
     },
     {
       "id": "graphic-zigzag",
       "file": "graphic-zigzag.png",
       "kind": "rendered-editable-commands",
-      "sha256": "0792c38084faf775fe3db779a671945a264d73e725067e4217b1763b58e4ac14",
+      "sha256": "0cda797ae774aef30b20a422a5c25853cae4001739c19a531a7d3509271f92d5",
       "width": 360,
-      "height": 60
+      "height": 172
     },
     {
       "id": "graphic-bubble",
