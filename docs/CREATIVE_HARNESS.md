@@ -6,9 +6,9 @@
 
 手机提交当前方向、已选择素材和 Scene；CloudBase 验证账号、冻结本次输入并记录任务。现有 `shiye-job` MQTT 唤醒计算服务器。模型 API 使用 DeepSeek Flash 思考模式；CPU 运行编排与 Canvas 渲染，GPU 可供图像工具使用。关闭手机不终止任务。任务状态、作品、检查点和预览以 CloudBase 为准，MQTT 只发送任务 ID 和修订通知。
 
-LangGraph 1.7.5 承担检查点和恢复；拾页的协议 2 原子事务承担真实素材的尺寸、用量、来源和幂等约束。模型按需读取 `creation-skills/*/SKILL.md`，查询操作 Schema、查看真实素材、提出方案、编辑 Scene、查看渲染、检查与修改。不存在生成整页位图再冒充可编辑作品的路径。
+LangGraph 1.7.5 承担检查点和恢复；拾页的协议 2 原子事务承担真实素材的尺寸、用量、来源和幂等约束。后台先加载构图、纸片层次及允许文字时的书写 Skill，并按用户明确选择的视觉风格加载对应专题；其他 Skill 仍可按需读取。常用操作合同随任务提供，模型查看真实素材、提出方案、编辑 Scene，自动收到渲染与检查任务。不存在生成整页位图再冒充可编辑作品的路径。
 
-参考 [LangGraph persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[DeepSeek Harness skills](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/skills)、[DeepSeek thinking/tool calls](https://api-docs.deepseek.com/guides/thinking_mode/)。采用 LangGraph 而非 DSH 的通用命令行配置，是为了复用现有原子 Scene 工具和 CloudBase 授权。DSH 当前为开发预览，默认 shell/遥测配置不直接带入业务。Skill 使用目录摘要和按需正文，不在每次调用重复全部教程。
+参考 [LangGraph persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[DeepSeek Harness skills](https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/skills)、[DeepSeek thinking/tool calls](https://api-docs.deepseek.com/guides/thinking_mode/)。采用 LangGraph 而非 DSH 的通用命令行配置，是为了复用现有原子 Scene 工具和 CloudBase 授权。DSH 当前为开发预览，默认 shell/遥测配置不直接带入业务。Skill 使用规则预载与按需正文；不加载所有风格，也不重复追加已读取的正文。
 
 ## 完成门槛
 
@@ -51,3 +51,11 @@ CloudBase 数据增量迁移 010、011 在隔离 PostgreSQL 16 实测，验证�
 ## 当前边界
 
 实体手机锁屏由页面完全卸载与重新打开模拟；未以浏览器视口代替实体 Safari 验收。失败和取消保留云端检查点与最后已发布预览，但当前 UI 尚不提供从任意中间步骤挑选并继续的版本面板。不同风格的模型输出可能仍有留白、阴影或细节需要人工调整；不以模型自审保证每次都满足审美。
+
+## 自动反馈与轮次控制
+
+每批改变 Scene 的事务后，后台自动渲染并提供当前 Scene、必用素材清单、最终提交校验和视觉检查任务。几何检查是程序结果，视觉判断由模型在下一轮看真实图完成；两者不能混作审美通过。模型直接合批修订，或在 `creation_finish.review` 中提交当前图像指纹、所见和未解决问题；无需额外一轮记录 review。原有独立 review 仍可用于阶段审阅。修改后同轮完成、旧图审阅和未解决问题仍会被拒绝。
+
+启动时提供真实毫米尺寸、必用/优先级、任务约束和常用合同；失效参数返回相应操作说明。无变化的预览复用已有渲染。连续局部微调收到合批修复提示，不自动判定作品合格。模型请求保留最近两份自动预览；更旧的图片与 Scene 明细在请求视图中缩短，完整检查点、工具收据、模型推理和原素材图保持不变。每轮记录模型耗时、截断标记和输入图片数。
+
+2026-11-20 的一份真实任务记录显示：26 轮、589069 ms，一轮纯思考耗尽 10000 token 后截断，参数纠错、连续单对象微调以及提交时才发现遗漏必用素材消耗了额外轮次。最后请求输入 122720 token。自动反馈优化据此提出，不降低 high 思考强度、不跳过实物约束或最后看图检查。实测耗时需区分本机执行与 App 上传/云端接回。

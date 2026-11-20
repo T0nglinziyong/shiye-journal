@@ -98,3 +98,39 @@ test('DeepSeek adapter enables thinking and round-trips reasoning without exposi
   const failing=createDeepSeekCreativeModel({key:'private-key',fetcher:async()=>new Response('private-key',{status:401})});
   await assert.rejects(failing({messages,tools:[],remainingMs:1000}),e=>!e.message.includes('private-key')&&e.code==='CREATIVE_MODEL_HTTP');
 });
+
+test('automatic bootstrap allows first-turn editing and combined visual review/finish without discovery calls',async t=>{
+  const f=await fixture(t);let n=0,renders=0;
+  assert.ok(f.state.loadedSkills.some(s=>s.name==='journal-composition'));
+  assert.match(f.state.messages[0].content,/常用工具合同/);
+  const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++n===1)return answer(plan(),add(f.document));
+    const p=lastScene(messages),feedback=messages.at(-1).content[0].text;
+    assert.match(feedback,/自动交付检查/);assert.match(feedback,/自动视觉检查任务/);
+    return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'文字清晰，已检查最新图',issues:[]}}));
+  }});
+  const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
+});
+
+test('combined finish rejects unseen edits and nonempty blocking issues',async t=>{
+  const f=await fixture(t);let n=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++n===1)return answer(plan(),add(f.document));
+    const p=lastScene(messages);
+    if(n===2)return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'发现问题',issues:['文字遮挡']}}));
+    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'旧图',issues:[]}}));}
+    assert.ok(messages.filter(m=>m.role==='tool').map(m=>JSON.parse(m.content)).some(v=>v.detail==='请先查看当前版本的真实预览'));throw Error('stale inline verified');
+  }});
+  await assert.rejects(harness.run({id:'inline-stale',state:f.state}),/stale inline verified/);
+});
+
+test('unchanged preview reuses the current render without another upload',async t=>{
+  const f=await fixture(t);let n=0,renders=0;
+  const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++n===1)return answer(plan(),add(f.document));
+    if(n===2)return answer(call('creation_preview',{}));
+    assert.equal(JSON.parse(messages.at(-1).content).data.reused,true);
+    const p=lastScene(messages);return answer(call('creation_finish',{sceneRevision:p.sceneRevision,review:{pngHash:p.pngHash,observations:'同版本预览',issues:[]}}));
+  }});
+  assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
+});
