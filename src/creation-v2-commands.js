@@ -10,6 +10,7 @@ import {arrangeCreationNodes} from './creation-arrange.js';
 import {creationReferenceBox,resolveCreationPlace,creationRotationFrame} from './creation-placement.js';
 import {normalizeGeometry,rectangleGeometry,geometryBounds,geometryArea,geometryIntersection,geometryDifference,transformGeometry} from './craft-topology.js';
 import {geometryToMask,itemSourceGeometry} from './craft-region-ops.js';
+import {materialMaskGeometry} from './material-mask.js';
 import {creationRegionGeometry} from './creation-region.js';
 import {attachSceneV2,assertSceneEditable,groupSceneLayers,moveSceneNode} from './scene-v2.js';
 import {applyScenePlacement,assertNoLinkedDependents,detachLinkedDependents,detachSceneLayout,solveSceneLayout} from './scene-layout.js';
@@ -59,6 +60,25 @@ function finishNode(doc,id,change,assets,{created=false}={}){
 function displayMaskGeometry(node,asset,region,page){
  const s=scale(page),crop=node.cropRect||{x:0,y:0,width:1,height:1};
  return geometryIntersection(creationRegionGeometry(region,{sourceSize:[asset.physicalWidthMM,asset.physicalHeightMM],localSize:[node.width/s,node.height/s],crop,output:'localRatio'}),rectangleGeometry(0,0,1,1));
+}
+
+function sourceHoles(node,asset){
+ const crop=node.cropRect||{x:0,y:0,width:1,height:1};
+ return (materialMaskGeometry(node.materialMask)?.holes||[]).map(ring=>normalizeGeometry([[ring.map(([x,y])=>[(crop.x+x*crop.width)*asset.physicalWidthMM,(crop.y+y*crop.height)*asset.physicalHeightMM])]]));
+}
+function namedSourceHoles(node,asset){
+ const holes=sourceHoles(node,asset),ids=node.craftWindowIDs||[];
+ if(holes.length!==ids.length)throw Error('既有孔洞缺少稳定编号');
+ return holes.map((geometry,i)=>({id:ids[i],geometry}));
+}
+function assignWindowIDs(node,asset,named){
+ const holes=sourceHoles(node,asset),used=new Set();
+ if(holes.length!==named.length)throw Error('实体开窗未产生独立孔洞');
+ node.craftWindowIDs=holes.map(hole=>{
+  const candidates=named.filter(({id,geometry})=>!used.has(id)&&geometryArea(geometryDifference(hole,geometry))+geometryArea(geometryDifference(geometry,hole))<1e-5);
+  if(candidates.length!==1)throw Error('开窗边界发生合并或变化，无法保留稳定编号');
+  used.add(candidates[0].id);return candidates[0].id;
+ });
 }
 
 function preserveReplacementStack(original,target,next,pieceIDs){
@@ -237,18 +257,18 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    const node=requireNode(doc,item.target);if(node.type!=='material'||node.tapeStrip)throw Error('material.window 需要普通实体素材');
    if(node.craftWindowIDs?.includes(item.windowId))throw Error('实体开窗编号重复');
    const asset=assets.find(row=>row.id===node.assetID),crop=node.cropRect||{x:0,y:0,width:1,height:1},opening=creationRegionGeometry(item.region,{sourceSize:[asset.physicalWidthMM,asset.physicalHeightMM],localSize:[node.width/s,node.height/s],crop});
+   const named=[...namedSourceHoles(node,asset),{id:item.windowId,geometry:opening}];
    if(item.keepRemainder||item.cutoutId||item.resultId&&item.resultId!==item.target){
     const source=itemSourceGeometry(node,asset),main=geometryDifference(source,opening),cutout=geometryIntersection(source,opening),resultId=item.resultId&&item.resultId!==item.target?item.resultId:item.target+'-window-'+craftDigest([input.transactionId,index]).slice(7,15),pieces=[{id:resultId,geometry:main}];
     if(item.keepRemainder||item.cutoutId)pieces.push({id:item.cutoutId||item.windowId+'-cutout',geometry:cutout});
     doc=physicalCut(doc,{target:item.target,regions:pieces,keepRemainders:item.keepRemainder!==false},assets,input.transactionId,index);
-    const metadataBefore=attachSceneV2(structuredClone(doc.page));requireNode(doc,resultId).craftWindowIDs=[...(node.craftWindowIDs||[]),item.windowId];recordManagedChanges(metadataBefore,attachSceneV2(doc.page));
+    const metadataBefore=attachSceneV2(structuredClone(doc.page));assignWindowIDs(requireNode(doc,resultId),asset,named);recordManagedChanges(metadataBefore,attachSceneV2(doc.page));
     if(item.edge&&item.edge.style!=='clean')doc=processMaterial(doc,resultId,[edgeStep(requireNode(doc,resultId),asset,item.edge)],assets);
    }else{
-    const before=node.materialMask?.holes?.length||0;if(before!==(node.craftWindowIDs?.length||0))throw Error('既有孔洞缺少稳定编号');
-    const previous=[...(node.craftWindowIDs||[])],metadataBefore=attachSceneV2(structuredClone(doc.page));delete node.craftWindowIDs;recordManagedChanges(metadataBefore,attachSceneV2(doc.page));
+    const metadataBefore=attachSceneV2(structuredClone(doc.page));delete node.craftWindowIDs;recordManagedChanges(metadataBefore,attachSceneV2(doc.page));
     const steps=[{op:'cut_shape',shape:'geometry',mode:'remove',unit:'ratio',geometry:displayMaskGeometry(node,asset,item.region,doc.page)}];
     if(item.edge&&item.edge.style!=='clean')steps.push(edgeStep(node,asset,item.edge));doc=processMaterial(doc,item.target,steps,assets);
-    const updated=requireNode(doc,item.target);if((updated.materialMask?.holes?.length||0)!==before+1)throw Error('实体开窗未产生独立孔洞');updated.craftWindowIDs=[...previous,item.windowId];
+    const updated=requireNode(doc,item.target);assignWindowIDs(updated,asset,named);
    }
   }else if(item.op==='material.weave'){
    if(requireNode(doc,item.strip).type!=='material')throw Error('穿插纸条必须是实体素材');

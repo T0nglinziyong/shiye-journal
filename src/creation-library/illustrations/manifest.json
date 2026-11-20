@@ -722,6 +722,22 @@
       "height": 286
     },
     {
+      "id": "paper-window-reuse",
+      "file": "paper-window-reuse.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "83c5444b6ba929d12e8532f8152557e636bfcc5ea8faa906ee7dfb76743f1e88",
+      "width": 360,
+      "height": 177
+    },
+    {
+      "id": "paper-weave",
+      "file": "paper-weave.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "80d34194ce9a1418700039ffaeb66ee084f1ddc65320ffb182c635d34b240143",
+      "width": 360,
+      "height": 210
+    },
+    {
       "id": "paper-split",
       "file": "paper-split.png",
       "kind": "rendered-editable-commands",

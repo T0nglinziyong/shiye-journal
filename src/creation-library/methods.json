@@ -411,6 +411,78 @@
       }
     },
     {
+      "id": "paper-window-reuse",
+      "skill": "paper-layering",
+      "title": "窗芯呼应",
+      "recipe": "window",
+      "when": "开窗之外，把挖出的同纹样窗芯用于另一处呼应",
+      "defaults": {
+        "reuseCore": true
+      },
+      "example": {
+        "corePlace": {
+          "reference": "page",
+          "at": [
+            109,
+            80
+          ],
+          "unit": "mm"
+        }
+      },
+      "lesson": {
+        "principle": "一张纸同时形成透空外框和独立窗芯，利用同一纹样连接两处内容，而不是复制材料。",
+        "steps": [
+          "先放置真实纸片，用 box 指定内部开窗范围。",
+          "给 corePlace，将窗芯移到需要呼应的位置；外框与窗芯分别保留身份。",
+          "后续使用输出报告中的节点继续移动、裁切或组合，不再次添加原素材。"
+        ],
+        "check": [
+          "孔洞能透出纸面或下层图像，窗芯在另一处可见。",
+          "窗芯使用裁下后的真实尺寸和外接框定位，不放大成原纸片。",
+          "外框与窗芯不重叠消费同一片材料；重要图案未被切断。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "纸张工艺的工具组合为拾页归纳实现，不声称复刻外部教程的全部步骤。"
+        }
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-window-reuse"
+      }
+    },
+    {
+      "id": "paper-weave",
+      "skill": "paper-layering",
+      "title": "纸条穿插",
+      "recipe": "weave",
+      "when": "已有真实纸条需要穿过纸面孔洞，形成前后交错的连接",
+      "defaults": {},
+      "lesson": {
+        "principle": "纸条按孔位从纸前穿到纸后，真实窗口和可见片段共同决定遮挡；纸条长度、宽度与来源保持不变。",
+        "steps": [
+          "先放置纸条与承载纸，确认同一组合层级，并把纸条对准至少两个孔位。",
+          "through 按穿行顺序指定目标与 sideAfter；region 创建真实孔洞，window 引用已有孔，二选一。",
+          "执行后按报告中的框节点继续编辑；新孔窗芯隐藏保留，需要时可显示复用。"
+        ],
+        "check": [
+          "孔洞足以容纳实际纸条宽度，纸条穿过所有孔而非浮在纸面。",
+          "前后关系符合 sideAfter；不靠复制纸条或画纸色矩形伪造。",
+          "宽度、长度、层级或孔位不满足时整批拒绝，调整位置后再执行。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "纸张工艺的工具组合为拾页归纳实现，不声称复刻外部教程的全部步骤。"
+        }
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-weave"
+      }
+    },
+    {
       "id": "paper-split",
       "skill": "paper-layering",
       "title": "条块分裁",

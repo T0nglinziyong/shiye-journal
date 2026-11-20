@@ -42,7 +42,7 @@ for(const t of templateCatalog.templates){
 }
 const images={};
 for(const [i,a] of exampleMaterials.entries()){
- const c=canvas.createCanvas(400,Math.round(400*a.physicalHeightMM/a.physicalWidthMM)),x=c.getContext('2d');x.fillStyle=palette[i%palette.length];x.fillRect(0,0,c.width,c.height);x.fillStyle='#FFF9E3';
+ const c=canvas.createCanvas(400,Math.round(400*a.physicalHeightMM/a.physicalWidthMM)),x=c.getContext('2d');x.fillStyle=a.id==='example-strip'?'#C66236':palette[i%palette.length];x.fillRect(0,0,c.width,c.height);x.fillStyle='#FFF9E3';
  if(i===0){x.beginPath();x.arc(240,130,75,0,2*Math.PI);x.fill();x.fillStyle='#3D6871';x.beginPath();x.moveTo(0,c.height);x.lineTo(180,210);x.lineTo(400,c.height);x.fill();}
  else if(i===1){x.strokeStyle='#FFF9E3';x.lineWidth=4;for(let y=45;y<c.height-20;y+=45){x.beginPath();x.moveTo(20,y);x.lineTo(360,y);x.stroke();}}
  else if(i===4){x.fillRect(22,22,356,c.height-44);x.fillStyle='#3D6871';x.font='32px sans-serif';x.fillText('SAMPLE',120,105);x.fillText('0001',150,c.height-60);for(let y=160;y<c.height-140;y+=65)x.fillRect(55,y,290,3);}

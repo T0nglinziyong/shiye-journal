@@ -4,7 +4,8 @@ export const exampleMaterials=[
  {id:'example-paper',alias:'m3',title:'示意图案纸',kind:'paper',role:'background',physicalWidthMM:42,physicalHeightMM:32,supply:{quantity:1}},
  {id:'example-tape',alias:'m4',title:'示意胶带',kind:'tape',role:'connector',physicalWidthMM:100,physicalHeightMM:6,tapeAxis:'horizontal',supply:{quantity:1}},
  {id:'example-ticket',alias:'m5',title:'示意票根（非真实票据）',kind:'ticket',role:'secondary',physicalWidthMM:22,physicalHeightMM:46,supply:{quantity:1}},
- {id:'example-note',alias:'m6',title:'示意空白便签',kind:'note',role:'information',physicalWidthMM:42,physicalHeightMM:32,supply:{quantity:1}}
+ {id:'example-note',alias:'m6',title:'示意空白便签',kind:'note',role:'information',physicalWidthMM:42,physicalHeightMM:32,supply:{quantity:1}},
+ {id:'example-strip',alias:'m7',title:'示意纸条',kind:'paper',role:'connector',physicalWidthMM:60,physicalHeightMM:4,supply:{quantity:1}}
 ];
 export function techniqueExample(method){
  const p={id:'demo',at:[72,88]},before=[];
@@ -21,6 +22,10 @@ export function techniqueExample(method){
   if(method.recipe==='relate'){p.referenceTarget='card';before.push({op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[70,80],unit:'mm'}});}
   if(method.recipe==='tear')p.path={points:[[0,.4],[.3,.5],[.7,.35],[1,.5]],unit:'ratio'};
   if(method.recipe==='window')p.box=[.2,.2,.6,.6];
+ }
+ if(method.recipe==='weave'){
+  delete p.at;p.strip='strip';p.through=[{target:'frame',region:{shape:'rect',space:'local',unit:'ratio',box:[.18,.2,.1,.6]},sideAfter:'front'},{target:'frame',region:{shape:'rect',space:'local',unit:'ratio',box:[.72,.2,.1,.6]},sideAfter:'back'}];
+  before.push({op:'material.add',id:'strip',asset:'m7',place:{reference:'page',at:[70,80],unit:'mm'}},{op:'material.add',id:'frame',asset:'m3',place:{reference:'page',at:[70,80],unit:'mm'}});
  }
  return {parameters:{...p,...method.example},before};
 }
