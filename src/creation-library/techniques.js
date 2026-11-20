@@ -24,22 +24,26 @@ const fieldHelp={...titleHelp,motif:'rings/spark/sprig/stitch/confetti/materials
 function methodFields(method){
  const base=['write','relate','tear','window','split','weave'].includes(method.recipe)?['id']:common;
  let specific=fields[method.recipe];
- if(method.recipe==='graphic')specific=specific.filter(k=>method.defaults.shape?!['seed','waypoints'].includes(k):k!=='options'&&(k!=='waypoints'||method.defaults.motif==='trail'));
+ if(method.recipe==='graphic'){
+  specific=specific.filter(k=>method.defaults.shape?!['seed','waypoints'].includes(k):k!=='options'&&(k!=='waypoints'||method.defaults.motif==='trail'));
+  if(method.defaults.shape==='bubble')specific=[...specific,'text','fontFamily','fontSizePt'];
+ }
  if(method.recipe==='pattern'&&['echo','bands'].includes(method.defaults.pattern))specific=specific.filter(k=>!['options','strokeWidthMm'].includes(k));
  return [...base,...specific];
 }
 export function describeTechnique(id){
  const method=catalog.methods.find(m=>m.id===id);if(!method)throw Error('未知教程方法');
- const names=methodFields(method),help={...fieldHelp,...titleHelp,...(method.recipe==='accent'?{count:'数字点缀候选数量 1–24；指定 positions 时以其长度为准；避让可能减少实际数量',widthMm:'点缀组局部范围宽度，毫米；不会缩放实体',heightMm:'点缀组局部范围高度，毫米；不会缩放实体'}:{}),...(method.recipe==='tape'?{widthMm:'胶带摆放范围宽度，毫米；不会缩放实体',heightMm:'胶带摆放范围高度，毫米；不会缩放实体'}:{}),corePlace:'可选窗芯位置，使用 layer.update.place 的完整结构。传入时显示并定位窗芯；不传则隐藏保留。位置按裁下窗芯的外接框定位，保留原图裁切来源',strip:'已经放置并对准孔位的真实纸条节点 ID；不缩放或自动拉长',through:'按穿行顺序给 2–16 项 {target,sideAfter:"front"|"back",region? ,window?}；region 用 material.window 的 Region 开新孔，window 引用已有孔 ID，二选一。新孔窗芯隐藏保留；输出报告列出替代后的框与窗芯 ID',...(method.recipe==='write'?{box:'素材局部可写区域 [x,y,width,height]，各值为比例；需先观察图片，避开重要图案',text:'完整正文，最多 500 字；不截断，实际高度需看预览'}:{})};
+ const names=methodFields(method),help={...fieldHelp,...titleHelp,...(method.recipe==='accent'?{count:'数字点缀候选数量 1–24；指定 positions 时以其长度为准；避让可能减少实际数量',widthMm:'点缀组局部范围宽度，毫米；不会缩放实体',heightMm:'点缀组局部范围高度，毫米；不会缩放实体'}:{}),...(method.recipe==='tape'?{widthMm:'胶带摆放范围宽度，毫米；不会缩放实体',heightMm:'胶带摆放范围高度，毫米；不会缩放实体'}:{}),corePlace:'可选窗芯位置，使用 layer.update.place 的完整结构。传入时显示并定位窗芯；不传则隐藏保留。位置按裁下窗芯的外接框定位，保留原图裁切来源',strip:'已经放置并对准孔位的真实纸条节点 ID；不缩放或自动拉长',through:'按穿行顺序给 2–16 项 {target,sideAfter:"front"|"back",region? ,window?}；region 用 material.window 的 Region 开新孔，window 引用已有孔 ID，二选一。新孔窗芯隐藏保留；输出报告列出替代后的框与窗芯 ID',...(method.recipe==='write'?{box:'素材局部可写区域 [x,y,width,height]，各值为比例；需先观察图片，避开重要图案',text:'完整正文，最多 500 字；不截断，实际高度需看预览'}:{}),...(method.defaults.shape==='bubble'?{text:'气泡中的短批注；超出框内可写区域时报错'}:{})};
  if(method.id==='magazine-offset')help.caption='主图下方的可选短图注，仅对应 aliases 首项；不自动编造';
  const example=techniqueExample(method);
- return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
+ return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')||(method.defaults.shape==='bubble'&&k==='text')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
 }
 function validate(method,params){
  libraryID(params.id);const allowed=new Set(methodFields(method));
  for(const key of Object.keys(params))if(!allowed.has(key))throw Error('该方法不支持参数：'+key);
  for(const key of required[method.recipe])if(params[key]===undefined)throw Error('缺少参数：'+key);
  if(method.id==='graphic-route'&&params.waypoints===undefined)throw Error('转折阅读线需要两个以上真实焦点的 waypoints');
+ if(method.defaults.shape==='bubble'&&params.text===undefined)throw Error('气泡批注框需要短文字 text');
  if(method.defaults.reuseCore&&!params.corePlace)throw Error('复用窗芯需要给出 corePlace');
  for(const key of ['widthMm','heightMm','fontSizePt','strokeWidthMm','lengthMm','periodMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<=0||params[key]>1000))throw Error('尺寸参数无效：'+key);
  for(const key of ['gapMm','amountMm','depthMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<0||params[key]>200))throw Error('间距参数无效：'+key);
@@ -126,6 +130,13 @@ export function compileTechnique({methodId,parameters,materials=[]}){
  }else if(method.recipe==='graphic'){
   if(p.shape)resolvedShapeOptions(p.shape,p.options);
   shape(p.shape?{kind:p.shape,...(p.options?{options:p.options}:{})}:{kind:'sketch',motif:p.motif,seed:p.seed||17,...(p.waypoints?{waypoints:p.waypoints}:{})},width/2,height/2,width,height,{fill:p.fill??null,stroke:colors[0],strokeWidthMm:p.strokeWidthMm||.65,opacity:p.opacity??1});
+  if(p.shape==='bubble'){
+   const inset=Math.max(2,width*.1),bodyTop=height*.09,bodyBottom=height*.68,bodyWidth=width-2*inset,fontSize=p.fontSizePt??11;
+   if(bodyWidth<=5)throw Error('气泡批注框宽度不足');
+   const contentHeight=measureTextHeight(p.text,bodyWidth,fontSize,font);
+   if(contentHeight>bodyBottom-bodyTop)throw Error('气泡批注文字超出框内可写区域；增大框或缩短文字');
+   text(p.text,inset,bodyTop+(bodyBottom-bodyTop-contentHeight)/2,bodyWidth,{fontSizePt:fontSize,textAlign:'center'});
+  }
  }else if(method.recipe==='pattern'){
   if(p.pattern==='echo'){for(let i=0;i<3;i++)shape('ellipse',width*(.15+i*.35),height*(i===1?.25:.75),3+i,3+i,{fill:colors[i%colors.length]});}
   else if(p.pattern==='bands'){shape('rect',width*.4,height*.5,width*.7,height*.25,{fill:colors[0]});shape('rect',width*.79,height*.5,width*.12,height*.25,{fill:colors[1]||colors[0]});}

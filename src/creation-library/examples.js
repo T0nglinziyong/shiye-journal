@@ -38,6 +38,15 @@ export function techniqueExample(method){
   p.widthMm=34;p.heightMm=34;
   before.push({op:'graphic.add',id:'focal',geometry:{kind:'star',options:{points:5,innerRatio:.5}},place:{reference:'page',at:[72,88],unit:'mm'},size:{width:7,height:7,unit:'mm'},style:{fill:'#E6B45E',stroke:'#3D6871',strokeWidthMm:.25}});
  }
+ if(method.id==='graphic-arch')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,91],unit:'mm'}});
+ if(method.id==='graphic-scallop-frame'){
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,88],unit:'mm'}});
+ }
+ if(method.id==='graphic-paperclip'){
+  p.at=[51,75];
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,88],unit:'mm'}});
+ }
+ if(method.id==='graphic-bubble')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[80,121],unit:'mm'}});
  if(method.recipe==='tape'){
   p.aliases=['m4'];
   if(method.id==='tape-fix')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,107],unit:'mm'}});

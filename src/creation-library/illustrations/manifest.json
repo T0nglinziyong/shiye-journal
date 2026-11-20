@@ -1085,24 +1085,24 @@
       "id": "graphic-arch",
       "file": "graphic-arch.png",
       "kind": "rendered-editable-commands",
-      "sha256": "167c5e57372de51f4c2e624185082aa2511e3dbb7000b8d4b59f88c68fafdcfc",
-      "width": 234,
+      "sha256": "9fcf4c85d44aec2c90db88f1d7f6d5da488f652ffd9397bfdddb470907d6bf2f",
+      "width": 236,
       "height": 300
     },
     {
       "id": "graphic-scallop-frame",
       "file": "graphic-scallop-frame.png",
       "kind": "rendered-editable-commands",
-      "sha256": "21e6831cdae03511b82530632263d030f2f2ee9cf694165ccbc5500649ef6666",
+      "sha256": "7f3ba1ffe2b3a72b5811b62b3d293aa8abb564b7c3a84cd70498c3e735691456",
       "width": 360,
-      "height": 263
+      "height": 287
     },
     {
       "id": "graphic-paperclip",
       "file": "graphic-paperclip.png",
       "kind": "rendered-editable-commands",
-      "sha256": "d37abbf07f35cda6e16169304df01fa658800a150aa5f48d280ffab4b4e18bf7",
-      "width": 135,
+      "sha256": "f9b668029fbce1eb78407f6938e2f1a27fde4a2200653f4ab6074ccfde21cb34",
+      "width": 334,
       "height": 300
     },
     {
@@ -1125,9 +1125,9 @@
       "id": "graphic-bubble",
       "file": "graphic-bubble.png",
       "kind": "rendered-editable-commands",
-      "sha256": "69d1e7031a8245944a82f95f04f921891cf4e61880cdf8575ce09a713628c7e3",
-      "width": 360,
-      "height": 245
+      "sha256": "84dd1ebf747fd0067340eca90efa03cce63607bf1dd0c25feee1055bfc79f905",
+      "width": 210,
+      "height": 300
     },
     {
       "id": "record-on-material",

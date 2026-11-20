@@ -2010,8 +2010,8 @@
         "id": "graphic-arch"
       },
       "example": {
-        "widthMm": 36,
-        "heightMm": 48,
+        "widthMm": 44,
+        "heightMm": 58,
         "options": {
           "archRise": 0.4,
           "frameInset": 0.06,
@@ -2019,16 +2019,16 @@
         }
       },
       "lesson": {
-        "principle": "用 archFrame 数字几何表达竖向图像需要拱形外沿呼应，结构参数保持可编辑。",
+        "principle": "在竖向图像外放一圈可调拱形线，保留图像原尺寸和透明中窗。",
         "steps": [
-          "先设置宽高",
-          "通过 options 调整archRise、frameInset、showInnerBorder",
-          "再设线色、填充和透明度。"
+          "根据现有图像尺寸设置框的宽高与位置",
+          "用 archRise 调拱顶，用 frameInset 调内外线距离",
+          "预览拱线与图像的接触位置。"
         ],
         "check": [
-          "修改结构参数后轮廓仍正确",
-          "空心区域透明",
-          "不会用缩放代替结构调整。"
+          "拱线围住图像而不遮住主要内容",
+          "中窗透明，图像没有被拉伸",
+          "拱顶和线距可分别修改。"
         ],
         "source": {
           "kind": "project-synthesis",
@@ -2060,7 +2060,7 @@
       },
       "example": {
         "widthMm": 52,
-        "heightMm": 36,
+        "heightMm": 40,
         "options": {
           "lobes": 5,
           "lobeDepth": 0.025,
@@ -2069,16 +2069,16 @@
         }
       },
       "lesson": {
-        "principle": "用 scallopFrame 数字几何表达便签或图文区需要轻量边界，结构参数保持可编辑。",
+        "principle": "用可调波浪外沿轻轻围住便签，留出透明的正文区域。",
         "steps": [
-          "先设置宽高",
-          "通过 options 调整lobes、lobeDepth、frameInset、showInnerBorder",
-          "再设线色、填充和透明度。"
+          "先按便签实际尺寸设置边框宽高",
+          "用 lobes 与 lobeDepth 调整波浪节奏",
+          "预览内线和文字的间距。"
         ],
         "check": [
-          "修改结构参数后轮廓仍正确",
-          "空心区域透明",
-          "不会用缩放代替结构调整。"
+          "花边不碰正文或重要图案",
+          "中窗透明，便签保持原尺寸",
+          "波浪数量、深度与内线可分别调整。"
         ],
         "source": {
           "kind": "project-synthesis",
@@ -2115,16 +2115,16 @@
         }
       },
       "lesson": {
-        "principle": "用 paperclip 数字几何表达纸边需要一个视觉固定点，结构参数保持可编辑。",
+        "principle": "在纸角放一枚数字回形针作为视觉固定点，不消耗实体库存。",
         "steps": [
-          "先设置宽高",
-          "通过 options 调整clipGap、innerLength",
-          "再设线色、填充和透明度。"
+          "先确定要强调的纸边位置",
+          "设置回形针宽高，再调夹口与内弯长度",
+          "预览它与纸片边缘的叠接。"
         ],
         "check": [
-          "修改结构参数后轮廓仍正确",
-          "空心区域透明",
-          "不会用缩放代替结构调整。"
+          "回形针落在纸边，不盖住正文",
+          "轮廓仍可单独编辑",
+          "不会误计为用户拥有的实体素材。"
         ],
         "source": {
           "kind": "project-synthesis",
@@ -2248,6 +2248,7 @@
       "example": {
         "widthMm": 45,
         "heightMm": 28,
+        "text": "这里的光",
         "options": {
           "tailPosition": 0.7,
           "depth": 0.12,
@@ -2255,16 +2256,16 @@
         }
       },
       "lesson": {
-        "principle": "用 bubble 数字几何表达批注需要指向具体图像，结构参数保持可编辑。",
+        "principle": "短批注和可调尾巴组成一个可编辑气泡，指向具体图像或细节。",
         "steps": [
-          "先设置宽高",
-          "通过 options 调整tailPosition、depth、radius",
-          "再设线色、填充和透明度。"
+          "选定真实焦点，写入简短且可信的批注",
+          "设置宽高与字号，通过 options 调整尾巴位置和圆角",
+          "预览文字是否完整、尾巴是否指向焦点。"
         ],
         "check": [
-          "修改结构参数后轮廓仍正确",
-          "空心区域透明",
-          "不会用缩放代替结构调整。"
+          "文字完整且留在气泡主体内",
+          "尾巴指向相关内容，不遮挡图像主体",
+          "图形与文字可分别编辑，空心区域透明。"
         ],
         "source": {
           "kind": "project-synthesis",

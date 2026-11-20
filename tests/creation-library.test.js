@@ -139,6 +139,17 @@ test('real accent example uses small physical items around a protected focal pho
  assert.deepEqual(compiled.operations[0].children.map(op=>op.asset),example.parameters.aliases);
  assert.ok(example.parameters.aliases.every(alias=>exampleMaterials.find(asset=>asset.alias===alias).physicalWidthMM<exampleMaterials[0].physicalWidthMM));
 });
+test('bubble lesson creates editable text inside the frame and rejects overflow',()=>{
+ const info=describeTechnique('graphic-bubble');
+ assert.equal(info.parameters.text.required,true);
+ assert.equal(info.example.prepare[0].asset,'m1');
+ const compiled=compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble',text:'这里的光'}});
+ assert.deepEqual(compiled.operations[0].children.map(op=>op.op),['graphic.add','text.add']);
+ assert.equal(compiled.operations[0].children[1].content,'这里的光');
+ assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble'}}),/需要短文字/);
+ assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble',text:'这段批注长到不可能放进很小的气泡主体内',widthMm:20,heightMm:12}}),/超出框内可写区域/);
+ for(const id of ['graphic-arch','graphic-scallop-frame','graphic-paperclip'])assert.ok(describeTechnique(id).example.prepare.some(op=>op.op==='material.add'),id+' missing context');
+});
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
  const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
  assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);
