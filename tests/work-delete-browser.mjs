@@ -78,7 +78,8 @@ try{
     })()`);
     assert.equal(immediate.card,false,`${title}删除后必须立即从列表消失：`+JSON.stringify({
       ...immediate,errors:b.errors,console:b.consoleMessages.slice(-8)}));
-    assert.ok(immediate.trash.includes(id),`${title}应已移入最近删除`);
+    assert.equal(immediate.trash.includes(id),tab!==3,`${title}的最近删除状态不正确`);
+    if(tab===3)continue;
     await b.click('.swift-tabs button:nth-child(5)','.recently-deleted-grid');
     assert.ok(await b.evaluate(`document.body.textContent.includes(${JSON.stringify(title)})`),
       `${title}应立即在最近删除出现`);
@@ -100,6 +101,15 @@ try{
         paper?.getBoundingClientRect().width>20&&paper?.getBoundingClientRect().height>20})()`),
     `${title}在最近删除中的封面应立即可见`);
   }
+  await b.command('Page.reload');
+  await b.wait('#view');
+  const persisted=await b.evaluate(`(async()=>{
+    const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('shiye-pwa-full-v1',1);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)});
+    const read=name=>new Promise((resolve,reject)=>{const request=db.transaction(name).objectStore(name).getAll();request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)});
+    const rows={projects:(await read('projects')).map(item=>item.id),trash:(await read('trash')).map(item=>item.item?.id)};db.close();return rows;
+  })()`);
+  assert.equal(persisted.projects.includes('draft-delete-test'),false);
+  assert.equal(persisted.trash.includes('draft-delete-test'),false);
   assert.deepEqual(b.errors,[]);
-  console.log('Snapshot, editable and draft deletion update lists without a reload');
+  console.log('Snapshot and editable works enter trash; drafts are deleted directly');
 }finally{await b.close();}

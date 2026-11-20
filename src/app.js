@@ -160,7 +160,7 @@ import {generationProfile} from './creation-methods.js';
 import {imageProvenance,projectForReconstruction} from './image-workflow.js';
 import {generatePageImage} from './ai-image-generation.js';
 import {clipMaterial,materialMaskGeometry} from './material-mask.js';
-import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.js';
+import {manualTemplateChoices,applyManualTemplate} from './template-start.js';
 import {exportSceneDocument,importSceneDocument} from './scene-io.js';
 import {resetCatalogPage,clearCatalogPages,snapshotCatalogPages,restoreCatalogPages} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
@@ -1257,24 +1257,26 @@ async function awaitTrashStages(ids){await Promise.all(ids.map(id=>pendingTrashS
 async function moveProjectsToTrash(ids){
   const selected=new Set(ids),projects=state.projects.filter(p=>selected.has(p.id));
   if(!projects.length)return 0;
-  const entries=projects.map(item=>({id:uid(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
+  const priorActive=state.activeProject,priorDraft=state.activeDraft;
+  const entries=projects.filter(item=>!item.isDraft).map(item=>({id:uid(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
   for(const project of projects){dirtyProjects.delete(project.id);saveVersions.set(project.id,(saveVersions.get(project.id)||0)+1);}
   for(const project of projects){projectSaveFingerprints.delete(project.id);projectSceneFingerprints.delete(project.id);}
   if(!dirtyProjects.size&&!dirtyUsageAssets.size){clearTimeout(saveTimer);saveTimer=null;}
   state.projects=state.projects.filter(p=>!selected.has(p.id));state.trash.push(...entries);
+  if(selected.has(state.activeProject?.id)){state.activeProject=null;state.activeDraft=null;}
   if(selected.has(state.previewProjectID)){state.previewProjectID=null;route('works');}
   else render();
   const staged=(async()=>{
     // The latest scene is in each trash entry. The store serializes an
     // already-started local save before this tombstone; queued stale saves
     // are invalidated by saveVersions above. Neither path waits for upload.
-    await db.transaction(['projects','trash'],tx=>{for(const entry of entries){tx.objectStore('projects').delete(entry.item.id);tx.objectStore('trash').put(entry);}});
+    await db.transaction(['projects','trash'],tx=>{for(const project of projects)tx.objectStore('projects').delete(project.id);for(const entry of entries)tx.objectStore('trash').put(entry);});
   })();
   for(const entry of entries)pendingTrashStages.set(entry.id,staged);
   try{
     await staged;
-    toast('已移到最近删除 · 云端后台同步中');
-    return entries.length;
+    toast(entries.length?projects.length===entries.length?'已移到最近删除 · 云端后台同步中':'作品已移到最近删除，草稿已删除':'草稿已删除 · 云端后台同步中');
+    return projects.length;
   }catch(error){
     const entryIDs=new Set(entries.map(entry=>entry.id));
     state.trash=state.trash.filter(entry=>!entryIDs.has(entry.id));
@@ -1282,6 +1284,7 @@ async function moveProjectsToTrash(ids){
       state.projects.push(project);
       dirtyProjects.set(project.id,project);
     }
+    state.activeProject=priorActive;state.activeDraft=priorDraft;
     if(dirtyProjects.size&&!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);
     render();toast('删除未能安全暂存，作品已恢复：'+(error?.message||error));
     throw error;
@@ -1457,7 +1460,7 @@ async function runAppAction(action,id,value){try{
   case 'download-snapshot':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const id=p.snapshotDocumentBlobId||p.snapshotBlobId,blob=(await db.get('blobs',id))?.data;if(!blob)throw Error('快照文件尚未同步，稍后重试');const ext=p.snapshotFormat==='application/pdf'?'pdf':p.snapshotFormat==='image/jpeg'?'jpg':p.snapshotFormat==='image/webp'?'webp':'png';download(blob,p.title+'.'+ext);break;}
   case 'export-scene-json':{const p=state.activeProject;if(!p||p.isSnapshot)throw Error('请选择可编辑作品');download(new Blob([JSON.stringify(exportSceneDocument(p))],{type:'application/json'}),p.title+'.shiye-scene.json');break;}
    case 'download-project-json':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;const {createNativeProjectDocument}=await import('./native-project-package.js');download(new Blob([JSON.stringify(createNativeProjectDocument(p))],{type:'application/json'}),p.title+'.shiyeproject.json');break;}
-  case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
+  case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm(p.isDraft?'删除这份草稿？不会进入最近删除，无法恢复。':'将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
     if(state.inspectorSession&&value!==state.tool){
@@ -2426,7 +2429,7 @@ async function createFromBasket(templateID=null){
   const p=createMatchingProject(false),draft=p.drafts[0];
   let result=null;
   if(templateID==='stage')result=applyMatchingStage(draft,state.assets,state.basket,state.matchPlacements);
-  else if(templateID)result=applyManualLayout(draft,state.assets,state.basket,templateID);
+  else if(templateID)result=applyManualTemplate(draft,state.assets,state.basket,templateID);
   else draft.items=[];
   await db.stageProject(p);
   state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool='select';
@@ -2435,9 +2438,9 @@ async function createFromBasket(templateID=null){
 }
 function openManualCreationDialog(){
   captureMatchingDirection();
-  const choices=[{id:'stage',title:'沿用本页摆放',description:'按照本页画布的位置和真实尺寸创建可编辑素材。',reason:'保留刚才的拖动结果'},
-    ...manualLayoutChoices({assets:state.assets,basket:state.basket,styles:state.matchStyles,purposes:state.matchPurposes})];
-  openOverlay(createElement(ManualLayoutDialog,{choices,onClose:closeOverlay,onChoose:id=>createFromBasket(id)}));
+  const draft=createMatchingProject(false).drafts[0];
+  const choices=manualTemplateChoices(draft,state.assets,state.basket,{styles:state.matchStyles,purposes:state.matchPurposes});
+  openOverlay(createElement(ManualLayoutDialog,{choices,source:image,onClose:closeOverlay,onChoose:id=>createFromBasket(id)}));
 }
 function openMaterialPicker(){
   openOverlay(createElement(MaterialPickerDialog,{assets:visibleMaterials(state.assets),source:image,

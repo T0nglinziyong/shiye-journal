@@ -46,6 +46,7 @@ import {searchableSeries} from './library-model.js';
 import {selectionActive,toggleSelected} from './library-selection-model.js';
 import {ReactFilterMenu} from './react-filter-menu.jsx';
 import {presetJournalTemplates,templateIndexText} from './journal-template-catalog.js';
+import {journalTemplateComposition} from './journal-template-composition.js';
 import {journalTemplateImageURL,saveJournalUserTemplate} from './journal-template-data.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
 import {loadJournalPresetPanel} from './journal-preset-images.js';
@@ -251,7 +252,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,loadLocalCover
         </article>;
       }):<p className="empty">没有最近删除的{kind==='asset'?'素材':'作品'}。</p>}
     </section>
-    <p className="deleted-retention-note">最近删除保留 30 天，到期自动移除恢复入口；已有作品仍可使用隐藏素材。云端无引用文件满 30 天并经再次核对后回收。</p>
+    <p className="deleted-retention-note">最近删除保留 30 天，草稿删除后不保留恢复入口；已有作品仍可使用隐藏素材。云端无引用文件满 30 天并经再次核对后回收。</p>
     <div className="swift-tray manage library-management-tray deleted-selection-tray"
       hidden={!choosing}><strong>已选 {selected.size} 项</strong>
       <button type="button" className="btn" data-trash-all disabled={busy}
@@ -400,9 +401,9 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
   const available=selected&&!!(selected.exampleBlobId||selected.exampleSourceNumbers?.length);
   const showCase=side==='case'&&available;
   return <div className="works-page"><div className="catalog-toolbar">
-    <PageHeading title="我的作品"/>
-    <CatalogTabs tabs={WORK_TABS} active="templates" onChange={onTabChange}/>
-    <div className="filters journal-template-filters" data-template-filters="true">
+    <PageHeading title={selected?'模板详情':'我的作品'}/>
+    {!selected?<CatalogTabs tabs={WORK_TABS} active="templates" onChange={onTabChange}/>:null}
+    {!selected?<div className="filters journal-template-filters" data-template-filters="true">
       <input type="search" id="work-search" placeholder="搜索模板名称或标签"
         aria-label="搜索模板" value={filters.query}
         onChange={event=>change({query:event.currentTarget.value})}/>
@@ -424,7 +425,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
       })}</div>
       <span className="catalog-total">{selected?`${catalog.length} 个模板`:
         `${found.length} / ${catalog.length} 个模板`}</span>
-    </div></div>
+    </div>:null}</div>
     <div className={`grid works-grid journal-template-grid ${selected?'journal-template-detail':''}`}>
       {selected?<article className="journal-template-detail-card"><div className="journal-template-detail-head">
         <button type="button" className="btn" data-template-back onClick={()=>{
@@ -439,7 +440,9 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
             onClick={()=>{setSide('case');viewState.templateSide='case';}}>真实案例</button>
         </div><JournalTemplateVisual key={`${selected.id}:${side}`} item={selected}
           side={showCase?'case':'template'} db={db} accountId={state.accountId} detail/>
-        <p>{selected.structure}</p><div className="journal-template-tags">
+        <section className="journal-template-composition"><h3>元素构成</h3><div className="journal-template-parts">
+          {journalTemplateComposition(selected).map(part=><div key={part.id} className="journal-template-part"><span>{part.label}</span><p>{part.text}</p></div>)}
+        </div></section><div className="journal-template-tags">
           {(selected.tags||[]).map(tag=><span className="chip" key={tag}>{tag}</span>)}
         </div></article>:<><button type="button" className="card work-entry journal-template-import-card"
           data-template-import onClick={()=>setImportOpen(true)}><div className="card-image">＋</div>
@@ -1074,7 +1077,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       {scope.candidateAssetIDs.length&&guidance.summary?<p className="muted" data-creation-guidance>{guidance.summary}</p>:null}
       </div>
     </details>
-    <div className="matching-layout"><section className="panel match-stage-section"><div className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small></div>
+    <div className="matching-layout"><details className="panel match-stage-section" open><summary className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small></summary><div className="match-fold-body">
       <div className="match-stage-settings"><select id="match-mode" aria-label="页面模式" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select>
         <select id="match-ratio" aria-label="纸张规格" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></div>
       <div className="match-stage-board" style={{'--match-page-ratio':pageSize.width/pageSize.height}}><div className={`match-stage-paper ${state.matchMode==='single'?'single':''}`} ref={stageRef} onPointerDown={event=>{if(event.target===event.currentTarget)setActiveMaterial(null);}}>
@@ -1093,8 +1096,8 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={activeAsset.id} data-react-action="true" onClick={action('match-core',activeAsset.id)} aria-pressed={state.coreIDs.includes(activeAsset.id)}>{state.coreIDs.includes(activeAsset.id)?'★ 已标星':'☆ 标星'}</button>
           <button type="button" data-act="basket" data-id={activeAsset.id} data-react-action="true" onClick={()=>{setActiveMaterial(null);onAction('basket',activeAsset.id);}}>移出本页</button></div></div>:<p className="match-stage-hint">点选素材可标星或移除，拖动素材可调整位置。</p>}</div>
       <p className="muted match-stage-count">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'可选推荐 '+scope.available.length:'可选推荐未开启'}</p>
-    </section>
-      <section className="panel match-recommendations"><div className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></div>
+    </div></details>
+      <details className="panel match-recommendations" open><summary className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></summary><div className="match-fold-body">
         <div className="match-shelf-tabs" role="tablist" aria-label="素材来源">{[['recommend','智能搭配'],['all','全部素材'],['used','已使用素材']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={shelfTab===id} onClick={()=>{setShelfTab(id);setShelfLimit(80);}}>{label}</button>)}</div>
         <input className="match-shelf-search" type="search" value={shelfQuery} onChange={event=>{setShelfQuery(event.target.value);setShelfLimit(80);}} placeholder="搜索名称、标签或类型" aria-label="搜索素材"/>
         {shelfTab==='all'?<div className="match-shelf-filters"><select aria-label="筛选系列" value={shelfSeries} onChange={event=>{setShelfSeries(event.target.value);setShelfLimit(80);}}><option value="all">全部系列</option><option value="none">系列外</option>{state.series.map(series=><option key={series.id} value={series.id}>{series.title}</option>)}</select>
@@ -1111,7 +1114,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
             <div className="match-rec-actions"><button data-act="basket" data-id={asset.id} data-react-action="true" onClick={()=>{if(isUsed&&activeMaterial===asset.id)setActiveMaterial(null);onAction('basket',asset.id);}}>{isUsed?'移出本页':'加入本页'}</button>{shelfTab==='recommend'?<button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button>:null}{shelfTab==='used'?<button data-act="match-core" data-id={asset.id} data-react-action="true" aria-pressed={state.coreIDs.includes(asset.id)} onClick={action('match-core',asset.id)}>{state.coreIDs.includes(asset.id)?'★ 已标星':'☆ 标星'}</button>:null}</div></div></div>;
         }):<p className="match-shelf-empty">{query?'没有匹配的素材':shelfTab==='used'?'本页尚未选择素材':'这一方向暂时没有候选'}</p>}</div>
         {shelfRows.length>shelfLimit?<button className="btn match-shelf-more" type="button" onClick={()=>setShelfLimit(value=>value+80)}>继续显示</button>:null}
-      </section></div>
+      </div></details></div>
     <section className="panel match-action"><h2>开始创作</h2>
       <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length)}>导出给网页版 AI</button>
         <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
@@ -1610,7 +1613,7 @@ export function ProjectPreviewPage({project,source,assets,localCover,loadLocalCo
     <div className="project-preview-actions">
       {project.isSnapshot?button('download-snapshot','下载快照','primary'):button('preview-continue','继续创作','primary')}
       {project.isSnapshot&&project.imageCreation?button('snapshot-export-rebuild','导出给 GPT 重建'):null}
-      {button('project-meta','作品信息与标签')}{button('project-delete','移到最近删除','danger')}
+      {button('project-meta','作品信息与标签')}{button('project-delete',project.isDraft?'删除草稿':'移到最近删除','danger')}
     </div>
   </div>;
 }

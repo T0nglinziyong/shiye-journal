@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fabric from 'fabric/node';
 import {draft} from '../src/domain.js';
-import {applyManualLayout} from '../src/manual-layout-templates.js';
+import {applyManualTemplate,manualTemplateChoices} from '../src/template-start.js';
 import {applyToolCalls} from '../src/creative.js';
 import {commitAIDraft} from '../src/ai-run-target.js';
 import {createFabricSceneBridge} from '../src/fabric-scene-bridge.js';
@@ -14,7 +14,9 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   const assets=[{id:'paper',title:'测试纸片',kind:'paper',physicalWidthMM:45,
     physicalHeightMM:35,supply:{quantity:1}}];
   const manual=draft();
-  assert.equal(applyManualLayout(manual,assets,['paper'],'story').placed,1);
+  const [choice]=manualTemplateChoices(manual,assets,['paper']);
+  assert.ok(choice);
+  assert.equal(applyManualTemplate(manual,assets,['paper'],choice.id).placed,1);
   assert.equal(manual.layers.length,1);
   const project={drafts:[structuredClone(manual)]},expected=structuredClone(project.drafts[0]);
   const generated=applyToolCalls([{name:'upsert_text',arguments:{items:[{key:'story',

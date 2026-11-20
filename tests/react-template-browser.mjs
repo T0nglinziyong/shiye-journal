@@ -7,7 +7,10 @@ const {click,evaluate,wait,sleep,errors}=browser;
 try{
   await wait('.series-grid');
   await click('[data-route="works"]','.works-grid');
+  const workCover=await evaluate('(()=>{const r=document.querySelector(".work-entry .card-image").getBoundingClientRect();return {width:r.width,height:r.height}})()');
   await click('.swift-tabs button:nth-child(4)','.journal-template-grid');
+  const templateCover=await evaluate('(()=>{const r=document.querySelector(".journal-template-import-card .card-image").getBoundingClientRect();return {width:r.width,height:r.height}})()');
+  assert.ok(Math.abs(templateCover.height-workCover.height)<2,JSON.stringify({workCover,templateCover}));
   await click('[data-template-import]','[data-template-save]');
   await evaluate(`(()=>{
     const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/NwAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));
@@ -22,7 +25,10 @@ try{
   await click('[data-template-save]');
   await wait('.journal-template-detail-card');
   assert.ok(await evaluate('document.querySelector(".journal-template-detail-card h2").textContent.includes("React 模板导入验收")'));
+  assert.ok(await evaluate('document.querySelector(".journal-template-composition").textContent.includes("主图")'));
+  assert.equal(await evaluate('!!document.querySelector(".journal-template-filters")'),false);
   await click('[data-template-back]','.journal-template-card');
+  assert.ok(await evaluate(`(()=>{const cover=document.querySelector('.journal-template-card .card-image').getBoundingClientRect(),entry=document.querySelector('.journal-template-import-card .card-image').getBoundingClientRect();return Math.abs(cover.height/cover.width-entry.height/entry.width)<.02})()`));
   await click('[data-filter-heading="类型"]','.swift-popover');
   await evaluate('[...document.querySelectorAll(".swift-popover [role=menuitemradio]")].find(button=>button.textContent==="我的模板").click()');
   await sleep(100);
