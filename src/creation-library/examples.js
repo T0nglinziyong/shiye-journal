@@ -18,6 +18,26 @@ export function techniqueExample(method){
   p.aliases=['m10','m11'];
   before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,88],unit:'mm'}});
  }
+ if(method.id==='accent-spark'){
+  p.at=[77,82];
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[82,98],unit:'mm'}});
+ }
+ if(method.id==='accent-sprig'){
+  p.at=[72,88];p.widthMm=70;
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,88],unit:'mm'}});
+ }
+ if(method.id==='accent-stitch'){
+  p.at=[72,90];
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,73],unit:'mm'}});
+ }
+ if(method.id==='accent-rings'){
+  p.at=[72,88];
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[30,88],unit:'mm'}},{op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[113,88],unit:'mm'}});
+ }
+ if(method.id==='accent-confetti'){
+  p.at=[70,81];
+  before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[86,89],unit:'mm'}});
+ }
  if(method.recipe==='film'){p.aliases=['m1','m2','m3'];p.at=[74,88];}
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
  if(method.skill==='photo-story'&&['materials','film'].includes(method.recipe))p.aliases=['m1','m8','m9'];
@@ -60,6 +80,14 @@ export function techniqueExample(method){
   before.push({op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[118,88],unit:'mm'}});
  }
  if(method.id==='pattern-stripes')before.push({op:'graphic.add',id:'ground',geometry:{kind:'rect'},place:{reference:'page',at:[72,88],unit:'mm'},size:{width:58,height:28,unit:'mm'},style:{fill:'#F1E8D5',stroke:null}});
+ if(method.id==='color-echo'){
+  p.at=[72,113];p.widthMm=70;p.heightMm=38;p.colors=['#3D6871','#FFF9E3','#72A8B7'];
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,88],unit:'mm'}});
+ }
+ if(method.id==='color-bands'){
+  p.at=[72,90];p.widthMm=70;p.heightMm=38;p.colors=['#3D6871','#E5B456'];
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,72],unit:'mm'}});
+ }
  if(method.recipe==='tape'){
   p.aliases=['m4'];
   if(method.id==='tape-fix')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,107],unit:'mm'}});

@@ -893,17 +893,17 @@
       "id": "color-echo",
       "file": "color-echo.png",
       "kind": "rendered-editable-commands",
-      "sha256": "662d42f56f19693882f5fb18ab13b02c2db1ff1d7079cb7df6e1db741c4e1ed8",
-      "width": 360,
-      "height": 184
+      "sha256": "fac40c860910fa4d4c4e07f7b8f7503a24bfb48c2f89719837021d7bca4be5df",
+      "width": 286,
+      "height": 300
     },
     {
       "id": "color-bands",
       "file": "color-bands.png",
       "kind": "rendered-editable-commands",
-      "sha256": "b3537727c76025af99e2af9bee14e1ded9313b45a9cc3184151b99cfdcbb5143",
+      "sha256": "66e0a2380f49eccb87b65104737367054306661341001a8dfb68e5023dece6af",
       "width": 360,
-      "height": 98
+      "height": 283
     },
     {
       "id": "quiet-pair",
@@ -1157,41 +1157,41 @@
       "id": "accent-spark",
       "file": "accent-spark.png",
       "kind": "rendered-editable-commands",
-      "sha256": "e5dd2e01878edab01283af2b44ac7cc16b016e3c6872b5d8dedd2fb3d34078a8",
-      "width": 360,
-      "height": 172
+      "sha256": "1545baca1c1dd8cbb583db9e98fceb1863d394f1e0855fddb50a28bf580ca494",
+      "width": 248,
+      "height": 300
     },
     {
       "id": "accent-sprig",
       "file": "accent-sprig.png",
       "kind": "rendered-editable-commands",
-      "sha256": "2b4eb65f709042bba532b4109d7716e63e69ec7ca25d793b066deb494b28a286",
+      "sha256": "d297451eebafde5e4238c01948d7e5e5fd92fba8a3fed2ac50acfa68ab6919a9",
       "width": 360,
-      "height": 209
+      "height": 246
     },
     {
       "id": "accent-stitch",
       "file": "accent-stitch.png",
       "kind": "rendered-editable-commands",
-      "sha256": "d73bb045a8cfbffffe3021e398db7b11833641d3f48ca4a3e061e7be8ef230d0",
+      "sha256": "ea367668092e03b37278dad8b2aecc2cec4e0467c9b6f2cfb1081ada5f41b2a8",
       "width": 360,
-      "height": 58
+      "height": 253
     },
     {
       "id": "accent-rings",
       "file": "accent-rings.png",
       "kind": "rendered-editable-commands",
-      "sha256": "811eebd570d0350236e981bd0f4f04338a9bc5cdbc72d86bad3c05a748e5ff89",
+      "sha256": "36f59c7af5efe1d8c99116c8f4a7e2bf3f5ec56e76645f90ae64c71fabaf163b",
       "width": 360,
-      "height": 182
+      "height": 142
     },
     {
       "id": "accent-confetti",
       "file": "accent-confetti.png",
       "kind": "rendered-editable-commands",
-      "sha256": "a5b1c583038b65205821087c8faf2c4b1400cf78f4d6d79d860a2612c6194ff1",
+      "sha256": "f8f328748b70aadf9b9466f334a6bb7e0d589e84ced874c9b40f9a65ec7b421f",
       "width": 360,
-      "height": 214
+      "height": 253
     },
     {
       "id": "accent-materials",
