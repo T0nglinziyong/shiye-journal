@@ -33,7 +33,7 @@ if(resume){initial=JSON.parse(await readFile(join(output,'input.json'),'utf8'));
 else {
   document=await createCreationDocument({draft:draft({mode:task.page.mode,ratio:task.page.ratio}),assets,
     aliases:Object.fromEntries(task.sourceContext.materials.map(m=>[m.alias,m.assetID])),title:style+'手帐',
-    styles:[style],prompt:'使用本次真实素材创作一份完成态的'+style+'手帐。图文共同构图，有具体内容与手作层次；不要做商品目录。',
+    styles:[style],prompt:'使用本次真实素材创作一份完成态的'+style+'手帐。图文共同构图，有具体内容与手作层次；不要做商品目录。'+(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS||''),
     contentPolicy:task.contentPolicy||'original',processing:task.processing,requiredAssetIDs:task.requiredAssetIDs,materialPriority:task.sourceContext.materialPriority});
 }
 const renderer=await createHarnessRenderer({source:document.source,images,saveArtifact:async({png,pngHash,document,report})=>{

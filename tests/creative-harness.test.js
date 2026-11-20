@@ -134,3 +134,32 @@ test('unchanged preview reuses the current render without another upload',async 
   }});
   assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
 });
+
+test('recipe discovery is paged, image-backed and does not resend the overview',async t=>{
+ const f=await fixture(t);let n=0;
+ const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++n===1)return answer(call('read_skill',{name:'journal-lettering',level:'methods'}));
+  const result=JSON.parse(messages.findLast(m=>m.role==='tool').content);assert.equal(result.ok,true);assert.equal(result.data.methods.length,8);assert.equal(messages.at(-1).content.filter(p=>p.type==='image_url').length,8);
+  assert.ok(result.data.methods.every(m=>m.tool.name==='creation_recipe'));throw Error('library discovery verified');
+ }});
+ await assert.rejects(harness.run({id:'method-gallery',state:f.state}),/library discovery verified/);
+});
+test('recipe edits render automatically and repeated transaction IDs never duplicate groups',async t=>{
+ const f=await fixture(t);let n=0,renders=0;
+ const args={kind:'technique',recipeId:'title-label',transactionId:'recipe-once',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'title',text:'今天的小记'}};
+ const harness=createCreativeHarness({...f,render:async d=>{renders++;return f.render(d);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++n===1)return answer(plan(),call('creation_recipe',args));
+  if(n===2)return answer(call('creation_recipe',args));
+  assert.equal(JSON.parse(messages.at(-1).content).data.replayed,true);
+  return answer(call('creation_finish',{review:{observations:'已查看标题组合',issues:[]}}));
+ }});
+ const done=await harness.run({id:'recipe-replay',state:f.state});assert.equal(done.status,'completed');assert.equal(done.document.page.layers.length,1);assert.equal(renders,1);
+});
+test('recipe failure is atomic and cannot be accepted as a finished artwork',async t=>{
+ const f=await fixture(t);let n=0;
+ const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++n===1)return answer(plan(),call('creation_recipe',{kind:'technique',recipeId:'paper-tear',transactionId:'bad',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'tear',target:'other-account',path:{points:[[0,.5],[1,.5]],unit:'ratio'}}}));
+  assert.equal(JSON.parse(messages.at(-1).content).ok,false);throw Error('recipe isolation verified');
+ }});
+ await assert.rejects(harness.run({id:'recipe-isolation',state:f.state}),/recipe isolation verified/);assert.equal((await harness.state('recipe-isolation')).document.page.layers.length,0);
+});

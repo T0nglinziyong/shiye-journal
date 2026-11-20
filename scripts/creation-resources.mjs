@@ -11,7 +11,7 @@ export async function creationResources(root=resourceRoot){
   for(const entry of await readdir(resolve(root,dir),{withFileTypes:true})){
    const path=dir+'/'+entry.name;
    if(entry.isDirectory()){if(entry.name!=='generated')await walk(path);}
-   else if(/\.(?:js|jsx|mjs|md|json|ttf|otf|woff2|txt)$/.test(path))files.push(path);
+   else if(/\.(?:js|jsx|mjs|md|json|ttf|otf|woff2|txt|png)$/.test(path))files.push(path);
   }
  }
  for(const dir of ['creation-skills','compute-server','src'])await walk(dir);

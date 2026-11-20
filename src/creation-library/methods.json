@@ -1,0 +1,683 @@
+{
+  "version": 1,
+  "methods": [
+    {
+      "id": "title-underline",
+      "skill": "journal-lettering",
+      "title": "手写下划标题",
+      "recipe": "title",
+      "when": "短标题需要与正文拉开层级",
+      "defaults": {
+        "treatment": "underline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-underline"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-outline",
+      "skill": "journal-lettering",
+      "title": "空心描边标题",
+      "recipe": "title",
+      "when": "需要醒目但不压重页面",
+      "defaults": {
+        "treatment": "outline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-outline"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-highlight",
+      "skill": "journal-lettering",
+      "title": "局部底色标题",
+      "recipe": "title",
+      "when": "标题需要呼应素材主色",
+      "defaults": {
+        "treatment": "highlight"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-highlight"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-stack",
+      "skill": "journal-lettering",
+      "title": "分行标题组",
+      "recipe": "title",
+      "when": "长标题适配窄区域",
+      "defaults": {
+        "treatment": "stack"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-stack"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-vertical",
+      "skill": "journal-lettering",
+      "title": "竖向标题",
+      "recipe": "title",
+      "when": "侧边形成纵向阅读轴",
+      "defaults": {
+        "treatment": "vertical"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-vertical"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-stagger",
+      "skill": "journal-lettering",
+      "title": "错落字群",
+      "recipe": "title",
+      "when": "少量关键词形成手写节奏",
+      "defaults": {
+        "treatment": "stagger"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-stagger"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-label",
+      "skill": "journal-lettering",
+      "title": "标签承载标题",
+      "recipe": "title",
+      "when": "把标题与纸片形成局部组合",
+      "defaults": {
+        "treatment": "label"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-label"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "title-curve",
+      "skill": "journal-lettering",
+      "title": "弧形标题",
+      "recipe": "title",
+      "when": "呼应圆形或弧形主体",
+      "defaults": {
+        "treatment": "curve"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-curve"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "paper-underlay",
+      "skill": "paper-layering",
+      "title": "错位垫纸",
+      "recipe": "materials",
+      "when": "两个真实材料需要层次",
+      "defaults": {
+        "arrangement": "stack"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-underlay"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "paper-peek",
+      "skill": "paper-layering",
+      "title": "侧边探出",
+      "recipe": "relate",
+      "when": "保留底层纸的少量色边",
+      "defaults": {
+        "relation": "peek"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-peek"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "paper-tear",
+      "skill": "paper-layering",
+      "title": "轨迹撕纸",
+      "recipe": "tear",
+      "when": "沿自定轨迹形成毛边并保留余料",
+      "defaults": {},
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-tear"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "paper-window",
+      "skill": "paper-layering",
+      "title": "开窗留芯",
+      "recipe": "window",
+      "when": "通过窗口露出下层材料，窗芯可再用",
+      "defaults": {},
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-window"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "paper-split",
+      "skill": "paper-layering",
+      "title": "条块分裁",
+      "recipe": "split",
+      "when": "将同一纸片分成不重叠材料再组合",
+      "defaults": {},
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-split"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "photo-row",
+      "skill": "photo-story",
+      "title": "照片横排",
+      "recipe": "materials",
+      "when": "相近题材组成一段叙事",
+      "defaults": {
+        "arrangement": "row"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-row"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "photo-grid",
+      "skill": "photo-story",
+      "title": "照片矩阵",
+      "recipe": "materials",
+      "when": "同组图片整齐对照",
+      "defaults": {
+        "arrangement": "grid"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-grid"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "photo-stagger",
+      "skill": "photo-story",
+      "title": "错落照片",
+      "recipe": "materials",
+      "when": "大小照片形成连贯节奏",
+      "defaults": {
+        "arrangement": "stagger"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-stagger"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "photo-caption",
+      "skill": "photo-story",
+      "title": "图文局部组",
+      "recipe": "materials",
+      "when": "照片下方留出真实描述",
+      "defaults": {
+        "arrangement": "row",
+        "captionPosition": "below"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-caption"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "graphic-loop",
+      "skill": "journal-graphics",
+      "title": "圈注细节",
+      "recipe": "graphic",
+      "when": "圈住已有素材中的具体细节",
+      "defaults": {
+        "motif": "loop"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "graphic-loop"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "graphic-route",
+      "skill": "journal-graphics",
+      "title": "转折阅读线",
+      "recipe": "graphic",
+      "when": "连接两到六个实际焦点",
+      "defaults": {
+        "motif": "trail"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "graphic-route"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "graphic-corner",
+      "skill": "journal-graphics",
+      "title": "角线框选",
+      "recipe": "graphic",
+      "when": "轻量提示内容区域",
+      "defaults": {
+        "motif": "corner"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "graphic-corner"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "graphic-rays",
+      "skill": "journal-graphics",
+      "title": "放射强调",
+      "recipe": "graphic",
+      "when": "强调一个小焦点",
+      "defaults": {
+        "motif": "rays"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "graphic-rays"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "pattern-dots",
+      "skill": "pattern-and-doodle",
+      "title": "散点节奏",
+      "recipe": "pattern",
+      "when": "留白区用疏密建立节奏",
+      "defaults": {
+        "pattern": "dots"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "pattern-dots"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "pattern-stripes",
+      "skill": "pattern-and-doodle",
+      "title": "斜线底纹",
+      "recipe": "pattern",
+      "when": "轻纹样衬托短题",
+      "defaults": {
+        "pattern": "stripes"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "pattern-stripes"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "pattern-grid",
+      "skill": "pattern-and-doodle",
+      "title": "格纹底纹",
+      "recipe": "pattern",
+      "when": "呼应文具或记录感",
+      "defaults": {
+        "pattern": "grid"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "pattern-grid"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "pattern-scallop",
+      "skill": "pattern-and-doodle",
+      "title": "波浪边线",
+      "recipe": "graphic",
+      "when": "围绕便签或图文区做轻装饰",
+      "defaults": {
+        "motif": "scallop"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "pattern-scallop"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "tape-fix",
+      "skill": "tape-and-vellum",
+      "title": "胶带固定",
+      "recipe": "tape",
+      "when": "真实胶带跨在素材边角",
+      "defaults": {
+        "arrangement": "single"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "tape-fix"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "tape-corners",
+      "skill": "tape-and-vellum",
+      "title": "双角胶带",
+      "recipe": "tape",
+      "when": "两处短胶带形成固定关系",
+      "defaults": {
+        "arrangement": "corners"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "tape-corners"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "tape-divider",
+      "skill": "tape-and-vellum",
+      "title": "胶带分隔",
+      "recipe": "tape",
+      "when": "横向短胶带分开两段内容",
+      "defaults": {
+        "arrangement": "divider"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "tape-divider"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "record-checklist",
+      "skill": "functional-journal",
+      "title": "清单小组",
+      "recipe": "record",
+      "when": "有明确待办事项",
+      "defaults": {
+        "layout": "checklist"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "record-checklist"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "record-timeline",
+      "skill": "functional-journal",
+      "title": "时间线小组",
+      "recipe": "record",
+      "when": "用户已提供顺序或时间",
+      "defaults": {
+        "layout": "timeline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "record-timeline"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "record-columns",
+      "skill": "functional-journal",
+      "title": "双栏短记",
+      "recipe": "record",
+      "when": "两组可对照文字",
+      "defaults": {
+        "layout": "columns"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "record-columns"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "color-echo",
+      "skill": "journal-color",
+      "title": "三点呼应",
+      "recipe": "pattern",
+      "when": "从实际素材取色，重复少量色点",
+      "defaults": {
+        "pattern": "echo"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "color-echo"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "color-bands",
+      "skill": "journal-color",
+      "title": "主辅色条",
+      "recipe": "pattern",
+      "when": "小面积强调色与主色建立关系",
+      "defaults": {
+        "pattern": "bands"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "color-bands"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "quiet-pair",
+      "skill": "quiet-photo-journal",
+      "title": "留白双件",
+      "recipe": "materials",
+      "when": "两件素材足以承载焦点",
+      "defaults": {
+        "arrangement": "diagonal",
+        "gapMm": 12
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "quiet-pair"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "quiet-note",
+      "skill": "quiet-photo-journal",
+      "title": "边角图文",
+      "recipe": "materials",
+      "when": "用一件图像和一段简短文字留下空间",
+      "defaults": {
+        "arrangement": "row",
+        "captionPosition": "below",
+        "gapMm": 8
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "quiet-note"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "layered-center",
+      "skill": "layered-journal",
+      "title": "中心叠片",
+      "recipe": "materials",
+      "when": "几件纸片围绕一个主视觉",
+      "defaults": {
+        "arrangement": "stack",
+        "gapMm": 4
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "layered-center"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "layered-diagonal",
+      "skill": "layered-journal",
+      "title": "对角层次",
+      "recipe": "materials",
+      "when": "大件与小件形成对角平衡",
+      "defaults": {
+        "arrangement": "diagonal",
+        "gapMm": 5
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "layered-diagonal"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "magazine-offset",
+      "skill": "magazine-journal",
+      "title": "错栏图组",
+      "recipe": "materials",
+      "when": "大图与小图建立不对称版面",
+      "defaults": {
+        "arrangement": "stagger",
+        "gapMm": 6
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "magazine-offset"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "magazine-headline",
+      "skill": "magazine-journal",
+      "title": "窄栏大题",
+      "recipe": "title",
+      "when": "标题成为版面中的图形",
+      "defaults": {
+        "treatment": "stack",
+        "fontSizePt": 30
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "magazine-headline"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "playful-bubble",
+      "skill": "playful-journal",
+      "title": "气泡短记",
+      "recipe": "title",
+      "when": "短句与圆角底形形成对话感",
+      "defaults": {
+        "treatment": "bubble"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "playful-bubble"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "playful-number",
+      "skill": "playful-journal",
+      "title": "圆点编号",
+      "recipe": "record",
+      "when": "少量条目需要明确顺序",
+      "defaults": {
+        "layout": "numbered"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "playful-number"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "vintage-ticket",
+      "skill": "vintage-journal",
+      "title": "票据短记",
+      "recipe": "materials",
+      "when": "票据与旁注保留原始信息",
+      "defaults": {
+        "arrangement": "stagger",
+        "captionPosition": "below"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "vintage-ticket"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "vintage-postmark",
+      "skill": "vintage-journal",
+      "title": "邮戳圈记",
+      "recipe": "title",
+      "when": "围绕短标签组织圆形印记",
+      "defaults": {
+        "treatment": "seal"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "vintage-postmark"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "composition-triangle",
+      "skill": "journal-composition",
+      "title": "三角素材组",
+      "recipe": "materials",
+      "when": "三件不同大小素材稳定聚合",
+      "defaults": {
+        "arrangement": "triangle"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "composition-triangle"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    },
+    {
+      "id": "composition-s",
+      "skill": "journal-composition",
+      "title": "S形素材组",
+      "recipe": "materials",
+      "when": "多件素材沿曲线连接阅读",
+      "defaults": {
+        "arrangement": "s-route"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "composition-s"
+      },
+      "composition": "输出可编辑组合；已有实物处理保留来源账本，余料不丢弃。"
+    }
+  ]
+}

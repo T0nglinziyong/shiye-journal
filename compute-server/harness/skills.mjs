@@ -1,3 +1,5 @@
+import {techniqueCatalog,describeTechnique} from '../../src/creation-library/techniques.js';
+import {libraryVersion,recipeImages} from './library.mjs';
 import {readFile,readdir,realpath,stat} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {join,sep} from 'node:path';
@@ -48,14 +50,25 @@ export async function loadCreationSkills(root=fileURLToPath(new URL('../../creat
       }
     }
     pictures.set(entry.name,parts);
-    registry.set(entry.name,{name:entry.name,description:match[2],content:match[3].trim(),illustrations,version:hash(text+JSON.stringify(illustrations))});
+    registry.set(entry.name,{name:entry.name,description:match[2],content:match[3].trim(),illustrations,version:hash(text+JSON.stringify(illustrations)+libraryVersion+JSON.stringify(techniqueCatalog.methods.filter(m=>m.skill===entry.name)))});
   }
   if(!registry.size)throw Error('创作 Skill 目录为空');
-  return {catalog:()=>[...registry.values()].map(({content,illustrations,...summary})=>({...summary,illustrationCount:illustrations.filter(i=>i.available).length})),read(name){
+  const methodsFor=(name,options={})=>{
+    const methods=techniqueCatalog.methods.filter(m=>m.skill===name),level=options.level||'overview',page=options.page||0;
+    if(!['overview','methods','detail'].includes(level)||!Number.isInteger(page)||page<0)throw Error('教程层级无效');
+    if(level==='detail'){const method=methods.find(m=>m.id===options.methodId);if(!method)throw Error('方法不属于该专题');return [method];}
+    return level==='methods'?methods.slice(page*8,page*8+8):[];
+  };
+  return {catalog:()=>[...registry.values()].map(({content,illustrations,...summary})=>({...summary,illustrationCount:illustrations.filter(i=>i.available).length,methodCount:techniqueCatalog.methods.filter(m=>m.skill===summary.name).length})),read(name,options={}){
     if(!registry.has(name))throw Error('未知创作 Skill：'+name);
-    return structuredClone(registry.get(name));
+    const entry=structuredClone(registry.get(name)),all=techniqueCatalog.methods.filter(m=>m.skill===name),selected=methodsFor(name,options);
+    if(options.level&&options.level!=='overview')return {name,version:entry.version,level:options.level,page:options.page||0,total:all.length,nextPage:(options.page||0)*8+8<all.length?(options.page||0)+1:null,methods:selected.map(m=>describeTechnique(m.id))};
+    return {...entry,methodCatalog:all.map(({id,title,when})=>({id,title,when})),readMore:{name,level:'methods',page:0}};
   },imageParts(name){
     if(!pictures.has(name))throw Error('未知创作 Skill：'+name);
     return structuredClone(pictures.get(name));
+  },async methodImageParts(name,options){
+    if(!registry.has(name))throw Error('未知创作 Skill：'+name);
+    return recipeImages(methodsFor(name,options).map(m=>m.id));
   }};
 }

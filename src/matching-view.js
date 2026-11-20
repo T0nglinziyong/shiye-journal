@@ -7,10 +7,10 @@ const recommendationCache=new WeakMap();
 const recommendationFields=['id','updatedAt','title','kind','kindDetail','role','secondaryRoles','contentCategories','layoutFits','tags','contentTags','themeTags','styleTags','colorTags','materialTags','moodTags','palette','semanticColorNames','physicalWidthMM','physicalHeightMM','seriesID','reviewStatus','autoOrganized','usageStatus','isProjectInternal','isCreativePreset','isBuiltinMaterial'];
 function rankingsForState(state){
  const styles=selectedDirections(styleGroups,state.matchStyles||[]),purposes=selectedDirections(purposeGroups,state.matchPurposes||[]);
- const key=JSON.stringify([state.assets.map(asset=>recommendationFields.map(field=>asset[field])),state.basket,state.excludedAssetIDs,styles,purposes,state.matchIntent,state.matchRatio]);
+ const key=JSON.stringify([state.assets.map(asset=>recommendationFields.map(field=>asset[field])),state.basket,state.excludedAssetIDs,styles,purposes,state.matchIntent,state.matchRatio,state.matchMode]);
  const cached=recommendationCache.get(state);
  if(cached?.key===key)return cached.rankings;
- const rankings=buildRecommendationRankings({assets:state.assets,basket:state.basket,styles,purposes,excluded:state.excludedAssetIDs||[],intent:state.matchIntent,pageSize:paperDimensions(state.matchRatio)});
+ const rankings=buildRecommendationRankings({assets:state.assets,basket:state.basket,styles,purposes,excluded:state.excludedAssetIDs||[],intent:state.matchIntent,pageSize:(()=>{const paper=paperDimensions(state.matchRatio);return paper?{...paper,width:paper.width*(state.matchMode==='spread'?2:1)}:null;})()});
  recommendationCache.set(state,{key,rankings});
  return rankings;
 }
