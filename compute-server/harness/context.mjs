@@ -18,7 +18,7 @@ export function initialToolGuide(document){
   const topics=['material.add','layer.update','page.update','graphic.add','place','size','order'];
   if(document.source.textMode!=='none')topics.push('text.add','text.lettering');
   return {catalog:creationHelp(),common:creationHelp({topics}),fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作已加载，直接使用；只有未提供的参数才查询帮助。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
+    notes:['常用操作已加载，直接使用；只有未提供的参数才查询帮助。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 必须同时提供 geometry.unit="mm" 与 points=[{x,y,pressure}]。style 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
 }
 
 export function materialBrief(document){
