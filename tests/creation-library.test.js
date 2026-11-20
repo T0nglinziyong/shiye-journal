@@ -32,6 +32,12 @@ test('adding a missing compatible material improves the same template, duplicate
  const selected=[make(slots[0],'m1')],good=make(slots[1],'good'),bad={...good,id:'bad',physicalWidthMM:1000};
  const scores=templateMarginalScores({selected,candidates:[good,bad],paper,templates:[t]});assert.ok(scores.get('good').utility>scores.get('bad').utility);assert.equal(scores.get('good').templateId,t.id);
 });
+test('correct type and style cannot force an oversized material into a small slot',()=>{
+ const t={id:'size-first',title:'尺寸优先',family:'test',aspect:1,styles:['复古'],elements:[{id:'e1',role:'focal',box:[.4,.4,.2,.2],accepts:['sticker'],styles:['复古']}]};
+ const material={id:'large',kind:'sticker',role:'focal',styleTags:['复古'],physicalWidthMM:80,physicalHeightMM:80};
+ const result=scoreTemplate(t,[material],{width:100,height:100});
+ assert.deepEqual(result.assignments,[]);assert.deepEqual(result.unused,['large']);
+});
 for(const template of templateCatalog.templates)test('template compiles through real transaction: '+template.id,async()=>{
  const assets=materialSlots(template).slice(0,5).map((s,i)=>({id:'test-'+i,alias:'m'+i,title:'模板验收素材',kind:'paper',physicalWidthMM:s.box[2]*148,physicalHeightMM:s.box[3]*210,supply:{quantity:1}}));
  const doc=await document(assets),result=compileTemplate({templateId:template.id,id:'layout',paper:{width:148,height:210},materials:assets,title:'今天的小记'});

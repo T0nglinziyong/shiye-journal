@@ -68,10 +68,10 @@ export function createCreativeHarness({model,skills,render,inspectMaterials,segm
       if(s.turns>=32||s.noProgress>=5)throw error('CREATIVE_STALLED','创作未能继续推进，成功步骤已保留');
       await onProgress({stage:'thinking',turn:s.turns+1,elapsedMs:clock()-s.startedAt});
       const apiMessages=modelContext(s.messages),modelStarted=clock();
-      const reply=await model({messages:apiMessages,tools:availableTools,signal:config.signal,remainingMs:s.deadlineAt-clock()});
+      const reply=await model({messages:apiMessages,tools:availableTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),recoveringFromTruncation:s.usage.some(u=>u.truncated)});
       live(s,config);
       const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages];
-      if(reply.truncated){messages.push({role:'user',content:'上一轮输出截断，没有执行。请用较小的完整工具批次继续。'});return {run:{...s,messages,turns:s.turns+1,usage,calls:[],noProgress:s.noProgress+1}};}
+      if(reply.truncated){messages.push({role:'user',content:'上一轮输出截断，没有执行。不要重复整体规划或读取已加载教程；本轮只执行一个完整的小工具调用，优先运行已选配方，随后根据自动预览继续。'});return {run:{...s,messages,turns:s.turns+1,usage,calls:[],noProgress:s.noProgress+1}};}
       const message=reply.message;
       if(!message||message.role!=='assistant')throw Error('模型响应无效');
       const calls=message.tool_calls||[];

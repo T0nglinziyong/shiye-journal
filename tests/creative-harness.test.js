@@ -86,6 +86,19 @@ test('cancellation cannot mark a result finished',async t=>{
   assert.notEqual((await harness.state('cancel'))?.status,'completed');
 });
 
+test('truncated output requests a smaller recovery call without executing or losing state',async t=>{
+  const f=await fixture(t);let n=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,recoveringFromTruncation})=>{
+    if(++n===1){assert.equal(recoveringFromTruncation,false);return {truncated:true};}
+    if(n===2){assert.equal(recoveringFromTruncation,true);assert.match(messages.at(-1).content,/一个完整的小工具调用/);return answer(plan(),add(f.document));}
+    assert.equal(recoveringFromTruncation,true);
+    return answer(call('creation_finish',{review:{observations:'检查当前完整预览',issues:[]}}));
+  }});
+  const result=await harness.run({id:'recover-truncated',state:f.state});
+  assert.equal(result.status,'completed');assert.equal(result.document.page.layers.length,1);
+  assert.equal(result.usage[0].truncated,true);
+});
+
 test('DeepSeek adapter enables thinking and round-trips reasoning without exposing credentials in errors',async()=>{
   const messages=[{role:'assistant',reasoning_content:'earlier reasoning',content:null,tool_calls:[]}];let payload;
   const model=createDeepSeekCreativeModel({key:'private-key',fetcher:async(url,request)=>{
@@ -95,6 +108,8 @@ test('DeepSeek adapter enables thinking and round-trips reasoning without exposi
   const result=await model({messages,tools:[],remainingMs:1000});
   assert.deepEqual(payload.thinking,{type:'enabled'});assert.equal(payload.reasoning_effort,'high');assert.deepEqual(payload.messages,messages);
   assert.equal(result.message.reasoning_content,'new reasoning');
+  await model({messages,tools:[],remainingMs:1000,recoveringFromTruncation:true});
+  assert.equal(payload.reasoning_effort,'low');assert.deepEqual(payload.thinking,{type:'enabled'});
   const failing=createDeepSeekCreativeModel({key:'private-key',fetcher:async()=>new Response('private-key',{status:401})});
   await assert.rejects(failing({messages,tools:[],remainingMs:1000}),e=>!e.message.includes('private-key')&&e.code==='CREATIVE_MODEL_HTTP');
 });

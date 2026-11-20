@@ -2,7 +2,7 @@ const endpoint='https://api.deepseek.com/chat/completions';
 export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-flash',effort='high'}={}){
   if(!key?.trim())throw Error('服务器未配置创作模型密钥');
   if(!['low','high','max'].includes(effort))throw Error('无效的创作思考强度');
-  return async({messages,tools,signal,remainingMs})=>{
+  return async({messages,tools,signal,remainingMs,recoveringFromTruncation=false})=>{
     const started=Date.now();
     for(let attempt=0;attempt<3;attempt++){
       signal?.throwIfAborted();
@@ -11,7 +11,7 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
       const timeout=AbortSignal.timeout(Math.min(120000,remaining));
       const response=await fetcher(endpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,timeout]):timeout,
         headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
-        body:JSON.stringify({model,messages,tools,tool_choice:'auto',thinking:{type:'enabled'},reasoning_effort:effort,stream:false,max_tokens:10000})});
+        body:JSON.stringify({model,messages,tools,tool_choice:'auto',thinking:{type:'enabled'},reasoning_effort:recoveringFromTruncation?'low':effort,stream:false,max_tokens:10000})});
       if([429,502,503,504].includes(response.status)&&attempt<2){
         await response.body?.cancel();
         const delay=Math.min(5000,Math.max(500,Number(response.headers.get('retry-after')||attempt+1)*1000));

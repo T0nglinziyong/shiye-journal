@@ -14,7 +14,7 @@ export function slotAffinity(asset,slot,paper){
  const type=slot.accepts?.includes(asset.kind)?1:.35;
  const text=terms(asset),content=overlap(slot.content||[],text),style=overlap(slot.styles||[],text);
  const semantic=content??.5,styleScore=style??.5;
- return {score:clamp(.72*geometry+.13*role+.09*type+.03*semantic+.03*styleScore),geometry,role,type};
+ return {score:clamp(geometry*(.72+.13*role+.09*type+.03*semantic+.03*styleScore)),geometry,role,type};
 }
 // Rectangular Hungarian assignment with one private empty column per source.
 export function maximumAssignment(weights){
