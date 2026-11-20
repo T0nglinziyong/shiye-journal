@@ -13,6 +13,7 @@ export function techniqueExample(method){
  if(method.recipe==='accent'&&method.defaults.motif==='materials')p.aliases=['m1','m2'];
  if(method.recipe==='film'){p.aliases=['m1','m2','m3'];p.at=[74,88];}
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
+ if(method.id==='magazine-offset'){p.aliases=['m1','m2','m5'];p.caption='示意图注';}
  if(method.recipe==='tape'){
   p.aliases=['m4'];
   if(method.id==='tape-fix')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,107],unit:'mm'}});

@@ -1120,7 +1120,8 @@
       "recipe": "pattern",
       "when": "从实际素材取色，重复少量色点",
       "defaults": {
-        "pattern": "echo"
+        "pattern": "echo",
+        "colors": ["#3D6871", "#E6B45E", "#D59076"]
       },
       "illustration": {
         "kind": "executable-schematic",
@@ -1335,7 +1336,7 @@
       "recipe": "materials",
       "when": "大图与小图建立不对称版面",
       "defaults": {
-        "arrangement": "stagger",
+        "arrangement": "magazine",
         "gapMm": 6
       },
       "illustration": {
@@ -1345,14 +1346,14 @@
       "lesson": {
         "principle": "不同大小图像错栏排列，留出不等宽的文字节奏。",
         "steps": [
-          "先选主图和辅助图",
-          "按顺序错位",
-          "标题靠近主图而非固定置顶。"
+          "先给主图，再给侧栏辅助图",
+          "主图与侧栏按真实尺寸错列；可把短图注放在主图下方",
+          "需要标题时，另与标题组组合。"
         ],
         "check": [
           "主图明确",
-          "不是等大卡片",
-          "图注能对应到具体图像。"
+          "不是等大卡片或普通横排",
+          "图注只对应主图，不压住侧栏图像。"
         ],
         "source": {
           "kind": "project-synthesis",

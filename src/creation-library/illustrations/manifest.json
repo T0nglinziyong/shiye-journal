@@ -893,9 +893,9 @@
       "id": "color-echo",
       "file": "color-echo.png",
       "kind": "rendered-editable-commands",
-      "sha256": "997eb575a9589d2eb47c5aa2ca50b9d24066599877dbd67a0602c256f542fcd4",
-      "width": 355,
-      "height": 300
+      "sha256": "662d42f56f19693882f5fb18ab13b02c2db1ff1d7079cb7df6e1db741c4e1ed8",
+      "width": 360,
+      "height": 184
     },
     {
       "id": "color-bands",
@@ -941,9 +941,9 @@
       "id": "magazine-offset",
       "file": "magazine-offset.png",
       "kind": "rendered-editable-commands",
-      "sha256": "b7d73b0e917109de79636187393ed6f67677487dc449cd7cabdb8ec417e2f3b2",
-      "width": 360,
-      "height": 147
+      "sha256": "b9541009ce63519208eb4f9bab0964b6b342ea301f491d2ef32529d3e283e635",
+      "width": 212,
+      "height": 300
     },
     {
       "id": "magazine-headline",

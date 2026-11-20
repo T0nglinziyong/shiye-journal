@@ -31,6 +31,7 @@ function methodFields(method){
 export function describeTechnique(id){
  const method=catalog.methods.find(m=>m.id===id);if(!method)throw Error('未知教程方法');
  const names=methodFields(method),help={...fieldHelp,...titleHelp,...(method.recipe==='accent'?{count:'数字点缀候选数量 1–24；指定 positions 时以其长度为准；避让可能减少实际数量',widthMm:'点缀组局部范围宽度，毫米；不会缩放实体',heightMm:'点缀组局部范围高度，毫米；不会缩放实体'}:{}),...(method.recipe==='tape'?{widthMm:'胶带摆放范围宽度，毫米；不会缩放实体',heightMm:'胶带摆放范围高度，毫米；不会缩放实体'}:{}),corePlace:'可选窗芯位置，使用 layer.update.place 的完整结构。传入时显示并定位窗芯；不传则隐藏保留。位置按裁下窗芯的外接框定位，保留原图裁切来源',strip:'已经放置并对准孔位的真实纸条节点 ID；不缩放或自动拉长',through:'按穿行顺序给 2–16 项 {target,sideAfter:"front"|"back",region? ,window?}；region 用 material.window 的 Region 开新孔，window 引用已有孔 ID，二选一。新孔窗芯隐藏保留；输出报告列出替代后的框与窗芯 ID',...(method.recipe==='write'?{box:'素材局部可写区域 [x,y,width,height]，各值为比例；需先观察图片，避开重要图案',text:'完整正文，最多 500 字；不截断，实际高度需看预览'}:{})};
+ if(method.id==='magazine-offset')help.caption='主图下方的可选短图注，仅对应 aliases 首项；不自动编造';
  const example=techniqueExample(method);
  return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
 }
@@ -104,6 +105,7 @@ export function compileTechnique({methodId,parameters,materials=[]}){
    if(p.arrangement==='row'){x=previous?previous.x+rows[i-1].w+gap:0;}
    if(p.arrangement==='grid'){x=(i%2)*(maxW+gap);y=Math.floor(i/2)*(maxH+gap);}
    if(p.arrangement==='stagger'){x=previous?previous.x+rows[i-1].w+gap:0;y=i%2?maxH*.2:0;}
+   if(p.arrangement==='magazine'){x=i?rows[0].w+gap:0;y=i===0?0:i===1?rows[0].h*.12:previous.y+rows[i-1].h+gap;}
    if(p.arrangement==='stack'){x=i*gap;y=i*gap;}
    if(p.arrangement==='diagonal'){x=i*(maxW*.65+gap);y=i*(maxH*.55+gap);}
    if(p.arrangement==='triangle'){x=(i%3===1?maxW+gap:i%3===2?(maxW+gap)/2:0);y=Math.floor(i/3)*(maxH*2+gap)+(i%3===2?maxH+gap:0);}
@@ -112,7 +114,12 @@ export function compileTechnique({methodId,parameters,materials=[]}){
    children.push({op:'material.add',id:id+'-m'+i,asset:a.alias,place:mmPlace(x+a.w/2,y+a.h/2)});
   }
   width=right;height=bottom;
-  if(p.caption){const captionFont=p.fontSizePt||11,captionHeight=measureTextHeight(p.caption,width,captionFont,font);text(p.caption,0,height+gap,width,{fontSizePt:captionFont});height+=gap+captionHeight;}
+  if(p.caption){
+   const captionFont=p.fontSizePt||11,captionWidth=p.arrangement==='magazine'?rows[0].w:width;
+   const captionY=p.arrangement==='magazine'?rows[0].h+gap:height+gap;
+   const captionHeight=measureTextHeight(p.caption,captionWidth,captionFont,font);
+   text(p.caption,0,captionY,captionWidth,{fontSizePt:captionFont});height=Math.max(height,captionY+captionHeight);
+  }
  }else if(method.recipe==='graphic'){
   if(p.shape)resolvedShapeOptions(p.shape,p.options);
   shape(p.shape?{kind:p.shape,...(p.options?{options:p.options}:{})}:{kind:'sketch',motif:p.motif,seed:p.seed||17,...(p.waypoints?{waypoints:p.waypoints}:{})},width/2,height/2,width,height,{fill:p.fill??null,stroke:colors[0],strokeWidthMm:p.strokeWidthMm||.65,opacity:p.opacity??1});

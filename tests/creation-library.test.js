@@ -203,6 +203,28 @@ test('tape recipes show physical attachment and keep rotated strips inside the s
  assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],segments:[{at:[5,5]},{at:[80,5]}]},materials:exampleMaterials}),/位置/);
  assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],lengthMm:1},materials:exampleMaterials}),/至少/);
 });
+test('magazine columns differ from a photo row and keep the main caption under its own image',async()=>{
+ const parameters={id:'magazine',aliases:['m1','m2','m5'],caption:'示意图注'};
+ const compiled=compileTechnique({methodId:'magazine-offset',parameters,materials:exampleMaterials});
+ const children=compiled.operations[0].children,photos=children.filter(op=>op.op==='material.add'),caption=children.find(op=>op.op==='text.add');
+ assert.equal(photos.length,3);
+ assert.ok(photos[1].place.at[0]>photos[0].place.at[0]);
+ assert.equal(photos[1].place.at[0],photos[2].place.at[0]);
+ assert.ok(photos[2].place.at[1]>photos[1].place.at[1]);
+ assert.equal(caption.place.at[1],exampleMaterials[0].physicalHeightMM+6);
+ assert.ok(caption.place.at[0]+caption.size.width<photos[1].place.at[0]-exampleMaterials[1].physicalWidthMM/2);
+ const stagger=compileTechnique({methodId:'photo-stagger',parameters:{id:'stagger',aliases:parameters.aliases},materials:exampleMaterials}).operations[0].children.filter(op=>op.op==='material.add');
+ assert.ok(stagger[2].place.at[0]>stagger[1].place.at[0]);
+ const doc=await document(exampleMaterials),done=apply(doc,compiled.operations,exampleMaterials).document;
+ for(let i=0;i<photos.length;i++)assert.ok(Math.abs(worldBox(done.page,photos[i].id).w*done.page.physicalPageHeightMM/done.page.canvas.height-exampleMaterials.find(a=>a.alias===parameters.aliases[i]).physicalWidthMM)<1e-6);
+ assert.ok(describeTechnique('magazine-offset').parameters.caption.description.includes('首项'));
+});
+test('three-point color echo has three distinct visible default colors',()=>{
+ const children=compileTechnique({methodId:'color-echo',parameters:{id:'echo'}}).operations[0].children;
+ assert.equal(children.length,3);
+ assert.equal(new Set(children.map(op=>op.style.fill)).size,3);
+ assert.ok(children.every(op=>op.style.fill!=='#F1E8D5'));
+});
 test('title effects compose in one editable text, while curve and grapheme constraints are explicit',async()=>{
  const gradient={angleDeg:45,stops:[{offset:0,color:'#112233'},{offset:1,color:'#445566'}]};
  const compiled=compileTechnique({methodId:'title-shadow',parameters:{id:'fx',text:'标题',style:{gradient,outline:{color:'#FFFFFF',widthMm:.3}}}});
