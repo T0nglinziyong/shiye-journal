@@ -7,12 +7,17 @@ export const exampleMaterials=[
  {id:'example-note',alias:'m6',title:'示意空白便签',kind:'note',role:'information',physicalWidthMM:42,physicalHeightMM:32,supply:{quantity:1}},
  {id:'example-strip',alias:'m7',title:'示意纸条',kind:'paper',role:'connector',physicalWidthMM:60,physicalHeightMM:4,supply:{quantity:1}},
  {id:'example-photo-two',alias:'m8',title:'示意窗景照片',kind:'photo',role:'secondary',physicalWidthMM:25,physicalHeightMM:32,supply:{quantity:1}},
- {id:'example-photo-three',alias:'m9',title:'示意山景照片',kind:'photo',role:'secondary',physicalWidthMM:30,physicalHeightMM:36,supply:{quantity:1}}
+ {id:'example-photo-three',alias:'m9',title:'示意山景照片',kind:'photo',role:'secondary',physicalWidthMM:30,physicalHeightMM:36,supply:{quantity:1}},
+ {id:'example-small-sticker',alias:'m10',title:'示意花朵贴纸',kind:'sticker',role:'accent',physicalWidthMM:10,physicalHeightMM:10,supply:{quantity:1}},
+ {id:'example-small-ticket',alias:'m11',title:'示意小票根',kind:'ticket',role:'accent',physicalWidthMM:12,physicalHeightMM:15,supply:{quantity:1}}
 ];
 export function techniqueExample(method){
  const p={id:'demo',at:[72,88]},before=[];
  if(method.recipe==='title')p.text='收集小美好';
- if(method.recipe==='accent'&&method.defaults.motif==='materials')p.aliases=['m1','m2'];
+ if(method.recipe==='accent'&&method.defaults.motif==='materials'){
+  p.aliases=['m10','m11'];
+  before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,88],unit:'mm'}});
+ }
  if(method.recipe==='film'){p.aliases=['m1','m2','m3'];p.at=[74,88];}
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
  if(method.skill==='photo-story'&&['materials','film'].includes(method.recipe))p.aliases=['m1','m8','m9'];

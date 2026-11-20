@@ -52,6 +52,12 @@ for(const [i,a] of exampleMaterials.entries()){
  else if(a.id==='example-photo-three'){
   x.fillStyle='#D6DDD2';x.fillRect(0,0,c.width,c.height);x.fillStyle='#F6E8C4';x.beginPath();x.arc(285,104,50,0,2*Math.PI);x.fill();x.fillStyle='#6F8C80';x.beginPath();x.moveTo(0,c.height*.67);x.lineTo(150,c.height*.24);x.lineTo(400,c.height*.72);x.fill();x.fillStyle='#3D6871';x.beginPath();x.moveTo(0,c.height*.83);x.lineTo(245,c.height*.49);x.lineTo(400,c.height*.86);x.fill();x.fillStyle='#B1C7C2';x.fillRect(0,c.height*.83,c.width,c.height*.17);
  }
+ else if(a.id==='example-small-sticker'){
+  x.fillStyle='#F4E9CF';x.fillRect(0,0,c.width,c.height);x.fillStyle='#D59076';for(let i=0;i<5;i++){const angle=i*Math.PI*2/5;x.beginPath();x.arc(200+95*Math.cos(angle),200+95*Math.sin(angle),74,0,2*Math.PI);x.fill();}x.fillStyle='#E5B456';x.beginPath();x.arc(200,200,70,0,2*Math.PI);x.fill();
+ }
+ else if(a.id==='example-small-ticket'){
+  x.fillStyle='#E8D5AC';x.fillRect(0,0,c.width,c.height);x.strokeStyle='#886E4E';x.lineWidth=8;x.strokeRect(24,24,c.width-48,c.height-48);x.fillStyle='#886E4E';x.font='bold 66px sans-serif';x.fillText('01',126,145);for(let y=210;y<c.height-80;y+=58)x.fillRect(70,y,260,7);
+ }
  else if(i===1){x.strokeStyle='#FFF9E3';x.lineWidth=4;for(let y=45;y<c.height-20;y+=45){x.beginPath();x.moveTo(20,y);x.lineTo(360,y);x.stroke();}}
  else if(i===4){x.fillRect(22,22,356,c.height-44);x.fillStyle='#3D6871';x.font='32px sans-serif';x.fillText('SAMPLE',120,105);x.fillText('0001',150,c.height-60);for(let y=160;y<c.height-140;y+=65)x.fillRect(55,y,290,3);}
  else if(a.kind==='note'){x.fillStyle='#EEE5D0';x.fillRect(0,0,c.width,c.height);x.strokeStyle='#CEB995';x.lineWidth=2;x.strokeRect(10,10,c.width-20,c.height-20);}

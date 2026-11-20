@@ -130,6 +130,15 @@ test('photo-story examples use photographs for every material slot',()=>{
   for(const alias of aliases)assert.equal(exampleMaterials.find(asset=>asset.alias===alias)?.kind,'photo',method.id+'/'+alias);
  }
 });
+test('real accent example uses small physical items around a protected focal photo',()=>{
+ const method=techniqueCatalog.methods.find(m=>m.id==='accent-materials'),example=techniqueExample(method);
+ assert.equal(example.before.find(op=>op.id==='photo')?.asset,'m1');
+ assert.deepEqual(example.parameters.aliases.map(alias=>exampleMaterials.find(asset=>asset.alias===alias)?.kind),['sticker','ticket']);
+ const compiled=compileTechnique({methodId:method.id,parameters:example.parameters,materials:exampleMaterials});
+ assert.deepEqual(compiled.report.skipped,[]);
+ assert.deepEqual(compiled.operations[0].children.map(op=>op.asset),example.parameters.aliases);
+ assert.ok(example.parameters.aliases.every(alias=>exampleMaterials.find(asset=>asset.alias===alias).physicalWidthMM<exampleMaterials[0].physicalWidthMM));
+});
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
  const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
  assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);
