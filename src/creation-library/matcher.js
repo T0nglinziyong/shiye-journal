@@ -2,6 +2,7 @@ import catalog from './templates.json' with {type:'json'};
 import {isMaterialSlot} from './template-elements.js';
 export const templateCatalog=catalog;
 export const templateEnabled=template=>template.usage?.status!=='deferred';
+export const templateManualEnabled=template=>templateEnabled(template)&&template.elements.length<=34;
 const clamp=v=>Math.max(0,Math.min(1,v));
 const roles={focal:['focal','secondary'],material:['secondary','focal','information'],background:['background'],accent:['accent','marker','connector','divider']};
 const dimensions=a=>[Number(a.physicalWidthMM??a.widthMM),Number(a.physicalHeightMM??a.heightMM)];
