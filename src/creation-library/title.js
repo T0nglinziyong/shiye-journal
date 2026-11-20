@@ -6,13 +6,14 @@ const extent=(text,fontSize)=>segments(text).reduce((sum,ch)=>sum+fontSize*pt*(/
 const roles={primary:1.35,secondary:.78,normal:1};
 const at=(x,y)=>({reference:'parent',at:[x,y],unit:'mm',anchor:'top-left'});
 
-export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','gapMm','style','curveHeightMm'];
+export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm'];
 export const titleHelp={
- runs:'可选词组数组；每项 {text,role:primary|secondary|normal,breakBefore?,rotationDeg?,offsetMm?,style?}，text 拼接必须等于完整标题；按词义分组，不随机旋转每字',
+ runs:'可选词组数组；每项 {text,role:primary|secondary|normal,fontFamily?,breakBefore?,rotationDeg?,offsetMm?,style?}。fontFamily 可给某个词组换字体；text 拼接必须等于完整标题；按词义分组，不随机旋转每字',
  emphasis:'需底色或圈注的精确词组，必须在 text 中出现；多个同词默认均强调',
  style:'与 text.add 相同的文字 style；可组合 outline/gradient/shadow/fillOpacity/字体等，不包含位置尺寸',
  curveHeightMm:'弧形标题弯曲高度，-80–80 mm；正负改变方向，必须单行',
  caption:'标题旁的小注，用户事实或本任务允许的随写；不自动编造',
+ captionFontFamily:'小注字体；默认沿用标题字体，可选预装字体或本机已安装字体',
  gapMm:'词组间距，0–20 mm'
 };
 
@@ -24,7 +25,8 @@ export function validateTitle(p){
  if(p.runs!==undefined){
   if(!Array.isArray(p.runs)||!p.runs.length||p.runs.length>24)throw Error('词组须为 1–24 项');
   for(const r of p.runs){
-   if(!r||Object.keys(r).some(k=>!['text','role','breakBefore','rotationDeg','offsetMm','style'].includes(k))||typeof r.text!=='string'||!r.text.length||!Object.hasOwn(roles,r.role||'normal'))throw Error('词组内容或角色无效');
+   if(!r||Object.keys(r).some(k=>!['text','role','fontFamily','breakBefore','rotationDeg','offsetMm','style'].includes(k))||typeof r.text!=='string'||!r.text.length||!Object.hasOwn(roles,r.role||'normal'))throw Error('词组内容或角色无效');
+   if(r.fontFamily!==undefined&&(typeof r.fontFamily!=='string'||!r.fontFamily.trim()))throw Error('词组字体名无效');
    if(r.breakBefore!==undefined&&typeof r.breakBefore!=='boolean')throw Error('词组换行无效');
    if(r.rotationDeg!==undefined&&(!Number.isFinite(r.rotationDeg)||Math.abs(r.rotationDeg)>20))throw Error('词组旋转须为 -20–20 度');
    if(r.offsetMm!==undefined&&(!Array.isArray(r.offsetMm)||r.offsetMm.length!==2||!r.offsetMm.every(n=>Number.isFinite(n)&&Math.abs(n)<=20)))throw Error('词组偏移须为两个 -20–20 mm 数值');
@@ -47,7 +49,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
  if(p.treatment==='offset-outline')style.outline={color:accent,widthMm:.4,offsetMm:[.6,.7]};
  if(p.treatment==='shadow')style.shadow={color:accent,offsetMm:[.6,.7],blurMm:.1};
  if(['gradient','gradient-outline'].includes(p.treatment))style.gradient={angleDeg:90,stops:[{offset:0,color:accent},{offset:1,color:colors[0]}]};
- if(p.treatment==='gradient-outline')style.outline={color:ground,widthMm:.4,offsetMm:[0,0]};
+ if(p.treatment==='gradient-outline')style.outline={color:colors[0],widthMm:.35,offsetMm:[0,0]};
  Object.assign(style,p.style);
  const children=[],texts=[],background=[],notes=[];let next=0;
  const shape=(kind,x,y,w,h,paint={})=>({op:'graphic.add',id:p.id+'-mark'+(++next),geometry:{kind},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:accent,...paint}});
@@ -66,7 +68,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
  if(runs){
   let x=5,y=5,lineH=0;
   for(const run of runs){
-   const primary=run.role==='primary',s={...style,fontSizePt:fontSize*roles[run.role||'normal'],...run.style};
+   const primary=run.role==='primary',s={...style,fontSizePt:fontSize*roles[run.role||'normal'],...run.style,...(run.fontFamily?{fontFamily:run.fontFamily}:{})};
    const w=Math.min(width-10,extent(run.text,s.fontSizePt)+2);
    if((run.breakBefore||x+w>width-5)&&x>5){x=5;y+=lineH+(p.gapMm??2);lineH=0;}
    const dx=run.offsetMm?.[0]||0,dy=run.offsetMm?.[1]||(primary?0:s.fontSizePt*pt*.18);
@@ -96,7 +98,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
  const mainTexts=texts.slice();
  let height=Math.max(p.heightMm||14,...texts.map(t=>t.y+t.h+5));
  if(p.treatment==='seal')height=Math.max(height,width);
- if(p.caption){const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
+ if(p.caption){const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:p.captionFontFamily||style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
  if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,p.treatment==='seal'?width:height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
  if(p.treatment==='underline'){
   const last=mainTexts.at(-1),bottom=last.y+last.inkHeight;

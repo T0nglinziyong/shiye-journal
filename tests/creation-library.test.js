@@ -219,6 +219,27 @@ test('phrase composition preserves the supplied text, meaningful grouping and ph
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-phrases',parameters:{id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
 });
+test('lettering recipes expose and preserve different bundled fonts',async()=>{
+ const detail=describeTechnique('title-caption');
+ assert.ok(detail.parameters.fontFamily.suggestedFonts.some(font=>font.family==='HongLeiZhuoShu'));
+ assert.ok(detail.parameters.captionFontFamily.suggestedFonts.some(font=>font.family==='Xiaolai'));
+ const title=compileTechnique({methodId:'title-caption',parameters:{id:'font-title',text:'收集日常',caption:'周末手记',fontFamily:'HongLeiZhuoShu',captionFontFamily:'Xiaolai',runs:[{text:'收集',fontFamily:'FontQu Smile'},{text:'日常',role:'primary'}]}});
+ const titleTexts=title.operations[0].children.filter(op=>op.op==='text.add');
+ assert.deepEqual(titleTexts.map(op=>op.style.fontFamily),['FontQu Smile','HongLeiZhuoShu','Xiaolai']);
+ const applied=apply(await document([]),title.operations,[]);
+ assert.equal(applied.changed,true);
+ for(const [id,family] of titleTexts.map(op=>[op.id,op.style.fontFamily]))assert.equal(applied.document.page.layers[0].children.find(node=>node.id===id)?.fontName,family);
+ for(const [methodId,parameters,family] of [
+  ['record-checklist',{id:'font-record',items:['一段日记'],fontFamily:'Sophora'},'Sophora'],
+  ['photo-caption',{id:'font-caption',aliases:['m1'],caption:'图注',fontFamily:'Like JianJian'},'Like JianJian'],
+  ['graphic-bubble',{id:'font-bubble',text:'旁注',fontFamily:'Otsutome'},'Otsutome']
+ ]){
+  const compiled=compileTechnique({methodId,parameters,materials:exampleMaterials});
+  assert.ok(compiled.operations[0].children.filter(op=>op.op==='text.add').every(op=>op.style.fontFamily===family),methodId);
+ }
+ const written=compileTechnique({methodId:'record-on-material',parameters:{id:'font-write',target:'note',box:[.1,.1,.8,.6],text:'落笔',fontFamily:'Ma Shan Zheng'}});
+ assert.equal(written.operations[0].style.fontFamily,'Ma Shan Zheng');
+});
 test('keyword highlight is local, behind text, and transparent hollow titles do not paint paper color',()=>{
  const marked=compileTechnique({methodId:'title-highlight',parameters:{id:'h',text:'留住今天的小美好',emphasis:'小美好',widthMm:100}}).operations[0].children;
  const bg=marked.find(o=>o.op==='graphic.add'),texts=marked.filter(o=>o.op==='text.add');

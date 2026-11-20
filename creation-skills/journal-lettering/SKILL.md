@@ -14,7 +14,9 @@ description: 建立手帐标题、正文和局部批注的层级；用于文字�
 
 ## 手写字形
 
-服务器已预装的字体会在任务开始时列出，使用 `style.fontFamily` 指定。HongLeiZhuoShu 适合拙趣、有张力的短标题；FontQu Smile 适合随性连笔的短句；Like JianJian 适合自然的青春手记。Xiaolai 适合清楚的日常正文，Sophora 适合松散随笔，Otsutome 适合笔刷标题；Ma Shan Zheng 仅用于需要毛笔感的短题，不把它当作所有手帐的默认笔迹。通常只需一种正文笔触和一种标题笔触，不用每段换字库。部分字体缺字由 Xiaolai 补字；看实际预览核对粗细和基线。不要要求手机传送字体，也不要向任意网址下载字体。
+服务器已预装的字体会在任务开始时列出；底层 `text.add` 用 `style.fontFamily`，教程 `creation_recipe` 用 `parameters.fontFamily`。HongLeiZhuoShu 适合拙趣、有张力的短标题；FontQu Smile 适合随性连笔的短句；Like JianJian 适合自然的青春手记。Xiaolai 适合清楚的日常正文，Sophora 适合松散随笔，Otsutome 适合笔刷标题；Ma Shan Zheng 仅用于需要毛笔感的短题，不把它当作所有手帐的默认笔迹。通常只需一种正文笔触和一种标题笔触，不用每段换字库。部分字体缺字由 Xiaolai 补字；看实际预览核对粗细和基线。不要要求手机传送字体，也不要向任意网址下载字体。
+
+调用 `creation_recipe` 时，标题、记录、图注、气泡和素材留白书写都可传 `fontFamily`；`read_skill level=methods` 的参数会列出预装字体及显示名称。标题的 `runs[].fontFamily` 可让主词与副词采用不同字体，标题小注另用 `captionFontFamily`；未指定的小注沿用标题字体。例如标题传 `fontFamily:"HongLeiZhuoShu"`，一个副词传 `fontFamily:"Xiaolai"`，正文记录传 `fontFamily:"Sophora"`。这些都是可编辑文字，换字后要重新预览断行和对齐。
 
 ## 与材料相处
 

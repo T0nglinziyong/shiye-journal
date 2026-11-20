@@ -8,6 +8,7 @@ import {techniqueExample,exampleMaterials} from './examples.js';
 import {measureSceneText} from '../scene-text-layout.js';
 import {styleFor} from '../scene-node-properties.js';
 import {tapeDimensions} from '../tape-strip.js';
+import {journalBundledFonts} from '../journal-font-catalog.js';
 export const techniqueCatalog=catalog;
 const common=['id','reference','at','rotationDeg'];
 const graphic=['widthMm','heightMm','colors','seed'];
@@ -36,7 +37,7 @@ export function describeTechnique(id){
  const names=methodFields(method),help={...fieldHelp,...titleHelp,...(method.recipe==='accent'?{count:'数字点缀候选数量 1–24；指定 positions 时以其长度为准；避让可能减少实际数量',widthMm:'点缀组局部范围宽度，毫米；不会缩放实体',heightMm:'点缀组局部范围高度，毫米；不会缩放实体'}:{}),...(method.recipe==='tape'?{widthMm:'胶带摆放范围宽度，毫米；不会缩放实体',heightMm:'胶带摆放范围高度，毫米；不会缩放实体'}:{}),corePlace:'可选窗芯位置，使用 layer.update.place 的完整结构。传入时显示并定位窗芯；不传则隐藏保留。位置按裁下窗芯的外接框定位，保留原图裁切来源',strip:'已经放置并对准孔位的真实纸条节点 ID；不缩放或自动拉长',through:'按穿行顺序给 2–16 项 {target,sideAfter:"front"|"back",region? ,window?}；region 用 material.window 的 Region 开新孔，window 引用已有孔 ID，二选一。新孔窗芯隐藏保留；输出报告列出替代后的框与窗芯 ID',...(method.recipe==='write'?{box:'素材局部可写区域 [x,y,width,height]，各值为比例；需先观察图片，避开重要图案',text:'完整正文，最多 500 字；不截断，实际高度需看预览'}:{}),...(method.defaults.shape==='bubble'?{text:'气泡中的短批注；超出框内可写区域时报错'}:{})};
  if(method.id==='magazine-offset')help.caption='主图下方的可选短图注，仅对应 aliases 首项；不自动编造';
  const example=techniqueExample(method);
- return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')||(method.defaults.shape==='bubble'&&k==='text')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
+ return {...method,parameters:Object.fromEntries(names.map(k=>[k,{description:help[k],...(k==='fontFamily'||k==='captionFontFamily'?{suggestedFonts:journalBundledFonts.map(f=>({family:f.family,label:f.label}))}:{}),required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')||(method.defaults.shape==='bubble'&&k==='text')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{kind:'technique',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:example.parameters}}};
 }
 function validate(method,params){
  libraryID(params.id);const allowed=new Set(methodFields(method));
@@ -55,6 +56,8 @@ function validate(method,params){
  if(params.count!==undefined&&(!Number.isInteger(params.count)||params.count<1||params.count>30))throw Error('纹样数量为 1–30');
  if(params.seed!==undefined&&(!Number.isInteger(params.seed)||params.seed<1||params.seed>2147483646))throw Error('种子无效');
  if(params.text!==undefined&&(typeof params.text!=='string'||!params.text.trim()||params.text.length>500))throw Error('文字应为 1–500 字');
+ if(params.fontFamily!==undefined&&(typeof params.fontFamily!=='string'||!params.fontFamily.trim()))throw Error('字体名无效');
+ if(params.captionFontFamily!==undefined&&(typeof params.captionFontFamily!=='string'||!params.captionFontFamily.trim()))throw Error('小注字体名无效');
  if(params.caption!==undefined&&(typeof params.caption!=='string'||params.caption.length>1000))throw Error('注释过长');
  if(params.pattern!==undefined&&!['plain','dots','stripes','grid'].includes(params.pattern))throw Error('未知背景花纹');
  if(params.items&&(!Array.isArray(params.items)||!params.items.length||params.items.length>12||params.items.some(t=>typeof t!=='string'||!t.trim()||t.length>180)))throw Error('条目格式无效');
