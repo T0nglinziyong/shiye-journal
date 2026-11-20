@@ -845,25 +845,25 @@
       "id": "tape-fix",
       "file": "tape-fix.png",
       "kind": "rendered-editable-commands",
-      "sha256": "a07129c315915ef054ea68f7c8c0780653e011b6d44bf797ea0d27400e35f51f",
-      "width": 360,
-      "height": 193
+      "sha256": "f9c6adef26c4d5269147e84a16dfdca612fbf693b40279e44361663796ed2cb1",
+      "width": 211,
+      "height": 300
     },
     {
       "id": "tape-corners",
       "file": "tape-corners.png",
       "kind": "rendered-editable-commands",
-      "sha256": "7d646d12814a237bd37d820d352514a44d2ab15db86a64727313003badcbc14d",
+      "sha256": "beca9b70206de932bef2a6940916db41bd58bca546bfd97c3b2b23455f0ae7c5",
       "width": 360,
-      "height": 230
+      "height": 289
     },
     {
       "id": "tape-divider",
       "file": "tape-divider.png",
       "kind": "rendered-editable-commands",
-      "sha256": "a68474a0924b8ded4c64697a9d82b7c3be65662805b94f34d3a3b6d9626757d3",
-      "width": 360,
-      "height": 151
+      "sha256": "24d4486ceb6e2534211cb2dc49f7738aeee368cb73f4bb61516bb341a8ebd12c",
+      "width": 210,
+      "height": 300
     },
     {
       "id": "record-checklist",

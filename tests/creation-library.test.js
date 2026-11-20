@@ -163,6 +163,31 @@ test('long captions and record entries stay inside their reported editable group
   assert.ok(compiled.report.heightMm-Math.max(...ends)<=parameters.gapMm+.01,methodId+' should not reserve unused rows');
  }
 });
+test('tape recipes show physical attachment and keep rotated strips inside the selectable group',async()=>{
+ const method=techniqueCatalog.methods.find(m=>m.id==='tape-corners'),example=techniqueExample(method);
+ assert.ok(example.before.some(op=>op.asset==='m3'));
+ assert.ok(describeTechnique(method.id).parameters.segments.description.includes('局部摆放'));
+ for(const parameters of [{id:'tapes',aliases:['m4']},{...example.parameters,id:'tapes'},{...example.parameters,id:'tapes',rotationDeg:30}]){
+  const compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
+  const done=apply(await document(exampleMaterials),compiled.operations,exampleMaterials).document,group=worldBox(done.page,'tapes');
+  const strips=compiled.operations[0].children.filter(op=>op.op==='material.tape');assert.equal(strips.length,2);
+  for(const strip of strips){
+   const box=worldBox(done.page,strip.id),angle=(box.rotation-group.rotation)*Math.PI/180,groupAngle=group.rotation*Math.PI/180;
+   const offsetX=box.cx-group.cx,offsetY=box.cy-group.cy;
+   const localX=offsetX*Math.cos(groupAngle)+offsetY*Math.sin(groupAngle);
+   const localY=-offsetX*Math.sin(groupAngle)+offsetY*Math.cos(groupAngle);
+   const dx=(Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h)/2;
+   const dy=(Math.abs(Math.sin(angle))*box.w+Math.abs(Math.cos(angle))*box.h)/2;
+   assert.ok(localX-dx>=-group.w/2-.01&&localX+dx<=group.w/2+.01);
+   assert.ok(localY-dy>=-group.h/2-.01&&localY+dy<=group.h/2+.01);
+  }
+ }
+ const moved=compileTechnique({methodId:method.id,parameters:{id:'moved',aliases:['m4'],segments:[{at:[5,5]},{at:[60,32]}]},materials:exampleMaterials});
+ assert.deepEqual(moved.operations[0].children.map(op=>op.place.rotationDeg),[-35,145]);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],segments:[{at:[5,5]}]},materials:exampleMaterials}),/段数/);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],segments:[{at:[5,5]},{at:[80,5]}]},materials:exampleMaterials}),/位置/);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],lengthMm:1},materials:exampleMaterials}),/至少/);
+});
 test('title effects compose in one editable text, while curve and grapheme constraints are explicit',async()=>{
  const gradient={angleDeg:45,stops:[{offset:0,color:'#112233'},{offset:1,color:'#445566'}]};
  const compiled=compileTechnique({methodId:'title-shadow',parameters:{id:'fx',text:'标题',style:{gradient,outline:{color:'#FFFFFF',widthMm:.3}}}});

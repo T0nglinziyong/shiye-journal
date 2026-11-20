@@ -13,7 +13,16 @@ export function techniqueExample(method){
  if(method.recipe==='accent'&&method.defaults.motif==='materials')p.aliases=['m1','m2'];
  if(method.recipe==='film')p.aliases=['m1','m2','m3'];
  if(method.recipe==='materials'){p.aliases=['m1','m2','m3'];if(method.defaults.captionPosition)p.caption='一片颜色，一段小记。';}
- if(method.recipe==='tape')p.aliases=['m4'];
+ if(method.recipe==='tape'){
+  p.aliases=['m4'];
+  if(method.id==='tape-fix')before.push({op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[72,107],unit:'mm'}});
+  if(method.id==='tape-corners'){
+   p.widthMm=42;p.heightMm=32;
+   p.segments=[{at:[2,2],rotationDeg:-35,lengthMm:15},{at:[40,30],rotationDeg:145,lengthMm:20}];
+   before.push({op:'material.add',id:'paper',asset:'m3',place:{reference:'page',at:[72,88],unit:'mm'}});
+  }
+  if(method.id==='tape-divider')before.push({op:'material.add',id:'card',asset:'m2',place:{reference:'page',at:[72,72],unit:'mm'}},{op:'material.add',id:'note',asset:'m6',place:{reference:'page',at:[72,106],unit:'mm'}});
+ }
  if(method.recipe==='record')p.items=['留下一片颜色','写下一句短记','收好今天的小物'];
  if(method.recipe==='write'){
   delete p.at;p.target='note';p.box=[.12,.16,.76,.68];p.text='留一片颜色，\n记一件小事。';p.fontSizePt=11;
