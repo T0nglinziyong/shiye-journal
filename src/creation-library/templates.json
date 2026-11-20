@@ -10713,7 +10713,11 @@
         }
       ],
       "interpretation": "人工核对的结构示意；尺寸为参考比例，实例化保留素材真实毫米尺寸，不复刻原图纹理。",
-      "reviewed": true
+      "reviewed": true,
+      "usage": {
+        "status": "deferred",
+        "reason": "连续回折胶卷需要照片随曲面变形，当前只能平面排列，暂不用于自动创作。"
+      }
     },
     {
       "id": "ac-27",

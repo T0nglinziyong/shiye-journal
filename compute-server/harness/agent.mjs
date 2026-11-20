@@ -97,7 +97,7 @@ export function createCreativeHarness({model,skills,render,inspectMaterials,segm
           }else if(name==='match_templates'){
             data=matchLibraryTemplates(document,args);if(!observedTools.includes(JSON.stringify([name,args,revision(document)])))images.push(...await recipeImages(data.map(t=>t.id)));
           }else if(name==='read_template'){
-            data=templateDetails(args.id);if(!observedTools.includes(JSON.stringify([name,args,null])))images.push(...await recipeImages([args.id]));
+            data=templateDetails(args.id);if(data.available!==false&&!observedTools.includes(JSON.stringify([name,args,null])))images.push(...await recipeImages([args.id]));
           }else if(name==='creation_recipe'){
             if(!plan||!loadedSkills.length)throw Error('先观察素材并记录构图计划');
             const fingerprint=craftDigest(args),prior=recipeReceipts[args.transactionId];

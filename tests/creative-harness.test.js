@@ -178,3 +178,17 @@ test('recipe failure is atomic and cannot be accepted as a finished artwork',asy
  }});
  await assert.rejects(harness.run({id:'recipe-isolation',state:f.state}),/recipe isolation verified/);assert.equal((await harness.state('recipe-isolation')).document.page.layers.length,0);
 });
+
+test('deferred template lookup explains the limitation without loading its image or executable recipe',async t=>{
+  const f=await fixture(t);let n=0,baseline=0;
+  const imageCount=messages=>messages.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++n===1){baseline=imageCount(messages);return answer(call('read_template',{id:'ac-26'}));}
+    const reply=JSON.parse(messages.findLast(m=>m.role==='tool').content);
+    assert.equal(reply.ok,true);assert.equal(reply.data.available,false);assert.equal(reply.data.tool,undefined);
+    assert.equal(imageCount(messages),baseline);
+    throw Error('verified deferred lookup');
+  }});
+  await assert.rejects(harness.run({id:'deferred-lookup',state:f.state}),/verified deferred lookup/);
+  assert.equal((await harness.state('deferred-lookup')).document.page.layers.length,0);
+});

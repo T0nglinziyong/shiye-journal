@@ -1,6 +1,7 @@
 import catalog from './templates.json' with {type:'json'};
 import {isMaterialSlot} from './template-elements.js';
 export const templateCatalog=catalog;
+export const templateEnabled=template=>template.usage?.status!=='deferred';
 const clamp=v=>Math.max(0,Math.min(1,v));
 const roles={focal:['focal','secondary'],material:['secondary','focal','information'],background:['background'],accent:['accent','marker','connector','divider']};
 const dimensions=a=>[Number(a.physicalWidthMM??a.widthMM),Number(a.physicalHeightMM??a.heightMM)];
@@ -58,7 +59,7 @@ export function scoreTemplate(template,materials,paper,{styles=[],content=[]}={}
 }
 export function rankTemplates({materials=[],paper={width:148,height:210},styles=[],content=[],limit=5,templates=catalog.templates}={}){
  if(!Number.isFinite(paper.width)||!Number.isFinite(paper.height)||paper.width<=0||paper.height<=0)throw Error('纸张尺寸无效');
- const pending=templates.map(t=>scoreTemplate(t,materials,paper,{styles,content})).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)),chosen=[];
+ const pending=templates.filter(templateEnabled).map(t=>scoreTemplate(t,materials,paper,{styles,content})).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)),chosen=[];
  while(pending.length&&chosen.length<Math.min(12,Math.max(1,limit))){
   let best=0,bestScore=-Infinity;
   for(let i=0;i<pending.length;i++){const s=pending[i].score-chosen.filter(t=>t.family===pending[i].family).length*3;if(s>bestScore){bestScore=s;best=i;}}
@@ -66,6 +67,7 @@ export function rankTemplates({materials=[],paper={width:148,height:210},styles=
  }return chosen;
 }
 export function templateMarginalScores({selected=[],candidates=[],paper={width:148,height:210},styles=[],content=[],templates=catalog.templates}={}){
+ templates=templates.filter(templateEnabled);
  const base=templates.map(t=>scoreTemplate(t,selected,paper,{styles,content}));
  const bestBefore=Math.max(0,...base.map(b=>b.score));
  return new Map(candidates.map(asset=>{
