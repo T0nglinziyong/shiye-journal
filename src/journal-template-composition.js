@@ -1,4 +1,4 @@
-import {templateCatalog,templateEnabled} from './creation-library/matcher.js';
+import {templateCatalog,templateManualEnabled} from './creation-library/matcher.js';
 
 const byId=new Map(templateCatalog.templates.map(template=>[template.id,template]));
 const caseByFamily={
@@ -18,7 +18,7 @@ export function executableJournalTemplates(){
     tags:[...new Set([...template.styles,...template.content])],
     styles:template.styles,purposes:template.content,
     toolTemplateId:template.id,templateImagePath:`/template-illustrations/${template.id}.webp`,
-    elements:template.elements,aspect:template.aspect,isCallable:templateEnabled(template),
+    elements:template.elements,aspect:template.aspect,isCallable:templateManualEnabled(template),
     exampleImagePath:caseImage(template.family),exampleIsReference:true
   }));
 }

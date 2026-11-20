@@ -1,7 +1,7 @@
 import {attachSceneV2} from './scene-v2.js';
-import {materialSlots,rankTemplates,scoreTemplate,templateCatalog,templateEnabled} from './creation-library/matcher.js';
+import {materialSlots,rankTemplates,scoreTemplate,templateCatalog,templateManualEnabled} from './creation-library/matcher.js';
 
-const simpleTemplates=templateCatalog.templates.filter(template=>templateEnabled(template)&&template.elements.length<=34);
+const simpleTemplates=templateCatalog.templates.filter(templateManualEnabled);
 const paperOf=draft=>({width:draft.canvas.width/draft.canvas.height*draft.physicalPageHeightMM,
   height:draft.physicalPageHeightMM});
 
