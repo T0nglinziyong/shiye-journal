@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision} from '../src/creation-transaction.js';
@@ -65,11 +66,12 @@ test('a separate workspace sends only changed nonempty images and can move its g
  const f=await fixture(t);let turns=0;
  const render=async(document,_signal,spaces)=>{
   const root=document.page.layers,view=id=>root.filter(node=>(node.workspaceId||(node.isParked?'tray':'page'))===id);
-  return {pngHash,sceneRevision:creationSceneRevision(document),imageURL:'data:image/png;base64,cGFnZQ==',spaceViews:spaces.map(space=>({id:space.id,signature:JSON.stringify(view(space.id)),imageURL:view(space.id).length?'data:image/png;base64,'+Buffer.from(space.id).toString('base64'):null,items:view(space.id).map(node=>node.id)}))};
+  const pageHash='sha256:'+createHash('sha256').update(JSON.stringify(view('page'))).digest('hex');
+  return {pngHash:pageHash,sceneRevision:creationSceneRevision(document),imageURL:'data:image/png;base64,cGFnZQ==',spaceViews:spaces.map(space=>({id:space.id,signature:space.id==='page'?pageHash:JSON.stringify(view(space.id)),imageURL:view(space.id).length?'data:image/png;base64,'+Buffer.from(space.id).toString('base64'):null,items:view(space.id).map(node=>node.id)}))};
  };
  const harness=createCreativeHarness({...f,render,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
   if(++turns===1)return answer(plan(),call('workspace_create',{id:'study',title:'局部试摆'}));
-  if(turns===2)return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-add',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'title',content:'试排标题',place:{reference:'page',at:[50,50],unit:'mm',surface:'study'},size:{width:45,unit:'mm'}}]}));
+  if(turns===2){assert.match(messages[2].content,/"study":\{"signature":"empty","empty":true/);return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-add',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'title',content:'试排标题',place:{reference:'page',at:[50,50],unit:'mm',surface:'study'},size:{width:45,unit:'mm'}}]}));}
   if(turns===3){const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
    assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['study']);
    return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
@@ -79,6 +81,18 @@ test('a separate workspace sends only changed nonempty images and can move its g
   return answer(call('creation_finish',{review:{observations:'试摆后移入纸面',issues:[]}}));
  }});
  const result=await harness.run({id:'study-flow',state:f.state});assert.equal(result.status,'completed');assert.equal(turns,4);
+});
+
+test('closing an empty workspace removes its visual state without another render',async t=>{
+  const f=await fixture(t);let turns=0,renders=0;
+  const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},model:async({messages})=>{
+    if(++turns===1)return answer(call('workspace_create',{id:'study',title:'试摆'}));
+    if(turns===2){assert.match(messages[2].content,/"study":\{"signature":"empty"/);return answer(call('workspace_close',{id:'study'}));}
+    assert.doesNotMatch(messages[2].content,/"study":\{"signature":"empty"/);
+    throw Error('closed workspace verified');
+  }});
+  await assert.rejects(harness.run({id:'close-study',state:f.state}),/closed workspace verified/);
+  assert.equal(renders,0);
 });
 
 test('finish cannot pass when a new edit invalidates a viewed preview',async t=>{
@@ -190,6 +204,25 @@ test('automatic bootstrap allows first-turn editing and combined visual review/f
     return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
   }});
   const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
+});
+
+test('a screenshot, edit rationale and final review stay linked in the recoverable run',async t=>{
+  const f=await fixture(t);let turns=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
+    assert.ok(tools.find(tool=>tool.function.name==='creation_apply').function.parameters.properties.decision);
+    if(++turns===1)return answer(plan(),call('creation_apply',{...JSON.parse(add(f.document).function.arguments),decision:'素材总图显示可用空间较大，先以短标题建立阅读起点'}));
+    assert.match(messages[2].content,/素材总图显示可用空间较大/);
+    assert.match(messages[2].content,/visualState/);
+    assert.match(messages.findLast(message=>message.role==='user'&&Array.isArray(message.content)).content[0].text,/工作空间状态：.*lastSeenTurn/);
+    return answer(call('creation_finish',{review:{observations:'标题清晰，留白可供后续手写',issues:[]}}));
+  }});
+  const done=await harness.run({id:'visual-decision',state:f.state});
+  assert.equal(done.status,'completed');assert.equal(done.visualState.page.lastSeenTurn,1);
+  assert.equal(done.decisions.find(entry=>entry.kind==='creation_apply').reason,'素材总图显示可用空间较大，先以短标题建立阅读起点');
+  assert.equal(done.decisions.at(-1).observations,'标题清晰，留白可供后续手写');
+  assert.equal(done.decisions.at(-1).pngHash,pngHash);
+  const restored=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async()=>{throw Error('completed run should not resume');}});
+  assert.deepEqual((await restored.state('visual-decision')).decisions,done.decisions);
 });
 
 test('combined finish rejects unseen edits and nonempty blocking issues',async t=>{

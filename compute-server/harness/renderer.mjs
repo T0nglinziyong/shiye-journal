@@ -55,7 +55,7 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
       }
     }
     const data=surface.toBuffer('image/jpeg',{quality:.86});
-    return {imageURL:await modelImage(data,3000),items:unplaced.map((material,index)=>({number:index+1,alias:material.alias,title:source.sourceSnapshots.find(snapshot=>snapshot.assetID===material.assetID)?.title||''})),parkedIDs:parked.map(node=>node.id),signature:hash(Buffer.from(JSON.stringify({space,unplaced:unplaced.map(m=>m.alias),parked,canvas:parked.length?document.page.canvas:null})))};
+    return {imageURL:await modelImage(data,3000),items:unplaced.map((material,index)=>({number:index+1,alias:material.alias,title:source.sourceSnapshots.find(snapshot=>snapshot.assetID===material.assetID)?.title||''})),parkedIDs:parked.map(node=>node.id),signature:hash(data)};
   };
   return {
     async inspectMaterials(keys){return Promise.all(keys.map(async alias=>{
@@ -70,7 +70,7 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
       const visible=document.page.layers.some(node=>!node.isParked&&!node.hidden&&!node.isHidden);
       if(!visible)return null;
       const {png}=await renderOfflinePNG(document.page,source,images,canvas,{decodedCache});
-      return {imageURL:await modelImage(png),items:document.page.layers.filter(node=>!node.isParked).map(node=>node.id)};
+      return {imageURL:await modelImage(png),signature:hash(png),items:document.page.layers.filter(node=>!node.isParked).map(node=>node.id)};
     },
     async render(document,signal,spaces=[{id:'page'},{id:'tray'}]){
       signal?.throwIfAborted();
@@ -80,7 +80,7 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
       const artifact=await saveArtifact({png,pngHash,sceneRevision,document,report});
       const views=await Promise.all(spaces.filter(space=>space.id!=='page').map(async space=>({id:space.id,...await tray(document,signal,{space:space.id})})));
       const pageNodes=document.page.layers.filter(node=>!node.isParked&&!node.hidden&&!node.isHidden);
-      const pageSignature=hash(Buffer.from(JSON.stringify({page:{canvas:document.page.canvas,pageMode:document.page.pageMode,paperColor:document.page.paperColor,paperPattern:document.page.paperPattern},nodes:pageNodes})));
+      const pageSignature=pngHash;
       const pageImageURL=await modelImage(png);
       const spaceViews=[{id:'page',imageURL:pageNodes.length?pageImageURL:null,signature:pageSignature,items:pageNodes.map(node=>node.id)},...views.map(view=>({id:view.id,imageURL:view.imageURL||null,signature:view.signature||'empty',items:view.items||[],parkedIDs:view.parkedIDs||[]}))];
       return {pngHash,sceneRevision,artifact,imageURL:pageImageURL,spaceViews,renderMs:Math.round(performance.now()-started),renderer:report.rendererBackend};
