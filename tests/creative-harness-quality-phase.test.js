@@ -83,8 +83,8 @@ test('two rendered layouts automatically enter detail mode and explicit rollback
    const scene=preview&&JSON.parse(preview.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
    if(turn===1)return answer(call('creation_plan',{intent:'先试摆再完善',steps:[{task:'检查',status:'in_progress'}]}),call('creation_apply',{protocolVersion:2,transactionId:'initial',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'初稿',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:50,unit:'mm'}}]}));
    if(turn===2){assert.match(preview.content[0].text,/剩余时间（秒）/);return answer(call('creation_review',{...scene,approved:false,observations:'标题太短',issues:['需要补充'],nextStep:'补充文字'}),call('creation_apply',{protocolVersion:2,transactionId:'second',baseSceneRevision:scene.sceneRevision,operations:[{op:'layer.update',target:'title',content:'新的标题'}]}));}
-   if(turn===3){assert.ok(!tools.some(tool=>tool.function.name==='search_references'));assert.match(preview.content[0].text,/阶段观察：/);return answer(call('creation_review',{...scene,approved:true,observations:'标题已完整',issues:[]}),call('creation_phase',{phase:'composition',reason:'需要重新检查构图选项'}));}
-   assert.ok(tools.some(tool=>tool.function.name==='search_references'));
+   if(turn===3){assert.ok(!tools.some(tool=>tool.function.name==='match_templates'));assert.match(preview.content[0].text,/阶段观察：/);return answer(call('creation_review',{...scene,approved:true,observations:'标题已完整',issues:[]}),call('creation_phase',{phase:'composition',reason:'需要重新检查构图选项'}));}
+   assert.ok(tools.some(tool=>tool.function.name==='match_templates'));
    return answer(call('creation_finish',{summary:'完成'}));
  }});
  const result=await harness.run({id:'auto-phase',state:initial});
