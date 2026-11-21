@@ -329,7 +329,7 @@ test('rich task makes a specific method and material evidence available before e
       return answer(call('creation_apply',{protocolVersion:2,transactionId:'rich-start',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'first-note',content:'第一层',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:40,unit:'mm'}}]}));
     }
     if(turns===3){
-      assert.deepEqual(new Set(tools.map(tool=>tool.function.name)),new Set(['creation_review','creation_finish']));
+      assert.deepEqual(new Set(tools.map(tool=>tool.function.name)),new Set(['creation_review','creation_finish','creation_preview']));
       return answer(revise(messages,'缺少纸片之间的实际叠放'));
     }
     assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
@@ -376,6 +376,19 @@ test('a screenshot, edit rationale and final review stay linked in the recoverab
   const restored=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async()=>{throw Error('completed run should not resume');}});
   assert.deepEqual((await restored.state('visual-decision')).decisions,done.decisions);
 });
+test('multi-material completion rejects a placeholder visual review',async t=>{
+ const f=await fixture(t),assets=Array.from({length:4},(_,i)=>({id:'sheet-'+i,title:'纸片 '+i,kind:'paper',physicalWidthMM:30,physicalHeightMM:40}));
+ const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
+ const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});let turns=0;
+ const harness=createCreativeHarness({...f,viewSpace:async()=>({imageURL:'data:image/png;base64,dGVzdA==',signature:pngHash,items:['title']}),checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
+  if(++turns===1)return answer(call('read_skill',{name:'paper-layering',level:'detail',methodId:'paper-peek'}),call('creation_plan',{intent:'先试摆',methods:[{id:'paper-peek',purpose:'建立叠放'}],themeEvidence:{supportedBy:['四张纸'],conflicts:[],response:'按纸片关系构图'},composition:{focal:'左侧主纸片',quietArea:'右侧书写区',connector:'共享蓝色'},steps:[{task:'试摆',status:'in_progress'}]}));
+  if(turns===2)return answer(call('creation_apply',{protocolVersion:2,transactionId:'review-placeholder',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'小记',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:40,unit:'mm'}}]}));
+  if(turns===3){const prompt=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)).content[0].text;assert.match(prompt,/构图意图.*左侧主纸片/);assert.match(prompt,/计划技巧.*paper-peek/);assert.ok(tools.some(tool=>tool.function.name==='workspace_view'));return answer(call('workspace_view',{id:'page'}));}
+  if(turns===4){assert.ok(messages.at(-1).content.some(part=>part.type==='image_url'));return answer(call('creation_finish',{review:{observations:'test',issues:[]}}));}
+  assert.match(JSON.parse(messages.findLast(m=>m.role==='tool').content).detail,/具体位置、对象或阅读关系/);throw Error('placeholder review rejected');
+ }});
+ await assert.rejects(harness.run({id:'review-placeholder',state}),/placeholder review rejected/);
+});
 
 test('combined finish rejects unseen edits and nonempty blocking issues',async t=>{
   const f=await fixture(t);let n=0;
@@ -406,7 +419,7 @@ test('finish review accepts a current image hash and rejects a stale one',async 
   if(++n===1)return answer(plan(),add(f.document));
   const p=lastScene(messages);
   if(n===2)return answer(call('creation_finish',{review:{pngHash:'sha256:'+'0'.repeat(64),sceneRevision:p.sceneRevision,observations:'旧图',issues:[]}}));
-  assert.match(JSON.parse(messages.at(-1).content).detail,/旧画面/);
+  const failure=JSON.parse(messages.at(-1).content);assert.match(failure.detail,/旧画面/);assert.deepEqual(failure.currentPreview,{pngHash:p.pngHash,sceneRevision:p.sceneRevision});
   return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'已核对当前图',issues:[]}}));
  }});
  assert.equal((await harness.run({id:'finish-hash',state:f.state})).status,'completed');
@@ -416,7 +429,7 @@ test('recipe discovery is paged, image-backed and does not resend the overview',
  const f=await fixture(t);let n=0;
  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
   if(++n===1)return answer(call('read_skill',{name:'journal-lettering',level:'methods'}));
-  const result=JSON.parse(messages.findLast(m=>m.role==='tool').content);assert.equal(result.ok,true);assert.equal(result.data.methods.length,8);assert.equal(messages.at(-1).content.filter(p=>p.type==='image_url').length,8);
+  const result=JSON.parse(messages.findLast(m=>m.role==='tool').content);assert.equal(result.ok,true);assert.equal(result.data.methods.length,8);assert.equal(messages.at(-1).content.filter(p=>p.type==='image_url').length,result.data.methods.filter(m=>m.illustration).length);
   assert.ok(result.data.methods.every(m=>m.tool.name==='creation_recipe'));assert.equal(result.data.guidance,f.skills.read('journal-lettering').content);throw Error('library discovery verified');
  }});
  await assert.rejects(harness.run({id:'method-gallery',state:f.state}),/library discovery verified/);

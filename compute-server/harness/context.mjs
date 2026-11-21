@@ -30,8 +30,8 @@ export function shortlistCreationMethods(document,brief={}){
     const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
     return ids.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
   }
-  const ids=/丰富|层叠|拼贴/.test(text)?['layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','title-label']:
-    /极简|留白|清新|淡雅/.test(text)?['quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption']:
+  const ids=/丰富|层叠|拼贴/.test(text)?['layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','title-tape']:
+    /极简|留白|清新|淡雅/.test(text)?['quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption','title-tape']:
     /杂志|照片|旅行/.test(text)?['magazine-offset','photo-stagger','photo-caption','paper-underlay','graphic-route']:
     ['composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
   const chosen=materialCount<3?ids.filter(id=>!['composition-s','layered-center','layered-diagonal','photo-stagger'].includes(id)):ids;

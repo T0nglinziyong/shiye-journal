@@ -40,9 +40,11 @@ GitHub 仓库中的 `creation-contract/release-v3/design/LETTERING.md` 是底层
 | 有节奏但仍能一眼读完 | `title-stagger`、`title-curve` | 错落以词组为单位；弧线回应附近素材轮廓，不围着整页兜圈 |
 | 与背景分离或增加字形层次 | `title-outline`、`title-shadow`、`title-offset-outline` | 空心适合简单底色；同侧投影保持统一光向；小字优先实心 |
 | 延续素材配色 | `title-gradient`、`title-gradient-outline`、`title-highlight` | 从已有素材取主色与强调色；高亮只落在关键词 |
-| 让标题成为局部图文组 | `title-label`、`title-underline`、`title-circle`、`title-caption` | 底形承载、下划分隔、圈注强调、旁注补充；选择需要的关系 |
+| 让标题成为局部图文组 | `title-label`、`title-tape`、`title-underline`、`title-circle`、`title-caption` | 底卡、半透明数字胶带、下划分隔、圈注或旁注；选择需要的关系 |
 
 方法不是互斥风格。结构、字形处理、局部承载可以组合，例如主次词组配同侧投影、两行标题配局部底色、文字组配小旁注。通常先确定一种结构和一个主要强调，再根据实际素材决定是否补小图形。不要为了展示工具把所有处理叠在一起。
+
+`title-tape` 根据实际字行生成短的半透明数字胶带，`pattern` 可选 `plain/dots/stripes/grid`，`tapeOpacity` 控制透明度，`fontFamily` 和 `runs[].fontFamily` 仍可分别调整。它适合跨在附近纸片或照片的边缘；若有真实胶带素材，需要使用实体胶带工具，不能把数字底形记作实体用量。长标题分行时逐行核对胶带边缘和字形对比。这个连接思路参考 [journal-page](https://github.com/lumen-prism/journal-page) 的公开教程；图形与参数由拾页独立实现，未复制其代码或图片。
 
 ### 从标题组到整页
 
