@@ -46,8 +46,8 @@ export function createCloudCreativeJobs({client=cloudClient,storage=cloudStorage
       return {...result,notified:true};
     },
     async pending(){const owner=await account();return (await device.list(owner,prefix)).map(row=>({id:row.jobID,projectID:row.projectID,owner}));},
-    async read(id){if(!uuid.test(id))throw Error('创作任务编号无效');await account();return unwrap(await client().from('shiye_creative_jobs').select('id,project_id,status,progress,result_path,revision,error_code,created_at,deadline_at,lease_until').eq('id',id).single(),'创作状态读取失败');},
-    async recent(){await account();return unwrap(await client().from('shiye_creative_jobs').select('id,project_id,status,progress,result_path,revision,error_code,created_at,deadline_at').order('created_at',{ascending:false}).limit(50),'创作任务读取失败');},
+    async read(id){if(!uuid.test(id))throw Error('创作任务编号无效');await account();return unwrap(await client().from('shiye_creative_jobs').select('id,project_id,status,progress,result_path,revision,error_code,created_at,updated_at,deadline_at,lease_until').eq('id',id).single(),'创作状态读取失败');},
+    async recent(){await account();return unwrap(await client().from('shiye_creative_jobs').select('id,project_id,status,progress,result_path,revision,error_code,created_at,updated_at,deadline_at').order('created_at',{ascending:false}).limit(50),'创作任务读取失败');},
     async document(job,{preview=false}={}){
       const owner=await account(),path=preview?job.progress?.documentPath:job.result_path;
       const match=new RegExp('^'+owner+'/creative/'+job.id+'/'+(preview?'previews':'results')+'/([a-f0-9]{64})\\.json$').exec(path||'');

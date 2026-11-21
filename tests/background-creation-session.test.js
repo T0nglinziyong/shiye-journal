@@ -10,7 +10,7 @@ async function fixture(){
   let document=await createCreationDocument({draft:d,assets:[]});
   const result=applyCreationTransaction(document,{protocolVersion:2,transactionId:'add',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'后台完成的标题',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]},[]);
   document=result.document;
-  const job={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',project_id:project.id,status:'completed'};
+  const job={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',project_id:project.id,status:'completed',updated_at:'2026-11-21T00:02:34Z'};
   project.creativeTask={id:job.id,taskHash:document.source.taskHash,status:'running'};
   return {project,document,job,assets:[]};
 }
@@ -36,7 +36,7 @@ test('reopening subscribes to the same job and closing observers never cancels t
   const api={pending:async()=>[],cancel:async()=>cancels++};
   const session=createBackgroundCreationSession({getAccount:()=>owner,getAssets:()=>[],getProject:async()=>f.project,persist:async()=>{},createImage:async()=>{},api,watch:(api,id,callbacks)=>{assert.equal(id,f.job.id);hooks=callbacks;return ()=>stops++;},onUpdate:value=>updates.push(value)});
   const pending=session.resume(f.project);await new Promise(setImmediate);hooks.onStatus({...f.job,status:'running'});await hooks.onDocument(f.document,f.job);
-  assert.equal((await pending).jobID,f.job.id);assert.equal(stops,1);assert.equal(cancels,0);assert.equal(updates.at(-1).status,'completed');
+  const completed=await pending;assert.equal(completed.jobID,f.job.id);assert.equal(completed.completedAt,f.job.updated_at);assert.equal(stops,1);assert.equal(cancels,0);assert.equal(updates.at(-1).status,'completed');
   const waiting=session.resume(f.project);await new Promise(setImmediate);const rejected=assert.rejects(waiting,/账号已切换/);owner='other';session.dispose();await rejected;assert.equal(cancels,0);
 });
 for(const phase of ['prepare','submit'])test('stopping during '+phase+' cancels the same durable task before observing it',async()=>{

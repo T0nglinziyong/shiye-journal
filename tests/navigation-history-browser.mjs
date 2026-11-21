@@ -47,6 +47,10 @@ try{
       viewport:innerHeight,cards:document.querySelectorAll('.asset-grid .card').length,
       route:history.state?.shiyeNavigation?.snapshot?.route})`))+` immediate ${immediate} later ${assetPosition}`);
   await browser.click('[data-id="navigation-asset-0"][data-act="detail"]','.detail-columns');
+  await browser.command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  assert.ok(await browser.evaluate('document.querySelector(".detail-back span").getBoundingClientRect().height<30'),
+    'Material detail back label stays on one line');
+  await browser.command('Emulation.clearDeviceMetricsOverride');
   await browser.click('[data-act="detail-back"]','.asset-grid');
   await browser.sleep(250);
   assert.ok(Math.abs(await browser.evaluate('scrollY')-assetPosition)<12,
