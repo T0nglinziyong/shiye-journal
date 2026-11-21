@@ -382,7 +382,7 @@ function JournalTemplateImport({db,onClose,onSaved,onError}){
 
 function DetailBackButton({children,onClick,...props}){
   return <button type="button" className="detail-back" onClick={onClick} {...props}>
-    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+    <svg className="shiye-icon" data-shiye-icon="back" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
     <span>{children}</span>
   </button>;
 }
@@ -1106,7 +1106,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       {scope.candidateAssetIDs.length&&guidance.summary?<p className="muted" data-creation-guidance>{guidance.summary}</p>:null}
       </div>
     </details>
-    <div className="matching-layout"><details className="panel match-stage-section" open><summary className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small><span className="match-panel-state"><span className="when-closed">展开</span><span className="when-open">收起</span></span></summary><div className="match-fold-body">
+    <div className="matching-layout"><details className="panel match-stage-section" open><summary className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length}件</small><span className="match-panel-state"><span className="when-closed">展开</span><span className="when-open">收起</span></span></summary><div className="match-fold-body">
       <div className="match-stage-settings"><select id="match-mode" aria-label="页面模式" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select>
         <select id="match-ratio" aria-label="纸张规格" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></div>
       <div className="match-stage-board" style={{'--match-page-ratio':pageSize.width/pageSize.height}}><div className={`match-stage-paper ${state.matchMode==='single'?'single':''}`} ref={stageRef} onPointerDown={event=>{if(event.target===event.currentTarget)setActiveMaterial(null);}}>
