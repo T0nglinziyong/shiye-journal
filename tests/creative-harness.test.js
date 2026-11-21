@@ -45,17 +45,20 @@ test('reference search returns sourced, actionable matches with stable page fit'
  assert.deepEqual(searchLibraryReferences(f.document,{query:'毫无关系的唯一关键词',kind:'techniques'}).results,[]);
  const cases=searchLibraryReferences(f.document,{query:'照片',kind:'cases',limit:8});
  assert.ok(cases.results.length>0);
+ assert.ok(cases.results.every(row=>row.id.startsWith('xhs-')));
  assert.ok(cases.results.every(row=>row.kind==='case'&&row.why.pageMode==='single'&&row.readWith.tool==='read_case'&&row.source.url.startsWith('https://')));
  assert.ok(!cases.results.some(row=>row.id==='digital-two-page-mirror'));
  assert.match(caseDetails(cases.results[0].id,f.document).usage,/不得直接放入作品/);
  assert.throws(()=>caseDetails('digital-two-page-mirror',f.document),/页面模式/);
  assert.deepEqual(matchJournalCases(f.document,{limit:2}).map(row=>row.kind),['case','case']);
+ assert.ok(caseDetails('xhs-lemonade-single',f.document).elements.every(element=>element.box.length===4));
  assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选/);
  assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选（可用 read_case 查看）：\[\]/);
  assert.match(f.state.messages[0].content,/不能凭先前看到的原图脑补字样后批准/);
  const spread=await createCreationDocument({draft:draft({mode:'spread'}),assets:[],styles:['丰富层叠']});
  const spreadCases=matchJournalCases(spread,{limit:3});
- assert.ok(spreadCases.some(row=>row.id==='digital-ephemera-spread'));
+ assert.ok(spreadCases.some(row=>row.id.startsWith('xhs-')));
+ assert.ok(spreadCases.every(row=>row.id.startsWith('xhs-')));
  assert.ok(spreadCases.every(row=>row.why.pageMode==='spread'));
 });
 

@@ -3,6 +3,7 @@
   "cases": [
     {
       "id": "digital-focal-photo-strip",
+      "archived": true,
       "title": "主照片与横向小照片",
       "pageMode": "single",
       "styles": [
@@ -39,6 +40,7 @@
     },
     {
       "id": "digital-torn-edge-foundation",
+      "archived": true,
       "title": "撕边底纸与照片组",
       "pageMode": "single",
       "styles": [
@@ -74,6 +76,7 @@
     },
     {
       "id": "digital-circular-three-clusters",
+      "archived": true,
       "title": "照片双焦点与环形点缀",
       "pageMode": "single",
       "styles": [
@@ -110,6 +113,7 @@
     },
     {
       "id": "digital-multi-photo-ticket",
+      "archived": true,
       "title": "多照片与票据的主次",
       "pageMode": "single",
       "styles": [
@@ -147,6 +151,7 @@
     },
     {
       "id": "digital-template-shrink-slide",
+      "archived": true,
       "title": "缩小并偏移的照片簇",
       "pageMode": "single",
       "styles": [
@@ -181,6 +186,7 @@
     },
     {
       "id": "digital-two-page-mirror",
+      "archived": true,
       "title": "镜像结构的跨页叙事",
       "pageMode": "spread",
       "styles": [
@@ -216,6 +222,7 @@
     },
     {
       "id": "digital-ephemera-spread",
+      "archived": true,
       "title": "旧纸拼贴与手绘的跨页",
       "pageMode": "spread",
       "styles": [
@@ -251,6 +258,7 @@
     },
     {
       "id": "digital-travel-procreate-spread",
+      "archived": true,
       "title": "旅行照片与纹理的跨页",
       "pageMode": "spread",
       "styles": [
@@ -289,6 +297,7 @@
     },
     {
       "id": "digital-sticker-depth",
+      "archived": true,
       "title": "贴纸叠层与有限图层",
       "pageMode": "single",
       "styles": [

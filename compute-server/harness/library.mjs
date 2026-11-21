@@ -6,11 +6,12 @@ import {compileTemplate} from '../../src/creation-library/compiler.js';
 import {templateFixture,isTextSlot,isGraphicElement} from '../../src/creation-library/template-elements.js';
 import {compileTechnique,techniqueCatalog} from '../../src/creation-library/techniques.js';
 import digitalCaseCatalog from '../../src/creation-library/digital-cases.json' with {type:'json'};
+import xhsCaseCatalog from '../../src/creation-library/xhs-cases.json' with {type:'json'};
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 import {inspectCreationDocument} from '../../src/creation-inspection.js';
 const imageCache=new Map();
-const digitalJournalCases=digitalCaseCatalog.cases;
-export const libraryVersion=createHash('sha256').update(JSON.stringify([manifest,templateCatalog,techniqueCatalog,digitalCaseCatalog])).digest('hex');
+const digitalJournalCases=[...xhsCaseCatalog.cases,...digitalCaseCatalog.cases];
+export const libraryVersion=createHash('sha256').update(JSON.stringify([manifest,templateCatalog,techniqueCatalog,digitalCaseCatalog,xhsCaseCatalog])).digest('hex');
 export async function recipeImages(ids){
  const result=[];
  for(const id of ids){
@@ -68,6 +69,7 @@ export function searchLibraryReferences(document,{query='',kind='all',styles=[],
   results.push({kind:'technique',id:method.id,title:method.title,score:match.score,why:{matched:match.hits},skill:method.skill,source:method.lesson?.source||null,readWith:{tool:'read_skill',name:method.skill,level:'detail',methodId:method.id}});
  }
  if(['all','cases'].includes(kind))for(const study of digitalJournalCases){
+  if(study.archived)continue;
   if(study.pageMode!==document.page.pageMode)continue;
   if(styles.length&&!styles.some(style=>study.styles.some(value=>similar(value,style))))continue;
   if(content.length&&!content.some(term=>study.content.some(value=>similar(value,term))))continue;
@@ -76,7 +78,7 @@ export function searchLibraryReferences(document,{query='',kind='all',styles=[],
   const materialKinds=new Set(context.materials.map(material=>normalized(material.kind)));
   const roleFit=study.roles.filter(role=>materialKinds.has(normalized(role))).length;
   const styleFit=study.styles.some(style=>context.styles.some(value=>similar(style,value)))?15:0;
-  results.push({kind:'case',id:study.id,title:study.title,score:match.score+roleFit*6+styleFit,why:{matched:match.hits,materialRoles:roleFit,pageMode:study.pageMode},styles:study.styles,content:study.content,source:study.source,summary:study.composition,readWith:{tool:'read_case',id:study.id}});
+  results.push({kind:'case',id:study.id,title:study.title,score:match.score+roleFit*6+styleFit+(study.id.startsWith('xhs-')?16:0),why:{matched:match.hits,materialRoles:roleFit,pageMode:study.pageMode},styles:study.styles,content:study.content,source:study.source,summary:study.composition,readWith:{tool:'read_case',id:study.id}});
  }
  const remaining=results.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)),selected=[];
  const sources=new Map(),skills=new Map();

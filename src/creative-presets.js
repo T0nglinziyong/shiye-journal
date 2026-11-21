@@ -23,7 +23,7 @@ const definitions=[
   {key:'daisy-bunch',title:'雏菊小束贴纸',kind:'sticker',role:'accent',texture:'贴纸纸',width:33,height:39,tags:['雏菊','花朵','自然'],colors:['奶油黄']},
   {key:'coffee-cup',title:'咖啡时刻贴纸',kind:'sticker',role:'annotation',texture:'贴纸纸',width:32,height:32,tags:['咖啡','日常','暖色'],colors:['咖啡棕']},
   {key:'tiny-moon',title:'弯月晚安贴纸',kind:'sticker',role:'accent',texture:'贴纸纸',width:30,height:31,tags:['月亮','夜晚','蓝色'],colors:['雾蓝']},
-  {key:'paperclip',title:'黄铜回形针贴纸',kind:'sticker',role:'connector',texture:'贴纸纸',width:16,height:40,tags:['回形针','文具','金色'],colors:['黄铜金']},
+  {key:'paperclip',title:'黄铜回形针',kind:'sticker',role:'connector',texture:'黄铜金属',width:16,height:40,tags:['回形针','文具','金色'],colors:['黄铜金']},
   {key:'day-postmark',title:'今日圆形印章',kind:'stamp',role:'annotation',texture:'印刷纸',width:32,height:32,tags:['印章','圆形','日期'],colors:['砖红']},
   {key:'archive-mark',title:'拾页档案印章',kind:'stamp',role:'information',texture:'印刷纸',width:41,height:24,tags:['印章','档案','文字'],colors:['深蓝']},
   {key:'flower-seal',title:'小花线描印章',kind:'stamp',role:'accent',texture:'印刷纸',width:30,height:30,tags:['印章','花朵','线描'],colors:['豆沙粉']}
