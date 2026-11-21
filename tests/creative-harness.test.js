@@ -145,7 +145,8 @@ test('a separate workspace sends only changed nonempty images and can move its g
    return answer(revise(messages,'标题还在试摆区'),call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
   const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
   assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['page']);
-  assert.equal(JSON.parse(latest.content[0].text.split('\n')[1].replace('工作空间状态：','')).changed.find(space=>space.id==='study').empty,true);
+  const stage=JSON.parse(latest.content[0].text.split('\n')[1].replace(/^阶段观察：|^工作空间状态：/,''));
+  assert.equal(stage.changed.find(space=>space.id==='study').empty,true);
   return answer(call('creation_finish',{review:{observations:'试摆后移入纸面',issues:[]}}));
  }});
  const result=await harness.run({id:'study-flow',state:f.state});assert.equal(result.status,'completed');assert.equal(turns,4);

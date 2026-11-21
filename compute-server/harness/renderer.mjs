@@ -83,13 +83,17 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
       const started=performance.now(),{png,report}=await renderOfflinePNG(document.page,source,images,canvas,{decodedCache});
       signal?.throwIfAborted();
       const pngHash=hash(png),sceneRevision=creationSceneRevision(document);
+      const sampleEdge=32,thumbnail=canvas.createCanvas(sampleEdge,sampleEdge),thumbnailContext=thumbnail.getContext('2d');
+      thumbnailContext.drawImage(await canvas.loadImage(png),0,0,sampleEdge,sampleEdge);
+      const pixels=thumbnailContext.getImageData(0,0,sampleEdge,sampleEdge).data,visualSample=Buffer.alloc(sampleEdge*sampleEdge*3);
+      for(let i=0,j=0;i<pixels.length;i+=4){visualSample[j++]=pixels[i];visualSample[j++]=pixels[i+1];visualSample[j++]=pixels[i+2];}
       const artifact=await saveArtifact({png,pngHash,sceneRevision,document,report});
       const views=await Promise.all(spaces.filter(space=>space.id!=='page').map(async space=>({id:space.id,...await tray(document,signal,{space:space.id})})));
       const pageNodes=document.page.layers.filter(node=>!node.isParked&&!node.hidden&&!node.isHidden);
       const pageSignature=pngHash;
       const pageImageURL=await modelImage(png);
       const spaceViews=[{id:'page',imageURL:pageNodes.length?pageImageURL:null,signature:pageSignature,items:pageNodes.map(node=>node.id)},...views.map(view=>({id:view.id,imageURL:view.imageURL||null,signature:view.signature||'empty',items:view.items||[],parkedIDs:view.parkedIDs||[]}))];
-      return {pngHash,sceneRevision,artifact,imageURL:pageImageURL,spaceViews,renderMs:Math.round(performance.now()-started),renderer:report.rendererBackend};
+      return {pngHash,sceneRevision,artifact,imageURL:pageImageURL,spaceViews,visualSample:visualSample.toString('base64'),renderMs:Math.round(performance.now()-started),renderer:report.rendererBackend};
     }
   };
 }

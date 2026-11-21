@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {COMPUTE_RETENTION_HOURS,computeObjectNames,sweepComputeJobs} from '../compute-server/retention.mjs';
+import {sweepCreativeArtifacts} from '../compute-server/harness/retention.mjs';
 
 const id='11111111-1111-4111-8111-111111111111',user_id='2111845279800434690';
 const prefix=`${user_id}/compute/${id}/`;
@@ -38,4 +39,10 @@ test('failed object removal retains metadata so cleanup can retry',async()=>{
    removeObject:async()=>{throw Error('storage unavailable');},
    removeJob:async()=>{removed=true;return true;}});
  assert.equal(result.failed,1);assert.equal(result.deleted,0);assert.equal(removed,false);
+});
+
+test('daily creative cleanup also removes private quality and trace reports',async()=>{
+ const names=[`${user_id}/creative/${id}/reports/evaluation.json`,`${user_id}/creative/${id}/reports/trace.json`],deleted=[];
+ const result=await sweepCreativeArtifacts({apply:true,rpc:async()=>({names}),removeObject:async name=>deleted.push(name)});
+ assert.equal(result.deleted,2);assert.deepEqual(deleted,names);
 });
