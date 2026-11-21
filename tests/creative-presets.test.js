@@ -38,8 +38,14 @@ test('27 bundled supplies join the ordinary library as read-only preset status',
     const png=await imageBytes(asset);
     assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
     const decoded=await loadImage(png);
-    assert.equal(decoded.width,asset.physicalWidthMM*12);
-    assert.equal(decoded.height,asset.physicalHeightMM*12);
+    if(asset.id.endsWith('paperclip')){
+      assert.ok(decoded.width>=asset.physicalWidthMM*12);
+      assert.ok(decoded.height>=asset.physicalHeightMM*12);
+      assert.ok(Math.abs(decoded.width/decoded.height-asset.physicalWidthMM/asset.physicalHeightMM)<.01);
+    }else{
+      assert.equal(decoded.width,asset.physicalWidthMM*12);
+      assert.equal(decoded.height,asset.physicalHeightMM*12);
+    }
   }
   const selected=creativePresetAssets.find(asset=>asset.kind==='sticker');
   const work=project('带预设的作品');work.drafts[0].items.push({assetID:selected.id});

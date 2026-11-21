@@ -2,6 +2,7 @@ import {paperDimensions} from './paper-sizes.js';
 import {buildRecommendationRankings,buildMaterialScope,diversifyRecommendations,normalizeRecommendationDirection} from './matching-materials.js';
 import {styleGroups,purposeGroups,selectedDirections} from './matching-directions.js';
 import {creationGuidanceRoute} from './creation-guidance.js';
+import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 
 const recommendationCache=new WeakMap();
 const recommendationFields=['id','updatedAt','title','kind','kindDetail','role','secondaryRoles','contentCategories','layoutFits','tags','contentTags','themeTags','styleTags','colorTags','materialTags','moodTags','palette','semanticColorNames','physicalWidthMM','physicalHeightMM','seriesID','reviewStatus','autoOrganized','usageStatus','isProjectInternal','isCreativePreset','isBuiltinMaterial'];
@@ -24,7 +25,7 @@ export function matchingScopeForState(state,ranked=matchingRecommendations(state
   ranked.filter(row=>row.asset.isCreativePreset),{limit:6,perKind:2}):[];
  const automaticIDs=new Set(automaticPresets.map(row=>row.asset.id));
  return buildMaterialScope({basket,coreIDs:state.coreIDs,
-  recommendations:recommendations.filter(row=>!automaticIDs.has(row.asset.id)),automaticPresets,
+  recommendations:recommendations.filter(row=>!automaticIDs.has(row.asset.id)&&!row.asset.isCreativePreset&&!isCurrentBuiltinMaterial(row.asset)),automaticPresets,
   excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,
   requireAllCandidates:state.aiSettings.requireAllCandidates});
 }

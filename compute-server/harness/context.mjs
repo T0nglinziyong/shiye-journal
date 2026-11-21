@@ -11,7 +11,7 @@ export function recommendCreationSkills(skills,document,brief={}){
     const names=[...(document.source.textMode==='none'?[]:['journal-lettering']),'journal-graphics','pattern-and-doodle','journal-composition','journal-color'];
     return names.filter(name=>catalog.has(name)).map(name=>catalog.get(name));
   }
-  const names=['journal-composition','paper-layering','journal-accents'];
+  const names=['journal-composition','journal-color','paper-layering','journal-accents'];
   if(document.source.textMode!=='none')names.push('journal-lettering');
   const styles=new Set([...(brief.styles||[]),...(document.source.styles||[]),brief.style]);
   const routes={'童趣可爱':'playful-journal','复古旧物':'vintage-journal','清新淡雅':'quiet-photo-journal','极简留白':'quiet-photo-journal','疏朗留白':'quiet-photo-journal','丰富层叠':'layered-journal','美式拼贴':'magazine-journal','杂志排版':'magazine-journal','日系文具':'functional-journal'};
@@ -80,7 +80,7 @@ export function modelContext(messages,state={}){
   });
   if(!state.document)return [messages[0],index,...recent];
   const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template'].includes(names.get(message.tool_call_id))).flatMap(message=>{
+  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
   }).slice(-2);
   const inspected=inspectCreationDocument(state.document);

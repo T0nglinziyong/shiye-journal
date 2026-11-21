@@ -190,12 +190,6 @@ function tinyMoon(ctx){
   ctx.fillStyle='#d4d7e5';ctx.fill();ctx.strokeStyle='#7683aa';ctx.lineWidth=.75;ctx.stroke();
   ctx.fillStyle='#d8b878';for(const [x,y,r] of [[25,5,1.5],[5,7,1.15],[25,23,1]]){star(ctx,x,y,r,.35,4);ctx.fill();}
 }
-function paperclip(ctx){
-  ctx.save();ctx.shadowColor='rgba(58,48,30,.25)';ctx.shadowBlur=1.2;ctx.shadowOffsetX=.6;
-  ctx.strokeStyle='#fffdf7';ctx.lineWidth=4.2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(7,34);ctx.lineTo(7,8);ctx.arc(8,8,4,Math.PI,Math.PI*2);ctx.lineTo(12,30);ctx.arc(9,30,3,0,Math.PI);ctx.lineTo(6,14);ctx.stroke();ctx.restore();
-  ctx.strokeStyle='#b9985f';ctx.lineWidth=2.1;ctx.lineCap='round';ctx.stroke();
-  ctx.strokeStyle='#e4c78e';ctx.lineWidth=.55;ctx.stroke();
-}
 function stamp(ctx,kind){
   const colors={'travel-postmark':'#668c9c','coffee-seal':'#8a6d59','night-seal':'#79718e',
     'library-date':'#647a69','ticket-seal':'#ad6d62','field-note-seal':'#75856f'};
@@ -223,11 +217,12 @@ const drawers={'sage-check-tape':tape,'blue-rule-tape':tape,'coral-dot-tape':tap
   ...Object.fromEntries(['rose-floral-tape','ochre-gingham-tape','lavender-star-tape',
     'forest-botanical-tape','sky-cloud-tape','vintage-script-tape'].map(key=>[key,tape])),
   'berry-branch':berryBranch,'sleepy-cat':sleepyCat,'daisy-bunch':daisyBunch,
-  'coffee-cup':coffeeCup,'tiny-moon':tinyMoon,paperclip,
+  'coffee-cup':coffeeCup,'tiny-moon':tinyMoon,
   ...Object.fromEntries(['travel-postmark','coffee-seal','night-seal','library-date',
     'ticket-seal','field-note-seal'].map(key=>[key,stamp]))};
 for(const asset of creativePresetAssets){
   const key=asset.id.split(':').at(-1),width=asset.physicalWidthMM,height=asset.physicalHeightMM;
+  if(key==='paperclip')continue;
   const canvas=createCanvas(width*12,height*12),ctx=canvas.getContext('2d');ctx.scale(12,12);
   drawers[key](ctx,key);
   await writeFile(join(root,key+'.png'),canvas.toBuffer('image/png'));

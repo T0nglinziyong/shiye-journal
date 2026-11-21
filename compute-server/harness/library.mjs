@@ -5,10 +5,13 @@ import {templateCatalog,rankTemplates,scoreTemplate,templateEnabled} from '../..
 import {compileTemplate} from '../../src/creation-library/compiler.js';
 import {templateFixture,isTextSlot,isGraphicElement} from '../../src/creation-library/template-elements.js';
 import {compileTechnique,techniqueCatalog} from '../../src/creation-library/techniques.js';
+import digitalCaseCatalog from '../../src/creation-library/digital-cases.json' with {type:'json'};
+import xhsCaseCatalog from '../../src/creation-library/xhs-cases.json' with {type:'json'};
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 import {inspectCreationDocument} from '../../src/creation-inspection.js';
 const imageCache=new Map();
-export const libraryVersion=createHash('sha256').update(JSON.stringify([manifest,templateCatalog,techniqueCatalog])).digest('hex');
+const digitalJournalCases=[...xhsCaseCatalog.cases,...digitalCaseCatalog.cases];
+export const libraryVersion=createHash('sha256').update(JSON.stringify([manifest,templateCatalog,techniqueCatalog,digitalCaseCatalog,xhsCaseCatalog])).digest('hex');
 export async function recipeImages(ids){
  const result=[];
  for(const id of ids){
@@ -36,6 +39,7 @@ export function matchLibraryTemplates(document,{aliases,reference='page',limit=5
  return rankTemplates({...context,limit}).map(row=>({...row,reference,paper:context.paper}));
 }
 const normalized=value=>String(value||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
+const similar=(a,b)=>normalized(a).includes(normalized(b))||normalized(b).includes(normalized(a));
 const bigrams=value=>{const text=normalized(value),result=new Set();for(let i=0;i<text.length-1;i++)result.add(text.slice(i,i+2));return result;};
 function relevance(query,fields){
  const q=normalized(query);if(!q)return {score:0,hits:[]};
@@ -48,7 +52,8 @@ function relevance(query,fields){
 }
 export function searchLibraryReferences(document,{query='',kind='all',styles=[],content=[],reference='page',limit=6}={}){
  const context=libraryContext(document,reference),results=[];
- if(kind!=='techniques')for(const template of templateCatalog.templates.filter(templateEnabled)){
+ if(!['all','templates','techniques','cases'].includes(kind))throw Error('未知参考类型');
+ if(['all','templates'].includes(kind))for(const template of templateCatalog.templates.filter(templateEnabled)){
   if(styles.length&&!styles.some(style=>template.styles.some(value=>normalized(value).includes(normalized(style))||normalized(style).includes(normalized(value)))))continue;
   if(content.length&&!content.some(term=>template.content.some(value=>normalized(value).includes(normalized(term))||normalized(term).includes(normalized(value)))))continue;
   const source=templateCatalog.sources.find(source=>source.id===template.sourceId);
@@ -57,27 +62,47 @@ export function searchLibraryReferences(document,{query='',kind='all',styles=[],
   const fit=scoreTemplate(template,context.materials,context.paper,{styles:context.styles,content}),score=Math.round(match.score+fit.score*.25);
   results.push({kind:'template',id:template.id,title:template.title,score,why:{matched:match.hits,materialFit:Math.round(fit.score),paperAspect:Math.round(fit.components.aspect*100)},styles:template.styles,content:template.content,source:{id:source?.id,title:source?.title,author:source?.author,url:source?.url},readWith:{tool:'read_template',id:template.id}});
  }
- if(kind!=='templates')for(const method of techniqueCatalog.methods){
+ if(['all','techniques'].includes(kind))for(const method of techniqueCatalog.methods){
   if(styles.length||content.length)continue;
   const match=relevance(query,[['title',[method.title],35],['purpose',[method.when],20],['method',[method.lesson?.principle],12],['skill',[method.skill],8]]);
   if(query&&!match.hits.length&&match.overlap<.25)continue;
   results.push({kind:'technique',id:method.id,title:method.title,score:match.score,why:{matched:match.hits},skill:method.skill,source:method.lesson?.source||null,readWith:{tool:'read_skill',name:method.skill,level:'detail',methodId:method.id}});
+ }
+ if(['all','cases'].includes(kind))for(const study of digitalJournalCases){
+  if(study.archived)continue;
+  if(study.pageMode!==document.page.pageMode)continue;
+  if(styles.length&&!styles.some(style=>study.styles.some(value=>similar(value,style))))continue;
+  if(content.length&&!content.some(term=>study.content.some(value=>similar(value,term))))continue;
+  const match=relevance(query,[['title',[study.title],35],['style',study.styles,25],['content',study.content,20],['role',study.roles,12],['composition',[study.composition],8]]);
+  if(query&&!match.hits.length&&match.overlap<.25)continue;
+  const materialKinds=new Set(context.materials.map(material=>normalized(material.kind)));
+  const roleFit=study.roles.filter(role=>materialKinds.has(normalized(role))).length;
+  const styleFit=study.styles.some(style=>context.styles.some(value=>similar(style,value)))?15:0;
+  results.push({kind:'case',id:study.id,title:study.title,score:match.score+roleFit*6+styleFit+(study.id.startsWith('xhs-')?16:0),why:{matched:match.hits,materialRoles:roleFit,pageMode:study.pageMode},styles:study.styles,content:study.content,source:study.source,summary:study.composition,readWith:{tool:'read_case',id:study.id}});
  }
  const remaining=results.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)),selected=[];
  const sources=new Map(),skills=new Map();
  while(remaining.length&&selected.length<limit){
   let bestIndex=0,bestValue=-Infinity;
   for(let i=0;i<remaining.length;i++){
-   const item=remaining[i],group=item.kind==='template'?item.source?.id:item.skill;
-   const count=(item.kind==='template'?sources:skills).get(group)||0;
+   const item=remaining[i],group=item.kind==='technique'?item.skill:item.source?.url||item.source?.id;
+   const count=(item.kind==='technique'?skills:sources).get(group)||0;
    const value=item.score-count*12;
    if(value>bestValue){bestValue=value;bestIndex=i;}
   }
-  const [item]=remaining.splice(bestIndex,1),group=item.kind==='template'?item.source?.id:item.skill;
-  const counts=item.kind==='template'?sources:skills;
+  const [item]=remaining.splice(bestIndex,1),group=item.kind==='technique'?item.skill:item.source?.url||item.source?.id;
+  const counts=item.kind==='technique'?skills:sources;
   counts.set(group,(counts.get(group)||0)+1);selected.push(item);
  }
  return {version:libraryVersion,query,reference,results:selected};
+}
+export function caseDetails(id,document){
+ const study=digitalJournalCases.find(item=>item.id===id);if(!study)throw Error('未知案例');
+ if(document&&study.pageMode!==document.page.pageMode)throw Error('案例页面模式与当前创作不一致');
+ return {...study,usage:'仅借鉴构图、配色与对象关系；来源图片和案例文字不是本次授权素材，不得直接放入作品。'};
+}
+export function matchJournalCases(document,{limit=3}={}){
+ return searchLibraryReferences(document,{kind:'cases',limit}).results;
 }
 export function templateDetails(id){
  const template=templateCatalog.templates.find(t=>t.id===id);if(!template)throw Error('未知模板');

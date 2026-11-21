@@ -139,6 +139,8 @@ test('automatic supplies are bounded, optional, persistent choices win, and UI/e
  assert.deepEqual(matchingViewModel(state).scope,scope);
  assert.equal(normalizeMatchingDefaults(state).matchAutoUsePresets,undefined);
  const off=matchingScopeForState({...state,aiSettings:{...state.aiSettings,autoUsePresets:false}});assert.deepEqual(off.candidateAssetIDs,['photo']);
+ const recommended=matchingScopeForState({...state,aiSettings:{...state.aiSettings,autoUsePresets:false,autoIncludeRecommendations:true}});
+ assert.ok(recommended.candidateAssetIDs.every(id=>!state.assets.find(asset=>asset.id===id)?.isCreativePreset));
  const pinned=matchingScopeForState({...state,basket:['photo',scope.available[0]]});assert.ok(pinned.required.includes(scope.available[0]));
 });
 test('automatic recommendations use the same finite 18 rows in view and export',async()=>{
