@@ -55,7 +55,7 @@ test('reference search returns sourced, actionable matches with stable page fit'
  assert.match(caseDetails('xhs-lemonade-single',f.document).source.imageSha256,/^[a-f0-9]{64}$/);
  assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选/);
  assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选（可用 read_case 查看）：\[\]/);
- assert.match(f.state.messages[0].content,/不能凭先前看到的原图脑补字样后批准/);
+ assert.match(f.state.messages[0].content,/不要把遮挡本身判为缺陷/);
  const spread=await createCreationDocument({draft:draft({mode:'spread'}),assets:[],styles:['丰富层叠']});
  const spreadCases=matchJournalCases(spread,{limit:3});
  assert.ok(spreadCases.some(row=>row.id.startsWith('xhs-')));
