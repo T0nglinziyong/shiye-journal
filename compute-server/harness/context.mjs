@@ -3,23 +3,37 @@ import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
 import {validateWebScene} from '../../src/web-scene-workbench.js';
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
+import {techniqueCatalog} from '../../src/creation-library/techniques.js';
 
-export function preloadCreationSkills(skills,document,brief={}){
+export function recommendCreationSkills(skills,document,brief={}){
   const names=['journal-composition','paper-layering','journal-accents'];
   if(document.source.textMode!=='none')names.push('journal-lettering');
   const styles=new Set([...(brief.styles||[]),...(document.source.styles||[]),brief.style]);
   const routes={'童趣可爱':'playful-journal','复古旧物':'vintage-journal','清新淡雅':'quiet-photo-journal','极简留白':'quiet-photo-journal','疏朗留白':'quiet-photo-journal','丰富层叠':'layered-journal','美式拼贴':'magazine-journal','杂志排版':'magazine-journal','日系文具':'functional-journal'};
   for(const [style,name] of Object.entries(routes))if(styles.has(style))names.push(name);
-  const available=new Set(skills.catalog().map(s=>s.name));
-  return [...new Set(names)].filter(name=>available.has(name)).map(name=>skills.read(name));
+  const catalog=new Map(skills.catalog().map(skill=>[skill.name,skill]));
+  return [...new Set(names)].filter(name=>catalog.has(name)).map(name=>catalog.get(name));
+}
+
+export function shortlistCreationMethods(document,brief={}){
+  const style=[...(brief.styles||[]),...(document.source.styles||[]),brief.style].filter(Boolean).join(' ');
+  const materialCount=document.source.materials.length;
+  const text=style+' '+String(brief.intent||'');
+  const ids=/丰富|层叠|拼贴/.test(text)?['layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','title-label']:
+    /极简|留白|清新|淡雅/.test(text)?['quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption']:
+    /杂志|照片|旅行/.test(text)?['magazine-offset','photo-stagger','photo-caption','paper-underlay','graphic-route']:
+    ['composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
+  const chosen=materialCount<3?ids.filter(id=>!['composition-s','layered-center','layered-diagonal','photo-stagger'].includes(id)):ids;
+  const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
+  return chosen.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
 }
 
 export function initialToolGuide(document){
-  const topics=['material.add','layer.update','page.update','graphic.add','place','size','order','geometry','shapeOptions','region'];
-  if(document.source.textMode!=='none')topics.push('text.add','text.lettering');
+  const topics=['material.add','layer.update','graphic.add','place','size'];
+  if(document.source.textMode!=='none')topics.push('text.add');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
-  return {catalog:creationHelp(),common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；只有未提供的参数才查询帮助。','place.at 必须是 [x,y] 数组，不能是带 x/y 字段的对象；相对定位使用 reference、referenceAnchor、anchor 和 offset。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切，不能当胶带延展。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 必须同时提供 geometry.unit="mm" 与 points=[{x,y,pressure}]。style 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
+  return {topics:creationHelp().topics,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
+    notes:['常用操作、全局素材编号图与尺寸已加载；复杂图形、裁切、文字特效和不熟悉的参数先用 creation_help 查询。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','颜色用六位 HEX；笔迹使用 geometry.unit="mm" 与 points=[{x,y,pressure}]，复杂笔迹参数先查询。']};
 }
 
 export function materialBrief(document){
@@ -45,18 +59,22 @@ export function modelContext(messages,state={}){
   if(messages.length<=2)return messages;
   const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
   const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||i===parts.findIndex(p=>p.type==='image_url'))}:first;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=Number.isInteger(state.compactedUntil)?state.compactedUntil:turns.at(-2)??turns.at(0)??2;
+  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-2)??turns.at(0)??2);
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
-  const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview);
-  const recent=tail.filter((message,i)=>!isPreview(message)||i===lastPreview);
+  const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
+  const recent=tail.filter((message,i)=>{
+    if(isPreview(message))return i===lastPreview;
+    if(message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))return i>lastAssistant;
+    return true;
+  });
   if(!state.document)return [messages[0],index,...recent];
   const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','creation_help'].includes(names.get(message.tool_call_id))).flatMap(message=>{
-    try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,3500)}]:[];}catch{return [];}
-  }).slice(-3);
+  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template'].includes(names.get(message.tool_call_id))).flatMap(message=>{
+    try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
+  }).slice(-2);
   const inspected=inspectCreationDocument(state.document);
   const scene=state.phase==='review'?{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>layer.surface==='page')}:inspected;
-  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'composition',plan:state.plan,decisions:(state.decisions||[]).slice(-8),spaces:state.spaces,visualState:state.visualState||null,scene,loadedSkills:state.loadedSkills,references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
+  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'composition',plan:state.plan,decisions:(state.decisions||[]).slice(-8),spaces:state.spaces,visualState:state.visualState||null,scene,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
   return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
 }
 

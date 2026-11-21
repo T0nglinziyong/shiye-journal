@@ -55,16 +55,16 @@ test('unreviewed and non-PNG illustrations never enter model messages',async t=>
   await assert.rejects(loadCreationSkills(f.skills,{illustrationRoot:f.images}),/PNG/);
 });
 
-test('preloaded and requested skills deliver actual image parts once, with separate tutorial attribution',async t=>{
+test('requested skills deliver an attributed image once and remove it from later context',async t=>{
   const f=await fixture(t),skills=await loadCreationSkills(f.skills,{illustrationRoot:f.images});
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{title:'测试'}});let turns=0;
   const count=messages=>messages.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length;
-  assert.equal(count(state.messages),1);
+  assert.equal(count(state.messages),0);
   const harness=createCreativeHarness({skills,model:async({messages})=>{
     turns++;
-    assert.equal(count(messages),turns===1?1:2);
-    assert.match(JSON.stringify(messages),/教程示意（仅供方法参考/);
+    assert.equal(count(messages),turns===2?1:0);
+    if(turns===2)assert.match(JSON.stringify(messages),/教程示意（仅供方法参考/);
     if(turns===3){assert.equal(JSON.parse(messages.at(-1).content).data.alreadyLoaded,true);throw Error('image delivery verified');}
     return {message:{role:'assistant',content:null,tool_calls:[{id:'read-'+turns,type:'function',function:{name:'read_skill',arguments:JSON.stringify({name:'optional-skill'})}}]}};
   }});
