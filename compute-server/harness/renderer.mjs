@@ -24,7 +24,7 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
     const unplaced=space==='tray'?source.materials.filter(material=>all||!placed.has(material.assetID)):[];
     const parked=all?[]:document.page.layers.filter(node=>node.isParked&&(node.workspaceId||'tray')===space);
     if(!unplaced.length&&!parked.length)return null;
-    const width=1440,cellWidth=240,cellHeight=218,columns=6,header=parked.length?90:54;
+    const cellWidth=240,cellHeight=218,columns=Math.min(6,Math.max(3,unplaced.length)),width=columns*cellWidth,header=parked.length?90:54;
     let parkedImage=null,parkedHeight=0;
     if(parked.length){
       const draft=structuredClone(document.page);
@@ -72,6 +72,7 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
     tray,
     index(document,signal){return tray(document,signal,{all:true});},
     async viewSpace(document,id,signal){
+      if(id==='source')return tray(document,signal,{all:true});
       if(id!=='page')return tray(document,signal,{space:id});
       const visible=document.page.layers.some(node=>!node.isParked&&!node.hidden&&!node.isHidden);
       if(!visible)return null;

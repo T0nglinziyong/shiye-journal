@@ -259,6 +259,8 @@ test('DeepSeek adapter enables thinking and round-trips reasoning without exposi
   const result=await model({messages,tools:[],remainingMs:1000});
   assert.deepEqual(payload.thinking,{type:'enabled'});assert.equal(payload.reasoning_effort,'high');assert.deepEqual(payload.messages,messages);
   assert.equal(result.message.reasoning_content,'new reasoning');
+  await model({messages,tools:[],remainingMs:1000,reasoningEffort:'low'});
+  assert.equal(payload.reasoning_effort,'low');
   await model({messages,tools:[],remainingMs:1000,recoveringFromTruncation:true});
   assert.equal(payload.reasoning_effort,'low');assert.deepEqual(payload.thinking,{type:'enabled'});
   const failing=createDeepSeekCreativeModel({key:'private-key',fetcher:async()=>new Response('private-key',{status:401})});
@@ -309,6 +311,99 @@ test('small task allows first-turn editing and combined visual review/finish wit
     return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
   }});
   const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
+});
+
+test('a real creative brief preloads concise expressive cards and must execute one before finish',async t=>{
+  const f=await fixture(t),brief={intent:'写一页有关平常散步的手帐',styles:['疏朗留白']};
+  const state=initialHarnessState({document:f.document,skills:f.skills,brief});
+  assert.equal(state.expressionRequired,true);
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-phrases','color-echo']);
+  assert.ok(state.loadedSkills.some(skill=>skill.selection==='detail:title-phrases:0'));
+  assert.match(state.messages[0].content,/已预读、可直接执行的表达方法卡/);
+  let turn=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
+    if(++turn===1)return answer(
+      call('creation_plan',{intent:brief.intent,methods:[{id:'title-phrases',purpose:'形成有主次的手写标题'},{id:'color-echo',purpose:'以三处小色点呼应标题'}],palette:{source:'散步与纸色',main:'#37564B',secondary:'#E9E0CE',accent:'#BA7955',relationship:'tonal',distribution:'浅色为底，深色标题，小面积暖色'},steps:[{task:'建立标题组',status:'in_progress'}]}),
+      call('creation_apply',{protocolVersion:2,transactionId:'plain-first',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'plain-title',content:'散步',place:{reference:'page',at:[45,55],unit:'mm'},size:{width:40,unit:'mm'}}]})
+    );
+    if(turn===2){
+      assert.deepEqual(new Set(tools.map(tool=>tool.function.name)),new Set(['creation_review','creation_finish','creation_preview']));
+      return answer(call('creation_finish',{review:{observations:'标题位于纸面左上，背景留白',issues:[]}}));
+    }
+    assert.match(JSON.parse(messages.at(-1).content).detail,/尚未实际保留标题或图形与配色处理/);
+    throw Error('expressive gate observed');
+  }});
+  await assert.rejects(harness.run({id:'expressive-gate',state}),/expressive gate observed/);
+});
+
+test('two preloaded expressive recipes can be committed and previewed in one transaction',async t=>{
+  const f=await fixture(t),brief={intent:'写一页关于散步的短记',styles:['疏朗留白']};
+  const state=initialHarnessState({document:f.document,skills:f.skills,brief});
+  let turn=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async()=>{
+    if(++turn===1)return answer(
+      call('creation_plan',{intent:brief.intent,methods:[{id:'title-phrases',purpose:'区分主词与短引'},{id:'color-echo',purpose:'用三处色点联系标题与页脚'}],palette:{source:'散步主题',main:'#37564B',secondary:'#E9E0CE',accent:'#BA7955',relationship:'tonal',distribution:'浅底与深字'},steps:[{task:'建立可编辑标题组',status:'in_progress'}]}),
+      call('creation_recipe',{kind:'technique',recipeId:'title-phrases',transactionId:'expressive-title',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'walk-title',at:[70,60],text:'慢慢散步',runs:[{text:'慢慢',role:'secondary'},{text:'散步',role:'primary'}]},with:[{recipeId:'color-echo',parameters:{id:'walk-palette',at:[90,105],widthMm:70,heightMm:35,colors:['#37564B','#E9E0CE','#BA7955']}}],decision:'以主次词组建立标题焦点，三个色点呼应标题'})
+    );
+    return answer(call('creation_finish',{review:{observations:'短引与主词在纸面上形成大小变化，标题清楚',issues:[]}}));
+  }});
+  const done=await harness.run({id:'expressive-title',state});
+  assert.equal(done.status,'completed');
+  assert.equal(turn,2);
+  assert.ok(done.recipeReceipts['expressive-title'].data.recipe.groupId==='walk-title');
+  assert.deepEqual(done.recipeReceipts['expressive-title'].data.recipes.map(recipe=>recipe.methodId),['title-phrases','color-echo']);
+});
+
+test('reading a preloaded expression method does not resend the full lesson',async t=>{
+  const f=await fixture(t),state=initialHarnessState({document:f.document,skills:f.skills,brief:{intent:'一页散步记录',styles:['疏朗留白']}});
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(!messages.some(message=>message.role==='tool'))return answer(call('read_skill',{name:'journal-lettering',level:'detail',methodId:'title-phrases'}));
+    const reply=JSON.parse(messages.findLast(message=>message.role==='tool').content);
+    assert.equal(reply.data.alreadyLoaded,true);
+    assert.ok(!reply.data.methods);
+    throw Error('compact duplicate lesson observed');
+  }});
+  await assert.rejects(harness.run({id:'preloaded-lesson',state}),/compact duplicate lesson observed/);
+});
+
+test('common graphic and layer-order aliases execute without a correction round',async t=>{
+  const f=await fixture(t);let turn=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++turn===1)return answer(plan(),call('creation_apply',{protocolVersion:2,transactionId:'aliases',baseSceneRevision:creationSceneRevision(f.document),operations:[
+      {op:'graphic.add',id:'card',geometry:{kind:'rectangle'},place:{reference:'page',at:[45,50]},size:{width:32,height:18,unit:'mm'},style:{fill:'#DDE8DF',stroke:null}},
+      {op:'order',target:'card',edge:'front'},
+      {op:'layer.update',target:'card',at:[50,55],place:{reference:'page'}}
+    ]}));
+    assert.equal(lastScene(messages).sceneRevision!==creationSceneRevision(f.document),true);
+    return answer(call('creation_finish',{review:{observations:'矩形卡片位于纸面左上',issues:[]}}));
+  }});
+  assert.equal((await harness.run({id:'command-aliases',state:f.state})).status,'completed');
+  assert.equal(turn,2);
+});
+
+test('batch recipe help accepts the with field as a topic',async t=>{
+  const f=await fixture(t);
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(!messages.some(message=>message.role==='tool'))return answer(call('creation_help',{topics:['with']}));
+    const reply=JSON.parse(messages.findLast(message=>message.role==='tool').content);
+    assert.equal(reply.ok,true);
+    assert.equal(reply.data.recipeBatch.tool,'creation_recipe');
+    throw Error('batch help observed');
+  }});
+  await assert.rejects(harness.run({id:'batch-help',state:f.state}),/batch help observed/);
+});
+
+test('after the first visual pass an expressive task offers recipes before more plain edits',async t=>{
+  const f=await fixture(t),brief={intent:'写一页散步手帐',styles:['疏朗留白']};
+  const state=initialHarnessState({document:f.document,skills:f.skills,brief});let turn=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
+    if(++turn===1)return answer(call('creation_plan',{intent:brief.intent,methods:[{id:'title-phrases',purpose:'标题层级'},{id:'color-echo',purpose:'颜色呼应'}],palette:{source:'主题',main:'#37564B',secondary:'#E9E0CE',relationship:'tonal',distribution:'主色标题，小面积辅色'},steps:[{task:'试摆',status:'in_progress'}]}),call('creation_apply',{protocolVersion:2,transactionId:'pass-1',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'note',content:'散步',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:50,unit:'mm'}}]}));
+    if(turn===2)return answer(revise(messages,'标题尚缺设计'));
+    assert.ok(!tools.some(tool=>tool.function.name==='creation_apply'));
+    assert.ok(tools.some(tool=>tool.function.name==='creation_recipe'));
+    throw Error('expression gate observed');
+  }});
+  await assert.rejects(harness.run({id:'expression-timing',state}),/expression gate observed/);
 });
 
 test('rich task makes a specific method and material evidence available before editing',async t=>{

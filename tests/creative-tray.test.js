@@ -8,6 +8,7 @@ import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision,applyCreationTransaction} from '../src/creation-transaction.js';
 import {inspectCreationDocument} from '../src/creation-inspection.js';
 import {createHarnessRenderer} from '../compute-server/harness/renderer.mjs';
+import {loadOfflineCanvas} from '../src/offline-node-preview.mjs';
 import {initialHarnessState} from '../compute-server/harness/agent.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 
@@ -29,6 +30,9 @@ test('one tray image represents unplaced sources, while a detailed material imag
  const state=initialHarnessState({document,skills:await loadCreationSkills(),brief:{},tray});
  const images=state.messages[1].content.filter(part=>part.type==='image_url');
  assert.equal(images.length,1);assert.equal((await renderer.inspectMaterials([tray.items[0].alias])).length,1);
+ const canvas=await loadOfflineCanvas(),indexImage=await canvas.loadImage(Buffer.from((await renderer.index(document)).imageURL.split(',')[1],'base64'));
+ assert.equal(indexImage.width,720);
+ assert.deepEqual((await renderer.viewSpace(document,'source')).items.map(item=>item.alias),tray.items.map(item=>item.alias));
 });
 
 test('material and group can move between tray and page with the same place contract',async()=>{

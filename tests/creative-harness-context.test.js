@@ -32,6 +32,30 @@ test('model context keeps the global index and recent tool pair while dropping s
   assert.equal(out.filter(m=>Array.isArray(m.content)).length,2);assert.equal(JSON.stringify(input),before);
 });
 
+test('after a real preview the model can request the saved source board instead of paying for it every turn',()=>{
+ const source={role:'user',content:[{type:'text',text:'素材清单'},{type:'text',text:'全局素材编号图；始终可对照此图。'},{type:'image_url',image_url:{url:'source-board'}}]};
+ const preview={role:'user',content:[{type:'text',text:'当前真实画面：first'},{type:'image_url',image_url:{url:'page'}}]};
+ const messages=[{role:'system',content:'rules'},source,{role:'assistant',content:'试摆完成'},preview];
+ const before=modelContext(messages,{qualityFrames:[]});
+ const after=modelContext(messages,{qualityFrames:[{pngHash:'first'}]});
+ assert.equal(before[1].content.filter(part=>part.type==='image_url').length,1);
+ assert.equal(after[1].content.filter(part=>part.type==='image_url').length,0);
+ assert.match(after[1].content[1].text,/workspace_view/);
+ assert.equal(after.at(-1),preview);
+ assert.equal(source.content[2].image_url.url,'source-board');
+});
+
+test('state summary does not repeat the Scene already present in the latest preview',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const {draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"sceneRevision":"current"}\n最新 Scene：{"layers":[{"id":"visible"}]}'},{type:'image_url',image_url:{url:'preview'}}]};
+ const out=modelContext([{role:'system',content:'rules'},{role:'user',content:'input'},{role:'assistant',content:'edit'},preview],{document,phase:'composition'});
+ const summary=JSON.parse(out[2].content.replace('当前创作状态（由检查点生成，早期对话已压缩）：',''));
+ assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
+ assert.equal(out.at(-1),preview);
+});
+
 test('model context stays bounded as checkpoint history grows',()=>{
  const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'text',text:'素材索引'},{type:'image_url',image_url:{url:'index'}}]};
  const messages=[system,index];
@@ -115,6 +139,9 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   assert.ok(!visualState.recommendedMethods.some(method=>method.skill==='journal-lettering'));
   assert.ok(!recommendCreationSkills(skills,visual).some(skill=>skill.name==='journal-lettering'));
   assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['layered-center','layered-diagonal']);
+  const noText=initialHarnessState({document:visual,skills,brief:{intent:'只用数字图形创作',styles:['丰富层叠']}});
+  assert.equal(noText.expressionRequired,true);
+  assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-flower','color-bands']);
 });
 
 test('repeated local edits get a batch correction hint without forcing acceptance',()=>{

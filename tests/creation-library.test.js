@@ -232,6 +232,12 @@ test('phrase composition preserves the supplied text, meaningful grouping and ph
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-phrases',parameters:{id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
 });
+test('short Chinese staggered title runs retain enough width to read as words',()=>{
+ const compiled=compileTechnique({methodId:'title-stagger',parameters:{id:'staggered',text:'去拾一束星光',runs:[{text:'去拾'},{text:'一束'},{text:'星光'}]}});
+ const words=compiled.operations[0].children.filter(operation=>operation.op==='text.add');
+ assert.deepEqual(words.map(word=>word.content),['去拾','一束','星光']);
+ assert.ok(words.every(word=>word.size.width>=20));
+});
 test('lettering recipes expose and preserve different bundled fonts',async()=>{
  const detail=describeTechnique('title-caption');
  assert.ok(detail.parameters.fontFamily.suggestedFonts.some(font=>font.family==='HongLeiZhuoShu'));
