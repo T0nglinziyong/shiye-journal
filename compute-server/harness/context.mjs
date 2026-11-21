@@ -19,7 +19,7 @@ export function initialToolGuide(document){
   if(document.source.textMode!=='none')topics.push('text.add','text.lettering');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   return {catalog:creationHelp(),common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；只有未提供的参数才查询帮助。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切，不能当胶带延展。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 必须同时提供 geometry.unit="mm" 与 points=[{x,y,pressure}]。style 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
+    notes:['常用操作、全局素材编号图与尺寸已加载；只有未提供的参数才查询帮助。','place.at 必须是 [x,y] 数组，不能是带 x/y 字段的对象；相对定位使用 reference、referenceAnchor、anchor 和 offset。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切，不能当胶带延展。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 必须同时提供 geometry.unit="mm" 与 points=[{x,y,pressure}]。style 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
 }
 
 export function materialBrief(document){

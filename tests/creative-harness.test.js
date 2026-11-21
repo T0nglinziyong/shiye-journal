@@ -312,9 +312,21 @@ test('unchanged preview reuses the current render without another upload',async 
     if(++n===1)return answer(plan(),add(f.document));
     if(n===2)return answer(call('creation_preview',{}));
     assert.equal(JSON.parse(messages.at(-1).content).data.reused,true);
-    const p=lastScene(messages);return answer(call('creation_finish',{review:{observations:'同版本预览',issues:[]}}));
+    const p=lastScene(messages);return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'同版本预览',issues:[]}}));
   }});
   assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
+});
+
+test('finish review accepts a current image hash and rejects a stale one',async t=>{
+ const f=await fixture(t);let n=0;
+ const harness=createCreativeHarness({...f,model:async({messages})=>{
+  if(++n===1)return answer(plan(),add(f.document));
+  const p=lastScene(messages);
+  if(n===2)return answer(call('creation_finish',{review:{pngHash:'sha256:'+'0'.repeat(64),sceneRevision:p.sceneRevision,observations:'旧图',issues:[]}}));
+  assert.match(JSON.parse(messages.at(-1).content).detail,/旧画面/);
+  return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'已核对当前图',issues:[]}}));
+ }});
+ assert.equal((await harness.run({id:'finish-hash',state:f.state})).status,'completed');
 });
 
 test('recipe discovery is paged, image-backed and does not resend the overview',async t=>{

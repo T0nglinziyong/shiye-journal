@@ -41,7 +41,7 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
   custom('workspace_close','关闭已清空的试摆空间。',object({id:{type:'string',pattern:'^[a-z][a-z0-9_-]{0,31}$'}},['id'])),
   custom('workspace_view','按需重看某个工作空间的当前图像；未变化空间不会自动重复发送。',object({id:{type:'string',pattern:'^[a-z][a-z0-9_-]{0,31}$'}},['id'])),
   custom('creation_undo','撤回最近一次成功的编辑批次，恢复之前的可编辑 Scene；随后自动重绘纸面和暂放区。',object({})),
-  custom('creation_finish','看过最新自动预览后直接提交检查意见和成品，后台自动绑定该预览。必须是本轮最后调用。',object({summary:{type:'string',maxLength:1200},review:object({observations:string,strengths:{type:'array',maxItems:6,items:string},issues:{type:'array',maxItems:12,items:string},nextStep:string},['observations','issues'])})),
+  custom('creation_finish','看过最新自动预览后直接提交检查意见和成品，后台自动绑定该预览。必须是本轮最后调用。',object({summary:{type:'string',maxLength:1200},review:object({observations:string,strengths:{type:'array',maxItems:6,items:string},issues:{type:'array',maxItems:12,items:string},nextStep:string,pngHash:string,sceneRevision:string},['observations','issues'])})),
   custom('creation_preview','渲染当前可编辑 Scene，返回真实预览和版本，用于检查构图。',object({})),
   custom('creation_review','看过当前真实预览后先评价构图、素材关系、文字可读性和任务方向；有问题时同轮可继续修改。',object({pngHash:string,sceneRevision:string,approved:{type:'boolean'},observations:string,strengths:{type:'array',maxItems:6,items:string},issues:{type:'array',maxItems:12,items:string},nextStep:string},['pngHash','sceneRevision','approved','observations','issues']))
 ];
@@ -243,6 +243,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
             if(index!==s.calls.length-1||results.some(r=>!r.ok))throw Error('完成必须是最后调用，前面的工具须全部成功');
             if(args.review){
               if(needsRender||!s.preview||s.preview.sceneRevision!==revision(document))throw Error('请先查看当前版本的真实预览');
+              if(args.review.pngHash&&args.review.pngHash!==s.preview.pngHash||args.review.sceneRevision&&args.review.sceneRevision!==s.preview.sceneRevision)throw Error('完成审阅引用了旧画面，请检查当前预览版本');
               if(args.review.issues.length)throw Error('存在未解决的问题，不能标为审阅通过');
               if(review?.approved===false&&review.sceneRevision===revision(document))throw Error('待修问题尚未通过修改与重新预览验证');
               review={...args.review,pngHash:s.preview.pngHash,sceneRevision:s.preview.sceneRevision,approved:true,turn:s.turns};
