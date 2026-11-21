@@ -14,6 +14,7 @@ import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditable
 import {applySceneNodePatch,applySceneWorldPatch,applyScenePagePatch,insertSceneLayer} from './scene-edit-kernel.js';
 import {USER_SCENE_POLICY,confirmSceneCapability} from './scene-edit-policy.js';
 import {normalizeMatchingDirection} from './matching-directions.js';
+import {matchingCreationProject} from './matching-project.js';
 import {importDefaultTitle} from './import-default-names.js';
 // Production deployment refresh marker: 2026-10-04
 import {materialKindName} from './material-taxonomy.js';
@@ -125,7 +126,7 @@ import {loadPreferences,savePreferences,migrateStoredPreferences} from './prefer
 import {cloudPreferencesRecord,cloudPreferencesFromMeta} from './cloud-preferences.js';
 import {cloudAISettingsRecord,cloudAISettingsFromMeta} from './cloud-ai-settings.js';
 import {cloudMatchingSettingsRecord,cloudMatchingSettingsFromMeta,applyMatchingDefaults} from './cloud-matching-settings.js';
-import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
+import {uid,canvasSize,draft,project,itemFromAsset,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
 import {applyMatchingStage} from './matching-stage.js';
 import {detectPaperCandidates,reprocessPaperCandidates,cropBitmap,alignMaterialPreview,initialMaterialRotation} from './image.js';
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
@@ -2322,16 +2323,7 @@ function createMatchingProject(automatic=true){
   const scope=matchingScope();
   const selectedIDs=state.basket.filter(id=>state.assets.some(asset=>asset.id===id&&!asset.isProjectInternal));
   if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!selectedIDs.length)throw Error('请先选择素材');
-  const p=project('新的手账',{mode:'spread',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];
-  d.matchingTwoPageWorkspace=true;
-  d.inactivePageDimmed=state.matchMode==='single';
-  d.items=automatic?[]:physicalPlacement(d,state.assets,selectedIDs.slice(0,8));
-  p.candidateAssetIDs=automatic?scope.candidateAssetIDs:selectedIDs;
-  p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:selectedIDs};
-  p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;
-  p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];
-  p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';
-  return p;
+  return matchingCreationProject(state,scope,selectedIDs,automatic);
 }
 async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
   if(!rebuildSnapshot&&!canStartCreation(state.matchCreationMode,matchingScope().candidateAssetIDs.length)){toast('请先选择素材');return;}
