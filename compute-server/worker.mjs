@@ -178,6 +178,7 @@ const query=async(table,params)=>{
 };
 const creative=env.SHIYE_CREATIVE_API_KEY?createCreativeWorker({key:env.SHIYE_CREATIVE_API_KEY,dns:env.SHIYE_CREATIVE_DNS||'system',samRoot,rpc,
   store:{download,upload},notify:id=>notify(id,'/api/creative-worker-notify'),
+  lookupRecords:async(userID,store,ids)=>query('shiye_records',{select:'id,record',user_id:'eq.'+userID,store:'eq.'+store,id:'in.('+ids.join(',')+')',limit:String(ids.length)}),
   listCheckpoints:id=>query('shiye_creative_checkpoints',{select:'job_id,seq,object_path,object_hash',job_id:'eq.'+id,order:'seq.asc',limit:'512'}),
   lookup:async id=>(await query('shiye_creative_jobs',{select:'id,status,lease_until',id:'eq.'+id}))[0],
   listActive:async()=>{

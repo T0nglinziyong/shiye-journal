@@ -56,9 +56,10 @@ test('creative submission survives a lost enqueue reply and reuses its immutable
     device:{put:async(user,value)=>records.set(user+value.id,value),get:async(user,key)=>records.get(user+key),delete:async(user,key)=>records.delete(user+key),list:async()=>[...records.values()]},
     client:()=>({rpc:async()=>{if(++enqueues===1)throw Error('response lost');return {data:{id,status:'queued'}};}}),request:async()=>({ok:true})});
   const document=await createCreationDocument({draft:draft(),assets:[]});
-  const reference=await api.prepare({projectID:'project',document,brief:{},images:[],id});
+  const reference=await api.prepare({projectID:'project',document,brief:{},id});
   await assert.rejects(api.submit(reference),/response lost/);assert.equal(records.size,1);
   const result=await api.submit(reference);assert.equal(result.status,'queued');assert.equal(records.size,0);assert.equal(blobs.size,1);
+  assert.equal(Object.hasOwn(JSON.parse(await [...blobs.values()][0].text()),'images'),false);
 });
 test('restored phone watcher loads the already completed result without resubmitting a job',async()=>{
   const win=new EventTarget(),doc=new EventTarget();doc.visibilityState='visible';let loaded=0,woken=0,finish;

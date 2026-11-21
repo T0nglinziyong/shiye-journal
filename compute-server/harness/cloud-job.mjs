@@ -5,11 +5,11 @@ import {cloudCheckpointJournal,creativeJobPrefix,creativeObjectHash} from './clo
 import {createHarnessRenderer} from './renderer.mjs';
 import {createMaterialSegmenter} from './segmentation.mjs';
 import {localGlyphOutline} from '../../src/creation-font-resolver.mjs';
-import {boundedMap} from '../../src/bounded-map.js';
 import {validateCreativeJobPackage} from '../../src/creative-job-package.js';
 import {installedCreationResources,requireResourceVersion} from './resources.mjs';
+import {loadCreativeMaterialImages} from './material-images.mjs';
 
-export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,model,notify,daemon,signal,clock=Date.now}){
+export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupRecords,model,notify,daemon,signal,clock=Date.now}){
   const prefix=creativeJobPrefix(job),startedAt=Date.parse(job.created_at),deadlineAt=Date.parse(job.deadline_at),controller=new AbortController();
   if(job.input_path!==prefix+'input.json'||!Number.isFinite(startedAt)||!Number.isFinite(deadlineAt)||deadlineAt-startedAt>600000)throw Error('创作任务输入或时限无效');
   const cancel=()=>controller.abort(signal.reason||Error('创作执行已停止'));signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();
@@ -32,14 +32,12 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,model,n
   try{
     const inputBytes=await store.download(job.input_path);
     if(creativeObjectHash(inputBytes)!==job.input_hash)throw Error('创作输入已被修改，未继续执行');
-    const input=validateCreativeJobPackage(JSON.parse(inputBytes.toString('utf8')),{userID:job.user_id,jobID:job.id}),images={};
+    const input=validateCreativeJobPackage(JSON.parse(inputBytes.toString('utf8')));
     const resources=await installedCreationResources();
     requireResourceVersion(input.brief.resourceVersion,resources.version);
     progress={...progress,resourceVersion:resources.version};
-    await boundedMap(input.images,4,async item=>{
-      controller.signal.throwIfAborted();const bytes=await store.download(item.path);
-      if(creativeObjectHash(bytes)!==item.sha256)throw Error('创作素材指纹不一致');images[item.alias]=bytes;
-    });
+    const {images,hashes}=await loadCreativeMaterialImages(input.document.source,{owner:job.user_id,store,lookupRecords,signal:controller.signal});
+    controller.signal.throwIfAborted();
     const skills=await loadCreationSkills(),checkpointer=await new JournalCheckpointSaver(cloudCheckpointJournal({job,store,rpc,list:listCheckpoints})).restore();
     const renderer=await createHarnessRenderer({source:input.document.source,images,saveArtifact:async({png,pngHash,document,report})=>{
       const pngPath=prefix+'previews/'+pngHash.slice(7)+'.png',documentBytes=Buffer.from(JSON.stringify(document));
@@ -49,7 +47,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,model,n
       await update({p_progress:progress});await ping(true);return pngPath;
     }});
     const segmentMaterial=daemon?await createMaterialSegmenter({source:input.document.source,images,
-      imageHashes:Object.fromEntries(input.images.map(m=>[m.alias,m.sha256])),daemon,saveArtifact:async({proposal,png})=>{
+      imageHashes:hashes,daemon,saveArtifact:async({proposal,png})=>{
         const path=prefix+'cuts/'+proposal.id+'.png';await store.upload(path,png,'image/png');return path;
       }}):undefined;
     const harness=createCreativeHarness({...renderer,skills,checkpointer,model,segmentMaterial,clock,
@@ -60,7 +58,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,model,n
     if(job.checkpoint_seq&&(!saved||saved.document.source.taskHash!==input.document.source.taskHash||saved.startedAt!==startedAt))throw Error('创作检查点与原始任务不一致');
     if(saved)requireResourceVersion(saved.resources.release,resources.version);
     const state=saved?undefined:initialHarnessState({document:input.document,skills,brief:input.brief,
-      images:await renderer.inspectMaterials(input.images.map(m=>m.alias)),startedAt,deadlineAt:deadlineAt-10000,resourceVersion:resources.version});
+      images:await renderer.inspectMaterials(input.document.source.materials.map(m=>m.alias)),startedAt,deadlineAt:deadlineAt-10000,resourceVersion:resources.version});
     const result=await harness.run({id:job.id,state,signal:controller.signal});
     controller.signal.throwIfAborted();
     if(result.status!=='completed')throw Error('创作未完成');

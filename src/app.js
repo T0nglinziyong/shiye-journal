@@ -4201,7 +4201,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
   }saveStatus('存储不可用');}}
 mountIcons(document);
 const backgroundCreation=createBackgroundCreationSession({
-  getAccount:()=>state.accountId,getAssets:()=>state.assets,createImage:modelImage,
+  getAccount:()=>state.accountId,getAssets:()=>state.assets,
   getProject:async id=>{
     const p=state.activeProject?.id===id?state.activeProject:state.projects.find(item=>item.id===id);
     if(!p)return null;
