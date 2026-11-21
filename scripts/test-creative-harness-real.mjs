@@ -32,9 +32,12 @@ const skills=await loadCreationSkills(),assets=task.sourceContext.sourceSnapshot
 let document,initial;
 if(resume){initial=JSON.parse(await readFile(join(output,'input.json'),'utf8'));document=initial.document;}
 else {
+  const prompt=task.materials.length
+    ?'使用本次真实素材创作一份完成态的'+style+'手帐。图文共同构图，有具体内容与手作层次；不要做商品目录。'
+    :'创作一份完成态的'+style+'手帐。本次没有任何素材；不得调用预设素材、模板中的素材或外部图片。可使用原创可编辑文字、荧光笔、程序绘制的图形、线条和笔迹。风格只约束视觉表达；自行选择一个具体的日常主题，用原创文字写出有内容和阅读节奏的观察，不要用空标题或占位文字凑版。';
   document=await createCreationDocument({draft:draft({mode:task.page.mode,ratio:task.page.ratio}),assets,
     aliases:Object.fromEntries(task.sourceContext.materials.map(m=>[m.alias,m.assetID])),title:style+'手帐',
-    styles:[style],prompt:'使用本次真实素材创作一份完成态的'+style+'手帐。图文共同构图，有具体内容与手作层次；不要做商品目录。'+(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS||''),
+    styles:[style],prompt:prompt+(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS||''),
     contentPolicy:task.contentPolicy||'original',processing:task.processing,requiredAssetIDs:task.requiredAssetIDs,materialPriority:task.sourceContext.materialPriority});
 }
 const renderer=await createHarnessRenderer({source:document.source,images,saveArtifact:async({png,pngHash,document,report})=>{
