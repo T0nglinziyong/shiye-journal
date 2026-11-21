@@ -1,0 +1,47 @@
+/* These leaf-level rules do not rebuild route containers or change canvas size. */
+.series-cover-artwork{position:absolute;inset:0;overflow:hidden;background:#fffefa}
+.series-cover-slot{position:absolute;display:flex;align-items:center;justify-content:center;overflow:visible}
+.series-cover .series-cover-slot img,.series-cover-slot img,.series-cover .series-cover-slot>.tape-flat-preview,.series-cover-slot>.tape-flat-preview{flex:none;display:block;width:100%;height:100%;min-width:0;max-width:100%;max-height:100%;margin:0;object-fit:contain}
+.series-cover-artwork[data-cover-layout="fan"] .series-cover-slot{filter:drop-shadow(0 2px 3px #263d3426)}
+.series-cover-artwork[data-cover-layout="pile"] .series-cover-slot{filter:drop-shadow(0 2px 3px #263d3426)}
+
+/* Work import keeps its paper controls in the same footer area as material
+   names and sizes, leaving the entire paper preview unobstructed. */
+#view .import-review .review-background-card{overflow:visible}
+#view .import-review .review-background-card .review-paper-controls{
+ position:static;transform:none;width:100%;box-shadow:none;background:transparent;
+ padding:8px 0 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(50px,auto) 30px;
+ gap:4px;align-items:center;
+}
+#view .import-review .review-background-card .review-paper-controls>*{
+ width:100%;min-width:0;height:38px;min-height:38px;font-size:12px;
+}
+#view .import-review .review-background-card .review-paper-controls input[type=color]{padding:3px}
+#view .import-review .review-record>.record-work-title-field{
+ display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:12px;
+ width:100%;margin:12px 0;
+}
+#view .import-review .record-work-title-field .record-work-title{width:100%;min-width:0}
+@media(max-width:699px){
+ #view .import-review .review-record>.record-work-title-field{grid-template-columns:70px minmax(0,1fr);gap:8px}
+ #view .import-review .review-background-card .review-paper-controls{grid-template-columns:minmax(0,1fr) 40px 28px;gap:3px}
+ #view .import-review .review-background-card .review-paper-controls>*{font-size:11px;padding-left:2px;padding-right:2px}
+}
+.series-editor-cover{position:relative;width:min(100%,300px);aspect-ratio:1.2;border:1px solid #e2e5db;border-radius:12px;overflow:hidden;margin:auto}
+.series-cover-empty{display:grid;place-items:center;width:100%;height:100%;color:#778079;font-size:12px}
+.series-cover img.series-cover-snapshot{z-index:10}
+.material-piece-image{position:relative;min-height:80px;display:grid;place-items:center}
+.material-piece-image>.material-piece-thumbnail{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain}
+.material-piece-image[data-piece-preview="pending"]::after{content:'预览中';font-size:11px;color:#879084;position:absolute}
+.material-piece-image[data-piece-preview="error"]::after{content:'预览失败';font-size:11px;color:#8a6256;position:absolute}
+.text-effects-panel{display:flex;flex-direction:column;gap:8px;min-width:0}
+.text-effects-preview{display:block;width:100%;height:auto;aspect-ratio:280/82;border-radius:8px}
+.text-effects-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.text-effects-presets button{min-width:0;min-height:38px!important;font-size:12px!important;text-align:center!important;padding:6px!important;background:#f1f4ef;border:1px solid #dce4dc;border-radius:8px}
+.text-effects-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.text-effects-fields label{min-width:0;display:flex;flex-direction:column;gap:3px;font-size:12px!important}
+.text-effects-fields input,.text-effects-fields select{min-width:0;width:100%;max-width:100%;min-height:34px;padding:4px;font-size:14px}
+.text-effects-panel small{font-size:11px;line-height:1.5;color:#6c756e}
+.material-field-help{font-size:11px;line-height:1.55;color:#6c756e;margin:-4px 0 8px}
+
+.series-detail-cover{position:relative;overflow:hidden}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="拾页：叶片与叠页">
+  <rect width="512" height="512" fill="#244b3b"/>
+  <g transform="translate(-74 -8) scale(1.22 1.08)">
+    <rect x="124" y="133" width="228" height="294" rx="25" fill="#90aa96"/>
+    <rect x="160" y="95" width="228" height="306" rx="25" fill="#fbf7ec"/>
+    <path d="M197 371h155" fill="none" stroke="#c9d8c8" stroke-linecap="round" stroke-width="8"/>
+    <g transform="translate(0 -18)">
+      <path d="M293 170c51 3 78 44 59 97-17 48-67 84-135 91-8-74 13-143 76-188Z" fill="#347052"/>
+      <path d="M223 346c28-54 67-91 111-132" fill="none" stroke="#e4efdf" stroke-linecap="round" stroke-width="10"/>
+      <path d="M270 283c-7-19-8-43-5-58M296 256c17 2 31 1 45-4" fill="none" stroke="#e4efdf" stroke-linecap="round" stroke-width="7"/>
+    </g>
+  </g>
+</svg>

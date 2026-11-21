@@ -10,6 +10,7 @@ const paletteFor=style=>{
   return ['#faf6ee','#9d9a88','#ded8c9','#4d5249'];
 };
 const purposeParts={
+  自由创作:['视觉入口','印刷字或短句','可写区域','图文连接','局部回应','有意留白'],
   日常记录:['主素材','主题标题','多行正文','图注','延续观察','数字分隔线'],
   旅途记录:['照片或票据','旅途主题','行程文字','路线线条','沿途见闻','图注'],
   图文收藏:['收藏主件','分类标题','分组说明','数字框线','第二组图注','短评'],
@@ -32,12 +33,12 @@ const spreadZones={
   diagonal:[[.08,.16,.33,.28],[.58,.11,.32,.08],[.56,.34,.35,.24],[.08,.5,.33,.13],[.08,.72,.34,.15],[.57,.72,.33,.13]]
 };
 function styleDimensions(styles){
-  const [mood,layout,medium]=styleGroups.map(group=>group.options.find(value=>styles.includes(value))||null);
-  return {mood:mood||styles[0]||'不预设',layout:layout||'不预设',medium:medium||'不预设'};
+  const [mood,layout]=styleGroups.map(group=>group.options.find(value=>styles.includes(value))||null);
+  return {mood:mood||styles[0]||'不预设',layout:layout||'不预设'};
 }
 function tailoredZones(entry,{layout,purpose,mode}){
   const raw=mode==='spread'?spreadZones[entry.id]:entry.zones;
-  const restrained=/极简|留白/.test(layout),dense=/密集拼贴/.test(layout);
+  const restrained=/极简|留白/.test(layout),dense=/丰富层叠/.test(layout);
   return raw.map(([x,y,w,h],index)=>{
     const scale=restrained?.94:dense?1.035:1;
     if(index===0&&purpose==='主题封面')w*=1.06;
@@ -48,14 +49,14 @@ function tailoredZones(entry,{layout,purpose,mode}){
     return [mode==='spread'?x:x+(w-nw)/2,y+(h-nh)/2,nw,nh];
   });
 }
-export function presetReferencePlans({styles=['韩系清新'],purposes=['日常记录'],mode='single',ratio='a5'}={}){
-  const dimensions=styleDimensions(styles),style=styles[0]||'韩系清新',purpose=purposes[0]||'日常记录',labels=purposeParts[purpose]||purposeParts.日常记录,palette=paletteFor(dimensions.mood);
+export function presetReferencePlans({styles=['随材而定','自动安排'],purposes=['自由创作'],mode='single',ratio='a5'}={}){
+  const dimensions=styleDimensions(styles),style=styles[0]||'随材而定',purpose=purposes[0]||'自由创作',labels=purposeParts[purpose]||purposeParts.自由创作,palette=paletteFor(dimensions.mood);
   return arrangements.map((entry,index)=>({index:index+1,id:entry.id,level:entry.level,title:entry.title,source:entry.source,style,purpose,mode,ratio,dimensions,idea:entry.idea,labels,zones:tailoredZones(entry,{layout:dimensions.layout,purpose,mode}),palette,secondaryStyles:styles.slice(1),secondaryPurposes:purposes.slice(1)}));
 }
 export function presetReferenceGuide(plans){
   return '四张匿名预设构图示意｜仅标示区域关系，不含用户作品、照片或日记。\n'+
     '这些结构来自用户提供的案例截图的文字化观察，并参考公开手帐方法；没有复制截图、原文、标志或个人照片。公开方法：https://www.1101.com/store/techo/en/magazine/tt_report/202304/ ；https://bulletjournal.com/blogs/faq/how-to-write-a-daily-log ；https://bulletjournal.com/blogs/bulletjournalist/show-tell-with-yu 。\n把样例视为可改造的起点：先观察本次真实素材的轮廓、方向、尺寸与可读内容，再选用或重组结构。不要复制样例坐标、色块、占位标签或凭空制造实物。\n'+
-    plans.map(p=>`\n${p.index}. ${p.level}方案 · ${p.title}｜${p.style} × ${p.purpose}${p.secondaryStyles.length?'；兼顾 '+p.secondaryStyles.join('、'):''}${p.secondaryPurposes.length?'；兼顾 '+p.secondaryPurposes.join('、'):''}\n风格拆解：配色与氛围=${p.dimensions.mood}；版式与密度=${p.dimensions.layout}；表现方式=${p.dimensions.medium}。这些维度可组合，不将配色当成固定模板。\n来源结构：${p.source}。${p.idea}\n图示区域：${p.labels.slice(0,p.zones.length).join(' → ')}。`).join('\n')+
+    plans.map(p=>`\n${p.index}. ${p.level}方案 · ${p.title}｜${p.style} × ${p.purpose}${p.secondaryStyles.length?'；兼顾 '+p.secondaryStyles.join('、'):''}${p.secondaryPurposes.length?'；兼顾 '+p.secondaryPurposes.join('、'):''}\n风格拆解：配色与氛围=${p.dimensions.mood}；版式与密度=${p.dimensions.layout}。这些维度可组合，不将配色当成固定模板。\n来源结构：${p.source}。${p.idea}\n图示区域：${p.labels.slice(0,p.zones.length).join(' → ')}。`).join('\n')+
     '\n\n同一种风格和用途可从简洁、均衡、丰富到实验构图，不按复杂度评分。先比较四种方案，选择最适合本次素材与用途的一种，再形成有个人判断的最终版；无需交付四个版本。';
 }
 export async function renderPresetReferences(plans,{width=400}={}){

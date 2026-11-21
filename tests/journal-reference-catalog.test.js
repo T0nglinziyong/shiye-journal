@@ -30,5 +30,5 @@ test('only two distinct relevant cases are selected by purpose, style and materi
   assert.notDeepEqual(food.map(item=>item.id),planner.map(item=>item.id));
   const guide=journalReferenceGuide(food);
   assert.match(guide,/不是可使用的素材/);
-  assert.match(guide,/最终正文按本次页面用途与用户事实写/);
+  assert.match(guide,/最终文字以本次内容策略为准/);
 });

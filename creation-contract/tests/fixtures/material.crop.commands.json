@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-crop",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.crop",
+      "target": "photo",
+      "region": {
+        "shape": "rect",
+        "space": "source",
+        "unit": "ratio",
+        "box": [
+          0.2,
+          0.2,
+          0.6,
+          0.6
+        ]
+      },
+      "keepRemainder": true
+    }
+  ]
+}

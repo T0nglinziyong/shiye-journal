@@ -1,0 +1,70 @@
+// Immutable account objects use CloudBase PostgreSQL cloud storage.
+export const SHIYE_STORAGE_BUCKET='shiye-private';
+
+export function createCloudBaseStorage({storage,bucketId=SHIYE_STORAGE_BUCKET,enabled=true}){
+  const bucket=()=>storage().from(bucketId);
+  let report=()=>{};
+  const run=async(action,work)=>{
+    const started=Date.now();
+    try{const result=await work();report({action,kind:'image',durationMs:Date.now()-started});return result;}
+    catch(error){report({action:action+'-failed',kind:'image',durationMs:Date.now()-started,error});throw error;}
+  };
+  const unwrap=(result,operation)=>{
+    if(result?.error)throw Object.assign(Error('CloudBase 云存储'+operation+'失败：'+result.error.message),{
+      status:Number(result.error.statusCode||result.error.status||0)||undefined,
+      code:result.error.code,cause:result.error
+    });
+    return result?.data;
+  };
+  const exists=async path=>unwrap(await bucket().exists(path),'核对')===true;
+  const isExistingKey=error=>{
+    const code=String(error?.code||error?.errorCode||'').toUpperCase();
+    const message=String(error?.message||'');
+    return code==='STORAGE_KEY_ALREADY_EXISTS'||
+      /\bSTORAGE_KEY_ALREADY_EXISTS\b|\bresource already exists\b/i.test(message)||
+      Number(error?.statusCode||error?.status)===409;
+  };
+  const mayHaveReachedServer=error=>{
+    const status=Number(error?.statusCode||error?.status||error?.cause?.statusCode||error?.cause?.status);
+    // A lost upload response can arrive as a network exception, a timeout or
+    // a gateway error. Never turn explicit auth/validation rejections into a
+    // successful upload merely because an old object happens to exist.
+    return ![400,401,403,404,413,422].includes(status);
+  };
+  return {enabled,provider:'cloudbase',defaultProvider:'cloudbase',setDiagnosticReporter:callback=>{report=typeof callback==='function'?callback:()=>{};},
+    probe:path=>run('storage-probe',()=>exists(path)),
+    download:path=>run('storage-get',async()=>{
+      const data=unwrap(await bucket().download(path),'下载');
+      if(!(data instanceof Blob)||!data.size)throw Error('CloudBase 云存储图片为空');
+      return data;
+    }),
+    preview:(path,variant='preview480')=>run('storage-preview',async()=>{
+      // PG Storage has no image transform. The committed 480px derivative is
+      // used for cards; editing can request the immutable original.
+      const target=variant==='preview480'?path+'-preview480.webp':path;
+      let data;
+      try{data=unwrap(await bucket().download(target),'预览');}
+      catch(error){
+        if(target===path||![404,400].includes(Number(error.status)))throw error;
+        // An original can still be shown if an older client committed before
+        // its optional derivative completed. The caller caches this result.
+        data=unwrap(await bucket().download(path),'预览');
+      }
+      if(!(data instanceof Blob)||!data.size)throw Error('CloudBase 云存储预览为空');
+      return data;
+    }),
+    upload:(path,blob,type=blob.type||'application/octet-stream')=>run('storage-put',async()=>{
+      try{
+        const result=await bucket().upload(path,blob,{contentType:type,upsert:false});
+        if(result?.error)unwrap(result,'上传');
+      }catch(error){
+        // A retry after a lost response can find the same immutable object.
+        // CloudBase reports this by code/message, often without HTTP status.
+        if(isExistingKey(error)||isExistingKey(error?.cause)||mayHaveReachedServer(error)){
+          try{if(await exists(path))return;}catch{/* Preserve the original upload error. */}
+        }
+        throw error;
+      }
+    })
+  };
+}

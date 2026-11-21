@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-group-ungroup",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "group.ungroup",
+      "target": "card"
+    }
+  ]
+}

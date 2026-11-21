@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-page-update",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "page.update",
+      "paperColor": "#FFFDF7"
+    }
+  ]
+}

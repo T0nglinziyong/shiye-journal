@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "digital-focal-photo-strip",
+      "archived": true,
+      "title": "主照片与横向小照片",
+      "pageMode": "single",
+      "styles": [
+        "叙事拼贴",
+        "照片手帐"
+      ],
+      "content": [
+        "日常记录",
+        "家庭",
+        "食物"
+      ],
+      "roles": [
+        "photo",
+        "paper",
+        "card",
+        "sticker"
+      ],
+      "source": {
+        "author": "Cheryl",
+        "title": "The Anatomy of a Scrapbook Page",
+        "url": "https://www.tracireed.com/journal/sf-plot-twists-scrapbook-anatomy",
+        "medium": "digital scrapbook tutorial"
+      },
+      "composition": "一张大照片是焦点；小照片沿顶部横排，覆盖主照片中无关紧要的部分；正文卡靠近主照片下部。",
+      "palette": "从食物照片取暖色给文字卡；图案纸承担照片与底面的过渡，颜色不与主照片抢焦点。",
+      "objects": "标题背后叠纸增强可读性；装饰分成顶部一组、底部两组，形成三角视线；混合媒介纹理只裁在主照片内。",
+      "sequence": [
+        "先定大照片和小照片的比例",
+        "用窄纸条连接小照片",
+        "放文字卡和标题",
+        "最后补三处装饰并检查阴影"
+      ],
+      "adaptation": "照片不足时减少顶部数量，不复制照片；没有纸片则用浅色数字底卡。"
+    },
+    {
+      "id": "digital-torn-edge-foundation",
+      "archived": true,
+      "title": "撕边底纸与照片组",
+      "pageMode": "single",
+      "styles": [
+        "复古旧物",
+        "丰富层叠"
+      ],
+      "content": [
+        "季节",
+        "日常记录",
+        "照片"
+      ],
+      "roles": [
+        "paper",
+        "photo",
+        "sticker"
+      ],
+      "source": {
+        "author": "Shayla",
+        "title": "Masking In Affinity Using The Manuscript",
+        "url": "https://www.tracireed.com/journal/the-manuscript-affinity-masing-tutorial",
+        "medium": "digital scrapbook tutorial"
+      },
+      "composition": "先铺主体图案纸；一侧撕边露出下层花纹，照片组压在稳定的底纸区域，文字在照片位置确定后再补。",
+      "palette": "低对比的浅色纸芯隔开两种图案，避免叠纸交界与照片同时竞争注意力。",
+      "objects": "撕边由上层纸、浅色纸芯、下层花纹三层构成；边缘只加轻微偏移阴影，末尾再放小装饰。",
+      "sequence": [
+        "建底纸与撕边层次",
+        "放照片并调整框架平衡",
+        "放文字",
+        "少量装饰收边"
+      ],
+      "adaptation": "没有花纹纸时只用一张底纸和浅色撕边；不要凭空制造真实素材。"
+    },
+    {
+      "id": "digital-circular-three-clusters",
+      "archived": true,
+      "title": "照片双焦点与环形点缀",
+      "pageMode": "single",
+      "styles": [
+        "丰富层叠",
+        "海边手帐"
+      ],
+      "content": [
+        "旅行",
+        "人物",
+        "海边"
+      ],
+      "roles": [
+        "photo",
+        "card",
+        "sticker",
+        "tag"
+      ],
+      "source": {
+        "author": "Cheryl",
+        "title": "The Modern Sticker Sneeze: Embellishing with Intention",
+        "url": "https://www.tracireed.com/journal/the-modern-sticker-sneeze-embellishing-with-intention",
+        "medium": "digital scrapbook tutorial"
+      },
+      "composition": "一张竖向主照片承担焦点，右下角小照片作回应；顶部横排文字卡；左上、右上、右下三组点缀形成环形阅读路线。",
+      "palette": "颜色跟随海边照片与同系列纸片；小装饰重复一两种色相即可，不因装饰数量多而增加过多颜色。",
+      "objects": "底部圆形字样作标题，上右文字卡承载正文；吊牌与穿绳错层制造手作感。",
+      "sequence": [
+        "先放主副照片",
+        "排顶部卡片",
+        "建立三处装饰簇",
+        "最后放底部标题与正文"
+      ],
+      "adaptation": "不足三组时保留主照片附近和对角两组；不要为填满而复制贴纸。"
+    },
+    {
+      "id": "digital-multi-photo-ticket",
+      "archived": true,
+      "title": "多照片与票据的主次",
+      "pageMode": "single",
+      "styles": [
+        "旅行票据",
+        "照片手帐",
+        "丰富层叠"
+      ],
+      "content": [
+        "演出",
+        "旅行",
+        "纪念"
+      ],
+      "roles": [
+        "photo",
+        "ticket",
+        "card",
+        "sticker"
+      ],
+      "source": {
+        "author": "Traci Reed",
+        "title": "5 Tips for Multi-Photo Layouts",
+        "url": "https://www.tracireed.com/journal/moonlit-5-tips-for-multi-photo-layouts",
+        "medium": "scrapbook layout tutorial"
+      },
+      "composition": "左下大幅合照锚定人物故事；表演照片和大票据作为次级证据，按阅读路线分组，不把所有照片做成同样大小。",
+      "palette": "用较深底面托住主照片，让照片成为第一视点；文字卡标签从背景色中抽色以连通各区。",
+      "objects": "票据承担故事证据而非装饰；文字切成小段落写在标签卡上，装饰围住主图而不遮挡重要人物。",
+      "sequence": [
+        "选择一张人物主图",
+        "把其余照片和票据分为两个信息组",
+        "从主图或底纸取色",
+        "补标签和点缀"
+      ],
+      "adaptation": "没有票据时省略该组，不用虚构门票；照片少时扩大留白和文字区。"
+    },
+    {
+      "id": "digital-template-shrink-slide",
+      "archived": true,
+      "title": "缩小并偏移的照片簇",
+      "pageMode": "single",
+      "styles": [
+        "极简留白",
+        "照片手帐"
+      ],
+      "content": [
+        "人物",
+        "日常记录"
+      ],
+      "roles": [
+        "photo",
+        "card",
+        "paper"
+      ],
+      "source": {
+        "author": "Guest Polly Nancy",
+        "title": "Today's Template Trick",
+        "url": "https://the-lilypad.com/todays-template-trick/",
+        "medium": "digital scrapbook tutorial"
+      },
+      "composition": "把模板中的照片与文字簇整体缩到约原尺寸四分之三，偏到页面一侧；人物视线朝向页面中心，另一侧留出呼吸空间。",
+      "palette": "原文未指定固定色盘；从照片提取少量背景与标题色，空白区保持低对比。",
+      "objects": "两张辅助照片与短文字合成一个可移动组；无关的模板位置删除，不保留空框。",
+      "sequence": [
+        "按照片比例选一个组",
+        "整体缩小并偏移",
+        "检查人物朝向",
+        "删掉不需的模板位置"
+      ],
+      "adaptation": "这是构图变换，不是强制按 75% 缩放实体素材；真实素材保持尺寸约束，优先调整簇的布置范围。"
+    },
+    {
+      "id": "digital-two-page-mirror",
+      "archived": true,
+      "title": "镜像结构的跨页叙事",
+      "pageMode": "spread",
+      "styles": [
+        "照片手帐",
+        "双页叙事"
+      ],
+      "content": [
+        "旅行",
+        "家庭",
+        "多照片"
+      ],
+      "roles": [
+        "photo",
+        "paper",
+        "sticker"
+      ],
+      "source": {
+        "author": "Traci Reed",
+        "title": "How to Turn a 12x12 Sketch into a 12x24 Double Page Scrapbook Layout",
+        "url": "https://www.tracireed.com/journal/island-time-12x12-sketch-to-12x24-layout",
+        "medium": "scrapbook layout tutorial"
+      },
+      "composition": "两页骨架镜像，照片比例与标题位置不完全重复；标题横跨双页但左右错高，装饰沿跨页对角线呼应。",
+      "palette": "原文未指定固定色盘；跨页沿用同一纸张色系，再以两处同色点缀建立连续性。",
+      "objects": "外侧较小照片和内侧较大照片形成重量平衡；装饰簇旋转而不是机械镜像。",
+      "sequence": [
+        "先定左页结构",
+        "镜像建立右页骨架",
+        "错开标题并调整照片比例",
+        "用对角线点缀连接两页"
+      ],
+      "adaptation": "只供双页创作参考；单页任务不得调用此案例或把一页划成两页。"
+    },
+    {
+      "id": "digital-ephemera-spread",
+      "archived": true,
+      "title": "旧纸拼贴与手绘的跨页",
+      "pageMode": "spread",
+      "styles": [
+        "丰富层叠",
+        "复古旧物",
+        "艺术手帐"
+      ],
+      "content": [
+        "日常记录",
+        "抽象拼贴"
+      ],
+      "roles": [
+        "paper",
+        "sticker",
+        "stamp"
+      ],
+      "source": {
+        "author": "Alaina Jensen",
+        "title": "Make an Artsy Junk Journal Page in Procreate",
+        "url": "https://alainajensen.com/blog/tutorials/make-an-artsy-junk-journal-page-in-procreate",
+        "medium": "digital journal process"
+      },
+      "composition": "跨页以纸片与信封建立主层，纸片向书脊靠拢；两页分别用树、植物和蘑菇形成呼应，局部允许倾斜打破整齐。",
+      "palette": "底层以米色和灰色为主，紫、绿植物跨页重复，黄色小蘑菇作少量亮点；黑色半透明印章加深局部。",
+      "objects": "旧纸、信封和文字片分别放在独立层；压入书脊，文字只露一部分；树印章半透明叠在纸片上，纤维、白色笔迹和叶片内部纹理作为末层。",
+      "sequence": [
+        "先摆旧纸与信封",
+        "用两页呼应的植物和树定重心",
+        "局部纤维与涂鸦",
+        "最后检查白色笔迹和叠层是否过密"
+      ],
+      "adaptation": "没有旧纸素材时只用已有真实素材或原创图形；不得把来源的笔刷图像当作本次素材。"
+    },
+    {
+      "id": "digital-travel-procreate-spread",
+      "archived": true,
+      "title": "旅行照片与纹理的跨页",
+      "pageMode": "spread",
+      "styles": [
+        "旅行拼贴",
+        "丰富层叠",
+        "手写手帐"
+      ],
+      "content": [
+        "旅行",
+        "地点建筑",
+        "照片"
+      ],
+      "roles": [
+        "photo",
+        "sticker",
+        "paper",
+        "stamp"
+      ],
+      "source": {
+        "author": "Alaina Jensen",
+        "title": "Digital Travel Journaling in Procreate",
+        "url": "https://alainajensen.com/blog/tutorials/digital-travel-journaling-in-procreate",
+        "medium": "digital journal process"
+      },
+      "composition": "先给跨页加轻微纸纹，再放旅行照片及主体剪纸；纸和纸板托住照片，印章与压力变化的图案连接零散区域。",
+      "palette": "照片提供主色；黄色手写标题与白色松散描边形成局部对比，其余底纹保持低对比。",
+      "objects": "照片剪纸保留可辨主体；纸板和旧广告印章在其后，图案笔刷在空处少量重复；标题及照片边缘用白线统一。",
+      "sequence": [
+        "做纸张底纹",
+        "选照片和剪纸并试摆",
+        "垫纸板与印章",
+        "加少量图案",
+        "用手写标题和描边收束"
+      ],
+      "adaptation": "没有照片时可借用纸纹、印章和手写的次序，但不要假装有旅行照片或地点。"
+    },
+    {
+      "id": "digital-sticker-depth",
+      "archived": true,
+      "title": "贴纸叠层与有限图层",
+      "pageMode": "single",
+      "styles": [
+        "童趣可爱",
+        "丰富层叠",
+        "数码拼贴"
+      ],
+      "content": [
+        "节日",
+        "日常记录"
+      ],
+      "roles": [
+        "paper",
+        "sticker"
+      ],
+      "source": {
+        "author": "Trish",
+        "title": "Scrapbooking in Procreate with Trish",
+        "url": "https://www.tracireed.com/journal/scrapbooking-in-procreate-with-trish",
+        "medium": "digital scrapbook tutorial"
+      },
+      "composition": "纯色底纸上摆两簇贴纸；主物在下，圆形标签居中层，小型糖果贴纸在最上层，叠层关系比整齐排列更重要。",
+      "palette": "紫色底纸与橘色圆签形成冷暖对照；重复同一橘色让两簇贴纸属于同一页。",
+      "objects": "房屋与南瓜作主体，圆形标签作强调，糖果贴纸是最上层点缀；按现实叠放顺序组织图层。",
+      "sequence": [
+        "先选底纸",
+        "建立两组贴纸主物",
+        "插入重复色的圆签",
+        "小点缀压在最上层",
+        "最后统一阴影方向"
+      ],
+      "adaptation": "仅借鉴层次和成组关系，不复制示例房屋、南瓜或糖果。"
+    }
+  ]
+}

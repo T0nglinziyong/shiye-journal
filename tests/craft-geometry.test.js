@@ -24,11 +24,11 @@ test('invalid/overdense geometry fails before allocating unbounded work',()=>{
   assert.throws(()=>buildCraftEdge({style:'postage',edges:['top','bottom','left','right'],period_mm:.5},100,80),/密|256/);
   assert.throws(()=>buildCraftEdge({style:'ticket_notch',position:0,period_mm:8},100,80),/角部/);
 });
-test('policy is opt-in and per-asset whole-only always wins',()=>{
+test('processing permission follows the single project setting',()=>{
   const a={id:'a',kind:'paper'};
   assert.equal(craftPermission({processing:'不预设'},a),'自由拆解');
   assert.equal(craftPermission({processing:'不预设'},{...a,kind:'photo'}),'自由拆解');
-  assert.equal(craftPermission({processing:'不预设',assetProcessing:{a:'保留完整'}},a),'保留完整');
+  assert.equal(craftPermission({processing:'少量裁剪'},a),'少量裁剪');
   assert.equal(craftPermission({processing:'保留完整'},a),'保留完整');
   assert.throws(()=>craftPermission({},a),/加工权限/);
 });

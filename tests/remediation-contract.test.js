@@ -1,46 +1,41 @@
+import {compileAndImport} from './web-scene-fixture.mjs';
+import {webSceneContract} from '../src/web-scene-contract.js';
+import {validateV3SceneDocument} from '../src/v3-scene-schema.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import Ajv from 'ajv';
+import Ajv from 'ajv/dist/2020.js';
 import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
-import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
-import {offlineContract,schemaFingerprint,validateValue} from '../src/creative-contract.js';
+import {createOfflineHandoff,importEditableWork} from './v3-test-handoff.mjs';
+import {schemaFingerprint,validateValue} from '../src/creative-contract.js';
 import {textParagraphMarkup} from '../src/canvas-text-content.js';
 import {Window} from 'happy-dom';
 
 const asset={id:'contract-asset',title:'蓝纸',kind:'sticker',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1}};
 const make=()=>createOfflineHandoff({project:project('合同验证'),assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'agent',includeThumbnails:false}});
 
-test('O-07: published schema and runtime agree on normal punctuation and rejected fields',async()=>{
-  const handoff=await make();
-  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
-  const schema=JSON.parse(strFromU8(files['schema/output.json']));
-  const context=JSON.parse(strFromU8(files['task/context.json']));
-  const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  const ajv=new Ajv({strict:false});
-  assert.equal(context.source.schemaHash,schemaFingerprint(schema));
-  assert.equal(schemaFingerprint(offlineContract('agent',context.source.capabilities)),context.source.schemaHash);
-  example.tools[0].arguments.texts[0].content='A < B 与 <3';
-  const valid=example.tools[0].arguments;
-  assert.equal(ajv.validate(schema.compose_page,valid),true);
-  assert.doesNotThrow(()=>validateValue(valid,schema.compose_page));
-  assert.equal(importEditableWork(JSON.stringify(example),[asset],{trustedSource:handoff.source}).drafts[0].textBlocks[0].content,'A < B 与 <3');
-  valid.unexpected=true;
-  assert.equal(ajv.validate(schema.compose_page,valid),false);
-  assert.throws(()=>validateValue(valid,schema.compose_page),/未知字段/);
+test('O-07: published Scene v2 schema and import agree on text and unknown fields',async()=>{
+ const handoff=await make(),files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
+ const schema=JSON.parse(strFromU8(files['api/scene.schema.json']));
+ const context=JSON.parse(strFromU8(files['TASK.json']));
+ const scene=JSON.parse(strFromU8(files['scene.json']));
+ const ajv=new Ajv({strict:false});
+ assert.equal(context.sourceContext.schemaHash,schemaFingerprint(webSceneContract));
+ assert.equal(ajv.validate(schema,scene),true);
+ assert.doesNotThrow(()=>validateValue(scene.page,webSceneContract));
+ assert.equal(importEditableWork(JSON.stringify(scene),[asset],{trustedSource:handoff.source}).isDraft,true);
+ scene.unexpected=true;
+ assert.equal(ajv.validate(schema,scene),false);
+ assert.throws(()=>validateV3SceneDocument(scene),/scene\/unexpected/);
 });
 
-test('O-08: preview-only task omits source-pixel crop and rejects it on import',async()=>{
-  const handoff=await make();
-  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
-  const schema=JSON.parse(strFromU8(files['schema/output.json']));
-  const capability=JSON.parse(strFromU8(files['task/knowledge.json'])).capabilities;
-  assert.equal(capability.sourcePixelCoordinates,false);
-  assert.equal(capability.cropPx,false);
-  assert.equal(schema.compose_page.properties.materials.items.properties.crop_px,undefined);
-  const response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  response.tools[0].arguments.materials[0].crop_px=[0,0,100,100];
-  assert.throws(()=>importEditableWork(JSON.stringify(response),[asset],{trustedSource:handoff.source}),/crop_px|未知字段/);
+test('O-08: v3 command schema rejects unsupported source-pixel crop fields',async()=>{
+ const handoff=await make(),files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
+ const schema=JSON.parse(strFromU8(files['api/commands.schema.json']));
+ assert.equal(handoff.source.capabilities.cropPx,false);
+ assert.ok(JSON.stringify(schema).includes('material.cut'));
+ const {validateCreationV2Commands:validateCommands}=await import('../src/creation-v2-commands.js');
+ assert.throws(()=>validateCommands({protocolVersion:2,transactionId:'crop',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[{op:'material.add',id:'m',asset:'m1',place:{reference:'page',at:[10,20],unit:'mm'},crop_px:[0,0,10,10]}]}),/commands/);
 });
 
 test('I-01: markup-like text stays inert while legitimate angle brackets survive',()=>{

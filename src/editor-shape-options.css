@@ -1,0 +1,12 @@
+.editor-shape-options .shape-option-list{display:grid;gap:10px}
+.shape-option-count,.shape-option-range>span{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.shape-option-count>div{display:flex;align-items:center;gap:8px}
+.shape-option-count button{min-width:44px;min-height:44px;font-size:20px;padding:4px}
+.shape-option-count output{min-width:2.5ch;text-align:center;font-variant-numeric:tabular-nums}
+.shape-option-range{display:grid;gap:2px}
+.shape-option-range output{color:var(--muted,#667264);font-variant-numeric:tabular-nums}
+.shape-option-range input[type=range]{width:100%;min-height:44px;accent-color:#53664c;padding:0}
+.shape-option-check{display:flex;align-items:center;gap:10px;min-height:44px}
+.shape-option-check input{width:22px;height:22px;accent-color:#53664c}
+.shape-option-precise{margin-top:10px}
+.shape-option-precise summary{min-height:44px;display:flex;align-items:center;cursor:pointer;text-decoration:underline;text-underline-offset:4px}

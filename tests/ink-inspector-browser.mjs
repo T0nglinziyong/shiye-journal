@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {browserHarness} from './browser-harness.mjs';
+const b=await browserHarness('shiye-ink-inspector',(process.env.SHIYE_TEST_URL||'http://127.0.0.1:5193')+'/');
+const set=async(selector,value)=>{await b.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);await b.sleep(60);};
+const field=selector=>b.evaluate(`document.querySelector(${JSON.stringify(selector)})?.value`);
+const savedInk=()=>b.evaluate(`(async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('shiye-pwa-full-v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});const records=await new Promise((resolve,reject)=>{const r=db.transaction('projects').objectStore('projects').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();return records[0]?.drafts[0].layers.find(n=>n.type==='ink');})()`);
+try{
+ await b.wait('.series-grid');await b.click('[data-route="works"]','.works-grid');
+ await b.click('#work-create','#blank-create-confirm');await b.click('#blank-create-confirm','.upper-canvas');
+ await b.click('[data-val="pen"]');
+ const rect=await b.evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()`);
+ const start={x:rect.x+rect.width*.2,y:rect.y+rect.height*.3};
+ await b.command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...start});
+ for(let i=1;i<=8;i++)await b.command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:start.x+rect.width*.5*i/8,y:start.y+rect.height*.1*i/8});
+ await b.command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,x:start.x+rect.width*.5,y:start.y+rect.height*.1});
+ await b.click('[data-val="layers"]','[data-layer-pick]');await b.click('[data-layer-pick]');await b.click('[data-val="layers"]');
+ await b.click('[aria-label="编辑对象"]','#inspector-ink-color');
+ for(let i=0;i<30&&!await savedInk();i++)await b.sleep(100);
+ const before=await savedInk();assert.ok(before?.points.length);
+ await set('#inspector-ink-color','#cc5533');await set('#inspector-ink-width-mm','2');
+ await set('#inspector-ink-style','marker');await set('#inspector-opacity','.4');await set('#inspector-blend-mode','multiply');
+ await b.click('[data-text-effect="gradient-outline"]');await b.wait('[aria-label="图形轮廓宽度 mm"]');
+ assert.deepEqual(await savedInk(),before,'staged edits must not replace the saved stroke');
+ await b.click('.floating-scene-panel-actions .primary');
+ for(let i=0;i<30&&(await savedInk()).color!=='#cc5533';i++)await b.sleep(100);
+ const saved=await savedInk();assert.equal(saved.color,'#cc5533');assert.equal(saved.opacity,.4);
+ assert.equal(saved.penStyle,'marker');assert.equal(saved.blendMode,'multiply');assert.ok(saved.graphicGradient&&saved.graphicOutline);
+ assert.deepEqual(saved.points,before.points,'style editing must retain pressure/path samples');
+ await b.click('[aria-label="编辑对象"]','#inspector-ink-color');
+ assert.equal(await field('#inspector-ink-color'),'#cc5533');assert.equal(Number(await field('#inspector-ink-width-mm')),2);
+ await set('#inspector-ink-width-mm','3');await b.click('.floating-scene-panel-actions button:not(.primary)');
+ await b.click('[aria-label="编辑对象"]','#inspector-ink-width-mm');assert.equal(Number(await field('#inspector-ink-width-mm')),2);
+ assert.deepEqual(await savedInk(),saved);
+ assert.deepEqual(b.errors,[]);console.log('INK_INSPECTOR_BROWSER_PASS: real pointer stroke, staged style/effects, save/reopen, discard, pressure retained');
+}finally{await b.close();}

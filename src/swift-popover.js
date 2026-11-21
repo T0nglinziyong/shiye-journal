@@ -1,3 +1,4 @@
+import {popupPlacement} from './popover-placement.js';
 let active = null;
 let activeAnchor = null;
 export function closePopover() { active?.(); }
@@ -10,24 +11,58 @@ export function closePopoverFor(anchor) {
 export function togglePopover(anchor, options = {}) {
   return closePopoverFor(anchor) ? null : openPopover(anchor, options);
 }
-export function openPopover(anchor, {title = '', width = 340, menu = false} = {}) {
+export function openPopover(anchor, {title = '', width = 340, menu = false, adjustPosition = null, dismissOnOutside = true} = {}) {
   closePopover();
   const controller = new AbortController(), surface = document.createElement('section'), owned = new Map();
   let closed = false;
-  surface.className = 'swift-popover' + (menu ? ' swift-menu' : '');
+  surface.className = 'swift-popover' + (menu ? ' swift-menu' : '') + (['添加图形','添加素材'].includes(title) ? ' swift-picker-popover' : '');
   surface.setAttribute('role', menu ? 'menu' : 'dialog');
   surface.setAttribute('aria-label', title || anchor.getAttribute('aria-label') || '设置');
   surface.tabIndex = -1;
   if (title) { const heading = document.createElement('h3'); heading.textContent = title; surface.append(heading); }
   const content = document.createElement('div'); content.className = 'popover-content'; surface.append(content); document.body.append(surface);
-  anchor.setAttribute('aria-expanded', 'true'); surface.style.width = Math.min(width, innerWidth - 24) + 'px';
+  const popupWidth=()=>Math.min(typeof width==='function'?width(innerWidth):width,innerWidth-24);
+  anchor.setAttribute('aria-expanded', 'true'); surface.style.width = popupWidth() + 'px';
   const position = () => {
     if (closed) return;
     if (!anchor.isConnected) { close(); return; }
-    const r = anchor.getBoundingClientRect(); surface.style.maxHeight = Math.max(100, innerHeight - 24) + 'px';
-    const h = surface.getBoundingClientRect().height;
-    surface.style.left = Math.max(12, Math.min(r.left, innerWidth - surface.offsetWidth - 12)) + 'px';
-    surface.style.top = Math.max(12, r.bottom + h + 8 <= innerHeight - 12 ? r.bottom + 8 : r.top - h - 8) + 'px';
+    // Responsive More width is chosen when the parent opens and only changes
+    // if the actual viewport changes. Opening a child never resizes it.
+    if(typeof width==='function'){
+      const preferred=popupWidth()+'px';
+      if(surface.style.width!==preferred)surface.style.width=preferred;
+    }
+    // Preserve the user-approved 28509aa9 phone/tablet popup geometry.
+    // Desktop-only placement improvements must never overwrite touch layout.
+    if(innerWidth<900){
+      const r = anchor.getBoundingClientRect(); surface.style.maxHeight = Math.max(160,Math.min(innerHeight-24, ['添加图形','添加素材'].includes(title)?innerHeight*.54:innerHeight*.78))+'px';
+      const h = surface.getBoundingClientRect().height;
+      surface.style.left = Math.max(12, Math.min(r.left, innerWidth - surface.offsetWidth - 12)) + 'px';
+      surface.style.top = Math.max(12, r.bottom + h + 8 <= innerHeight - 12 ? r.bottom + 8 : r.top - h - 8) + 'px';
+    }else{
+      const rect=anchor.getBoundingClientRect(),picker=['添加图形','添加素材'].includes(title);
+      const spec={anchor:rect,viewportWidth:innerWidth,viewportHeight:innerHeight,
+        popupWidth:surface.offsetWidth,popupHeight:surface.getBoundingClientRect().height,picker};
+      const bounded=popupPlacement(spec);
+      surface.style.maxHeight=bounded.maxHeight+'px';
+      const placed=popupPlacement({...spec,popupHeight:surface.getBoundingClientRect().height});
+      surface.style.left=placed.left+'px';
+      surface.style.top=placed.top+'px';
+    }
+    if(typeof adjustPosition==='function'){
+      const box=surface.getBoundingClientRect();
+      const adjusted=adjustPosition({left:box.left,top:box.top,
+        width:box.width,height:box.height,viewportWidth:innerWidth,
+        viewportHeight:innerHeight,anchor:anchor.getBoundingClientRect()});
+      if(adjusted&&Number.isFinite(adjusted.left)){
+        const left=adjusted.left+'px';
+        if(surface.style.left!==left)surface.style.left=left;
+      }
+      if(adjusted&&Number.isFinite(adjusted.top)){
+        const top=adjusted.top+'px';
+        if(surface.style.top!==top)surface.style.top=top;
+      }
+    }
     for (const fn of owned.values()) fn?.();
   };
   const close = (focus = false) => {
@@ -40,9 +75,9 @@ export function openPopover(anchor, {title = '', width = 340, menu = false} = {}
   };
   active = close; activeAnchor = anchor;
   const observer = new ResizeObserver(position); observer.observe(surface); observer.observe(anchor);
-  document.addEventListener('pointerdown', e => {
+  if (dismissOnOutside) document.addEventListener('pointerdown', e => {
     if (!surface.contains(e.target) && !anchor.contains(e.target) && ![...owned.keys()].some(el => el.contains(e.target))) close();
-  }, {signal: controller.signal});
+  }, {signal: controller.signal, capture:true});
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); close(true); }
     else if (menu && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {

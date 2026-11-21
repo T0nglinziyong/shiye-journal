@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-mask",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.mask",
+      "target": "photo",
+      "region": {
+        "shape": "ellipse",
+        "space": "local",
+        "unit": "ratio",
+        "box": [
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      "mode": "intersect"
+    }
+  ]
+}

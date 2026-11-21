@@ -16,7 +16,7 @@ test('idle timeout and cancellation return meaningful errors without keys',async
 test('HTTP authentication failures are distinguished',async()=>{await assert.rejects(requestChat({...base,request:async()=>new Response('',{status:401})}),/密钥无效/);});
 test('A-12: provider errors have safe codes without leaking provider text or credentials',async()=>{
  const cases=[
-  [401,'authentication',''],[429,'rate-limit',''],
+  [401,'authentication',''],[402,'balance',''],[429,'rate-limit',''],
   [400,'context-limit',JSON.stringify({error:{code:'context_length_exceeded',message:'private text and sk-should-not-leak'}})],
   [400,'unsupported-request',JSON.stringify({error:{code:'unsupported_response_format',message:'private text and sk-should-not-leak'}})]
  ];
@@ -29,4 +29,12 @@ test('A-12: provider errors have safe codes without leaking provider text or cre
 test('keep-alive without text reports provider waiting, not fictitious output',async()=>{
  const progress=[];await requestChat({...base,onProgress:p=>progress.push(p),request:async()=>sse([': keep-alive\n\n','data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n','data: [DONE]\n\n'])});
  assert.ok(progress.some(p=>p.keepAlives===1&&p.received===0&&p.phase.includes('服务保活中')));assert.ok(progress.at(-1).networkBytes>0);assert.equal(progress.at(-1).received,2);
+});
+test('a broken progress renderer does not prevent the model request',async()=>{
+ let requests=0;
+ const response=await requestChat({...base,onProgress:()=>{throw Error('progress node was removed');},
+  request:async()=>{requests++;return new Response(JSON.stringify({choices:[{message:{content:'ok'}}]}),
+    {headers:{'Content-Type':'application/json'}});}});
+ assert.equal(requests,1);
+ assert.equal(response.choices[0].message.content,'ok');
 });

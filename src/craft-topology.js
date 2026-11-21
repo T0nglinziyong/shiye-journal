@@ -56,7 +56,15 @@ export function normalizeGeometry(geometry){
 function operation(name,a,others){
  bounded(a);others.forEach(g=>bounded(g));
  let points=0;for(const geometry of [a,...others])for(const polygon of geometry)for(const ring of polygon){points+=ring.length;craftAssert(points<=MAX_POINTS,'GEOMETRY_BUDGET','复合裁切总点数超过预算');}
- try{return bounded(polygonClipping[name](a,...others));}
+ try{
+  // Coincident cut boundaries may be returned as zero-area rings. They are
+  // lines, not material, and must not invalidate two otherwise disjoint
+  // physical pieces during the ledger's overlap check.
+  const result=polygonClipping[name](a,...others).filter(poly=>
+    poly.length&&Math.abs(ringArea(poly[0]))>EPS)
+    .map(poly=>[poly[0],...poly.slice(1).filter(ring=>Math.abs(ringArea(ring))>EPS)]);
+  return bounded(result);
+ }
  catch(error){if(error.code)throw error;throw craftError('GEOMETRY_FAILED','裁切拓扑计算未完成；请减小工艺复杂度');}
 }
 export const geometryDifference=(a,...b)=>!a.length?[]:operation('difference',a,b.filter(g=>g.length));

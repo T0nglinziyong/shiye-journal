@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><title>Unified graphics: synthetic regression</title>
+<style>body{margin:0;background:#faf6ed;font:15px sans-serif}main{max-width:920px;margin:auto;padding:20px}h1{font-size:22px}canvas{max-width:100%;height:auto;display:block;margin:12px 0;border:1px solid #d3d8d3}</style>
+<main><h1>One graphic API · geometry, placement, paint</h1><p>Shape, custom paths and pressure strokes remain editable.</p><section id="preview"></section><canvas id="editor"></canvas></main>
+<script type="module">
+import * as fabric from 'fabric';
+import {project} from '/src/domain.js';
+import {createOfflineHandoff} from '/src/offline-creation.js';
+import {assetFromSourceSnapshot} from '/src/material-anatomy.js';
+import {webSceneDocument} from '/src/web-scene-workbench.js';
+import {applyCreationV2Batch} from '/src/creation-v2-commands.js';
+import {describeCreationCommand} from '/src/creation-v2-contract.js';
+import {findSceneNode} from '/src/scene-v2.js';
+import {worldBox} from '/src/scene-spatial.js';
+import {renderSceneCanvas} from '/src/scene-renderer.js';
+import {createFabricSceneBridge} from '/src/fabric-scene-bridge.js';
+import {USER_SCENE_POLICY} from '/src/scene-edit-policy.js';
+const pixel=document.createElement('canvas');pixel.width=20;pixel.height=20;pixel.getContext('2d').fillRect(0,0,20,20);const blob=await new Promise(resolve=>pixel.toBlob(resolve,'image/png'));
+const asset={id:'fixture-paper',title:'Synthetic only',kind:'paper',physicalWidthMM:20,physicalHeightMM:20};
+const task=await createOfflineHandoff({project:project('Unified graphic fixture'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array(await blob.arrayBuffer())}]});
+const assets=task.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true}));
+const tx=operations=>({protocolVersion:2,transactionId:'graphics-browser',baseSceneRevision:'sha256:'+'0'.repeat(64),operations});
+const pos=(x,y,rotationDeg=0)=>({reference:'page',at:[x,y],unit:'mm',rotationDeg});
+const operations=[
+ {op:'graphic.add',id:'main',geometry:{kind:'star'},place:pos(45,50),size:{width:42,unit:'mm'},style:{fill:'#D9B46D',stroke:'#5B775F',strokeWidthMm:.7}},
+ {op:'graphic.add',id:'accent',geometry:{kind:'star'},place:{reference:'node:main',referenceAnchor:'top-right',anchor:'bottom-left',offset:{value:[3,-2],unit:'mm'},behavior:'linked'},size:{width:8,unit:'mm'},style:{fill:null,stroke:'#5B775F',strokeWidthMm:.5}},
+ {op:'graphic.add',id:'ring',geometry:{kind:'ellipse'},place:pos(100,50),size:{width:35,height:23,unit:'mm'},style:{fill:null,stroke:'#5476A1',strokeWidthMm:.7}},
+ {op:'text.add',id:'label',content:'Look closer',place:pos(74,100),size:{width:70,unit:'mm'},style:{fontSizePt:20,fontFamily:'sans-serif',textAlign:'center'}},
+ {op:'graphic.add',id:'highlighter',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:0},{x:1,y:0}]},size:{reference:'node:label',width:.9,unit:'ratio'},place:{reference:'node:label',at:[.5,.4],unit:'ratio',behavior:'linked'},style:{stroke:'#F5CF79',strokeWidthMm:6,penStyle:'marker',opacity:.5},order:{before:'label'}},
+ {op:'graphic.add',id:'path',geometry:{kind:'path',viewBox:[0,0,20,30],paths:[{d:'M2 28 C1 12 10 2 18 2 C19 18 10 28 2 28 Z',style:{fill:'#729983'}},{d:'M2 28 L15 6',style:{stroke:'#F3EDDD',fill:null}}]},place:pos(45,155,-10),size:{width:30,unit:'mm'},style:{strokeWidthMm:.6}},
+ {op:'graphic.add',id:'stroke',geometry:{kind:'stroke',unit:'mm',points:[{x:0,y:10,pressure:.1},{x:10,y:0,pressure:.8},{x:25,y:12,pressure:.7},{x:40,y:0,pressure:.1}]},place:pos(105,150),style:{stroke:'#BA7C64',strokeWidthMm:3,penStyle:'pressure'}}
+];
+const doc=applyCreationV2Batch(webSceneDocument(task.source,task.source.baseDraft),tx(operations),assets);
+const result=await renderSceneCanvas(doc.page);result.canvas.id='artwork';document.querySelector('#preview').append(result.canvas);
+const n=findSceneNode(doc.page,'path'),canvas=new fabric.Canvas('editor',{width:680,height:240}),bridge=createFabricSceneBridge(fabric);
+const editable={...structuredClone(n),id:'editable',x:150,y:110,width:110,height:150};const object=await bridge.fromNode(editable);canvas.add(object);canvas.renderAll();
+window.__graphicsTest={doc,assets,tx,applyCreationV2Batch,findSceneNode,worldBox,renderSceneCanvas,bridge,canvas,object,policy:USER_SCENE_POLICY,help:describeCreationCommand('graphic.add')};
+window.__graphicsReady=true;
+</script>

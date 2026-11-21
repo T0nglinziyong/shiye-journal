@@ -1,0 +1,2597 @@
+{
+  "version": 2,
+  "methods": [
+    {
+      "id": "title-underline",
+      "skill": "journal-lettering",
+      "title": "手写下划标题",
+      "recipe": "title",
+      "when": "短标题需要与正文拉开层级",
+      "defaults": {
+        "treatment": "underline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-underline"
+      },
+      "lesson": {
+        "principle": "用一条随标题宽度延展的笔迹建立文字与下方内容的边界。",
+        "steps": [
+          "先确定完整标题和可用宽度",
+          "选字号与字色",
+          "在末行下方放短笔迹，保留呼吸间距。"
+        ],
+        "check": [
+          "线条没有穿过字脚",
+          "长标题换行后底线仍在末行下方。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-outline",
+      "skill": "journal-lettering",
+      "title": "透明空心标题",
+      "recipe": "title",
+      "when": "需要醒目但不压重页面",
+      "defaults": {
+        "treatment": "outline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-outline"
+      },
+      "lesson": {
+        "principle": "只描绘字形边线，字心透明，底层照片或纹理可以穿过。",
+        "steps": [
+          "选笔画清楚的短题",
+          "将 fillOpacity 设为 0 并选择 outline",
+          "在有纹理的底层上核对字心。"
+        ],
+        "check": [
+          "字心没有白色填块",
+          "描边不过粗，不吞掉狭窄字腔。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-highlight",
+      "skill": "journal-lettering",
+      "title": "局部底色标题",
+      "recipe": "title",
+      "when": "标题需要呼应素材主色",
+      "defaults": {
+        "treatment": "highlight"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-highlight"
+      },
+      "example": {
+        "text": "收集小美好",
+        "emphasis": "小美好"
+      },
+      "lesson": {
+        "principle": "只在指定关键词背后放局部色带，其他文字保留纸面。",
+        "steps": [
+          "提供完整 text 和原文中的 emphasis",
+          "按词组排版",
+          "把半透明色带置于关键词下方；换行时每行分别铺色。"
+        ],
+        "check": [
+          "非关键词没有底色",
+          "色带未遮住笔画",
+          "词组读序仍连贯，行间空白没有连成一片。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-stack",
+      "skill": "journal-lettering",
+      "title": "分行标题组",
+      "recipe": "title",
+      "when": "长标题适配窄区域",
+      "defaults": {
+        "treatment": "stack"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-stack"
+      },
+      "example": {
+        "text": "今天的风\n很温柔",
+        "widthMm": 42
+      },
+      "lesson": {
+        "principle": "通过语义断行形成紧凑字块，不用缩小字号塞进窄缝。",
+        "steps": [
+          "按语义在 text 中给换行",
+          "设定可用宽度",
+          "保留字号并检查自动换行。"
+        ],
+        "check": [
+          "没有孤立标点和意外半词",
+          "字块能与附近素材形成共同边线。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-vertical",
+      "skill": "journal-lettering",
+      "title": "竖向标题",
+      "recipe": "title",
+      "when": "侧边形成纵向阅读轴",
+      "defaults": {
+        "treatment": "vertical"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-vertical"
+      },
+      "lesson": {
+        "principle": "用纵向字序建立侧边轴，适合少量汉字。",
+        "steps": [
+          "给完整短题",
+          "工具按 Unicode 字素竖排",
+          "将整组靠近需要呼应的纵边。"
+        ],
+        "check": [
+          "组合音标没有拆开",
+          "不会把长段落竖成细线",
+          "读序明确。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-stagger",
+      "skill": "journal-lettering",
+      "title": "错落字群",
+      "recipe": "title",
+      "when": "少量关键词形成手写节奏",
+      "defaults": {
+        "treatment": "stagger"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-stagger"
+      },
+      "example": {
+        "text": "慢慢收集",
+        "runs": [
+          {
+            "text": "慢慢",
+            "role": "secondary",
+            "rotationDeg": -2
+          },
+          {
+            "text": "收集",
+            "role": "primary",
+            "offsetMm": [
+              0,
+              1.5
+            ],
+            "rotationDeg": 2
+          }
+        ]
+      },
+      "lesson": {
+        "principle": "按词组轻微改变角度和基线，保留词义的聚合。",
+        "steps": [
+          "把完整标题分为 runs",
+          "选主词和辅助词",
+          "仅对有需要的组给 offsetMm 或 rotationDeg。"
+        ],
+        "check": [
+          "不是每字交替倾斜",
+          "词组没有互盖",
+          "整页缩看仍能顺读。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-tape",
+      "skill": "journal-lettering",
+      "title": "半透明胶带标题",
+      "recipe": "title",
+      "when": "短标题需要轻薄底色，与附近纸片或照片连成局部图文组",
+      "defaults": {
+        "treatment": "tape",
+        "pattern": "stripes"
+      },
+      "example": {
+        "text": "散步手记",
+        "fontFamily": "HongLeiZhuoShu",
+        "widthMm": 56,
+        "colors": ["#304B42", "#809588", "#E7DAC0"],
+        "tapeOpacity": 0.55
+      },
+      "lesson": {
+        "principle": "根据实际字行生成轻薄的可编辑数字胶带，让标题和相邻素材有接触关系，而不是铺满一张底卡。",
+        "steps": [
+          "从相邻素材取字色、胶带纹样色与底色",
+          "按完整标题和可用宽度决定换行；长标题每行各有短胶带",
+          "把标题组跨在纸片或照片的边缘，观察真实预览后调整位置与透明度。"
+        ],
+        "check": [
+          "标题文字完整且可读",
+          "胶带没有遮住主体和关键印刷字",
+          "数字胶带未被误算为实体素材。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "受 journal-page 的标题与胶带连接关系启发；拾页独立实现可编辑 Scene 图形，未复制其代码或案例图片。"
+        }
+      }
+    },
+    {
+      "id": "title-label",
+      "skill": "journal-lettering",
+      "title": "标签承载标题",
+      "recipe": "title",
+      "when": "把标题与纸片形成局部组合",
+      "defaults": {
+        "treatment": "label"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-label"
+      },
+      "lesson": {
+        "principle": "以可编辑数字底形承载标题，底形可配局部纹样。",
+        "steps": [
+          "设定标题宽度",
+          "从素材取字色与底色",
+          "选择 plain/dots/stripes/grid 后放置整组。"
+        ],
+        "check": [
+          "底形没有过大抢占主图",
+          "数字底形未被误认为新增实体纸。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-curve",
+      "skill": "journal-lettering",
+      "title": "弧形标题",
+      "recipe": "title",
+      "when": "呼应圆形或弧形主体",
+      "defaults": {
+        "treatment": "curve"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-curve"
+      },
+      "lesson": {
+        "principle": "单行文字沿浅弧呼应圆形主体，弧高可正负调节。",
+        "steps": [
+          "确定单行内容和可读字号",
+          "设置 curveHeightMm",
+          "宽度不足时加宽，不截断标题。"
+        ],
+        "check": [
+          "弧形没有挤字",
+          "超长标题改分行",
+          "与主体弧线关系明确。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "paper-underlay",
+      "skill": "paper-layering",
+      "title": "错位垫纸",
+      "recipe": "materials",
+      "when": "两个真实材料需要层次",
+      "defaults": {
+        "arrangement": "stack"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "paper-underlay"
+      },
+      "lesson": {
+        "principle": "几张真实纸片错位叠放，露出的边承担颜色和层次。",
+        "steps": [
+          "按从底到上的顺序给 aliases",
+          "以 gapMm 决定露边",
+          "整体放到主图附近。"
+        ],
+        "check": [
+          "后放素材在上",
+          "重要文字没有被盖住",
+          "每个来源只用一次。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "aliases": [
+          "m3",
+          "m1"
+        ]
+      }
+    },
+    {
+      "id": "paper-peek",
+      "skill": "paper-layering",
+      "title": "侧边探出",
+      "recipe": "relate",
+      "when": "保留底层纸的少量色边",
+      "defaults": {
+        "relation": "peek"
+      },
+      "lesson": {
+        "principle": "让一张已有纸片从另一件素材的指定边探出。",
+        "steps": [
+          "先放 target 和 referenceTarget",
+          "选择 edge",
+          "用 amountMm 调整露出量。"
+        ],
+        "check": [
+          "露出的是有用内容",
+          "移动参照后重新检查接触",
+          "不通过缩放实物实现露边。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "paper-tear",
+      "skill": "paper-layering",
+      "title": "轨迹撕纸",
+      "recipe": "tear",
+      "when": "沿自定轨迹形成毛边并保留余料",
+      "defaults": {},
+      "lesson": {
+        "principle": "沿局部轨迹撕出真实裁片，保留另一侧余料。",
+        "steps": [
+          "给从纸边到纸边的 path",
+          "选 keep 方向",
+          "设置 depthMm、periodMm 和 seed。"
+        ],
+        "check": [
+          "原外沿不被误改",
+          "撕口不过分锯齿",
+          "余料仍有来源且能继续用。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "paper-window",
+      "skill": "paper-layering",
+      "title": "开窗留芯",
+      "recipe": "window",
+      "when": "通过窗口露出下层材料，窗芯可再用",
+      "defaults": {},
+      "lesson": {
+        "principle": "切开真实纸面中央，外框与挖下的内芯分别保留。",
+        "steps": [
+          "给 target",
+          "用局部比例 box 描述开窗",
+          "把框放到需要露出下层的位置。"
+        ],
+        "check": [
+          "窗口真的透明",
+          "内芯隐藏但未丢弃",
+          "后续显示内芯不重复消费来源。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "paper-window-reuse",
+      "skill": "paper-layering",
+      "title": "窗芯呼应",
+      "recipe": "window",
+      "when": "开窗之外，把挖出的同纹样窗芯用于另一处呼应",
+      "defaults": {
+        "reuseCore": true
+      },
+      "example": {
+        "corePlace": {
+          "reference": "page",
+          "at": [
+            109,
+            80
+          ],
+          "unit": "mm"
+        }
+      },
+      "lesson": {
+        "principle": "一张纸同时形成透空外框和独立窗芯，利用同一纹样连接两处内容，而不是复制材料。",
+        "steps": [
+          "先放置真实纸片，用 box 指定内部开窗范围。",
+          "给 corePlace，将窗芯移到需要呼应的位置；外框与窗芯分别保留身份。",
+          "后续使用输出报告中的节点继续移动、裁切或组合，不再次添加原素材。"
+        ],
+        "check": [
+          "孔洞能透出纸面或下层图像，窗芯在另一处可见。",
+          "窗芯使用裁下后的真实尺寸和外接框定位，不放大成原纸片。",
+          "外框与窗芯不重叠消费同一片材料；重要图案未被切断。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "纸张工艺的工具组合为拾页归纳实现，不声称复刻外部教程的全部步骤。"
+        }
+      }
+    },
+    {
+      "id": "paper-weave",
+      "skill": "paper-layering",
+      "title": "纸条穿插",
+      "recipe": "weave",
+      "when": "已有真实纸条需要穿过纸面孔洞，形成前后交错的连接",
+      "defaults": {},
+      "lesson": {
+        "principle": "纸条按孔位从纸前穿到纸后，真实窗口和可见片段共同决定遮挡；纸条长度、宽度与来源保持不变。",
+        "steps": [
+          "先放置纸条与承载纸，确认同一组合层级，并把纸条对准至少两个孔位。",
+          "through 按穿行顺序指定目标与 sideAfter；region 创建真实孔洞，window 引用已有孔，二选一。",
+          "执行后按报告中的框节点继续编辑；新孔窗芯隐藏保留，需要时可显示复用。"
+        ],
+        "check": [
+          "孔洞足以容纳实际纸条宽度，纸条穿过所有孔而非浮在纸面。",
+          "前后关系符合 sideAfter；不靠复制纸条或画纸色矩形伪造。",
+          "宽度、长度、层级或孔位不满足时整批拒绝，调整位置后再执行。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "纸张工艺的工具组合为拾页归纳实现，不声称复刻外部教程的全部步骤。"
+        }
+      }
+    },
+    {
+      "id": "paper-split",
+      "skill": "paper-layering",
+      "title": "条块分裁",
+      "recipe": "split",
+      "when": "将同一纸片分成不重叠材料再组合",
+      "defaults": {},
+      "lesson": {
+        "principle": "把一张材料拆成多段，让各段成为可再次组合的实体。",
+        "steps": [
+          "指定 parts 和间隙比例",
+          "执行真实分裁",
+          "分别移动生成的 part 节点。"
+        ],
+        "check": [
+          "分段没有重叠消费",
+          "间隙余料仍保留",
+          "内容关键部分未被随意切断。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/paper-layering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "photo-row",
+      "skill": "photo-story",
+      "title": "照片横排",
+      "recipe": "materials",
+      "when": "相近题材组成一段叙事",
+      "defaults": {
+        "arrangement": "row"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-row"
+      },
+      "lesson": {
+        "principle": "按实际尺寸排成一条横向图组，保留自然高低差。",
+        "steps": [
+          "依阅读顺序列 aliases",
+          "设 gapMm",
+          "用整组位置与标题建立联系。"
+        ],
+        "check": [
+          "没有拉伸照片",
+          "图组宽度适合纸面",
+          "不把所有页面都变成货架。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "photo-grid",
+      "skill": "photo-story",
+      "title": "照片矩阵",
+      "recipe": "materials",
+      "when": "同组图片整齐对照",
+      "defaults": {
+        "arrangement": "grid"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-grid"
+      },
+      "lesson": {
+        "principle": "少量同级照片按两列组织，以共同边线建立秩序。",
+        "steps": [
+          "按顺序提供照片",
+          "留出统一间隔",
+          "把文字放在图组之外或整体下方。"
+        ],
+        "check": [
+          "照片主体完整",
+          "尺寸不同仍保持实物尺度",
+          "层次需要时另选主图。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "photo-stagger",
+      "skill": "photo-story",
+      "title": "错落照片",
+      "recipe": "materials",
+      "when": "大小照片形成连贯节奏",
+      "defaults": {
+        "arrangement": "stagger"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-stagger"
+      },
+      "lesson": {
+        "principle": "图像沿横向排列并错开高度，用边缘差形成节奏。",
+        "steps": [
+          "按内容顺序给素材",
+          "设间隔",
+          "预览后把整组靠近对应短记。"
+        ],
+        "check": [
+          "错位有阅读顺序",
+          "不是每张都任意旋转",
+          "组高宽没有越出纸面。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "photo-caption",
+      "skill": "photo-story",
+      "title": "图文局部组",
+      "recipe": "materials",
+      "when": "照片下方留出真实描述",
+      "defaults": {
+        "arrangement": "row",
+        "captionPosition": "below"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-caption"
+      },
+      "lesson": {
+        "principle": "图组与一段短图注共用宽度，图注紧邻对应图片。",
+        "steps": [
+          "提供 aliases 和 caption",
+          "先确定图片顺序",
+          "选可读的注释字号。"
+        ],
+        "check": [
+          "图注没有暗示不存在的经历",
+          "文字不被图片覆盖",
+          "整组仍可独立移动。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-loop",
+      "skill": "journal-graphics",
+      "title": "圈注细节",
+      "recipe": "graphic",
+      "when": "圈住已有素材中的具体细节",
+      "defaults": {
+        "motif": "loop"
+      },
+      "lesson": {
+        "principle": "用轻手绘圈线指向一处内容，不填满圈内。",
+        "steps": [
+          "在已有素材上找出具体细节并确定圈线占地",
+          "从素材取线色",
+          "选择固定 seed 并调整线宽。"
+        ],
+        "check": [
+          "圈心透明",
+          "圈线不是无关装饰",
+          "缩看能识别强调对象。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-route",
+      "skill": "journal-graphics",
+      "title": "转折阅读线",
+      "recipe": "graphic",
+      "when": "连接两到六个实际焦点",
+      "defaults": {
+        "motif": "trail"
+      },
+      "lesson": {
+        "principle": "通过两到六个实际焦点规划转折阅读线。",
+        "steps": [
+          "按两个到六个真实焦点在图形框内给 waypoints",
+          "调整线宽和占地",
+          "把线放在相关素材之间。"
+        ],
+        "check": [
+          "路线不穿过正文",
+          "起终点对应真实内容",
+          "不是任意蛇形填空。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-corner",
+      "skill": "journal-graphics",
+      "title": "角线框选",
+      "recipe": "graphic",
+      "when": "轻量提示内容区域",
+      "defaults": {
+        "motif": "corner"
+      },
+      "lesson": {
+        "principle": "用少量角线界定一个内容区，保持边框开放。",
+        "steps": [
+          "确定目标框宽高",
+          "设置线色和粗细",
+          "对齐需要被组织的图文区。"
+        ],
+        "check": [
+          "角线不盖住文字",
+          "开放边让内容仍与页面相连。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-rays",
+      "skill": "journal-graphics",
+      "title": "放射强调",
+      "recipe": "graphic",
+      "when": "强调一个小焦点",
+      "defaults": {
+        "motif": "rays"
+      },
+      "lesson": {
+        "principle": "在小焦点外侧放射短线，强调一次视觉停顿。",
+        "steps": [
+          "选择焦点周围可用区域",
+          "控制短线密度与粗细",
+          "放到主体外围。"
+        ],
+        "check": [
+          "放射线未盖脸或小字",
+          "全页不出现多个同强度放射中心。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "pattern-dots",
+      "skill": "pattern-and-doodle",
+      "title": "散点节奏",
+      "recipe": "pattern",
+      "when": "留白区用疏密建立节奏",
+      "defaults": {
+        "pattern": "dots"
+      },
+      "lesson": {
+        "principle": "局部点阵与相邻留白形成疏密对比，行列数控制点的密度。",
+        "steps": [
+          "设置区域宽高与 options.rows/columns",
+          "颜色呼应已有材料",
+          "留出正文的安静空间。"
+        ],
+        "check": [
+          "没有铺满全页",
+          "点不会被误看成内容符号",
+          "尺寸与正文相称。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/pattern-and-doodle/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "widthMm": 58,
+        "heightMm": 28,
+        "options": {
+          "rows": 4,
+          "columns": 8,
+          "showOuterBorder": false,
+          "dotSize": 1.2
+        }
+      }
+    },
+    {
+      "id": "pattern-stripes",
+      "skill": "pattern-and-doodle",
+      "title": "斜线底纹",
+      "recipe": "pattern",
+      "when": "轻纹样衬托短题",
+      "defaults": {
+        "pattern": "stripes"
+      },
+      "lesson": {
+        "principle": "斜线作为局部底纹，为纯色区增加方向。",
+        "steps": [
+          "确定有限底纹区域",
+          "设置 options.rows/columns 与线宽",
+          "与相邻素材方向协调。"
+        ],
+        "check": [
+          "线纹不抢正文",
+          "边缘没有漏出超出预期的斜线。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/pattern-and-doodle/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "widthMm": 54,
+        "heightMm": 24,
+        "options": {
+          "rows": 4,
+          "columns": 8,
+          "showOuterBorder": false,
+          "angle": 35
+        }
+      }
+    },
+    {
+      "id": "pattern-grid",
+      "skill": "pattern-and-doodle",
+      "title": "格纹底纹",
+      "recipe": "pattern",
+      "when": "呼应文具或记录感",
+      "defaults": {
+        "pattern": "grid"
+      },
+      "lesson": {
+        "principle": "少量横竖线形成可读的记录感底纹。",
+        "steps": [
+          "先决定局部区域",
+          "调整 options.rows/columns 与线宽",
+          "与标题保留间距。"
+        ],
+        "check": [
+          "格子密度适合显示尺度",
+          "底纹不承担不存在的真实纸张来源。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/pattern-and-doodle/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "widthMm": 58,
+        "heightMm": 28,
+        "options": {
+          "rows": 4,
+          "columns": 8,
+          "showOuterBorder": false
+        }
+      }
+    },
+    {
+      "id": "pattern-scallop",
+      "skill": "pattern-and-doodle",
+      "title": "波浪边线",
+      "recipe": "graphic",
+      "when": "围绕便签或图文区做轻装饰",
+      "defaults": {
+        "motif": "scallop"
+      },
+      "lesson": {
+        "principle": "手绘波浪短边回应便签的柔和轮廓。",
+        "steps": [
+          "限定边线宽高",
+          "选择线色和 seed",
+          "放在内容外沿。"
+        ],
+        "check": [
+          "波浪不压正文",
+          "需要精确重复数时改用可调波浪线。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/pattern-and-doodle/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "tape-fix",
+      "skill": "tape-and-vellum",
+      "title": "胶带固定",
+      "recipe": "tape",
+      "when": "真实胶带跨在素材边角",
+      "defaults": {
+        "arrangement": "single"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "tape-fix"
+      },
+      "lesson": {
+        "principle": "用真实胶带的一段跨过素材边缘形成固定关系。",
+        "steps": [
+          "选择一个胶带 alias",
+          "按真实宽度取 lengthMm",
+          "整组放到纸边。"
+        ],
+        "check": [
+          "胶带不是凭空素材",
+          "长度在库存范围",
+          "印刷关键信息未被遮住。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/tape-and-vellum/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "tape-corners",
+      "skill": "tape-and-vellum",
+      "title": "双角胶带",
+      "recipe": "tape",
+      "when": "两处短胶带形成固定关系",
+      "defaults": {
+        "arrangement": "corners"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "tape-corners"
+      },
+      "lesson": {
+        "principle": "两段胶带分别贴在区域的对角，形成局部固定。",
+        "steps": [
+          "指定胶带与两角间的宽高",
+          "设置每段位置、角度与长度",
+          "一起调整整体位置。"
+        ],
+        "check": [
+          "两段共同消耗实际来源",
+          "固定点触及纸边",
+          "不是四角全部贴满。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/tape-and-vellum/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "tape-divider",
+      "skill": "tape-and-vellum",
+      "title": "胶带分隔",
+      "recipe": "tape",
+      "when": "横向短胶带分开两段内容",
+      "defaults": {
+        "arrangement": "divider"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "tape-divider"
+      },
+      "lesson": {
+        "principle": "一段横向胶带区分相邻内容，同时呼应已有纹样。",
+        "steps": [
+          "选真实胶带",
+          "设置取用长度",
+          "放到两个内容组之间。"
+        ],
+        "check": [
+          "条带不遮文字",
+          "不把窄胶带随意拉宽",
+          "分隔有内容依据。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/tape-and-vellum/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "record-checklist",
+      "skill": "functional-journal",
+      "title": "清单小组",
+      "recipe": "record",
+      "when": "有明确待办事项",
+      "defaults": {
+        "layout": "checklist"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "record-checklist"
+      },
+      "lesson": {
+        "principle": "条目前放空心复选标记，形成清晰的阅读序列。",
+        "steps": [
+          "提供真实 items",
+          "设宽度与字级",
+          "长条目自然增加行高。"
+        ],
+        "check": [
+          "没有编造已完成状态",
+          "方框与对应条目对齐",
+          "长文不覆盖下一项。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/functional-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "record-timeline",
+      "skill": "functional-journal",
+      "title": "时间线小组",
+      "recipe": "record",
+      "when": "用户已提供顺序或时间",
+      "defaults": {
+        "layout": "timeline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "record-timeline"
+      },
+      "lesson": {
+        "principle": "沿一条纵线放置有顺序的短记，节点对应事件。",
+        "steps": [
+          "按真实顺序给 items",
+          "用字号和间隔控制节奏",
+          "查看线与节点的关系。"
+        ],
+        "check": [
+          "没有虚构日期",
+          "连接线在文字之外",
+          "条目长短不破坏顺序。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/functional-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "record-columns",
+      "skill": "functional-journal",
+      "title": "双栏短记",
+      "recipe": "record",
+      "when": "两组可对照文字",
+      "defaults": {
+        "layout": "columns"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "record-columns"
+      },
+      "lesson": {
+        "principle": "两列短记作对照，不要求每条同样长。",
+        "steps": [
+          "交替提供左、右 items",
+          "选择总宽度",
+          "按每行较高条目分配行距。"
+        ],
+        "check": [
+          "跨列内容不会串读",
+          "窄栏不挤字",
+          "末行保留足够空间。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/functional-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "color-echo",
+      "skill": "journal-color",
+      "title": "三点呼应",
+      "recipe": "pattern",
+      "when": "从实际素材选色，在周围重复少量色点",
+      "defaults": {
+        "pattern": "echo",
+        "colors": [
+          "#3D6871",
+          "#E6B45E",
+          "#D59076"
+        ]
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "color-echo"
+      },
+      "lesson": {
+        "principle": "三个轻重不同的色点在相关区域形成呼应。",
+        "steps": [
+          "观察素材，手动指定最多三个 HEX 颜色",
+          "限定点簇的宽高与位置",
+          "将色点靠近素材或相关短记。"
+        ],
+        "check": [
+          "指定颜色确实来自本页素材",
+          "色点与主体有可见的呼应关系",
+          "没有为平衡而填满留白。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-color/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "color-bands",
+      "skill": "journal-color",
+      "title": "主辅色条",
+      "recipe": "pattern",
+      "when": "小面积强调色与主色建立关系",
+      "defaults": {
+        "pattern": "bands"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "color-bands"
+      },
+      "lesson": {
+        "principle": "主色宽条与辅色窄条建立面积差，提供局部配色依据。",
+        "steps": [
+          "观察素材，分别指定主辅 HEX 颜色",
+          "设定条带的宽高和位置",
+          "将条带与图文共同对齐。"
+        ],
+        "check": [
+          "辅色面积小于主色",
+          "只在需要承托或分隔的地方使用。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-color/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "quiet-pair",
+      "skill": "quiet-photo-journal",
+      "title": "留白双件",
+      "recipe": "materials",
+      "when": "两件素材足以承载焦点",
+      "defaults": {
+        "arrangement": "diagonal-open",
+        "gapMm": 12
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "quiet-pair"
+      },
+      "lesson": {
+        "principle": "两件真实素材以对角关系留出安静书写区。",
+        "steps": [
+          "选择能表达主题的两件素材",
+          "设置较大 gapMm",
+          "把短记靠近其中一件。"
+        ],
+        "check": [
+          "素材不是孤零零的商品陈列",
+          "留白有用途",
+          "不要无意加入第三件。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/quiet-photo-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "aliases": [
+          "m1",
+          "m2"
+        ]
+      }
+    },
+    {
+      "id": "quiet-note",
+      "skill": "quiet-photo-journal",
+      "title": "边角图文",
+      "recipe": "materials",
+      "when": "用一件图像和一段简短文字留下空间",
+      "defaults": {
+        "arrangement": "row",
+        "captionPosition": "below",
+        "gapMm": 8
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "quiet-note"
+      },
+      "lesson": {
+        "principle": "一件或少量图像与短记组成一个轻量图文簇。",
+        "steps": [
+          "选择主图",
+          "提供简短 caption",
+          "在图组下方留出舒适行高。"
+        ],
+        "check": [
+          "文字对应主图",
+          "没有无依据事实",
+          "整页仍有明确完成意图。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/quiet-photo-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "aliases": [
+          "m1"
+        ],
+        "caption": "一片颜色，一段小记。"
+      }
+    },
+    {
+      "id": "layered-center",
+      "skill": "layered-journal",
+      "title": "中心叠片",
+      "recipe": "materials",
+      "when": "几件纸片围绕一个主视觉",
+      "defaults": {
+        "arrangement": "stack",
+        "gapMm": 4
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "layered-center"
+      },
+      "lesson": {
+        "principle": "多件纸片围绕局部核心叠压，靠露边形成层次。",
+        "steps": [
+          "底层素材先给",
+          "核心放在后面",
+          "以小间距集中密度并保留簇外空白。"
+        ],
+        "check": [
+          "主体没有被盖住",
+          "露边颜色有分工",
+          "避免两块整页大底板。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/layered-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "aliases": [
+          "m3",
+          "m2",
+          "m1"
+        ]
+      }
+    },
+    {
+      "id": "layered-diagonal",
+      "skill": "layered-journal",
+      "title": "对角层次",
+      "recipe": "materials",
+      "when": "大件与小件形成对角平衡",
+      "defaults": {
+        "arrangement": "diagonal",
+        "gapMm": 5
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "layered-diagonal"
+      },
+      "lesson": {
+        "principle": "一簇材料沿对角延伸，连接主视觉与次级内容。",
+        "steps": [
+          "依据大小与内容排序",
+          "按实际尺寸沿对角展开",
+          "把文字嵌入形成的空区。"
+        ],
+        "check": [
+          "对角线不是机械阶梯",
+          "不同材料接触有意义",
+          "密处之间可透气。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/layered-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "magazine-offset",
+      "skill": "magazine-journal",
+      "title": "错栏图组",
+      "recipe": "materials",
+      "when": "大图与小图建立不对称版面",
+      "defaults": {
+        "arrangement": "magazine",
+        "gapMm": 6
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "magazine-offset"
+      },
+      "lesson": {
+        "principle": "不同大小图像错栏排列，留出不等宽的文字节奏。",
+        "steps": [
+          "先给主图，再给侧栏辅助图",
+          "主图与侧栏按真实尺寸错列；可把短图注放在主图下方",
+          "需要标题时，另与标题组组合。"
+        ],
+        "check": [
+          "主图明确",
+          "不是等大卡片或普通横排",
+          "图注只对应主图，不压住侧栏图像。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/magazine-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "magazine-headline",
+      "skill": "magazine-journal",
+      "title": "窄栏大题",
+      "recipe": "title",
+      "when": "标题成为版面中的图形",
+      "defaults": {
+        "treatment": "stack",
+        "fontSizePt": 30
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "magazine-headline"
+      },
+      "lesson": {
+        "principle": "窄栏大标题自身成为版面中的主要形状。",
+        "steps": [
+          "选择简短有内容的标题",
+          "按语义分行",
+          "在实际宽度内保留大字级。"
+        ],
+        "check": [
+          "不因大字而重复印刷标题",
+          "窄栏没有错误断词",
+          "正文有独立空间。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/magazine-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "text": "今日\n收藏",
+        "widthMm": 38
+      }
+    },
+    {
+      "id": "playful-bubble",
+      "skill": "playful-journal",
+      "title": "气泡短记",
+      "recipe": "title",
+      "when": "短句与圆角底形形成对话感",
+      "defaults": {
+        "treatment": "bubble"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "playful-bubble"
+      },
+      "lesson": {
+        "principle": "短句与圆润底形组成轻松的文字块。",
+        "steps": [
+          "提供短句",
+          "设置字色底色",
+          "把圆润文字组靠近相关主体。"
+        ],
+        "check": [
+          "字没有贴边",
+          "底形不被误当实体",
+          "需要指向尾巴用气泡批注框。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/playful-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "playful-number",
+      "skill": "playful-journal",
+      "title": "圆点编号",
+      "recipe": "record",
+      "when": "少量条目需要明确顺序",
+      "defaults": {
+        "layout": "numbered"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "playful-number"
+      },
+      "lesson": {
+        "principle": "圆点编号和短条目形成活泼但清楚的顺序。",
+        "steps": [
+          "按正确顺序给 items",
+          "确定编号色和正文色",
+          "检查长条目行距。"
+        ],
+        "check": [
+          "编号不会压正文",
+          "没有凭空创造事项",
+          "条目顺序可读。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/playful-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "vintage-ticket",
+      "skill": "vintage-journal",
+      "title": "票据短记",
+      "recipe": "materials",
+      "when": "票据与旁注保留原始信息",
+      "defaults": {
+        "arrangement": "stagger",
+        "captionPosition": "below"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "vintage-ticket"
+      },
+      "lesson": {
+        "principle": "真实票据与短记录以错位关系组成收藏簇。",
+        "steps": [
+          "选择真实票据来源",
+          "保留编号日期",
+          "用 caption 补充已知信息。"
+        ],
+        "check": [
+          "没有编造票据事实",
+          "没有统一棕色滤镜",
+          "实物尺寸不变。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/vintage-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      },
+      "example": {
+        "aliases": [
+          "m5",
+          "m1"
+        ],
+        "caption": "纸上的痕迹。"
+      }
+    },
+    {
+      "id": "vintage-postmark",
+      "skill": "vintage-journal",
+      "title": "邮戳圈记",
+      "recipe": "title",
+      "when": "围绕短标签组织圆形印记",
+      "defaults": {
+        "treatment": "seal"
+      },
+      "example": {
+        "text": "旅途"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "vintage-postmark"
+      },
+      "lesson": {
+        "principle": "用透明圈线和短标签表达收藏印记，不冒充真实邮戳。",
+        "steps": [
+          "给不含虚构事实的短词",
+          "设置圈线和底色",
+          "放到内容关联处。"
+        ],
+        "check": [
+          "不会暗示不存在的日期地点",
+          "没有额外实体印章库存",
+          "字可读。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/vintage-journal/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "composition-triangle",
+      "skill": "journal-composition",
+      "title": "三角素材组",
+      "recipe": "materials",
+      "when": "三件不同大小素材稳定聚合",
+      "defaults": {
+        "arrangement": "triangle"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "composition-triangle"
+      },
+      "lesson": {
+        "principle": "三件尺寸不同的材料构成稳定三角视觉关系。",
+        "steps": [
+          "选择三件有内容联系的素材",
+          "按主次给 aliases",
+          "设置组间空隙。"
+        ],
+        "check": [
+          "三件仍保持实物尺度",
+          "焦点不因平均间隔而消失",
+          "无意遮挡已检查。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-composition/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "composition-s",
+      "skill": "journal-composition",
+      "title": "S形素材组",
+      "recipe": "materials",
+      "when": "多件素材沿曲线连接阅读",
+      "defaults": {
+        "arrangement": "s-route"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "composition-s"
+      },
+      "lesson": {
+        "principle": "多件素材沿可追踪的曲线组织阅读次序。",
+        "steps": [
+          "按内容顺序给素材",
+          "设定间隔",
+          "围绕曲线路径安排标题与短记。"
+        ],
+        "check": [
+          "顺序不是随意蛇形",
+          "图文没有互盖",
+          "整体占地适合纸面。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-composition/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-shadow",
+      "skill": "journal-lettering",
+      "title": "同侧阴影标题",
+      "recipe": "title",
+      "when": "平直字形需要轻微立体层次",
+      "defaults": {
+        "treatment": "shadow"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-shadow"
+      },
+      "lesson": {
+        "principle": "给整段字同方向、低模糊投影，形成轻度层次。",
+        "steps": [
+          "选可读字色",
+          "设定 shadow 的 offsetMm、blurMm 和 color",
+          "预览浅底与深底对比。"
+        ],
+        "check": [
+          "投影方向统一",
+          "阴影没有变成另一行模糊正文。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-offset-outline",
+      "skill": "journal-lettering",
+      "title": "偏移轮廓标题",
+      "recipe": "title",
+      "when": "需要线性错位而非模糊投影",
+      "defaults": {
+        "treatment": "offset-outline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-offset-outline"
+      },
+      "lesson": {
+        "principle": "描边向同一方向偏移，形成可识别的双轮廓节奏。",
+        "steps": [
+          "先读清原字",
+          "设置 outline 宽度和小幅 offsetMm",
+          "保留实字填充。"
+        ],
+        "check": [
+          "轮廓与实字仍有关联",
+          "偏移不过大导致重影难读。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-gradient",
+      "skill": "journal-lettering",
+      "title": "字内渐变标题",
+      "recipe": "title",
+      "when": "用同一色系明暗变化突出短题",
+      "defaults": {
+        "treatment": "gradient"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-gradient"
+      },
+      "lesson": {
+        "principle": "渐变只在字形内发生，保持一段文字的整体色彩方向。",
+        "steps": [
+          "选来自本页的两到三个颜色",
+          "按 0–1 排列 gradient.stops",
+          "设置 angleDeg。"
+        ],
+        "check": [
+          "色标完整覆盖 0 和 1",
+          "浅色端在底色上仍可辨认。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-gradient-outline",
+      "skill": "journal-lettering",
+      "title": "渐变描边标题",
+      "recipe": "title",
+      "when": "彩色标题需要从邻近底色中分离",
+      "defaults": {
+        "treatment": "gradient-outline"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-gradient-outline"
+      },
+      "lesson": {
+        "principle": "用薄描边隔开渐变字与背景，字仍是可编辑文本。",
+        "steps": [
+          "先确定渐变",
+          "加入细 outline",
+          "检查最细笔画与背景接触处。"
+        ],
+        "check": [
+          "描边未盖住渐变",
+          "没有依靠厚白边把整页变成贴图。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-phrases",
+      "skill": "journal-lettering",
+      "title": "主次词组标题",
+      "recipe": "title",
+      "when": "主词承重，连接词让出空间",
+      "defaults": {
+        "treatment": "phrases"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-phrases"
+      },
+      "example": {
+        "text": "把日常收好",
+        "runs": [
+          {
+            "text": "把",
+            "role": "secondary"
+          },
+          {
+            "text": "日常",
+            "role": "primary"
+          },
+          {
+            "text": "收好",
+            "role": "normal",
+            "breakBefore": true
+          }
+        ]
+      },
+      "lesson": {
+        "principle": "主词、辅助词和连接词形成不同字级，按整词分行。",
+        "steps": [
+          "给 runs 并保证拼接等于 text",
+          "设置 primary/secondary/normal",
+          "必要处显式 breakBefore。"
+        ],
+        "check": [
+          "所有文字都保留",
+          "主词确实承重",
+          "小字没有低于舒适阅读大小。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-circle",
+      "skill": "journal-lettering",
+      "title": "关键词圈注",
+      "recipe": "title",
+      "when": "一句话中只有一个词值得停顿",
+      "defaults": {
+        "treatment": "circle"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-circle"
+      },
+      "example": {
+        "text": "收集小美好",
+        "emphasis": "小美好"
+      },
+      "lesson": {
+        "principle": "用透明椭圆圈住关键词，同时保留整句话的阅读连续性。",
+        "steps": [
+          "指定原文 emphasis",
+          "围绕该词的实际排版框画细圈；换行时逐行画圈",
+          "按主题调整圈色。"
+        ],
+        "check": [
+          "圈线没有盖住字",
+          "没有把整段正文都圈起来。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "title-caption",
+      "skill": "journal-lettering",
+      "title": "标题与旁注",
+      "recipe": "title",
+      "when": "短标题需要一行补充但不增加第二个主标题",
+      "defaults": {
+        "treatment": "plain"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-caption"
+      },
+      "example": {
+        "text": "留住日常",
+        "caption": "一片颜色，一段短记。"
+      },
+      "lesson": {
+        "principle": "标题和较小旁注成为一个组，旁注补充信息而非重复标题。",
+        "steps": [
+          "提供标题与 caption",
+          "先安排主标题",
+          "在组内留出旁注行高。"
+        ],
+        "check": [
+          "旁注内容有依据",
+          "两级字号明显",
+          "长旁注没有挤出组边界。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-flower",
+      "skill": "journal-graphics",
+      "title": "参数花朵",
+      "recipe": "graphic",
+      "when": "回应素材中的花卉或圆形轮廓",
+      "defaults": {
+        "shape": "flower",
+        "widthMm": 24,
+        "heightMm": 24,
+        "options": {
+          "petals": 5,
+          "petalDepth": 0.18,
+          "centerRadius": 0.07,
+          "showCenter": true
+        }
+      },
+      "example": {
+        "widthMm": 24,
+        "heightMm": 24,
+        "options": {
+          "petals": 5,
+          "petalDepth": 0.18,
+          "centerRadius": 0.07,
+          "showCenter": true
+        }
+      },
+      "lesson": {
+        "principle": "在已有花卉或圆形素材旁放一朵可编辑的数字花，重复轮廓语言而不复制实体素材。",
+        "steps": [
+          "观察相邻素材的花瓣数量与外形，选择放置位置和宽高",
+          "用 petals、petalDepth 调花瓣，用 centerRadius、showCenter 调花心",
+          "按素材颜色设置线色、填充与透明度"
+        ],
+        "check": [
+          "数字花与参照素材有形状呼应，但不盖住原图案",
+          "空心区域透明，花瓣与花心仍可通过参数调整",
+          "原实体素材的尺寸和来源不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-star",
+      "skill": "journal-graphics",
+      "title": "轻重星形",
+      "recipe": "graphic",
+      "when": "在关键词或焦点附近作单点强调",
+      "defaults": {
+        "shape": "star",
+        "widthMm": 22,
+        "heightMm": 22,
+        "options": {
+          "points": 5,
+          "innerRatio": 0.5
+        }
+      },
+      "example": {
+        "widthMm": 22,
+        "heightMm": 22,
+        "options": {
+          "points": 5,
+          "innerRatio": 0.5
+        }
+      },
+      "lesson": {
+        "principle": "在关键词或焦点旁用一颗可编辑星形作单点强调。",
+        "steps": [
+          "选择需要强调的词或图像细节，并在旁边留出星形位置",
+          "用 points 调尖角数，用 innerRatio 调星角深度",
+          "设置线色、填充和透明度，按整页比例检查大小"
+        ],
+        "check": [
+          "星形没有盖住需要阅读的文字或图像细节",
+          "结构参数改变后仍是清楚的单点强调",
+          "空心设置仍保持透明"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-arrow",
+      "skill": "journal-graphics",
+      "title": "方向箭头",
+      "recipe": "graphic",
+      "when": "有明确的起点与目标需要连接",
+      "defaults": {
+        "shape": "arrow",
+        "widthMm": 42,
+        "heightMm": 12,
+        "options": {
+          "headLength": 0.3,
+          "shaftWidth": 0.16
+        }
+      },
+      "example": {
+        "widthMm": 42,
+        "heightMm": 12,
+        "options": {
+          "headLength": 0.3,
+          "shaftWidth": 0.16
+        }
+      },
+      "lesson": {
+        "principle": "一支可调箭头连接明确的起点与目标，让阅读方向可见。",
+        "steps": [
+          "先确定两件相关素材的起终点",
+          "设置箭头长度，用 headLength 与 shaftWidth 调整比例",
+          "预览箭头是否落在素材之间。"
+        ],
+        "check": [
+          "箭头指向真实目标，不盖住主体",
+          "长短与箭头粗细可以分开调整",
+          "空心内部保持透明。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-arch",
+      "skill": "journal-graphics",
+      "title": "拱形承载框",
+      "recipe": "graphic",
+      "when": "竖向图像需要拱形外沿呼应",
+      "defaults": {
+        "shape": "archFrame",
+        "widthMm": 36,
+        "heightMm": 48,
+        "options": {
+          "archRise": 0.4,
+          "frameInset": 0.06,
+          "showInnerBorder": true
+        }
+      },
+      "example": {
+        "widthMm": 44,
+        "heightMm": 58,
+        "options": {
+          "archRise": 0.4,
+          "frameInset": 0.06,
+          "showInnerBorder": true
+        }
+      },
+      "lesson": {
+        "principle": "在竖向图像外放一圈可调拱形线，保留图像原尺寸和透明中窗。",
+        "steps": [
+          "根据现有图像尺寸设置框的宽高与位置",
+          "用 archRise 调拱顶，用 frameInset 调内外线距离",
+          "预览拱线与图像的接触位置。"
+        ],
+        "check": [
+          "拱线围住图像而不遮住主要内容",
+          "中窗透明，图像没有被拉伸",
+          "拱顶和线距可分别修改。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-scallop-frame",
+      "skill": "journal-graphics",
+      "title": "波浪花边框",
+      "recipe": "graphic",
+      "when": "便签或图文区需要轻量边界",
+      "defaults": {
+        "shape": "scallopFrame",
+        "widthMm": 52,
+        "heightMm": 36,
+        "options": {
+          "lobes": 5,
+          "lobeDepth": 0.025,
+          "frameInset": 0.06,
+          "showInnerBorder": true
+        }
+      },
+      "example": {
+        "widthMm": 52,
+        "heightMm": 40,
+        "options": {
+          "lobes": 5,
+          "lobeDepth": 0.025,
+          "frameInset": 0.06,
+          "showInnerBorder": true
+        }
+      },
+      "lesson": {
+        "principle": "用可调波浪外沿轻轻围住便签，留出透明的正文区域。",
+        "steps": [
+          "先按便签实际尺寸设置边框宽高",
+          "用 lobes 与 lobeDepth 调整波浪节奏",
+          "预览内线和文字的间距。"
+        ],
+        "check": [
+          "花边不碰正文或重要图案",
+          "中窗透明，便签保持原尺寸",
+          "波浪数量、深度与内线可分别调整。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-paperclip",
+      "skill": "journal-graphics",
+      "title": "数字回形针",
+      "recipe": "graphic",
+      "when": "纸边需要一个视觉固定点；不代表实体库存",
+      "defaults": {
+        "shape": "paperclip",
+        "widthMm": 9,
+        "heightMm": 22,
+        "options": {
+          "clipGap": 0.22,
+          "innerLength": 0.6
+        }
+      },
+      "example": {
+        "widthMm": 9,
+        "heightMm": 22,
+        "options": {
+          "clipGap": 0.22,
+          "innerLength": 0.6
+        }
+      },
+      "lesson": {
+        "principle": "在纸角放一枚数字回形针作为视觉固定点，不消耗实体库存。",
+        "steps": [
+          "先确定要强调的纸边位置",
+          "设置回形针宽高，再调夹口与内弯长度",
+          "预览它与纸片边缘的叠接。"
+        ],
+        "check": [
+          "回形针落在纸边，不盖住正文",
+          "轮廓仍可单独编辑",
+          "不会误计为用户拥有的实体素材。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-wave",
+      "skill": "journal-graphics",
+      "title": "可调波浪线",
+      "recipe": "graphic",
+      "when": "短段落之间需要柔和分隔",
+      "defaults": {
+        "shape": "wave",
+        "widthMm": 55,
+        "heightMm": 7,
+        "options": {
+          "count": 5,
+          "depth": 0.12
+        }
+      },
+      "example": {
+        "widthMm": 55,
+        "heightMm": 7,
+        "options": {
+          "count": 5,
+          "depth": 0.12
+        }
+      },
+      "lesson": {
+        "principle": "一条轻波浪线把两段短记分开，又保留柔和的连续感。",
+        "steps": [
+          "先找两段文字之间的空隙",
+          "设置线段长度，用 count 和 depth 调起伏",
+          "预览线条是否与上下文字保持距离。"
+        ],
+        "check": [
+          "波浪不碰到字形",
+          "起伏大小与重复次数可单独修改",
+          "线条仍是独立可编辑图层。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-zigzag",
+      "skill": "journal-graphics",
+      "title": "折线分隔",
+      "recipe": "graphic",
+      "when": "需要呼应几何纹样的清楚分界",
+      "defaults": {
+        "shape": "zigzag",
+        "widthMm": 55,
+        "heightMm": 7,
+        "options": {
+          "count": 7,
+          "depth": 0.15
+        }
+      },
+      "example": {
+        "widthMm": 55,
+        "heightMm": 7,
+        "options": {
+          "count": 7,
+          "depth": 0.15
+        }
+      },
+      "lesson": {
+        "principle": "折线在两块内容之间建立清楚的几何分界。",
+        "steps": [
+          "先确定需要分隔的两块内容",
+          "设置折线长度，用 count 和 depth 控制节奏",
+          "预览折线与文字、素材边缘的距离。"
+        ],
+        "check": [
+          "折线没有压住文字",
+          "重复数和折角深度可分别修改",
+          "分界仍保留足够留白。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "graphic-bubble",
+      "skill": "journal-graphics",
+      "title": "气泡批注框",
+      "recipe": "graphic",
+      "when": "批注需要指向具体图像",
+      "defaults": {
+        "shape": "bubble",
+        "widthMm": 45,
+        "heightMm": 28,
+        "options": {
+          "tailPosition": 0.7,
+          "depth": 0.12,
+          "radius": 0.1
+        }
+      },
+      "example": {
+        "widthMm": 45,
+        "heightMm": 28,
+        "text": "这里的光",
+        "options": {
+          "tailPosition": 0.7,
+          "depth": 0.12,
+          "radius": 0.1
+        }
+      },
+      "lesson": {
+        "principle": "短批注和可调尾巴组成一个可编辑气泡，指向具体图像或细节。",
+        "steps": [
+          "选定真实焦点，写入简短且可信的批注",
+          "设置宽高与字号，通过 options 调整尾巴位置和圆角",
+          "预览文字是否完整、尾巴是否指向焦点。"
+        ],
+        "check": [
+          "文字完整且留在气泡主体内",
+          "尾巴指向相关内容，不遮挡图像主体",
+          "图形与文字可分别编辑，空心区域透明。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-graphics/SKILL.md",
+          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+        }
+      }
+    },
+    {
+      "id": "record-on-material",
+      "skill": "functional-journal",
+      "title": "在素材留白中写字",
+      "recipe": "write",
+      "when": "便签、纸片或照片具有清楚的空白，可承载与素材相关的短段落",
+      "defaults": {},
+      "lesson": {
+        "principle": "先观察素材中真正可以写字的空白，选择局部比例区域，让段落与素材一起移动，保留记录功能和图文关系。",
+        "steps": [
+          "预览素材，避开印刷文字、人物、图案和边缘，确定 box 比例框",
+          "传入已有素材节点与完整正文，选可读字号和对比清楚的字色",
+          "预览正文实际高度；超出区域时拆分内容或改用其他位置，不裁字、不缩小实体"
+        ],
+        "check": [
+          "文字完整且没有压住重要图案，末行没有越出选定区域",
+          "素材移动或旋转后文字仍保持对应位置与方向",
+          "未假设整张素材都是可写空白"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/functional-journal/SKILL.md",
+          "url": "https://www.xiaohongshu.com/explore/6a29267d0000000006023374",
+          "observed": "四图全部核对；第三图说明便签的留白书写与上下文呼应。工具为本项目实现。"
+        }
+      }
+    },
+    {
+      "id": "photo-film",
+      "skill": "photo-story",
+      "title": "胶片照片组",
+      "recipe": "film",
+      "when": "多张照片需要连续阅读次序，且希望保留各自真实尺寸",
+      "defaults": {
+        "bendMm": 10,
+        "frameInset": 0.1,
+        "holesPerFrame": 6,
+        "gapMm": 3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "photo-film"
+      },
+      "lesson": {
+        "principle": "按实物尺寸为每张照片生成有透明齿孔的数字边框，再通过平移和旋转形成直排或弧形次序。",
+        "steps": [
+          "按阅读次序提供素材别名，先看尺寸能否放进纸面",
+          "用 bendMm 控制排布起伏、gapMm 控制相邻外接框间距",
+          "用 frameInset 和 holesPerFrame 调整胶片边带与齿孔，再整体放入页面"
+        ],
+        "check": [
+          "照片未缩放、拉伸或裁切，重要主体仍完整",
+          "边带和齿孔真正透明，不靠白色方块遮盖",
+          "图组没有超出可用纸面，缺少照片时减少输入别名而不复制实物"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "依据已核对的胶片照片叙事示意归纳为平面可编辑图形；不宣称能让实体照片弯曲变形。"
+        }
+      }
+    },
+    {
+      "id": "graphic-film-frame",
+      "skill": "photo-story",
+      "title": "可调胶片边框",
+      "recipe": "graphic",
+      "when": "已有照片组需要胶片边带，或需要可编辑的多格图文框架",
+      "defaults": {
+        "shape": "filmFrame",
+        "widthMm": 90,
+        "heightMm": 30,
+        "fill": "#343A37",
+        "options": {
+          "columns": 3,
+          "count": 16,
+          "frameInset": 0.16
+        },
+        "strokeWidthMm": 0.1
+      },
+      "lesson": {
+        "principle": "使用带透明照片窗和齿孔的原生数字几何，格数、齿孔数和边带比例均可独立修改。",
+        "steps": [
+          "设置宽高与 columns，先确认照片窗的布局",
+          "用 count 调每边齿孔数，frameInset 调边带宽度",
+          "选择填充颜色并把边框放在照片组上方，核对图片边缘"
+        ],
+        "check": [
+          "透明窗口能看到底层内容，页面换色后仍正常",
+          "格数与实际照片对应，修改结构后再次检查对齐",
+          "数字边框不进入实体库存，也不自动改变照片尺寸"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/photo-story/SKILL.md",
+          "scope": "依据已核对的胶片照片叙事示意归纳为平面可编辑图形；不宣称能让实体照片弯曲变形。"
+        }
+      }
+    },
+    {
+      "id": "accent-spark",
+      "skill": "journal-accents",
+      "title": "角落光芒",
+      "recipe": "accent",
+      "when": "标题与照片接触处需要轻量强调",
+      "defaults": {
+        "motif": "spark",
+        "arrangement": "corner",
+        "widthMm": 48,
+        "heightMm": 30,
+        "motifSizeMm": 6,
+        "count": 5,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-spark"
+      },
+      "lesson": {
+        "principle": "沿局部转角排列大小不同的光芒，保留中央主体与大段空白。",
+        "steps": [
+          "选照片或标题附近一个需要强调的角落",
+          "设置局部范围、两种呼应色和少量光芒位置",
+          "看 skipped 与整页预览，再调数量和线宽"
+        ],
+        "check": [
+          "光芒靠近焦点但没有盖住关键内容",
+          "大小有变化，页面其他角落仍留白",
+          "光芒仍是独立可编辑图形"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-sprig",
+      "skill": "journal-accents",
+      "title": "枝叶陪衬",
+      "recipe": "accent",
+      "when": "自然主题需要一两枝细线陪衬",
+      "defaults": {
+        "motif": "sprig",
+        "arrangement": "edge",
+        "widthMm": 35,
+        "heightMm": 30,
+        "motifSizeMm": 7,
+        "count": 2,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-sprig"
+      },
+      "lesson": {
+        "principle": "用疏朗枝叶形成侧边陪衬，让笔触呼应植物或安静的主题。",
+        "steps": [
+          "选照片或便签的侧边，不在正文中间铺枝叶",
+          "设定边缘范围、枝叶数量及细线颜色",
+          "查看实际枝叶与素材边缘的距离，必要时改位置"
+        ],
+        "check": [
+          "枝叶没有穿过文字或照片主体",
+          "左右陪衬仍保持疏朗，不形成对称硬框",
+          "两枝均独立可编辑"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-stitch",
+      "skill": "journal-accents",
+      "title": "边缘针脚",
+      "recipe": "accent",
+      "when": "纸边或标签需要手工细节",
+      "defaults": {
+        "motif": "stitch",
+        "arrangement": "edge",
+        "widthMm": 60,
+        "heightMm": 10,
+        "motifSizeMm": 6,
+        "count": 7,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-stitch"
+      },
+      "lesson": {
+        "principle": "只沿一段纸边绘制短针脚，线色与纸面保持适度对比。",
+        "steps": [
+          "找到便签或纸片的一段真实边缘",
+          "沿边缘设窄范围，调针脚数、间距和线色",
+          "对照整页预览微调到纸边，不延伸到正文"
+        ],
+        "check": [
+          "针脚跟随纸边而非悬在空白处",
+          "线条没有盖住正文",
+          "每段针脚仍可分别编辑"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-rings",
+      "skill": "journal-accents",
+      "title": "空心圈呼应",
+      "recipe": "accent",
+      "when": "两个内容簇需要颜色和视线上的连接",
+      "defaults": {
+        "motif": "rings",
+        "arrangement": "arc",
+        "widthMm": 55,
+        "heightMm": 30,
+        "motifSizeMm": 6,
+        "count": 5,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-rings"
+      },
+      "lesson": {
+        "principle": "用有大小差异的透明圈形成轻微弧形节奏，让底层纹理透出。",
+        "steps": [
+          "找两个需要建立联系的内容簇",
+          "把弧形范围放在两簇之间，设圈数、颜色与线宽",
+          "检查两端是否靠近内容，并避开正文"
+        ],
+        "check": [
+          "圈形成阅读方向而非孤立散点",
+          "空心处仍露出底层内容",
+          "圈没有遮住关键图像和文字"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-confetti",
+      "skill": "journal-accents",
+      "title": "局部碎点",
+      "recipe": "accent",
+      "when": "活泼主题需要局部色彩节奏",
+      "defaults": {
+        "motif": "confetti",
+        "arrangement": "corner",
+        "widthMm": 40,
+        "heightMm": 28,
+        "motifSizeMm": 3,
+        "count": 7,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-confetti"
+      },
+      "lesson": {
+        "principle": "把色块和圆点集中在转角，远离正文并留下没有碎点的区域。",
+        "steps": [
+          "选择便签或照片附近一个空角",
+          "限定小范围，设点数、两种呼应色与保护区域",
+          "看 skipped 和整页预览，去掉多余碎点"
+        ],
+        "check": [
+          "碎点集中在一处且远离正文",
+          "色块与圆点大小有变化",
+          "其他留白没有被平均填满"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      }
+    },
+    {
+      "id": "accent-materials",
+      "skill": "journal-accents",
+      "title": "真实小物配组",
+      "recipe": "accent",
+      "when": "现有小贴纸、邮票或票根需要组合",
+      "defaults": {
+        "motif": "materials",
+        "arrangement": "edge",
+        "widthMm": 84,
+        "heightMm": 58,
+        "motifSizeMm": 6,
+        "count": 2,
+        "colors": [
+          "#536B59",
+          "#C19658"
+        ],
+        "strokeWidthMm": 0.3
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "accent-materials"
+      },
+      "lesson": {
+        "principle": "先核对真实尺寸和主题，用不重叠的小物组建立语义联系，不复制唯一库存。",
+        "steps": [
+          "确定点缀要服务的主体与局部毫米范围",
+          "从素材选一到两种颜色，选择少量位置并标出正文保护框",
+          "执行配方，阅读 skipped；看整页后再调位置、疏密与线宽"
+        ],
+        "check": [
+          "主体和文字没有被点缀遮挡",
+          "点缀有大小与密度变化，没有均匀铺满空位",
+          "数字图形独立可编辑，真实素材尺寸和来源保持不变"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-accents/SKILL.md",
+          "scope": "现有教程的点缀关系归纳，配方和避让为拾页实现；不是来源图像复刻。"
+        }
+      },
+      "example": {
+        "positions": [
+          [
+            0.75,
+            0.25
+          ],
+          [
+            0.2,
+            0.79
+          ]
+        ],
+        "protectedBoxes": [
+          [
+            0.333,
+            0.172,
+            0.334,
+            0.656
+          ]
+        ]
+      }
+    }
+  ]
+}

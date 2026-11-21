@@ -1,0 +1,36 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-ink-add",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "ink.add",
+      "id": "underline",
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 30,
+          "y": 1
+        }
+      ],
+      "unit": "mm",
+      "place": {
+        "reference": "page",
+        "at": [
+          50,
+          90
+        ],
+        "unit": "mm",
+        "anchor": "center"
+      },
+      "style": {
+        "penStyle": "marker",
+        "strokeWidthMm": 3,
+        "color": "#E8D66B"
+      }
+    }
+  ]
+}

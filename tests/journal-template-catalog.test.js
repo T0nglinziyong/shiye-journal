@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {project} from '../src/domain.js';
 import {presetJournalTemplates,normalizeUserTemplate,rankJournalTemplates,USER_TEMPLATE_PREFIX} from '../src/journal-template-catalog.js';
-import {journalTemplateRecords,saveJournalUserTemplate,validateJournalImage} from '../src/journal-template-ui.js';
+import {journalTemplateRecords,saveJournalUserTemplate,validateJournalImage} from '../src/journal-template-data.js';
 import {selectJournalAbstractTemplates,journalAbstractTemplateGuide} from '../src/journal-abstract-templates.js';
 import {selectJournalReferenceCases} from '../src/journal-reference-catalog.js';
 import {workInTab} from '../src/work-collections.js';
@@ -53,10 +53,10 @@ test('AI reference bundle includes both uploaded template and paired case, separ
   globalThis.fetch=async()=>({ok:true,blob:async()=>new Blob([new Uint8Array([137,80,78,71,1])],{type:'image/png'})});
   globalThis.FileReader=class{readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result=`data:${blob.type};base64,${Buffer.from(bytes).toString('base64')}`;this.onload?.();});}};
   try{
-    const db={get:async(store,id)=>({data:new Blob([id],{type:id==='finished'?'image/jpeg':'image/png'})})};
-    const result=await loadJournalTemplateReferences({context:{styles:['旅行票据'],purposes:['旅途记录'],materials:[{title:'茶饮票根',tags:['路线']}]},userTemplates:[custom],db});
+    const db={previewBlob:async id=>new Blob([id],{type:id==='finished'?'image/jpeg':'image/png'})};
+    const result=await loadJournalTemplateReferences({context:{styles:['旅行票据'],purposes:['旅途记录'],materials:[{title:'茶饮票根',tags:['路线']}]},userTemplates:[custom],db,encodeReference:async()=>new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32])});
     assert.ok(result.selectedTemplates.some(entry=>entry.id===custom.id));
     assert.deepEqual(result.referenceImages.filter(entry=>entry.id.startsWith(custom.id)).map(entry=>entry.kind),['template','case']);
-    assert.ok(result.referenceImages.every(entry=>entry.bytes.length>0&&entry.url.startsWith('data:image/')));
+    assert.ok(result.referenceImages.every(entry=>entry.bytes.length>0&&entry.url.startsWith('data:image/webp;')&&entry.extension==='webp'));
   }finally{globalThis.fetch=originalFetch;globalThis.FileReader=originalReader;}
 });

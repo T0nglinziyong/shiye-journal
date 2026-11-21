@@ -1,0 +1,138 @@
+import {textLines} from '../editor-tools-model.js';
+
+const pt=25.4/72;
+const segments=text=>[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)].map(s=>s.segment);
+const extent=(text,fontSize)=>segments(text).reduce((sum,ch)=>sum+fontSize*pt*(/^[\u0000-\u00ff]+$/u.test(ch)?.65:1),0);
+const roles={primary:1.35,secondary:.78,normal:1};
+const at=(x,y)=>({reference:'parent',at:[x,y],unit:'mm',anchor:'top-left'});
+
+export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm','tapeOpacity'];
+export const titleHelp={
+ runs:'可选词组数组；每项 {text,role:primary|secondary|normal,fontFamily?,breakBefore?,rotationDeg?,offsetMm?,style?}。fontFamily 可给某个词组换字体；text 拼接必须等于完整标题；按词义分组，不随机旋转每字',
+ emphasis:'需底色或圈注的精确词组，必须在 text 中出现；多个同词默认均强调',
+ style:'与 text.add 相同的文字 style；可组合 outline/gradient/shadow/fillOpacity/字体等，不包含位置尺寸',
+ curveHeightMm:'弧形标题弯曲高度，-80–80 mm；正负改变方向，必须单行',
+ caption:'标题旁的小注，用户事实或本任务允许的随写；不自动编造',
+ captionFontFamily:'小注字体；默认沿用标题字体，可选预装字体或本机已安装字体',
+ tapeOpacity:'数字胶带透明度，0.15–0.9；只影响标题后的胶带，不改变文字或真实素材',
+ gapMm:'词组间距，0–20 mm'
+};
+
+export function validateTitle(p){
+ if(p.emphasis!==undefined&&(typeof p.emphasis!=='string'||!p.emphasis.trim()||!p.text.includes(p.emphasis)))throw Error('强调词必须出现在完整标题中');
+ if(p.curveHeightMm!==undefined&&(!Number.isFinite(p.curveHeightMm)||Math.abs(p.curveHeightMm)>80))throw Error('弧高须为 -80–80 mm');
+ if(p.gapMm!==undefined&&p.gapMm>20)throw Error('词组间距须为 0–20 mm');
+ if(p.tapeOpacity!==undefined&&(!Number.isFinite(p.tapeOpacity)||p.tapeOpacity<.15||p.tapeOpacity>.9))throw Error('数字胶带透明度须为 0.15–0.9');
+ if(p.style!==undefined&&(!p.style||typeof p.style!=='object'||Array.isArray(p.style)))throw Error('标题 style 无效');
+ if(p.runs!==undefined){
+  if(!Array.isArray(p.runs)||!p.runs.length||p.runs.length>24)throw Error('词组须为 1–24 项');
+  for(const r of p.runs){
+   if(!r||Object.keys(r).some(k=>!['text','role','fontFamily','breakBefore','rotationDeg','offsetMm','style'].includes(k))||typeof r.text!=='string'||!r.text.length||!Object.hasOwn(roles,r.role||'normal'))throw Error('词组内容或角色无效');
+   if(r.fontFamily!==undefined&&(typeof r.fontFamily!=='string'||!r.fontFamily.trim()))throw Error('词组字体名无效');
+   if(r.breakBefore!==undefined&&typeof r.breakBefore!=='boolean')throw Error('词组换行无效');
+   if(r.rotationDeg!==undefined&&(!Number.isFinite(r.rotationDeg)||Math.abs(r.rotationDeg)>20))throw Error('词组旋转须为 -20–20 度');
+   if(r.offsetMm!==undefined&&(!Array.isArray(r.offsetMm)||r.offsetMm.length!==2||!r.offsetMm.every(n=>Number.isFinite(n)&&Math.abs(n)<=20)))throw Error('词组偏移须为两个 -20–20 mm 数值');
+  }
+  if(p.runs.map(r=>r.text).join('')!==p.text)throw Error('词组拼接必须等于完整标题，不得丢字或增加文字');
+ }
+ if(p.treatment==='curve'&&(p.runs||p.text.includes('\n')))throw Error('弧形标题只接受完整单行文字；分组或多行请改用分行标题');
+}
+
+export function compileTitle(p,{widthExplicit=false}={}){
+ validateTitle(p);
+ const colors=p.colors||['#3D6871','#E6B45E','#F1E8D5'],fontSize=p.style?.fontSizePt??p.fontSizePt??18,accent=colors[1]||colors[0],ground=colors[2]||'#F1E8D5';
+ let width=p.widthMm||70;
+ if(p.treatment==='stack'&&!widthExplicit)width=Math.max(28,Math.min(70,extent(p.text,fontSize)/2+10));
+ if(p.treatment==='seal'&&!widthExplicit)width=Math.max(34,Math.min(70,extent(p.text,fontSize)+16));
+ if(p.treatment==='vertical')width=Math.max(16,fontSize*pt+10);
+ if(width<=10)throw Error('标题宽度须大于 10 mm');
+ const style={fontFamily:p.fontFamily||'Xiaolai',fontSizePt:fontSize,color:colors[0]};
+ if(p.treatment==='outline')Object.assign(style,{fillOpacity:0,outline:{color:colors[0],widthMm:.35,offsetMm:[0,0]}});
+ if(p.treatment==='offset-outline')style.outline={color:accent,widthMm:.4,offsetMm:[.6,.7]};
+ if(p.treatment==='shadow')style.shadow={color:accent,offsetMm:[.6,.7],blurMm:.1};
+ if(['gradient','gradient-outline'].includes(p.treatment))style.gradient={angleDeg:90,stops:[{offset:0,color:accent},{offset:1,color:colors[0]}]};
+ if(p.treatment==='gradient-outline')style.outline={color:colors[0],widthMm:.35,offsetMm:[0,0]};
+ Object.assign(style,p.style);
+ const children=[],texts=[],background=[],notes=[];let next=0;
+ const shape=(kind,x,y,w,h,paint={})=>({op:'graphic.add',id:p.id+'-mark'+(++next),geometry:{kind},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:accent,...paint}});
+ const addText=(content,x,y,w,s)=>{
+  const size=s.fontSizePt||fontSize,rowHeight=size*pt*(s.lineHeight||1.3),lineWidth=Math.max(1,w-1);
+  const layout=textLines({content,width:lineWidth,fontSize:size*pt,fixedLineHeight:rowHeight},value=>extent(value,size));
+  const lines=layout.lines.length,h=lines*rowHeight+Math.abs(s.curveHeightMm||0)+2;
+  const op={op:'text.add',id:p.id+'-text'+(++next),content,place:at(x,y),size:{width:w,unit:'mm'},style:s};
+  const lastLine=[...layout.lines].reverse().find(line=>line.text.trim())?.text||'';
+  const inkLines=layout.lines.filter(line=>line.text.trim()).map(line=>({x,y:y+line.y,width:Math.min(w,extent(line.text,size)),height:size*pt*1.1}));
+  texts.push({op,x,y,w,h,inkHeight:(lines-1)*rowHeight+size*pt*1.1,lastLineWidth:Math.min(w,extent(lastLine,size)),lineCount:lines,inkLines});return texts.at(-1);
+ };
+ let runs=p.runs;
+ if(!runs&&p.emphasis){const pieces=p.text.split(p.emphasis);runs=[];pieces.forEach((part,i)=>{if(part)runs.push({text:part});if(i<pieces.length-1)runs.push({text:p.emphasis,role:'primary'});});}
+ if(runs&&p.treatment==='vertical')throw Error('竖排使用完整文字，不接受词组布局');
+ if(runs){
+  let x=5,y=5,lineH=0;
+  for(const run of runs){
+   const primary=run.role==='primary',s={...style,fontSizePt:fontSize*roles[run.role||'normal'],...run.style,...(run.fontFamily?{fontFamily:run.fontFamily}:{})};
+   const w=Math.min(width-10,extent(run.text,s.fontSizePt)+2);
+   if((run.breakBefore||x+w>width-5)&&x>5){x=5;y+=lineH+(p.gapMm??2);lineH=0;}
+   const dx=run.offsetMm?.[0]||0,dy=run.offsetMm?.[1]||(primary?0:s.fontSizePt*pt*.18);
+   const t=addText(run.text,x+dx,y+dy,w,s);
+   if(run.rotationDeg)t.op.place.rotationDeg=run.rotationDeg;
+   if(p.treatment==='highlight'&&(p.emphasis?run.text===p.emphasis:primary))for(const line of t.inkLines)background.push(shape('rect',line.x-.7,line.y+line.height*.48,line.width+1.4,line.height*.52,{fill:accent,fillOpacity:.45}));
+   if(p.treatment==='circle'&&(p.emphasis?run.text===p.emphasis:primary))for(const line of t.inkLines)background.push(shape('ellipse',line.x-1,line.y-1,line.width+2,line.height+2,{fill:null,stroke:accent,strokeWidthMm:.45}));
+   x+=w+(p.gapMm??1.2);lineH=Math.max(lineH,t.inkHeight+Math.abs(dy));
+  }
+ }else{
+  const content=p.treatment==='vertical'?segments(p.text).join('\n'):p.text;
+  if(p.treatment==='curve'){
+   const needed=extent(content,style.fontSizePt)*1.04+12;
+   if(widthExplicit&&needed>width)throw Error('弧形标题文字超出宽度；增大 widthMm 或减小 fontSizePt，不会自动丢字');
+   width=Math.max(width,needed);style.curveHeightMm=p.curveHeightMm??style.curveHeightMm??5;
+  }
+  const t=addText(content,5,5,width-10,p.treatment==='seal'?{...style,textAlign:'center'}:style);
+  if(p.treatment==='seal'){
+   if(t.inkHeight>width-10)throw Error('邮戳圈记文字超出圆形范围；缩短标签或增大 widthMm');
+   const dy=Math.max(0,(width-t.inkHeight)/2-t.y);
+   t.y+=dy;t.op.place.at[1]+=dy;
+   for(const line of t.inkLines)line.y+=dy;
+  }
+  if(['highlight','circle'].includes(p.treatment))notes.push('未给强调词或主词组，本次保留普通标题；请指定 emphasis 或 runs 中的 primary。');
+  if(p.treatment==='stagger')notes.push('未提供词组，保留连续读序；不自动随机旋转每字。');
+ }
+ const mainTexts=texts.slice();
+ let height=Math.max(p.heightMm||14,...texts.map(t=>t.y+t.h+5));
+ if(p.treatment==='seal')height=Math.max(height,width);
+ if(p.caption){const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:p.captionFontFamily||style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
+ if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,p.treatment==='seal'?width:height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
+ if(p.treatment==='tape'){
+  const lines=mainTexts.flatMap(t=>t.inkLines);
+  for(const [index,line] of lines.entries()){
+   const x=Math.max(0,line.x-2),y=Math.max(0,line.y+line.height*.12),w=Math.min(width-x,line.width+4),h=Math.max(2.4,line.height*1.15);
+   const notch=Math.min(.7,h*.18),d=`M 0 0 L ${w} 0 L ${w-notch} ${h*.24} L ${w} ${h*.47} L ${w-notch} ${h*.72} L ${w} ${h} L 0 ${h} L ${notch} ${h*.75} L 0 ${h*.53} L ${notch} ${h*.27} Z`;
+   background.push({op:'graphic.add',id:p.id+'-tape'+index,geometry:{kind:'path',viewBox:[0,0,w,h],paths:[{d}]},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:ground,fillOpacity:p.tapeOpacity??.62,stroke:accent,strokeWidthMm:.12}});
+   if(p.pattern==='dots')for(let dx=2;dx<w-1;dx+=3.8)background.push(shape('ellipse',x+dx,y+h*.75,.45,.45,{fill:accent,fillOpacity:.34}));
+   if(p.pattern==='stripes'||p.pattern==='grid'){
+    const paths=[];
+    for(let dx=2;dx<w-1;dx+=4.2)paths.push({d:p.pattern==='stripes'?`M ${dx} ${h*.85} L ${Math.min(w-1,dx+1.8)} ${h*.15}`:`M ${dx} ${h*.15} L ${dx} ${h*.85}`});
+    if(p.pattern==='grid')paths.push({d:`M 1 ${h*.5} L ${w-1} ${h*.5}`});
+    background.push({op:'graphic.add',id:p.id+'-tape-pattern'+index,geometry:{kind:'path',viewBox:[0,0,w,h],paths},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:null,stroke:accent,strokeWidthMm:.12,opacity:.34}});
+   }
+  }
+  notes.push('标题后方为可编辑数字胶带，不消耗实体胶带来源。');
+ }
+ if(p.treatment==='underline'){
+  const last=mainTexts.at(-1),bottom=last.y+last.inkHeight;
+  const sameRow=last.lineCount===1?mainTexts.filter(t=>t.lineCount===1&&Math.abs(t.y-last.y)<1):[last];
+  const left=Math.min(...sameRow.map(t=>t.x)),right=Math.max(...sameRow.map(t=>t.x+t.lastLineWidth));
+  const lineWidth=Math.max(1,Math.min(width-left,right-left));
+  children.push({op:'graphic.add',id:p.id+'-underline',geometry:{kind:'stroke',unit:'mm',points:Array.from({length:9},(_,i)=>({x:i*lineWidth/8,y:Math.sin(i*.8)*.22,pressure:.6}))},place:at(left,bottom+1),style:{stroke:accent,strokeWidthMm:.55,penStyle:'fountain'}});
+  height=Math.max(height,bottom+5);
+ }
+ if(p.pattern&&p.pattern!=='plain'&&p.treatment!=='tape'){
+  const count=p.count||8;
+  for(let i=0;i<count;i++){
+   const x=(i+.5)*width/count;
+   if(p.pattern==='dots')background.push(shape('ellipse',x,2,.9,.9,{fill:accent,fillOpacity:.45}));
+   else {const g=shape('rect',x,1,width/count,3,{fill:null,stroke:accent,strokeWidthMm:.25});g.geometry={kind:'path',viewBox:[0,0,10,10],paths:[{d:p.pattern==='grid'?'M 5 0 L 5 10 M 0 5 L 10 5':'M 0 10 L 10 0'}]};background.push(g);}
+  }
+ }
+ return {children:[...background,...texts.map(t=>t.op),...children],width,height,notes};
+}

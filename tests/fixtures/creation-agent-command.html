@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unified in-app creation regression</title>
+<style>body{margin:16px;font:16px system-ui;background:#f4f5f1}canvas{width:min(100%,500px);height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}</style>
+<h1>应用内 Command → 真实 Canvas</h1><p>合成素材功能回归，不是审美验收作品。模型回复使用固定测试数据，不发送 API 请求。</p><pre id="result">running</pre><div id="preview"></div>
+<script type="module">
+import {draft} from '/src/domain.js';
+import {runCreativeAgent} from '/src/creative-runner.js';
+import {renderSceneCanvas} from '/src/scene-renderer.js';
+import {worldBox} from '/src/scene-spatial.js';
+try{
+ const asset={id:'blue',title:'合成蓝纸',kind:'paper',physicalWidthMM:50,physicalHeightMM:35,supply:{quantity:1}};
+ const blue=document.createElement('canvas');blue.width=blue.height=20;const ctx=blue.getContext('2d');ctx.fillStyle='#779db0';ctx.fillRect(0,0,20,20);
+ const checkpoints=[];let requests=0,renders=0,lastCanvas;
+ const call=(name,args)=>({id:'c'+requests,type:'function',function:{name,arguments:JSON.stringify(args)}});
+ const output=await runCreativeAgent({draft:draft(),assets:[asset],aliases:{m1:'blue'},requiredAssetIDs:['blue'],key:'synthetic-local-test',maxTurns:4,
+  request:async(_url,init)=>{
+   const payload=JSON.parse(init.body),revision=[...JSON.stringify(payload.messages).matchAll(/sha256:[a-f0-9]{64}/g)].at(-1)[0];requests++;
+   const tool=requests===1?call('creation_help',{topics:['group.compose','material.glyphKnockout','fonts']}):requests===2?call('creation_apply',{protocolVersion:2,transactionId:'browser-art',baseSceneRevision:revision,operations:[
+    {op:'group.compose',id:'card',place:{reference:'page',at:[60,65],unit:'mm',rotationDeg:-6},layoutBox:{width:80,height:80,unit:'mm'},children:[
+     {op:'material.add',id:'paper',asset:'m1',place:{reference:'parent',at:[.5,.35],unit:'ratio'}},
+     {op:'text.add',id:'note',content:'把念头留在纸上。',size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#345045'},place:{reference:'parent',at:[.5,.8],unit:'ratio'}},
+     {op:'graphic.add',id:'table',geometry:{kind:'weeklyTable',options:{rows:3,columns:4,showOuterBorder:false}},size:{width:45,height:18,unit:'mm'},style:{fill:null,stroke:'#54755e',strokeWidthMm:.4},place:{reference:'parent',at:[.5,1.15],unit:'ratio'}}]},
+    {op:'material.glyphKnockout',target:'paper',text:'HI',style:{fontFamily:'Ma Shan Zheng',fontSizePt:24},place:{reference:'node:paper',at:[.5,.5],unit:'ratio',rotationSpace:'reference',rotationDeg:0}}
+   ]}):requests===3?call('creation_apply',{protocolVersion:2,transactionId:'browser-adjust',baseSceneRevision:revision,operations:[{op:'layer.update',target:'table',geometry:{kind:'weeklyTable',options:{rows:4,columns:3,showOuterBorder:false}}},{op:'layer.update',target:'card',place:{reference:'page',at:[65,75],unit:'mm',rotationDeg:4}}]}):call('creation_finish',{sceneRevision:revision,summary:'局部组合、高级表格与字体轮廓回归'});
+   return new Response(JSON.stringify({choices:[{message:{tool_calls:[tool]}}]}),{headers:{'Content-Type':'application/json'}});
+  },
+  onTurn:async event=>{if(event.results.some(r=>!r.ok))throw Error(JSON.stringify(event.results));if(event.results.some(r=>r.changed))checkpoints.push(structuredClone(event.draft));},
+  onFinalScene:async scene=>{renders++;const result=await renderSceneCanvas(scene,{loadMaterialImage:()=>blue});lastCanvas=result.canvas;return result.canvas.toDataURL('image/png');}
+ });
+ if(checkpoints.length!==2||requests!==4||renders!==1||!output.finished||output.sceneHash!==output.renderedSceneHash)throw Error('流程回归失败');
+ const table=output.draft.primitives.find(n=>n.id==='table'),paper=output.draft.items[0],box=worldBox(output.draft,'paper');
+ if(table.shapeOptions.rows!==4||table.shapeOptions.columns!==3||!paper.materialMask)throw Error('实际参数或镂空未持久化');
+ document.querySelector('#preview').append(lastCanvas);
+ document.querySelector('#result').textContent=JSON.stringify({status:'passed',requests,checkpoints:checkpoints.length,renders,sceneHash:output.sceneHash,table:table.shapeOptions,materialMask:paper.materialMask.shape,world:box},null,2);document.body.dataset.result='passed';
+}catch(error){document.querySelector('#result').textContent=error.stack;document.body.dataset.result='failed';}
+</script>

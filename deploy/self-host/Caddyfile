@@ -1,6 +1,0 @@
-# 把 DNS 的 A/AAAA 指向 4090 电脑的公网地址，开放 80/443。
-# Caddy 自动申请和续期 HTTPS 证书；Node 服务仍只监听 127.0.0.1。
-shiyejournal.vip {
-    encode zstd gzip
-    reverse_proxy 127.0.0.1:4173
-}

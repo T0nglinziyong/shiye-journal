@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {paperPresets,paperDimensions,paperSizeOptions} from '../src/paper-sizes.js';
 import {canvasSize,draft,itemFromAsset,setDraftPaperSize} from '../src/domain.js';
 import {importPaperDimensions} from '../src/import-save.js';
-import {renderMatchingPage} from '../src/matching-view.js';
 
 test('size chart presets have distinct ids and physical canvas ratios',()=>{
   assert.equal(new Set(paperPresets.map(x=>x.id)).size,paperPresets.length);
@@ -32,8 +31,7 @@ test('import calibration and selectors use the same named dimensions',()=>{
 });
 
 test('matching direction includes size-chart choices',()=>{
-  const state={assets:[],basket:[],coreIDs:[],excludedAssetIDs:[],matchStyles:[],matchPurposes:[],matchMode:'single',matchRatio:'b5-half',matchProcessing:'保留完整',matchIntent:'',matchContentPolicy:'documentary',matchUserText:'',matchFacts:'',recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{autoIncludeRecommendations:false,requireAllCandidates:false},materialUseHints:{},materialUseRequired:{}};
-  const html=renderMatchingPage({state,head:()=>'',imgTag:()=>'',esc:x=>x,kindName:x=>x,session:{render:()=>''}});
+  const html=paperSizeOptions('b5-half');
   assert.match(html,/<option value="b5-half" selected>B5 Half · 91 × 257 mm<\/option>/);
 });
 

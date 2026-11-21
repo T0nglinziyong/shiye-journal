@@ -1,0 +1,100 @@
+{
+  "status": "candidate-not-production",
+  "files": [
+    {
+      "path": "START_HERE.md",
+      "bytes": 2717,
+      "sha256": "a5afefdb38341120e3b60077508deacbfccaf7054243188f2f72b594af9bf036"
+    },
+    {
+      "path": "api/CATALOG.md",
+      "bytes": 2836,
+      "sha256": "af9b080f62db2cd3b9aace8d39968d2174a618fdda5968258eb1778879eac34d"
+    },
+    {
+      "path": "api/PROTOCOL.md",
+      "bytes": 5996,
+      "sha256": "2a3e2a0826bedf74eac457cb9601f55bc7bf9e210c8634a8b04d1295715f7bb1"
+    },
+    {
+      "path": "api/RENDERING.md",
+      "bytes": 2051,
+      "sha256": "959727a117867193ac989c8d97b97696d2ba4b5555431f6600faa7d1b4b66f84"
+    },
+    {
+      "path": "api/SCENE_INTEGRATION.md",
+      "bytes": 3324,
+      "sha256": "e3fd7953bd3bba1a5f5b1ba2fa787976eb0dc505aca65659751e58bd4349739d"
+    },
+    {
+      "path": "api/SOURCES.md",
+      "bytes": 768,
+      "sha256": "a1dadb828196e01bf718dda522d9d9eec8cad3f7b35af3ce6e4f6237e3bd3b69"
+    },
+    {
+      "path": "api/SPATIAL.md",
+      "bytes": 5783,
+      "sha256": "b91184f2578002cd605ac30763a3eb0ed14189a0ec9ffa20f1bce405f750ff28"
+    },
+    {
+      "path": "api/assets.schema.json",
+      "bytes": 2698,
+      "sha256": "175b2301790fcd0bf41b871408ea9dba8a546829506168ce812bd926596a9e25"
+    },
+    {
+      "path": "api/commands.schema.json",
+      "bytes": 34072,
+      "sha256": "e1c34f1f20a68f88b364a7349802d8746c0497ad9e011a5ccab10b71ef678d63"
+    },
+    {
+      "path": "api/common.schema.json",
+      "bytes": 13391,
+      "sha256": "440412732c84eac0a525aa8b382b3fbaf15ea70731bf0b32b942c3c5b1a1019e"
+    },
+    {
+      "path": "api/errors.json",
+      "bytes": 3088,
+      "sha256": "227419fe680c785fb6d71a9d5d1af3bb3baadda96a485c37dc0f0ba2ef81db11"
+    },
+    {
+      "path": "api/operations.json",
+      "bytes": 41138,
+      "sha256": "ef588e6e179f5b90c9503d38b6bb20488f291a7ff2b39785e544ad56eff28f8d"
+    },
+    {
+      "path": "api/scene-spatial.schema.json",
+      "bytes": 1837,
+      "sha256": "ad0859d755a6bea414dad069072771bc11f9d7a9c754b5123bea2f71da472372"
+    },
+    {
+      "path": "api/task.schema.json",
+      "bytes": 4550,
+      "sha256": "dca39f35743e081dc456e760723d531a9b0bf890018c8d03eb47139f8a6f0090"
+    },
+    {
+      "path": "contract-release.json",
+      "bytes": 434,
+      "sha256": "c7401fdccc70441e7c6350526bcf4c78521fc39b8320e11eebcaaa5c525f87e9"
+    },
+    {
+      "path": "design/GUIDE.md",
+      "bytes": 3172,
+      "sha256": "f37b554d41e8bb2452c731360baf89cae0e07aeb928a35026173d83e4660df17"
+    },
+    {
+      "path": "design/RECIPES.md",
+      "bytes": 12000,
+      "sha256": "e86ecc76251ed93ced439a214d6957a3bf998aa79e2c9f6bbd3f8dea55411915"
+    },
+    {
+      "path": "runtime/command-help.cjs",
+      "bytes": 2318,
+      "sha256": "5145648a54883bf3cc1736242d89c0d3878ab548f72dd8861685ad5e6470194a"
+    },
+    {
+      "path": "runtime/placement-math.cjs",
+      "bytes": 4250,
+      "sha256": "c7fb21c8e5541bb64db56c4078169162925890ebf28f8ce92a8961a5634cbf5d"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "shiye-pg-test-d1gg723f7fb356ccc",
+  "functionRoot": ".cloudbase-build/functions",
+  "functions": [
+    {
+      "name": "shiye-api",
+      "type": "Event",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 60,
+      "memorySize": 256,
+      "installDependency": true
+    }
+  ]
+}

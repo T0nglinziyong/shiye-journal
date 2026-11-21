@@ -4,17 +4,38 @@ on:
   push:
     branches: [recognition-official-engines]
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - 'src/browser-active-contours.js'
       - 'src/material-boundary-refiners.js'
-      - 'src/internal-paper-regions.js'
-      - 'src/fast-material-recognition.js'
+      - 'src/material-box-discovery.js'
+      - 'src/material-segmentation.js'
+      - 'src/repeated-apertures.js'
+      - 'src/paper-analysis.js'
+      - 'src/foreground-evidence.js'
+      - 'src/image.js'
+      - 'src/vision-runtime.js'
+      - 'src/preferences.js'
+      - 'src/cutout-editor.js'
+      - 'src/app.js'
       - 'src/opencv-worker.js'
       - 'src/opencv-worker-browser.js'
+      - 'src/material-polish.css'
+      - 'src/material-carrier.js'
       - 'src/recognition-*.js'
+      - 'src/region-edit-plan.js'
+      - 'src/react-sam-region-overlay.jsx'
+      - 'src/react-routes.jsx'
+      - 'src/sam-review.css'
       - 'src/slimsam-*.js'
       - 'tests/recognition-engine-browser.mjs'
+      - 'tests/recognition-stage-reuse-browser.mjs'
+      - 'tests/import-paper-layout-browser.mjs'
+      - 'tests/recognition-browser.mjs'
+      - 'tests/region-edit-browser.mjs'
+      - 'tests/material-count-browser.mjs'
+      - 'tests/cutout-inspection-browser.mjs'
+      - 'tests/import-browser-acceptance.mjs'
       - 'tests/browser-active-contours-parity.test.js'
       - '.github/workflows/recognition-browser.yml'
   workflow_dispatch:
@@ -45,7 +66,7 @@ jobs:
           set -euo pipefail
           npm install --prefix "$RUNNER_TEMP/shiye-browser" --no-save --package-lock=false agent-browser@0.38.2
           BROWSER_BIN="$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser"
-          "$BROWSER_BIN" install --with-deps
+          "$BROWSER_BIN" install
           echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
       - name: Build
         run: npm run build
@@ -55,7 +76,7 @@ jobs:
           SHIYE_TEST_URL: http://127.0.0.1:5194
         run: |
           set -euo pipefail
-          npm run dev -- --port 5194 --strictPort > /tmp/shiye-recognition-server.log 2>&1 &
+          npm run dev -- --mode browser-test --port 5194 --strictPort > /tmp/shiye-recognition-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
@@ -63,5 +84,26 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:5194/ >/dev/null
+          node tests/material-count-browser.mjs
           node tests/recognition-engine-browser.mjs
+          node tests/recognition-stage-reuse-browser.mjs
+          node tests/import-paper-layout-browser.mjs
           node tests/cutout-inspection-browser.mjs
+          node tests/recognition-browser.mjs
+          node tests/import-browser-acceptance.mjs
+      - name: Check region editing and paper correction in Chromium
+        shell: bash
+        env:
+          SHIYE_TEST_URL: http://127.0.0.1:5195
+        run: |
+          set -euo pipefail
+          npm run build:ui
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5195 --strictPort > /tmp/shiye-region-edit-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5195/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5195/ >/dev/null
+          node tests/region-edit-browser.mjs

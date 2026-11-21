@@ -1,0 +1,21 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layout-arrange",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layout.arrange",
+      "targets": [
+        "photo",
+        "caption"
+      ],
+      "container": "page.left",
+      "rule": {
+        "direction": "vertical",
+        "gapMm": 4,
+        "align": "center",
+        "behavior": "once"
+      }
+    }
+  ]
+}

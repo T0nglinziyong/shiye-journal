@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "magazine-light",
+      "file": "magazine-light.png",
+      "caption": "照片先分主次，语义相关的装饰连接图组，短标题留在空区。仅学习布局关系，不复制案例文字或照片。",
+      "author": "美和趣味",
+      "title": "棕色系🍂4款秋日杂志风拼贴（附图解教程）",
+      "sourceURL": "https://www.xiaohongshu.com/explore/6acdf1bb0000000015009485",
+      "observation": "正文与全部9张原图，2026-11-20",
+      "sha256": "283215dedbc79c205c83c1ef0d687c0bdcf969501b77d3b9ef4d836520b93cd7",
+      "reviewed": true
+    }
+  ]
+}

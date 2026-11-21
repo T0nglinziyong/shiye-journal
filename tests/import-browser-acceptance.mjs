@@ -2,9 +2,14 @@
 // It is never copied to public/ or uploaded. Screenshots stay under /tmp.
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import {build} from 'esbuild';
 import {browserHarness} from './browser-harness.mjs';
 const directory=process.env.SHIYE_IMPORT_SCREENSHOTS||'/tmp/shiye-import-acceptance';await mkdir(directory,{recursive:true});
-const b=await browserHarness('shiye-import-test',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173');
+const fixture=await build({entryPoints:['tests/fixtures/ui-cloudbase-harness.mjs'],bundle:true,
+  platform:'browser',format:'iife',globalName:'ShiyeUiFixture',write:false});
+const b=await browserHarness('shiye-import-test',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173',
+  async({command})=>command('Page.addScriptToEvaluateOnNewDocument',
+    {source:fixture.outputFiles[0].text+'\nShiyeUiFixture.installUiCloudBase(window);'}));
 const {evaluate,command,click,wait,sleep}=b,report=[];
 async function screenshot(name,w,h){await sleep(100);const r=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(directory+'/'+w+'x'+h+'-'+name+'.png',Buffer.from(r.data,'base64'));const layout=await evaluate('({overflow:document.documentElement.scrollWidth-innerWidth,modalOpen:document.querySelector("#modal").open})');assert.ok(layout.overflow<=1,JSON.stringify(layout));report.push({name,width:w,height:h,...layout});}
 try {
@@ -15,17 +20,21 @@ try {
   await wait('.import-inspect[aria-busy="true"]');assert.ok(await evaluate('!!document.querySelector("#crop-preview img[src]")'));
   // Cold OpenCV worker startup can exceed 30 s in CI even though the warm path
   // finishes quickly. Keep a finite bound without conflating it with UI delay.
-  await wait('.import-inspect[aria-busy="false"]',process.env.SHIYE_TEST_RECOGNITION==='slimsam'?300000:90000);
+  await wait('.import-inspect[aria-busy="false"]',90000);
   await wait('.import-candidate-tile');await sleep(100);
   const analysis=await evaluate('({candidates:document.querySelectorAll(".import-candidate-tile").length,corners:[...document.querySelectorAll(".paper-handle")].map(b=>({x:b.style.left,y:b.style.top}))})');console.log('Import photo analysis:',JSON.stringify(analysis));
   if(photo){const thumbnails=await evaluate('Promise.all([...document.querySelectorAll(".candidate-thumb img")].map(async im=>{await im.decode();const c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext("2d").drawImage(im,0,0);return c.toDataURL("image/png").split(",")[1];}))');for(let i=0;i<thumbnails.length;i++)await writeFile(directory+'/candidate-'+i+'.png',Buffer.from(thumbnails[i],'base64'));}
   for(const [w,h] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768],[1440,900],[2560,1440]]) {
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await screenshot('inspect',w,h);
-    assert.equal(await evaluate('document.querySelectorAll(".paper-correction").length'),0);assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),4);
+    assert.equal(await evaluate('document.querySelectorAll(".paper-correction").length'),0);
+    assert.ok(await evaluate('!!document.querySelector(".sam-region-overlay")||document.querySelectorAll(".paper-handle").length===4'));
     if(w>=820){const rect=await evaluate('(()=>{const p=document.querySelector(".import-preparation").getBoundingClientRect(),i=document.querySelector(".import-inspector").getBoundingClientRect(),buttons=[document.querySelector(".import-photo-tools .btn"),document.querySelector(".confirm-photo")].map(e=>e.getBoundingClientRect().height);return {bottom:p.bottom-i.bottom,buttons};})()');assert.ok(Math.abs(rect.bottom)<1);assert.ok(Math.abs(rect.buttons[0]-rect.buttons[1])<1);}
-    const before=await evaluate('document.querySelectorAll(".import-candidate-tile").length');await click('[data-act="preview-crop"]','[data-act="readjust-paper"]');await screenshot('correction-preview',w,h);assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),before);assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),0);await click('[data-act="readjust-paper"]','.paper-handle');
+    const before=await evaluate('document.querySelectorAll(".import-candidate-tile").length');await click('[data-act="preview-crop"]','.paper-handle');assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),4);await screenshot('correction-corners',w,h);await click('[data-act="preview-crop"]','[data-act="readjust-paper"]');await screenshot('correction-preview',w,h);assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),before);assert.equal(await evaluate('document.querySelectorAll(".paper-handle").length'),0);await click('[data-act="readjust-paper"]','.paper-handle');await click('[data-act="cancel-paper-adjust"]','[data-act="preview-crop"]');
   }
-  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await click('[data-act="manual-import-box"]','.multi-box-editor');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await click('[data-act="preview-crop"]','.paper-handle');await click('[data-act="preview-crop"]','[data-act="apply-paper-preview"]');
+  await click('[data-act="apply-paper-preview"]','[data-act="manual-import-box"]');
+  await click('[data-act="manual-import-box"]','.multi-box-editor');
   for(const [w,h] of [[390,844],[1024,768],[390,844]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(100);
     const position=await evaluate('(()=>{const base=document.querySelector("#crop-preview"),image=base.querySelector("img"),overlay=base.querySelector(".multi-box-editor"),a=base.getBoundingClientRect(),b=overlay.getBoundingClientRect(),scale=Math.min(base.clientWidth/image.naturalWidth,base.clientHeight/image.naturalHeight);return {x:b.left-a.left,y:b.top-a.top,w:b.width,h:b.height,expectedX:(base.clientWidth-image.naturalWidth*scale)/2,expectedY:(base.clientHeight-image.naturalHeight*scale)/2,expectedW:image.naturalWidth*scale,expectedH:image.naturalHeight*scale,regions:overlay.querySelectorAll(".import-region").length};})()');
@@ -34,11 +43,20 @@ try {
   await evaluate('[...document.querySelectorAll("#crop-preview + .import-photo-tools button")].find(b=>b.textContent==="取消标记").click()');
   await evaluate('globalThis.__candidateNode=document.querySelector(".import-candidate-grid");const panel=document.querySelector(".inspector-scroll");panel.scrollTop=panel.scrollHeight;globalThis.__candidateScroll=panel.scrollTop;');await click('[data-act="import-toggle-candidate"]');assert.ok(await evaluate('document.querySelector(".import-candidate-grid")===globalThis.__candidateNode&&document.querySelector(".inspector-scroll").scrollTop===globalThis.__candidateScroll'));await click('[data-act="import-toggle-candidate"]');
   await click('[data-import-check="0"]','#cutout-canvas');
-  for(const mode of ['edge','appearance','direction']){
-    await click('[data-cut-mode="'+mode+'"]');assert.ok(await evaluate('document.querySelector("#modal").open'));await screenshot('check-'+mode,2560,1440);
-    const actions=mode==='edge'?['[data-repair="erase"]','[data-repair="restore"]','#cutout-recognition','#cutout-undo']:mode==='appearance'?['[data-appearance="natural"]','[data-appearance="vivid"]','#cutout-original-color']:['#cutout-left','#cutout-rotate','#cutout-align','#cutout-original-direction'];
-    for(const selector of actions){await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'),'Editor must stay open after '+selector);}
+  await wait('#cutout-method',90000);
+  assert.ok(await evaluate('!!document.querySelector("#cutout-method")&&!!document.querySelector("#cutout-pixels")'));
+  for(const selector of ['[data-repair="erase"]','[data-repair="restore"]']){await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'));}
+  await screenshot('check-rough',2560,1440);
+  await click('[data-cut-step="recognition"]','#cutout-post-shapes');
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-curves")'),false);
+  assert.ok(await evaluate('!!document.querySelector("#cutout-post-shapes")&&!!document.querySelector("#cutout-post-apertures")'));
+  await screenshot('check-recognition',2560,1440);
+  await click('[data-cut-step="final"]','#cutout-auto-straighten');
+  for(const selector of ['[data-appearance="natural"]','[data-appearance="vivid"]','[data-appearance="original"]','#cutout-left','#cutout-rotate','#cutout-align','#cutout-original-direction']){
+    await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'),'Editor must stay open after '+selector);
   }
+  await screenshot('check-final',2560,1440);
   await click('#cutout-reset');
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await screenshot('cutout',w,h);const scrolling=await evaluate('(()=>{const m=document.querySelector("#modal");m.scrollTop=m.scrollHeight;return {top:m.scrollTop,height:m.clientHeight,total:m.scrollHeight};})()');assert.ok(scrolling.total<=scrolling.height+1||scrolling.top>0,'Material editor must be scrollable');}
   await click('#cutout-cancel');await click('[data-act="import-confirm-photo"]','.review-candidates');

@@ -1,0 +1,9 @@
+.tape-processing-dialog{width:min(430px,calc(100vw - 24px));max-height:min(720px,calc(100dvh - 24px));overflow:auto}
+.tape-processing-dialog .dialog-head{display:flex;align-items:center;justify-content:space-between}
+.tape-processing-dialog .stack{display:grid;gap:12px;margin:14px 0}
+.tape-processing-dialog label:not(.toggle-row){display:grid;gap:6px}
+.tape-processing-dialog select,.tape-processing-dialog input[type=number]{width:100%;min-height:38px;border:1px solid #cbd7cc;border-radius:9px;padding:6px 10px;background:#fffefa}
+.tape-processing-image{display:grid;place-items:center;min-height:110px;max-height:170px;border-radius:12px;background:#f5f6f0;overflow:hidden}
+.tape-processing-image img{max-width:100%;max-height:170px;object-fit:contain}
+.tape-processing-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+.tape-processing-error{color:#a34b35}
