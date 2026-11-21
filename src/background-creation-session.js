@@ -3,7 +3,6 @@ import {creativeRunParameters} from './ai-creation-session.js';
 import {createCloudCreativeJobs,watchCloudCreativeJob} from './cloud-creative-jobs.js';
 import {commitAIDraft} from './ai-run-target.js';
 import {importWebScene} from './web-scene-workbench.js';
-import {boundedMap} from './bounded-map.js';
 
 const phases={queued:'已提交，等待计算服务器',loading:'正在读取素材',thinking:'正在构思与编辑',preview:'正在检查实际画面',completed:'创作完成',failed:'创作未完成，已保留后台检查点',cancelled:'已停止创作'};
 export function creativeJobProgress(job){
@@ -36,7 +35,7 @@ export async function applyBackgroundCreativeResult({project,document,job,assets
   }
 }
 
-export function createBackgroundCreationSession({getAccount,getAssets,getProject,persist,createImage,api=createCloudCreativeJobs(),watch=watchCloudCreativeJob,onUpdate=()=>{}}){
+export function createBackgroundCreationSession({getAccount,getAssets,getProject,persist,api=createCloudCreativeJobs(),watch=watchCloudCreativeJob,onUpdate=()=>{}}){
   const runs=new Map(),previews=new Map();
   const ensure=owner=>{if(getAccount()!==owner)throw Error('账号已切换，后台任务继续保留在原账号');};
   const observe=async(projectID,id,owner,listener)=>{
@@ -81,18 +80,10 @@ export function createBackgroundCreationSession({getAccount,getAssets,getProject
       try{
       guard();
       const parameters=creativeRunParameters({project,draft,assets,ids,prompt,settings:{}}),document=await createCreationDocument(parameters);
-      const images=await boundedMap(document.source.materials,4,async m=>{
-        guard();const asset=assets.find(a=>a.id===m.assetID);
-        if(!asset)throw Error('所选素材已不在素材库：'+m.assetID);
-        let data;
-        try{data=await createImage(asset,null,1280,true);}
-        catch(error){throw Error('素材「'+asset.title+'」预览读取失败：'+error.message,{cause:error});}
-        if(!/^data:image\/png;base64,/.test(data||''))throw Error('创作素材预览未生成');
-        return {alias:m.alias,blob:await (await fetch(data)).blob()};
-      });guard();
-      reference=await api.prepare({projectID:project.id,document,images,brief:{intent:prompt,styles:parameters.styles,purposes:parameters.pagePurposes,contentPolicy:parameters.contentPolicy}});
+      guard();
+      reference=await api.prepare({projectID:project.id,document,brief:{intent:prompt,styles:parameters.styles,purposes:parameters.pagePurposes,contentPolicy:parameters.contentPolicy}});
       guard();project.creativeTask={id:reference.id,taskHash:document.source.taskHash,targetDraftID:draft.id,status:'uploading'};
-      await persist(project);await onProgress?.({jobID:reference.id,projectID:project.id,status:'uploading',message:'正在上传创作输入，完成后可锁屏'});
+      await persist(project);await onProgress?.({jobID:reference.id,projectID:project.id,status:'uploading',message:'正在提交创作设置，完成后可锁屏'});
       guard();await api.submit(reference);guard();
       project.creativeTask.status='queued';await persist(project);
       return observe(project.id,reference.id,owner,onProgress);

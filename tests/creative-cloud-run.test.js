@@ -1,4 +1,4 @@
-import {validateCreativeJobPackage} from '../src/creative-job-package.js';
+import {validateCreativeJobPackage,CREATIVE_JOB_FORMAT} from '../src/creative-job-package.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {draft} from '../src/domain.js';
@@ -13,7 +13,7 @@ const reply=(...calls)=>({message:{role:'assistant',content:null,reasoning_conte
 test('cloud worker commits hash-verified editable output after real rendering and a durable journal',async()=>{
   const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',user='10000000001',prefix=`${user}/creative/${id}/`;
   const document=await createCreationDocument({draft:draft(),assets:[]});
-  const bytes=Buffer.from(JSON.stringify({format:'shiye-creative-job-v1',document,brief:{style:'test',resourceVersion:(await installedCreationResources()).version},images:[]}));
+  const bytes=Buffer.from(JSON.stringify({format:CREATIVE_JOB_FORMAT,document,brief:{style:'test',resourceVersion:(await installedCreationResources()).version}}));
   const started=Date.now(),job={id,user_id:user,input_path:prefix+'input.json',input_hash:creativeObjectHash(bytes),lease_token:'lease',checkpoint_seq:0,created_at:new Date(started).toISOString(),deadline_at:new Date(started+600000).toISOString()};
   const objects=new Map([[job.input_path,bytes]]),entries=[],updates=[];let modelCalls=0,notifications=0;
   const result=await runCloudCreativeJob(job,{store:{download:async path=>objects.get(path),upload:async(path,body)=>objects.set(path,body)},listCheckpoints:async()=>entries,
@@ -41,7 +41,8 @@ test('cloud worker commits hash-verified editable output after real rendering an
 
 test('creative job payload accepts task facts only, never fonts skills or executable resources',async()=>{
  const document=await createCreationDocument({draft:draft(),assets:[]});
- const input={format:'shiye-creative-job-v1',document,brief:{},images:[]};
+  const input={format:CREATIVE_JOB_FORMAT,document,brief:{}};
  assert.equal(validateCreativeJobPackage(input,{userID:'owner',jobID:'job'}),input);
+ assert.throws(()=>validateCreativeJobPackage({...input,images:[]}),/仅接收/);
  for(const key of ['fonts','skills','tools','runtime'])assert.throws(()=>validateCreativeJobPackage({...input,[key]:['payload']},{userID:'owner',jobID:'job'}),/服务器管理/);
 });

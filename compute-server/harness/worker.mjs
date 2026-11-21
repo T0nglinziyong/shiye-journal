@@ -4,7 +4,7 @@ import {createCreativeNetwork} from './network.mjs';
 import {createDeepSeekCreativeModel} from './deepseek.mjs';
 import {runCloudCreativeJob} from './cloud-job.mjs';
 
-export function createCreativeWorker({key,dns='system',samRoot,rpc,store,listCheckpoints,listActive,lookup,notify,logger=console}){
+export function createCreativeWorker({key,dns='system',samRoot,rpc,store,listCheckpoints,listActive,lookup,lookupRecords,notify,logger=console}){
   const network=createCreativeNetwork({dns}),model=createDeepSeekCreativeModel({key,fetcher:network.fetcher});
   const daemons=[new SamDaemonClient(samRoot),new SamDaemonClient(samRoot)],active=new Map(),timers=new Map(),retryUntil=new Map();
   let closed=false,recovering=null;
@@ -29,7 +29,7 @@ export function createCreativeWorker({key,dns='system',samRoot,rpc,store,listChe
     },
     process:async(job,daemon)=>{
       const controller=new AbortController();let settled;const done=new Promise(resolve=>{settled=resolve;});active.set(job.id,{controller,done});
-      try{const result=await runCloudCreativeJob(job,{store,rpc,listCheckpoints,model,notify,daemon,signal:controller.signal});
+      try{const result=await runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupRecords,model,notify,daemon,signal:controller.signal});
         logger.log('Creative completed',job.id,'milliseconds',result.totalMs);
       }catch(error){logger.error('Creative failed',job.id,error.code||'CREATIVE_FAILED');if(error.creativeRetry)later(job.id,5000);}
       finally{active.delete(job.id);if(!timers.has(job.id))retryUntil.delete(job.id);settled();}
