@@ -2,6 +2,320 @@
   "version": 2,
   "methods": [
     {
+      "id": "title-cross-shadow",
+      "skill": "journal-lettering",
+      "title": "横带穿字与同侧阴影",
+      "recipe": "title",
+      "when": "主字需要层次并用小字穿过中部",
+      "defaults": {
+        "treatment": "cross-shadow"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-cross-shadow"
+      },
+      "example": {
+        "text": "秋天的来信",
+        "caption": "AUTUMN NOTES",
+        "fontSizePt": 24,
+        "widthMm": 75,
+        "colors": [
+          "#385348",
+          "#A8754A",
+          "#F5E9D5"
+        ]
+      },
+      "lesson": {
+        "principle": "主字阴影与中部小字横带组成一个可编辑标题组。",
+        "steps": [
+          "主字和小字分别选字体",
+          "横带按小字长度自动计算",
+          "统一主字投影方向，并检查遮挡后的读序"
+        ],
+        "check": [
+          "小字完整可读",
+          "横带没有覆盖整行主字"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现，指定笔画变形另需字形工具。"
+        }
+      }
+    },
+    {
+      "id": "title-scattered-round",
+      "skill": "journal-lettering",
+      "title": "错落字位与圆点点缀",
+      "recipe": "title",
+      "when": "用错落词组配圆形节奏",
+      "defaults": {
+        "treatment": "scatter-round"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-scattered-round"
+      },
+      "example": {
+        "text": "慢慢收集",
+        "runs": [
+          {
+            "text": "慢慢",
+            "role": "secondary",
+            "rotationDeg": -3
+          },
+          {
+            "text": "收集",
+            "role": "primary",
+            "rotationDeg": 2,
+            "offsetMm": [
+              0,
+              1
+            ]
+          }
+        ],
+        "colors": [
+          "#394F48",
+          "#D49D6A",
+          "#F1E8D5"
+        ]
+      },
+      "lesson": {
+        "principle": "词组轻微错位，局部圆点响应字间留白。",
+        "steps": [
+          "按词义划分 runs",
+          "调整角度和基线",
+          "保留字间阅读顺序"
+        ],
+        "check": [
+          "圆点不压字",
+          "主词仍可读"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现，指定笔画变形另需字形工具。"
+        }
+      }
+    },
+    {
+      "id": "title-scattered-triangle",
+      "skill": "journal-lettering",
+      "title": "错落字位与三角点缀",
+      "recipe": "title",
+      "when": "错落标题需要锐角节奏",
+      "defaults": {
+        "treatment": "scatter-triangle"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-scattered-triangle"
+      },
+      "example": {
+        "text": "城市散步",
+        "runs": [
+          {
+            "text": "城市",
+            "role": "secondary",
+            "rotationDeg": -2
+          },
+          {
+            "text": "散步",
+            "role": "primary",
+            "rotationDeg": 2
+          }
+        ],
+        "colors": [
+          "#324D62",
+          "#D69A59",
+          "#F2E5CF"
+        ]
+      },
+      "lesson": {
+        "principle": "词组错位与一枚小三角形成轻量呼应。",
+        "steps": [
+          "按词义划分 runs",
+          "调节角度和间距",
+          "三角形放在字群末端"
+        ],
+        "check": [
+          "符号没有代替字形笔画",
+          "标题可顺读"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现，指定笔画变形另需字形工具。"
+        }
+      }
+    },
+    {
+      "id": "title-number-route",
+      "skill": "journal-lettering",
+      "title": "倾斜数字与外围线条",
+      "recipe": "title",
+      "when": "日期或数字做成叙事标题",
+      "defaults": {
+        "treatment": "number-route"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-number-route"
+      },
+      "example": {
+        "text": "2026·秋",
+        "runs": [
+          {
+            "text": "2026",
+            "role": "primary",
+            "rotationDeg": -4
+          },
+          {
+            "text": "·秋",
+            "role": "secondary",
+            "rotationDeg": 2
+          }
+        ],
+        "colors": [
+          "#394D57",
+          "#C88358",
+          "#F2E5D7"
+        ]
+      },
+      "lesson": {
+        "principle": "数字词组轻微倾斜，外侧线条在局部收束。",
+        "steps": [
+          "给年份或真实日期",
+          "主次词组分别调整角度",
+          "外围线条保留足够字脚距离"
+        ],
+        "check": [
+          "不虚构日期",
+          "线条不穿字"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现，指定笔画变形另需字形工具。"
+        }
+      }
+    },
+    {
+      "id": "title-script-dots",
+      "skill": "journal-lettering",
+      "title": "连写字与圆点底纹",
+      "recipe": "title",
+      "when": "短英文手写标题需要轻薄底纹",
+      "defaults": {
+        "treatment": "script-dots",
+        "fontFamily": "MasonHandwriting",
+        "backdrop": {
+          "kind": "dots",
+          "densityMm": 4,
+          "patternColor": "#C98E65",
+          "opacity": 0.75
+        }
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-script-dots"
+      },
+      "example": {
+        "text": "Slow days",
+        "fontFamily": "MasonHandwriting",
+        "fontSizePt": 25,
+        "widthMm": 70,
+        "backdrop": {
+          "kind": "dots",
+          "densityMm": 4,
+          "patternColor": "#C98E65",
+          "opacity": 0.75
+        },
+        "colors": [
+          "#31524C",
+          "#C98E65",
+          "#F6EBD8"
+        ]
+      },
+      "lesson": {
+        "principle": "保持整词连写，在字周围排列可编辑的小圆点。",
+        "steps": [
+          "选择连写字体",
+          "调节点间距和颜色",
+          "预览文字与圆点的空隙"
+        ],
+        "check": [
+          "圆点不压字",
+          "英文仍连写"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现，指定笔画变形另需字形工具。"
+        }
+      }
+    },
+    {
+      "id": "title-paper-lettering",
+      "skill": "journal-lettering",
+      "title": "有色纸片承载浅字",
+      "recipe": "title",
+      "when": "标题需要手撕纸片般的色块",
+      "defaults": {
+        "treatment": "paper-lettering",
+        "style": {
+          "color": "#FFF8EB"
+        },
+        "backdrop": {
+          "kind": "paper",
+          "paddingMm": 5,
+          "color": "#355D55",
+          "pattern": "stripes",
+          "patternColor": "#D7B083",
+          "opacity": 1,
+          "densityMm": 5
+        }
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-paper-lettering"
+      },
+      "example": {
+        "text": "今日小记",
+        "fontSizePt": 22,
+        "widthMm": 75,
+        "style": {
+          "color": "#FFF8EB"
+        },
+        "backdrop": {
+          "kind": "paper",
+          "paddingMm": 5,
+          "color": "#355D55",
+          "pattern": "stripes",
+          "patternColor": "#D7B083",
+          "opacity": 1,
+          "densityMm": 5
+        }
+      },
+      "lesson": {
+        "principle": "随字行裁切数字纸片，浅色字与低对比纹样组成可编辑组。",
+        "steps": [
+          "从素材取深底浅字两色",
+          "调节纸片边距、纹样和不透明度",
+          "检查多行时每行纸片边界"
+        ],
+        "check": [
+          "纸片没有空占整张大卡",
+          "浅色字保持清晰"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现，指定笔画变形另需字形工具。"
+        }
+      }
+    },
+    {
       "id": "title-underline",
       "skill": "journal-lettering",
       "title": "手写下划标题",
@@ -231,7 +545,11 @@
         "text": "散步手记",
         "fontFamily": "HongLeiZhuoShu",
         "widthMm": 56,
-        "colors": ["#304B42", "#809588", "#E7DAC0"],
+        "colors": [
+          "#304B42",
+          "#809588",
+          "#E7DAC0"
+        ],
         "tapeOpacity": 0.55
       },
       "lesson": {
