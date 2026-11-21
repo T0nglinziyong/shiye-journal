@@ -12,7 +12,7 @@ import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 import {validateValue} from '../../src/creative-contract.js';
 import {auditCreationDesign} from '../../src/creation-design-audit.js';
 import {compileSegmentationCuts} from './segmentation.mjs';
-import {preloadCreationSkills,initialToolGuide,materialBrief,automaticSceneFeedback,modelContext,iterationAdvice,failureGuidance} from './context.mjs';
+import {preloadCreationSkills,initialToolGuide,materialBrief,automaticSceneFeedback,modelContext,creativeCompactionCandidate,iterationAdvice,failureGuidance} from './context.mjs';
 
 const object=(properties,required=[])=>({type:'object',additionalProperties:false,properties,required});
 const string={type:'string',minLength:1,maxLength:2000};
@@ -53,7 +53,7 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
   const loaded=preloadCreationSkills(skills,document,brief);
   const fonts=offlineBundledFonts().map(({family,label,coverage})=>({family,label,coverage}));
   const resources={libraryVersion,release:resourceVersion,fontVersion:fontManifest.version,skills:skills.catalog().map(({name,version})=>({name,version})),protocolVersion:2};
-  return {resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},startedAt,deadlineAt,turns:0,status:'running',plan:null,loadedSkills:loaded.map(({name,version})=>({name,version})),observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,preview:null,noProgress:0,results:[],usage:[],
+  return {resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],loadedSkills:loaded.map(({name,version})=>({name,version})),observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,preview:null,noProgress:0,results:[],usage:[],
     messages:[{role:'system',content:system+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai；无需上传或下载）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify(resources)+'\n可按需读取的 Skill：'+JSON.stringify(skills.catalog())+'\n已自动加载的 Skill（无需再次读取）：'+JSON.stringify(loaded)+'\n常用工具合同：'+JSON.stringify(initialToolGuide(document))},
       {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials)+'\n素材来源与尺寸：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n按真实尺寸匹配的模板候选（可用 read_template 查看）：'+JSON.stringify(matchLibraryTemplates(document,{reference:document.page.pageMode==='spread'?'page.right':'page',limit:3}))},
         ...(tray?[{type:'text',text:'全局素材编号图；始终可对照此图。需要局部细节时再调用 inspect_materials。'},{type:'image_url',image_url:{url:tray.imageURL}}]:[]),
@@ -72,18 +72,28 @@ export function createCreativeHarness({model,skills,render,viewSpace,inspectMate
       live(s,config);
       if(s.turns>=32||s.noProgress>=5)throw error('CREATIVE_STALLED','创作未能继续推进，成功步骤已保留');
       await onProgress({stage:'thinking',turn:s.turns+1,elapsedMs:clock()-s.startedAt});
-      const apiMessages=modelContext(s.messages,s),modelStarted=clock();
+      let contextState=s;
+      const candidate=typeof model.compact==='function'&&s.deadlineAt-clock()>45000?creativeCompactionCandidate(s.messages,s):null;
+      if(candidate){
+        try{
+          const compacted=await model.compact({previousSummary:s.creativeMemory,history:candidate.history,signal:config.signal,remainingMs:s.deadlineAt-clock()});
+          live(s,config);
+          if(typeof compacted?.summary==='string'&&compacted.summary.trim().length>=20&&compacted.summary.length<=2500&&!compacted.truncated)
+            contextState={...s,creativeMemory:compacted.summary.trim(),compactedUntil:candidate.cutoff,compactions:[...(s.compactions||[]),{turn:s.turns,through:candidate.cutoff,usage:compacted.usage||null}]};
+        }catch(error){if(config.signal?.aborted)throw error;}
+      }
+      const apiMessages=modelContext(s.messages,contextState),modelStarted=clock();
       const reply=await model({messages:apiMessages,tools:availableTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),recoveringFromTruncation:s.usage.some(u=>u.truncated)});
       live(s,config);
       const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages];
-      if(reply.truncated){messages.push({role:'user',content:'上一轮输出截断，没有执行。不要重复整体规划或读取已加载教程；本轮只执行一个完整的小工具调用，优先运行已选配方，随后根据自动预览继续。'});return {run:{...s,messages,turns:s.turns+1,usage,calls:[],noProgress:s.noProgress+1}};}
+      if(reply.truncated){messages.push({role:'user',content:'上一轮输出截断，没有执行。不要重复整体规划或读取已加载教程；本轮只执行一个完整的小工具调用，优先运行已选配方，随后根据自动预览继续。'});return {run:{...contextState,messages,turns:s.turns+1,usage,calls:[],noProgress:s.noProgress+1}};}
       const message=reply.message;
       if(!message||message.role!=='assistant')throw Error('模型响应无效');
       const calls=message.tool_calls||[];
       if(calls.length>12||calls.some(c=>typeof c.id!=='string'||!c.id||c.type!=='function')||new Set(calls.map(c=>c.id)).size!==calls.length)throw Error('模型工具调用格式无效');
       messages.push(message);
       if(!calls.length)messages.push({role:'user',content:'尚未通过 creation_finish 交付，请继续调用创作工具。'});
-      return {run:{...s,messages,turns:s.turns+1,usage,calls,noProgress:calls.length?s.noProgress:s.noProgress+1}};
+      return {run:{...contextState,messages,turns:s.turns+1,usage,calls,noProgress:calls.length?s.noProgress:s.noProgress+1}};
     })
     .addNode('tools',async({run:s},config)=>{
       live(s,config);let document=structuredClone(s.document),plan=s.plan,review=s.review,status=s.status,needsRender=false;

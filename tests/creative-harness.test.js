@@ -147,6 +147,38 @@ test('DeepSeek adapter enables thinking and round-trips reasoning without exposi
   await assert.rejects(failing({messages,tools:[],remainingMs:1000}),e=>!e.message.includes('private-key')&&e.code==='CREATIVE_MODEL_HTTP');
 });
 
+test('DeepSeek compaction summarizes earlier creative choices without editing tools',async()=>{
+ let payload;
+ const model=createDeepSeekCreativeModel({key:'private-key',fetcher:async(_url,request)=>{
+   payload=JSON.parse(request.body);
+   return Response.json({choices:[{finish_reason:'stop',message:{content:'保留左侧留白；居中方案因主图拥挤已放弃。'}}],usage:{total_tokens:200}});
+ }});
+ const result=await model.compact({previousSummary:'试过居中',history:[{role:'assistant',text:'左侧更清晰'}],remainingMs:30000});
+ assert.match(result.summary,/左侧留白/);assert.equal(result.usage.total_tokens,200);
+ assert.equal(payload.reasoning_effort,'low');assert.equal(payload.tools,undefined);
+ assert.match(payload.messages[1].content,/试过居中/);
+});
+
+test('harness preserves a compacted design decision in the persisted run',async t=>{
+ const f=await fixture(t),state=structuredClone(f.state);
+ for(let i=0;i<7;i++)state.messages.push({role:'assistant',content:i===1?'居中太拥挤，改为左侧留白。':'完成一次试摆。'},{role:'user',content:'继续检查构图。'});
+ state.turns=7;
+ let calls=0,compactions=0;
+ const model=async({messages})=>{
+   calls++;
+   assert.match(messages[2].content,/左侧留白/);
+   if(calls===1){assert.equal(messages.filter(message=>message.role==='assistant').length,2);return answer(plan());}
+   throw Error('verified compacted context');
+ };
+ model.compact=async({history})=>{compactions++;assert.match(JSON.stringify(history),/居中太拥挤/);return {summary:'居中太拥挤，已决定改为左侧留白，右侧保留给手写文字。',usage:{total_tokens:30}};};
+ const harness=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
+ await assert.rejects(harness.run({id:'compacted',state}),/verified compacted context/);
+ const saved=await harness.state('compacted');
+ assert.equal(saved.creativeMemory,'居中太拥挤，已决定改为左侧留白，右侧保留给手写文字。');
+ assert.equal(saved.compactions.length,1);
+ assert.equal(compactions,1);
+});
+
 test('automatic bootstrap allows first-turn editing and combined visual review/finish without discovery calls',async t=>{
   const f=await fixture(t);let n=0,renders=0;
   assert.ok(f.state.loadedSkills.some(s=>s.name==='journal-composition'));
