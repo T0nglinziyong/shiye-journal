@@ -11,7 +11,7 @@ import {createCreativeHarness,initialHarnessState} from '../compute-server/harne
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
 import {createDeepSeekCreativeModel} from '../compute-server/harness/deepseek.mjs';
-import {searchLibraryReferences} from '../compute-server/harness/library.mjs';
+import {searchLibraryReferences,caseDetails,matchJournalCases} from '../compute-server/harness/library.mjs';
 
 const pngHash='sha256:'+'a'.repeat(64);
 const call=(name,args,id=name)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
@@ -43,6 +43,36 @@ test('reference search returns sourced, actionable matches with stable page fit'
  assert.ok(methods.results.length>0);
  assert.ok(methods.results.every(row=>row.readWith.tool==='read_skill'&&row.readWith.methodId===row.id));
  assert.deepEqual(searchLibraryReferences(f.document,{query:'毫无关系的唯一关键词',kind:'techniques'}).results,[]);
+ const cases=searchLibraryReferences(f.document,{query:'照片',kind:'cases',limit:8});
+ assert.ok(cases.results.length>0);
+ assert.ok(cases.results.every(row=>row.kind==='case'&&row.why.pageMode==='single'&&row.readWith.tool==='read_case'&&row.source.url.startsWith('https://')));
+ assert.ok(!cases.results.some(row=>row.id==='digital-two-page-mirror'));
+ assert.match(caseDetails(cases.results[0].id,f.document).usage,/不得直接放入作品/);
+ assert.throws(()=>caseDetails('digital-two-page-mirror',f.document),/页面模式/);
+ assert.deepEqual(matchJournalCases(f.document,{limit:2}).map(row=>row.kind),['case','case']);
+ assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选/);
+ assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选（可用 read_case 查看）：\[\]/);
+ const spread=await createCreationDocument({draft:draft({mode:'spread'}),assets:[],styles:['丰富层叠']});
+ const spreadCases=matchJournalCases(spread,{limit:3});
+ assert.ok(spreadCases.some(row=>row.id==='digital-ephemera-spread'));
+ assert.ok(spreadCases.every(row=>row.why.pageMode==='spread'));
+});
+
+test('model can read a sourced case before editing and retain its advice through the turn',async t=>{
+ const f=await fixture(t);let calls=0;
+ const model=async({messages})=>{
+  calls++;
+  if(calls===1)return answer(call('read_case',{id:'digital-focal-photo-strip'}),plan(),add(f.document));
+  const caseReply=messages.find(message=>message.role==='tool'&&message.content.includes('digital-focal-photo-strip'));
+  assert.ok(caseReply);
+  assert.match(caseReply.content,/构图、配色与对象关系/);
+  const p=lastScene(messages);
+  return answer(call('creation_review',{...p,approved:true,observations:'已查看一页预览',issues:[]}),call('creation_finish',{}));
+ };
+ const harness=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
+ const done=await harness.run({id:'case-reference',state:f.state});
+ assert.equal(done.status,'completed');
+ assert.ok(done.trace.some(event=>event.kind==='tool'&&event.name==='read_case'&&event.ok));
 });
 
 test('harness restores after an actual render failure without replaying model or material transaction',async t=>{

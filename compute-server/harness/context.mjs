@@ -80,7 +80,7 @@ export function modelContext(messages,state={}){
   });
   if(!state.document)return [messages[0],index,...recent];
   const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template'].includes(names.get(message.tool_call_id))).flatMap(message=>{
+  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
   }).slice(-2);
   const inspected=inspectCreationDocument(state.document);
