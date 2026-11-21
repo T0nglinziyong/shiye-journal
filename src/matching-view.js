@@ -17,11 +17,13 @@ function rankingsForState(state){
 export function matchingRecommendations(state,direction='全部'){return rankingsForState(state)[normalizeRecommendationDirection(direction)]||[];}
 // One bounded scope for UI, API creation and exported ZIPs.
 export function matchingScopeForState(state,ranked=matchingRecommendations(state)){
+ const validIDs=new Set(state.assets.filter(asset=>!asset.isProjectInternal).map(asset=>asset.id));
+ const basket=state.basket.filter(id=>validIDs.has(id));
  const recommendations=ranked.slice(0,18);
  const automaticPresets=state.aiSettings.autoUsePresets===true?diversifyRecommendations(
   ranked.filter(row=>row.asset.isCreativePreset),{limit:6,perKind:2}):[];
  const automaticIDs=new Set(automaticPresets.map(row=>row.asset.id));
- return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,
+ return buildMaterialScope({basket,coreIDs:state.coreIDs,
   recommendations:recommendations.filter(row=>!automaticIDs.has(row.asset.id)),automaticPresets,
   excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,
   requireAllCandidates:state.aiSettings.requireAllCandidates});

@@ -2320,13 +2320,14 @@ function captureMatchingDirection(){
 }
 function createMatchingProject(automatic=true){
   const scope=matchingScope();
-  if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!state.basket.length)throw Error('请先选择素材');
+  const selectedIDs=state.basket.filter(id=>state.assets.some(asset=>asset.id===id&&!asset.isProjectInternal));
+  if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!selectedIDs.length)throw Error('请先选择素材');
   const p=project('新的手账',{mode:'spread',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];
   d.matchingTwoPageWorkspace=true;
   d.inactivePageDimmed=state.matchMode==='single';
-  d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));
-  p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];
-  p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};
+  d.items=automatic?[]:physicalPlacement(d,state.assets,selectedIDs.slice(0,8));
+  p.candidateAssetIDs=automatic?scope.candidateAssetIDs:selectedIDs;
+  p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:selectedIDs};
   p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;
   p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];
   p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';p.creationMode=state.matchCreationMode||'edit';
