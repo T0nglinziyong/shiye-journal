@@ -48,6 +48,39 @@ test('harness restores after an actual render failure without replaying model or
   assert.equal(Object.keys(done.document.v3Transactions).length,1);
 });
 
+test('an unsatisfactory batch can be undone and rebuilt from the restored scene',async t=>{
+ const f=await fixture(t);let turns=0;
+ const harness=createCreativeHarness({...f,model:async({messages})=>{
+  if(++turns===1)return answer(plan(),add(f.document));
+  if(turns===2)return answer(call('creation_undo',{}));
+  if(turns===3){const scene=lastScene(messages);assert.equal(scene.sceneRevision,creationSceneRevision(f.document));
+   return answer(call('creation_apply',{protocolVersion:2,transactionId:'replacement',baseSceneRevision:scene.sceneRevision,operations:[{op:'text.add',id:'replacement',content:'重排之后',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]}));}
+  return answer(call('creation_finish',{review:{observations:'已检查重排后的纸面',issues:[]}}));
+ },checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
+ const result=await harness.run({id:'undo-rebuild',state:f.state});
+ assert.equal(result.status,'completed');assert.deepEqual(result.document.page.layers.map(node=>node.id),['replacement']);assert.equal(turns,4);
+});
+
+test('a separate workspace sends only changed nonempty images and can move its group to the page',async t=>{
+ const f=await fixture(t);let turns=0;
+ const render=async(document,_signal,spaces)=>{
+  const root=document.page.layers,view=id=>root.filter(node=>(node.workspaceId||(node.isParked?'tray':'page'))===id);
+  return {pngHash,sceneRevision:creationSceneRevision(document),imageURL:'data:image/png;base64,cGFnZQ==',spaceViews:spaces.map(space=>({id:space.id,signature:JSON.stringify(view(space.id)),imageURL:view(space.id).length?'data:image/png;base64,'+Buffer.from(space.id).toString('base64'):null,items:view(space.id).map(node=>node.id)}))};
+ };
+ const harness=createCreativeHarness({...f,render,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++turns===1)return answer(plan(),call('workspace_create',{id:'study',title:'局部试摆'}));
+  if(turns===2)return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-add',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'title',content:'试排标题',place:{reference:'page',at:[50,50],unit:'mm',surface:'study'},size:{width:45,unit:'mm'}}]}));
+  if(turns===3){const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
+   assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['study']);
+   return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
+  const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
+  assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['page']);
+  assert.equal(JSON.parse(latest.content[0].text.split('\n')[1].replace('工作空间状态：','')).changed.find(space=>space.id==='study').empty,true);
+  return answer(call('creation_finish',{review:{observations:'试摆后移入纸面',issues:[]}}));
+ }});
+ const result=await harness.run({id:'study-flow',state:f.state});assert.equal(result.status,'completed');assert.equal(turns,4);
+});
+
 test('finish cannot pass when a new edit invalidates a viewed preview',async t=>{
   const f=await fixture(t);let n=0;
   const model=async({messages})=>{

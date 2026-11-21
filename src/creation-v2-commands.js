@@ -34,7 +34,8 @@ const assetFor=(doc,assets,alias)=>{const id=doc.source.materials.find(row=>row.
 const patch=patchSceneNode;
 const processMaterial=(doc,target,steps,assets,mode='append')=>runMaterialAlgorithm(doc,'edit_materials',{items:[{piece:target,mode,operations:steps}]},assets);
 function placeFor(doc,place,widthMm,heightMm,rotationDeg=0,parentID=null){return resolveCreationPlace(doc.page,place,{widthMm,heightMm,rotationDeg,parentID});}
-function addToParent(doc,id,parent,assets){if(!parent)return doc;const group=requireNode(doc,parent);if(group.type!=='group')throw Error('父级必须是图层组');return editScene(doc,[{op:'move',id:requireNode(doc,id).id,parent:group.id}],assets);}
+function surfaceOf(doc,id){const path=spatialPath(doc.page.layers,requireNode(doc,id).id),root=path.ancestors[0]||path.node;return root.isParked?root.workspaceId||'tray':'page';}
+function addToParent(doc,id,parent,assets){if(!parent)return doc;const group=requireNode(doc,parent);if(group.type!=='group')throw Error('父级必须是图层组');doc=editScene(doc,[{op:'move',id:requireNode(doc,id).id,parent:group.id}],assets);return patch(doc,id,{isParked:false,workspaceId:'page'},assets);}
 function finishPlacement(doc,id,place){if(place)applyScenePlacement(doc.page,id,place);return doc;}
 function reorder(doc,target,order,assets){
  const at=locate(doc.page.layers,target);if(!at)throw Error('图层不存在：'+target);
@@ -45,7 +46,10 @@ function reorder(doc,target,order,assets){
  return editScene(doc,[{op:'move',id:at.node.id,parent:at.parent?.id,before}],assets);
 }
 function finishNode(doc,id,change,assets,{created=false}={}){
+ const parent=locate(doc.page.layers,id)?.parent;
+ if(parent&&change.place?.surface&&change.place.surface!==surfaceOf(doc,parent.id))throw Error('组合子对象不能单独移往其他工作空间；请移动整个组合或先解除组合');
  doc=updateCreationNode(doc,id,created&&change.place?{...change,place:{...change.place,rotationDeg:change.place.rotationDeg??0}}:change,assets);
+ if(parent&&change.place?.surface)doc=patch(doc,id,{isParked:false,workspaceId:'page'},assets);
  if(change.order)doc=reorder(doc,id,change.order,assets);
  else if(created){
   // Command order is paint order across all node types. The underlying
@@ -90,6 +94,7 @@ function preserveReplacementStack(original,target,next,pieceIDs){
  // may be locked or user-edited); replacement pieces occupy the original slot.
  for(const peer of location.siblings){const surviving=find(next,peer.id);if(surviving)surviving.zIndex=peer.zIndex;}
  for(const id of pieceIDs)requireNode(next,id).zIndex=location.node.zIndex??0;
+ if(location.node.isParked)for(const id of pieceIDs){requireNode(next,id).isParked=true;requireNode(next,id).workspaceId=location.node.workspaceId||'tray';}
  return next;
 }
 
@@ -193,14 +198,21 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    doc=finishNode(doc,item.target,item,assets);
   }else if(item.op==='layer.reparent'){
    if(item.parent!==null&&requireNode(doc,item.parent).type!=='group')throw Error('父级必须是组合');
+   const surface=surfaceOf(doc,item.target);
    doc=editScene(doc,[{op:'move',id:requireNode(doc,item.target).id,parent:item.parent?requireNode(doc,item.parent).id:null}],assets);
+   doc=patch(doc,item.target,item.parent?{isParked:false,workspaceId:'page'}:{isParked:surface!=='page',workspaceId:surface},assets);
    if(item.order)doc=reorder(doc,item.target,item.order,assets);
   }else if(item.op==='layer.delete'){
    if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
    doc=editScene(doc,[{op:'delete',id:requireNode(doc,item.target).id}],assets);
   }else if(item.op==='group.create'){
    const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:undefined;
-   doc=editScene(doc,[{op:'group',ids:targets,id:item.id,name:item.id,layoutBox:bounds}],assets);doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
+   const surfaces=targets.map(id=>surfaceOf(doc,id));
+   if(surfaces.some(value=>value!==surfaces[0]))throw Error('不同工作空间的对象须先移到同一区域再编组');
+   doc=editScene(doc,[{op:'group',ids:targets,id:item.id,name:item.id,layoutBox:bounds}],assets);
+   for(const id of targets){const node=requireNode(doc,id);if(node.isParked||node.workspaceId&&node.workspaceId!=='page')doc=patch(doc,id,{isParked:false,workspaceId:'page'},assets);}
+   if(surfaces[0]!=='page')doc=patch(doc,item.id,{isParked:true,workspaceId:surfaces[0]},assets);
+   doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(item.op==='group.compose'){
    if(find(doc,item.id))throw Error('组合编号已经存在');
    const group={id:item.id,type:'group',name:item.id,children:[],localTransform:[1,0,0,1,0,0],layoutBox:item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:item.parent&&requireNode(doc,item.parent).layoutBox?{...requireNode(doc,item.parent).layoutBox}:{width:doc.page.canvas.width,height:doc.page.canvas.height},opacity:1,blendMode:'normal',zIndex:500};
@@ -213,8 +225,10 @@ export function applyCreationV2Batch(document,input,assets,options={}){
     doc=applyCreationV2Batch(doc,{protocolVersion:2,transactionId:'child-'+craftDigest([input.transactionId,index,childIndex]).slice(7,39),baseSceneRevision:input.baseSceneRevision,operations:[creates?{...child,parent:item.id}:child]},assets,options);
    }
   }else if(item.op==='group.ungroup'){
-   if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
-   doc=editScene(doc,[{op:'ungroup',id:requireNode(doc,item.target).id}],assets);
+   const group=requireNode(doc,item.target),members=(group.children||[]).map(child=>child.id),surface=locate(doc.page.layers,item.target)?.parent?'page':surfaceOf(doc,item.target);
+   if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,group.id);
+   doc=editScene(doc,[{op:'ungroup',id:group.id}],assets);
+   for(const id of members)doc=patch(doc,id,{isParked:surface!=='page',workspaceId:surface},assets);
   }else if(item.op==='layout.arrange')arrangeCreationNodes(doc.page,item.targets.map(id=>requireNode(doc,id).id),item.rule,item.container);
   else if(item.op==='layout.detach')detachSceneLayout(doc.page,requireNode(doc,item.target).id,item.scope||'all');
   else if(item.op==='material.cut'){

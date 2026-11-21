@@ -29,7 +29,7 @@ test('cloud worker commits hash-verified editable output after real rendering an
       if(++modelCalls===1)return reply(call('read_skill',{name:'journal-composition'}),call('creation_plan',{intent:'测试',steps:[{task:'添加可编辑文字并看图',status:'in_progress'}]}),
         call('creation_apply',{protocolVersion:2,transactionId:'text',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
       const visual=messages.findLast(m=>Array.isArray(m.content)&&m.content[0]?.text?.startsWith('当前真实画面：'));
-      assert.ok(visual.content[1].image_url.url.startsWith('data:image/jpeg;base64,'));
+      assert.ok(visual.content.find(part=>part.type==='image_url').image_url.url.startsWith('data:image/jpeg;base64,'));
       const preview=JSON.parse(visual.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
       return reply(call('creation_review',{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,approved:true,observations:'测试图像已渲染，非审美验收',issues:[]}),call('creation_finish',{}));
     }});

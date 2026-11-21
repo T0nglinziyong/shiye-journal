@@ -58,7 +58,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
     if(job.checkpoint_seq&&(!saved||saved.document.source.taskHash!==input.document.source.taskHash||saved.startedAt!==startedAt))throw Error('创作检查点与原始任务不一致');
     if(saved)requireResourceVersion(saved.resources.release,resources.version);
     const state=saved?undefined:initialHarnessState({document:input.document,skills,brief:input.brief,
-      images:await renderer.inspectMaterials(input.document.source.materials.map(m=>m.alias)),startedAt,deadlineAt:deadlineAt-10000,resourceVersion:resources.version});
+      tray:await renderer.index(input.document,controller.signal),startedAt,deadlineAt:deadlineAt-10000,resourceVersion:resources.version});
     const result=await harness.run({id:job.id,state,signal:controller.signal});
     controller.signal.throwIfAborted();
     if(result.status!=='completed')throw Error('创作未完成');

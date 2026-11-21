@@ -82,6 +82,11 @@
     "Place": {
       "type": "object",
       "properties": {
+        "surface": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+          "default": "page"
+        },
         "reference": {
           "$ref": "#/$defs/Reference"
         },

@@ -36,7 +36,8 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
  Object.assign(next,styleFor(node.type,change.style,page,node));
  if(change.content!==undefined){if(node.type!=='text')throw Error('content 只适用于文字');next.content=change.content;}
  if(change.name!==undefined){if(node.type!=='group')throw Error('name 只适用于组合');next.name=change.name;}
- if(change.hidden!==undefined){next.hidden=change.hidden;next.isHidden=change.hidden;if(!change.hidden)next.isParked=false;}
+ if(change.hidden!==undefined){next.hidden=change.hidden;next.isHidden=change.hidden;if(!change.hidden){next.isParked=false;next.workspaceId='page';}}
+ if(change.place?.surface){next.workspaceId=change.place.surface;next.isParked=change.place.surface!=='page';if(next.isParked){next.hidden=false;next.isHidden=false;}}
  if(change.locked!==undefined){next.isLocked=change.locked;next.locked=change.locked;}
  if(change.layoutBox){if(node.type!=='group'||!node.localTransform)throw Error('layoutBox 只适用于空间组');next.layoutBox={width:change.layoutBox.width*s,height:change.layoutBox.height*s};}
  if(change.kind!==undefined){if(node.type!=='shape'||node.svgPaths)throw Error('kind 只适用于基础图形');next.kind=change.kind==='rect'?'rectangle':change.kind;}
