@@ -95,7 +95,7 @@ test('skill routing uses explicit direction and respects no-text tasks',async()=
   assert.ok(recommendCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='vintage-journal'));
 });
 
-test('skill routing offers concrete non-title methods without preloading tutorials',async()=>{
+test('zero-material skill routing offers lettering and drawn graphics without source techniques',async()=>{
   const skills=await loadCreationSkills();
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
@@ -103,10 +103,17 @@ test('skill routing offers concrete non-title methods without preloading tutoria
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{styles:['丰富层叠']}});
   assert.deepEqual(state.loadedSkills,[]);
-  assert.ok(state.recommendedMethods.some(method=>method.id==='paper-peek'));
-  assert.ok(state.recommendedMethods.some(method=>method.id==='accent-materials'));
+  assert.ok(state.recommendedMethods.some(method=>method.id==='title-phrases'));
+  assert.ok(state.recommendedMethods.some(method=>method.id==='graphic-wave'));
+  assert.ok(!state.recommendedMethods.some(method=>method.id==='paper-peek'));
+  assert.ok(!initialToolGuide(document).common.descriptions.some(item=>item.name==='material.add'));
+  assert.match(state.messages[0].content,/零素材创作/);
   assert.ok(!state.messages[0].content.includes('基础 Skill、匹配风格和常用参数已自动提供'));
   assert.ok(state.messages[0].content.length<30000);
+  const visual=await createCreationDocument({draft:draft(),assets:[],contentPolicy:'visual'});
+  const visualState=initialHarnessState({document:visual,skills,brief:{styles:['丰富层叠']}});
+  assert.ok(!visualState.recommendedMethods.some(method=>method.skill==='journal-lettering'));
+  assert.ok(!recommendCreationSkills(skills,visual).some(skill=>skill.name==='journal-lettering'));
   assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['layered-center','layered-diagonal']);
 });
 

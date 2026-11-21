@@ -6,6 +6,11 @@ import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 import {techniqueCatalog} from '../../src/creation-library/techniques.js';
 
 export function recommendCreationSkills(skills,document,brief={}){
+  if(document.source.materials?.length===0){
+    const catalog=new Map(skills.catalog().map(skill=>[skill.name,skill]));
+    const names=[...(document.source.textMode==='none'?[]:['journal-lettering']),'journal-graphics','pattern-and-doodle','journal-composition','journal-color'];
+    return names.filter(name=>catalog.has(name)).map(name=>catalog.get(name));
+  }
   const names=['journal-composition','paper-layering','journal-accents'];
   if(document.source.textMode!=='none')names.push('journal-lettering');
   const styles=new Set([...(brief.styles||[]),...(document.source.styles||[]),brief.style]);
@@ -19,6 +24,12 @@ export function shortlistCreationMethods(document,brief={}){
   const style=[...(brief.styles||[]),...(document.source.styles||[]),brief.style].filter(Boolean).join(' ');
   const materialCount=document.source.materials.length;
   const text=style+' '+String(brief.intent||'');
+  if(!materialCount){
+    const ids=document.source.textMode==='none'?['graphic-wave','graphic-corner','graphic-star']:/丰富|层叠|拼贴/.test(text)?['title-stack','title-phrases','title-stagger','title-highlight','graphic-wave']:
+      ['title-caption','title-underline','title-phrases','graphic-wave','graphic-corner'];
+    const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
+    return ids.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
+  }
   const ids=/丰富|层叠|拼贴/.test(text)?['layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','title-label']:
     /极简|留白|清新|淡雅/.test(text)?['quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption']:
     /杂志|照片|旅行/.test(text)?['magazine-offset','photo-stagger','photo-caption','paper-underlay','graphic-route']:
@@ -29,7 +40,7 @@ export function shortlistCreationMethods(document,brief={}){
 }
 
 export function initialToolGuide(document){
-  const topics=['material.add','layer.update','graphic.add','place','size'];
+  const topics=[...(document.source.materials.length?['material.add']:[]),'layer.update','graphic.add','place','size'];
   if(document.source.textMode!=='none')topics.push('text.add');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   return {topics:creationHelp().topics,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
