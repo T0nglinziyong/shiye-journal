@@ -262,9 +262,10 @@ test('harness preserves a compacted design decision in the persisted run',async 
  assert.equal(compactions,1);
 });
 
-test('automatic bootstrap allows first-turn editing and combined visual review/finish without discovery calls',async t=>{
+test('small task allows first-turn editing and combined visual review/finish without discovery calls',async t=>{
   const f=await fixture(t);let n=0,renders=0;
-  assert.ok(f.state.loadedSkills.some(s=>s.name==='journal-composition'));
+  assert.deepEqual(f.state.loadedSkills,[]);
+  assert.ok(f.state.messages[0].content.includes('journal-composition'));
   assert.match(f.state.messages[0].content,/常用工具合同/);
   const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
     if(++n===1)return answer(plan(),add(f.document));
@@ -273,6 +274,52 @@ test('automatic bootstrap allows first-turn editing and combined visual review/f
     return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
   }});
   const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
+});
+
+test('rich task makes a specific method and material evidence available before editing',async t=>{
+  const f=await fixture(t);
+  const assets=Array.from({length:4},(_,i)=>({id:'paper-'+i,title:'纸片 '+i,kind:'paper',physicalWidthMM:30,physicalHeightMM:40}));
+  const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
+  const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});
+  assert.equal(state.methodStudyRequired,true);
+  let turns=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
+    if(++turns===1){
+      assert.equal(tools.some(tool=>tool.function.name==='creation_apply'),false);
+      return answer(call('read_skill',{name:'paper-layering',level:'detail',methodId:'paper-peek'}),call('creation_plan',{intent:'用纸片建立有层次的主体',methods:[{id:'paper-peek',purpose:'用色边区分叠放关系'}],themeEvidence:{supportedBy:['四件纸片的色彩和形态'],conflicts:[],response:'以素材形态构图'},steps:[{task:'试摆纸片',status:'in_progress'}]}));
+    }
+    if(turns===2){
+      assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
+      return answer(call('creation_apply',{protocolVersion:2,transactionId:'rich-start',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'first-note',content:'第一层',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:40,unit:'mm'}}]}));
+    }
+    if(turns===3){
+      assert.deepEqual(new Set(tools.map(tool=>tool.function.name)),new Set(['creation_review','creation_finish']));
+      return answer(revise(messages,'缺少纸片之间的实际叠放'));
+    }
+    assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
+    throw Error('method gate observed');
+  }});
+  await assert.rejects(harness.run({id:'rich-method',state}),/method gate observed/);
+  const saved=await harness.state('rich-method');
+  assert.equal(saved.loadedSkills[0].selection,'detail:paper-peek:0');
+  assert.equal(saved.plan.methods[0].id,'paper-peek');
+  assert.ok(saved.skillReferences[0].principle);
+});
+
+test('a many-material first draft cannot cover the page before its first visual check',async t=>{
+  const f=await fixture(t);
+  const assets=Array.from({length:8},(_,i)=>({id:'sheet-'+i,title:'纸片 '+i,kind:'paper',physicalWidthMM:35,physicalHeightMM:50}));
+  const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
+  const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});
+  let turn=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+    if(++turn===1)return answer(call('read_skill',{name:'paper-layering',level:'detail',methodId:'paper-peek'}),call('creation_plan',{intent:'先铺核心',methods:[{id:'paper-peek',purpose:'让底层露边'}],themeEvidence:{supportedBy:['纸片色彩'],conflicts:[],response:'按形态构图'},steps:[{task:'放置纸片',status:'in_progress'}]}));
+    if(turn===2)return answer(call('creation_apply',{protocolVersion:2,transactionId:'overfull',baseSceneRevision:creationSceneRevision(document),operations:Array.from({length:5},(_,i)=>({op:'material.add',id:'item-'+i,asset:'m'+(i+1),place:{reference:'page',at:[25+i*20,50],unit:'mm'}}))}));
+    assert.match(messages.at(-1).content,/首批最多摆四件/);
+    throw Error('first draft limit observed');
+  }});
+  await assert.rejects(harness.run({id:'many-materials',state}),/first draft limit observed/);
+  assert.equal((await harness.state('many-materials')).document.page.layers.length,0);
 });
 
 test('a screenshot, edit rationale and final review stay linked in the recoverable run',async t=>{

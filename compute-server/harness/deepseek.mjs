@@ -11,7 +11,7 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
       const timeout=AbortSignal.timeout(Math.min(summary?25000:120000,remaining));
       const response=await fetcher(endpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,timeout]):timeout,
         headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
-        body:JSON.stringify({model,messages,...(summary?{}:{tools,tool_choice:'auto'}),thinking:{type:'enabled'},reasoning_effort:summary||recoveringFromTruncation?'low':effort,stream:false,max_tokens:summary?3000:10000})});
+        body:JSON.stringify({model,messages,...(summary?{}:{tools,tool_choice:'auto'}),thinking:{type:'enabled'},reasoning_effort:summary||recoveringFromTruncation?'low':effort,stream:false,max_tokens:summary?3000:16000})});
       if([429,502,503,504].includes(response.status)&&attempt<2){
         await response.body?.cancel();
         const delay=Math.min(5000,Math.max(500,Number(response.headers.get('retry-after')||attempt+1)*1000));

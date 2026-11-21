@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,preloadCreationSkills,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
+import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 
 test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
@@ -43,6 +43,18 @@ test('model context stays bounded as checkpoint history grows',()=>{
  assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
 });
 
+test('temporary material detail images leave the model context after they are used',()=>{
+ const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'image_url',image_url:{url:'index'}}]};
+ const inspect={role:'assistant',tool_calls:[{id:'inspect',function:{name:'inspect_materials'}}]};
+ const result={role:'tool',tool_call_id:'inspect',content:'{"ok":true}'};
+ const details={role:'user',content:[{type:'text',text:'素材 A'},{type:'image_url',image_url:{url:'detailA'}},{type:'image_url',image_url:{url:'detailB'}}]};
+ const before=modelContext([system,index,inspect,result,details]);
+ assert.equal(before.filter(message=>message===details).length,1);
+ const after=modelContext([system,index,inspect,result,details,{role:'assistant',content:'已看过局部细节'}, {role:'user',content:'下一步'}]);
+ assert.equal(after.some(message=>message===details),false);
+ assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,1);
+});
+
 test('creative compaction carries design decisions and rejected attempts into later turns',async()=>{
  const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'image_url',image_url:{url:'index'}}]}];
  for(let i=0;i<7;i++)messages.push(
@@ -77,10 +89,25 @@ test('malformed historical tool arguments cannot break compaction',()=>{
 
 test('skill routing uses explicit direction and respects no-text tasks',async()=>{
   const skills=await loadCreationSkills();
-  const selected=preloadCreationSkills(skills,{source:{textMode:'none',styles:[]}},{styles:['童趣可爱'],intent:'复古旧物'}).map(s=>s.name);
+  const selected=recommendCreationSkills(skills,{source:{textMode:'none',styles:[]}},{styles:['童趣可爱'],intent:'复古旧物'}).map(s=>s.name);
   assert.deepEqual(selected,['journal-composition','paper-layering','journal-accents','playful-journal']);
   assert.ok(!selected.includes('vintage-journal'));
-  assert.ok(preloadCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='vintage-journal'));
+  assert.ok(recommendCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='vintage-journal'));
+});
+
+test('skill routing offers concrete non-title methods without preloading tutorials',async()=>{
+  const skills=await loadCreationSkills();
+  const {createCreationDocument}=await import('../src/creation-document.js');
+  const {draft}=await import('../src/domain.js');
+  const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
+  const document=await createCreationDocument({draft:draft(),assets:[]});
+  const state=initialHarnessState({document,skills,brief:{styles:['丰富层叠']}});
+  assert.deepEqual(state.loadedSkills,[]);
+  assert.ok(state.recommendedMethods.some(method=>method.id==='paper-peek'));
+  assert.ok(state.recommendedMethods.some(method=>method.id==='accent-materials'));
+  assert.ok(!state.messages[0].content.includes('基础 Skill、匹配风格和常用参数已自动提供'));
+  assert.ok(state.messages[0].content.length<30000);
+  assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['layered-center','layered-diagonal']);
 });
 
 test('repeated local edits get a batch correction hint without forcing acceptance',()=>{
