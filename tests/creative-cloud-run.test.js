@@ -35,6 +35,10 @@ test('cloud worker commits hash-verified editable output after real rendering an
     }});
   assert.ok(entries.length>4);assert.ok(notifications>=2);assert.ok(updates.some(v=>v.p_progress?.stage==='preview'));
   const output=JSON.parse(objects.get(result.resultPath));assert.equal(output.page.layers[0].content,'一页新的想法');
+  const evaluation=JSON.parse(objects.get(prefix+'reports/evaluation.json'));
+  const trace=JSON.parse(objects.get(prefix+'reports/trace.json'));
+  assert.equal(evaluation.comparison.revisions,1);
+  assert.ok(trace.some(event=>event.kind==='model')&&trace.some(event=>event.kind==='tool')&&trace.some(event=>event.kind==='render'));
   assert.equal(creativeObjectHash(objects.get(result.resultPath)).slice(7)+'.json',result.resultPath.split('/').at(-1));
   const publicProgress=JSON.stringify(updates);assert.ok(!publicProgress.includes('test-only'));assert.equal(modelCalls,2);
 });

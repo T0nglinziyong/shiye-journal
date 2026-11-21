@@ -4,7 +4,7 @@ export async function sweepCreativeArtifacts({rpc,removeObject,apply=false}){
     const result=await rpc('shiye_creative_cleanup_plan_v1',{p_limit:200});
     if(!Array.isArray(result?.names)||result.names.length>200)throw Error('创作清理计划无效');
     for(const name of result.names){
-      if(!/^\d{10,22}\/creative\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}\/(?:input\.json|(?:assets|previews|results|checkpoints|cuts)\/[a-zA-Z0-9_-]+\.(?:png|json|json\.gz))$/.test(name))throw Error('创作清理路径无效');
+      if(!/^\d{10,22}\/creative\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}\/(?:input\.json|(?:assets|previews|results|checkpoints|cuts|reports)\/[a-zA-Z0-9_-]+\.(?:png|json|json\.gz))$/.test(name))throw Error('创作清理路径无效');
     }
     scanned+=result.names.length;
     if(!apply)break;

@@ -145,7 +145,8 @@ test('a separate workspace sends only changed nonempty images and can move its g
    return answer(revise(messages,'标题还在试摆区'),call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
   const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
   assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['page']);
-  assert.equal(JSON.parse(latest.content[0].text.split('\n')[1].replace('工作空间状态：','')).changed.find(space=>space.id==='study').empty,true);
+  const stage=JSON.parse(latest.content[0].text.split('\n')[1].replace(/^阶段观察：|^工作空间状态：/,''));
+  assert.equal(stage.changed.find(space=>space.id==='study').empty,true);
   return answer(call('creation_finish',{review:{observations:'试摆后移入纸面',issues:[]}}));
  }});
  const result=await harness.run({id:'study-flow',state:f.state});assert.equal(result.status,'completed');assert.equal(turns,4);
@@ -311,9 +312,21 @@ test('unchanged preview reuses the current render without another upload',async 
     if(++n===1)return answer(plan(),add(f.document));
     if(n===2)return answer(call('creation_preview',{}));
     assert.equal(JSON.parse(messages.at(-1).content).data.reused,true);
-    const p=lastScene(messages);return answer(call('creation_finish',{review:{observations:'同版本预览',issues:[]}}));
+    const p=lastScene(messages);return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'同版本预览',issues:[]}}));
   }});
   assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
+});
+
+test('finish review accepts a current image hash and rejects a stale one',async t=>{
+ const f=await fixture(t);let n=0;
+ const harness=createCreativeHarness({...f,model:async({messages})=>{
+  if(++n===1)return answer(plan(),add(f.document));
+  const p=lastScene(messages);
+  if(n===2)return answer(call('creation_finish',{review:{pngHash:'sha256:'+'0'.repeat(64),sceneRevision:p.sceneRevision,observations:'旧图',issues:[]}}));
+  assert.match(JSON.parse(messages.at(-1).content).detail,/旧画面/);
+  return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'已核对当前图',issues:[]}}));
+ }});
+ assert.equal((await harness.run({id:'finish-hash',state:f.state})).status,'completed');
 });
 
 test('recipe discovery is paged, image-backed and does not resend the overview',async t=>{

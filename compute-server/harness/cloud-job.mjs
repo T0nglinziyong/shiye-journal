@@ -8,6 +8,7 @@ import {localGlyphOutline} from '../../src/creation-font-resolver.mjs';
 import {validateCreativeJobPackage} from '../../src/creative-job-package.js';
 import {installedCreationResources,requireResourceVersion} from './resources.mjs';
 import {loadCreativeMaterialImages} from './material-images.mjs';
+import {summarizeCreativeEvaluation} from './quality-evaluation.mjs';
 
 export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupRecords,model,notify,daemon,signal,clock=Date.now}){
   const prefix=creativeJobPrefix(job),startedAt=Date.parse(job.created_at),deadlineAt=Date.parse(job.deadline_at),controller=new AbortController();
@@ -63,7 +64,12 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
     controller.signal.throwIfAborted();
     if(result.status!=='completed')throw Error('创作未完成');
     const bytes=Buffer.from(JSON.stringify(result.document)),path=prefix+'results/'+creativeObjectHash(bytes).slice(7)+'.json';
-    await store.upload(path,bytes,'application/json');
+    const evaluation=summarizeCreativeEvaluation(result.qualityFrames||[]);
+    await Promise.all([
+      store.upload(path,bytes,'application/json'),
+      store.upload(prefix+'reports/evaluation.json',Buffer.from(JSON.stringify(evaluation)),'application/json'),
+      store.upload(prefix+'reports/trace.json',Buffer.from(JSON.stringify(result.trace||[])),'application/json')
+    ]);
     await update({p_result_path:path,p_progress:{...progress,stage:'completed',totalMs:clock()-startedAt,turns:result.turns}});
     await ping(true);return {id:job.id,resultPath:path,totalMs:clock()-startedAt};
   }catch(error){

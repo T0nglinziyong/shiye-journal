@@ -13,6 +13,7 @@ import {createHarnessRenderer} from '../compute-server/harness/renderer.mjs';
 import {createCreativeNetwork} from '../compute-server/harness/network.mjs';
 import {createMaterialSegmenter} from '../compute-server/harness/segmentation.mjs';
 import {SamDaemonClient} from '../compute-server/sam-daemon-client.mjs';
+import {summarizeCreativeEvaluation} from '../compute-server/harness/quality-evaluation.mjs';
 
 const [packagePath,outputPath,style='复古收藏',resumeFlag]=process.argv.slice(2);
 if(!packagePath||!outputPath)throw Error('用法：node --env-file=<私有配置> scripts/test-creative-harness-real.mjs <当前任务包目录> <私有输出目录> [风格] [--resume]');
@@ -56,12 +57,16 @@ const segmentMaterial=daemon?await createMaterialSegmenter({source:document.sour
 const harness=createCreativeHarness({skills,checkpointer,...renderer,segmentMaterial,capabilities:{glyphOutline:localGlyphOutline},model:createDeepSeekCreativeModel({key:process.env.SHIYE_CREATIVE_API_KEY,effort:process.env.SHIYE_CREATIVE_EFFORT||'high',fetcher:network.fetcher}),onProgress:e=>console.log(JSON.stringify(e))});
 try{
   const result=await harness.run({id:'acceptance',state:resume?undefined:initial});
-  const report={status:result.status,totalMs:Date.now()-initial.startedAt,turns:result.turns,loadedSkills:result.loadedSkills,review:result.review,preview:result.preview,usage:result.usage,style,source:'existing-private-v3-package',liveApp:false};
+  const evaluation=summarizeCreativeEvaluation(result.qualityFrames||[]);
+  const report={status:result.status,totalMs:Date.now()-initial.startedAt,turns:result.turns,loadedSkills:result.loadedSkills,review:result.review,preview:result.preview,usage:result.usage,evaluation:evaluation.comparison,traceEvents:result.trace?.length||0,style,materialCount:task.materials.length,source:'existing-private-v3-package',liveApp:false};
   await writeFile(join(output,'project.shiyeproject.json'),JSON.stringify(result.document),{mode:0o600});
+  await writeFile(join(output,'evaluation.json'),JSON.stringify(evaluation,null,2),{mode:0o600});
+  await writeFile(join(output,'trace.json'),JSON.stringify(result.trace||[],null,2),{mode:0o600});
   await writeFile(join(output,'report.json'),JSON.stringify(report,null,2),{mode:0o600});
   console.log(JSON.stringify(report));
 }catch(error){
   const saved=await harness.state('acceptance');
+  if(saved){await writeFile(join(output,'evaluation.json'),JSON.stringify(summarizeCreativeEvaluation(saved.qualityFrames||[]),null,2),{mode:0o600});await writeFile(join(output,'trace.json'),JSON.stringify(saved.trace||[],null,2),{mode:0o600});}
   await writeFile(join(output,'failure.json'),JSON.stringify({code:error.code||'FAILED',message:error.message,totalMs:Date.now()-initial.startedAt,turns:saved?.turns,results:saved?.results},null,2),{mode:0o600});
   console.error(JSON.stringify({code:error.code||'FAILED',message:error.message,output}));process.exitCode=1;
 }finally{daemon?.stop();await network.close();}
