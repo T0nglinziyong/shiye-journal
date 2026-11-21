@@ -68,7 +68,7 @@ export function createBackgroundCreationSession({getAccount,getAssets,getProject
           const project=await getProject(projectID);ensure(owner);
           if(!project)throw Error('原作品已删除；后台结果仍保留，未恢复已删除作品');
           const result=await applyBackgroundCreativeResult({project,document,job,assets:getAssets(),persist:async p=>{ensure(owner);await persist(p);}});
-          emit({job,status:'completed',document,previewURL,project:result.project,message:result.candidate?'已另存 AI 候选，原稿修改已保留':'创作完成，草稿已保存'});end(null,{...result,jobID:id});
+          emit({job,status:'completed',document,previewURL,project:result.project,message:result.candidate?'已另存 AI 候选，原稿修改已保留':'创作完成，草稿已保存'});end(null,{...result,jobID:id,completedAt:job.updated_at});
         }catch(error){emit({status:'result-unapplied',message:error.message});end(error);}
       },
       onError:error=>{try{emit({status:'disconnected',message:'连接暂不可用，后台继续创作；恢复连接后补同步'});}catch(accountError){end(accountError);}}

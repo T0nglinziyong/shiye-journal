@@ -9,6 +9,13 @@ import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
 const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchPlacements','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose','recommendFilter'];
+export function creativeCompletionText(startedAt,completedAt=new Date().toISOString()){
+ const start=Date.parse(startedAt),finish=Date.parse(completedAt);
+ const seconds=Number.isFinite(start)&&Number.isFinite(finish)?Math.max(1,Math.round((finish-start)/1000)):1;
+ const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),rest=seconds%60;
+ const elapsed=(hours?hours+'小时':'')+(minutes?minutes+'分':'')+rest+'秒';
+ return `创作完成，用时${elapsed}，点击方案继续编辑`;
+}
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
@@ -54,7 +61,7 @@ export function createMatchingSession(c){
    const owner=account();
    void c.backgroundCreation.resume(v.project,progressFor(v,owner)).then(async result=>{
      if(account()!==owner||!result)return;
-     v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.progress='创作完成，点击方案继续编辑';await save();update();
+     v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt);await save();update();
    }).catch(async error=>{if(account()!==owner)return;v.status='failed';v.progress=error.message;await save();update();});
  };
 
@@ -137,7 +144,7 @@ export function createMatchingSession(c){
     await save();ensureAccount();
     if(mode==='edit'){
       const result=await c.backgroundCreation.generate({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,prompt:p.intent||'',onProgress:progressFor(v,account()),signal:run.signal});
-      ensureAccount();v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.progress='创作完成，已保存到草稿。点击方案继续编辑。';await save();update();return;
+      ensureAccount();v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt);await save();update();return;
     }
     if(mode!=='edit'){
      let snapshot=referenceSnapshot;

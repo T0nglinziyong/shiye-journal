@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchingSession} from '../src/matching-session.js';
+import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchingSession,creativeCompletionText} from '../src/matching-session.js';
+
+test('completed AI creation reports its elapsed time and opens the result',()=>{
+ assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T00:02:34Z'),
+  '创作完成，用时2分34秒，点击方案继续编辑');
+ assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T01:00:01Z'),
+  '创作完成，用时1小时1秒，点击方案继续编辑');
+});
 
 const draft={id:'d',sceneVersion:2,canvas:{width:700,height:1000},layers:[]};
 const work={id:'p',activeDraftID:'d',drafts:[draft]};

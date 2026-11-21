@@ -81,7 +81,8 @@
 .material-editor-dialog .material-tag-fields{display:grid;gap:9px}
 /* Series context is a label beside the back action, never a floating heading. */
 #view .detail-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px}
-#view .detail-topline .detail-back{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0}
+#view .detail-topline .detail-back{display:inline-flex;align-items:center;gap:7px;flex:none;min-width:max-content;min-height:36px;padding:0;white-space:nowrap}
+#view .detail-topline .detail-back>span{white-space:nowrap}
 #view .detail-back svg,#modal .detail-back svg{display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #modal .dialog-head>.detail-back{display:inline-flex;align-items:center;gap:7px;min-width:0;padding:0;border:0;border-radius:0;background:transparent;color:#52634b;font-size:15px}
 #view .detail-topline .detail-category{float:none;display:inline-flex;align-items:center;min-height:36px;text-align:right}
