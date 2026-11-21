@@ -317,6 +317,7 @@ test('rich task makes a specific method and material evidence available before e
   const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
   const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});
   assert.equal(state.methodStudyRequired,true);
+  assert.match(state.messages[1].content[0].text,/首选案例的元素布局.*xhs-.*elements/);
   let turns=0;
   const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
     if(++turns===1){
