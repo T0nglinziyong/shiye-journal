@@ -54,7 +54,7 @@ export function modelContext(messages,state={}){
   const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','creation_help'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,3500)}]:[];}catch{return [];}
   }).slice(-3);
-  const summary={creativeMemory:state.creativeMemory||null,plan:state.plan,spaces:state.spaces,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),undoAvailable:(state.undoStack||[]).length,review:state.review?.approved?'approved':null};
+  const summary={creativeMemory:state.creativeMemory||null,plan:state.plan,decisions:(state.decisions||[]).slice(-8),spaces:state.spaces,visualState:state.visualState||null,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
   return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
 }
 
@@ -72,7 +72,7 @@ export function creativeCompactionTranscript(messages){
   const compactCall=call=>{
     const name=call.function?.name;
     let args;try{const parsed=JSON.parse(call.function?.arguments||'{}');args=parsed&&typeof parsed==='object'?parsed:{};}catch{return {name,invalidArguments:true};}
-    if(name==='creation_apply')return {name,transactionId:args.transactionId,operations:(Array.isArray(args.operations)?args.operations:[]).map(raw=>{const op=raw&&typeof raw==='object'?raw:{};return {op:op.op,id:op.id,target:op.target,asset:op.asset,content:typeof op.content==='string'?op.content.slice(0,120):undefined,size:op.size,fontFamily:op.style?.fontFamily,surface:op.place?.surface||op.patch?.place?.surface,reference:op.place?.reference,at:op.place?.at,rotationDeg:op.place?.rotationDeg};})};
+    if(name==='creation_apply')return {name,transactionId:args.transactionId,decision:args.decision,operations:(Array.isArray(args.operations)?args.operations:[]).map(raw=>{const op=raw&&typeof raw==='object'?raw:{};return {op:op.op,id:op.id,target:op.target,asset:op.asset,content:typeof op.content==='string'?op.content.slice(0,120):undefined,size:op.size,fontFamily:op.style?.fontFamily,surface:op.place?.surface||op.patch?.place?.surface,reference:op.place?.reference,at:op.place?.at,rotationDeg:op.place?.rotationDeg};})};
     return {name,args:JSON.stringify(args).slice(0,800)};
   };
   return messages.map(message=>{

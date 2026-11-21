@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import manifest from '../../src/creation-library/illustrations/manifest.json' with {type:'json'};
-import {templateCatalog,rankTemplates,templateEnabled} from '../../src/creation-library/matcher.js';
+import {templateCatalog,rankTemplates,scoreTemplate,templateEnabled} from '../../src/creation-library/matcher.js';
 import {compileTemplate} from '../../src/creation-library/compiler.js';
 import {templateFixture,isTextSlot,isGraphicElement} from '../../src/creation-library/template-elements.js';
 import {compileTechnique,techniqueCatalog} from '../../src/creation-library/techniques.js';
@@ -34,6 +34,50 @@ export function matchLibraryTemplates(document,{aliases,reference='page',limit=5
  const context=libraryContext(document,reference);
  if(aliases){if(new Set(aliases).size!==aliases.length||aliases.some(a=>!context.materials.some(m=>m.alias===a)))throw Error('素材已放置或不在本次授权范围');context.materials=context.materials.filter(m=>aliases.includes(m.alias));}
  return rankTemplates({...context,limit}).map(row=>({...row,reference,paper:context.paper}));
+}
+const normalized=value=>String(value||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
+const bigrams=value=>{const text=normalized(value),result=new Set();for(let i=0;i<text.length-1;i++)result.add(text.slice(i,i+2));return result;};
+function relevance(query,fields){
+ const q=normalized(query);if(!q)return {score:0,hits:[]};
+ let direct=0;const hits=[];
+ for(const [kind,values,weight] of fields)for(const value of values||[]){const term=normalized(value);if(term.length<2)continue;if(q.includes(term)){direct+=weight;hits.push({field:kind,value});}}
+ const queryPairs=bigrams(q),documentPairs=bigrams(fields.flatMap(([,values])=>values||[]).join(' '));
+ const common=[...queryPairs].filter(pair=>documentPairs.has(pair)).length;
+ const overlap=queryPairs.size?common/queryPairs.size:0;
+ return {score:Math.min(100,direct+Math.round(overlap*30)),hits,overlap};
+}
+export function searchLibraryReferences(document,{query='',kind='all',styles=[],content=[],reference='page',limit=6}={}){
+ const context=libraryContext(document,reference),results=[];
+ if(kind!=='techniques')for(const template of templateCatalog.templates.filter(templateEnabled)){
+  if(styles.length&&!styles.some(style=>template.styles.some(value=>normalized(value).includes(normalized(style))||normalized(style).includes(normalized(value)))))continue;
+  if(content.length&&!content.some(term=>template.content.some(value=>normalized(value).includes(normalized(term))||normalized(term).includes(normalized(value)))))continue;
+  const source=templateCatalog.sources.find(source=>source.id===template.sourceId);
+  const match=relevance(query,[['title',[template.title],35],['style',template.styles,25],['content',template.content,20],['family',[template.family],10],['source',[source?.title,source?.author],7]]);
+  if(query&&!match.hits.length&&match.overlap<.25)continue;
+  const fit=scoreTemplate(template,context.materials,context.paper,{styles:context.styles,content}),score=Math.round(match.score+fit.score*.25);
+  results.push({kind:'template',id:template.id,title:template.title,score,why:{matched:match.hits,materialFit:Math.round(fit.score),paperAspect:Math.round(fit.components.aspect*100)},styles:template.styles,content:template.content,source:{id:source?.id,title:source?.title,author:source?.author,url:source?.url},readWith:{tool:'read_template',id:template.id}});
+ }
+ if(kind!=='templates')for(const method of techniqueCatalog.methods){
+  if(styles.length||content.length)continue;
+  const match=relevance(query,[['title',[method.title],35],['purpose',[method.when],20],['method',[method.lesson?.principle],12],['skill',[method.skill],8]]);
+  if(query&&!match.hits.length&&match.overlap<.25)continue;
+  results.push({kind:'technique',id:method.id,title:method.title,score:match.score,why:{matched:match.hits},skill:method.skill,source:method.lesson?.source||null,readWith:{tool:'read_skill',name:method.skill,level:'detail',methodId:method.id}});
+ }
+ const remaining=results.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)),selected=[];
+ const sources=new Map(),skills=new Map();
+ while(remaining.length&&selected.length<limit){
+  let bestIndex=0,bestValue=-Infinity;
+  for(let i=0;i<remaining.length;i++){
+   const item=remaining[i],group=item.kind==='template'?item.source?.id:item.skill;
+   const count=(item.kind==='template'?sources:skills).get(group)||0;
+   const value=item.score-count*12;
+   if(value>bestValue){bestValue=value;bestIndex=i;}
+  }
+  const [item]=remaining.splice(bestIndex,1),group=item.kind==='template'?item.source?.id:item.skill;
+  const counts=item.kind==='template'?sources:skills;
+  counts.set(group,(counts.get(group)||0)+1);selected.push(item);
+ }
+ return {version:libraryVersion,query,reference,results:selected};
 }
 export function templateDetails(id){
  const template=templateCatalog.templates.find(t=>t.id===id);if(!template)throw Error('未知模板');
