@@ -365,7 +365,7 @@ function JournalTemplateImport({db,onClose,onSaved,onError}){
     }catch(error){onError(error);}finally{setBusy(false);}
   };
   return createPortal(<><div className="dialog-head"><h2>导入模板与案例</h2>
-      <button type="button" className="btn" data-template-import-back onClick={onClose}>返回模板</button></div>
+      <DetailBackButton data-template-import-back onClick={onClose}>返回模板</DetailBackButton></div>
     <form className="stack journal-template-import" onSubmit={save}>
       <label>模板名称<input name="title" maxLength="80" required placeholder="例如：双列时间轴"/></label>
       <label>结构说明<textarea name="structure" required placeholder="简述主图、文字、装饰与阅读顺序"/></label>
@@ -380,14 +380,21 @@ function JournalTemplateImport({db,onClose,onSaved,onError}){
     </form></>,host);
 }
 
+function DetailBackButton({children,onClick,...props}){
+  return <button type="button" className="detail-back" onClick={onClick} {...props}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+    <span>{children}</span>
+  </button>;
+}
+
 export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
-  const [filters,setFilters]=useState(()=>({query:'',type:'tool',status:'all',sort:'default-asc',
+  const [filters,setFilters]=useState(()=>({query:'',status:'all',sort:'default-asc',
     ...(viewState.templateFilters||{}),
     type:viewState.templateFilters?.type==='preset'?'tool':viewState.templateFilters?.type||'tool'}));
   const [selectedID,setSelectedID]=useState(viewState.templateID||null);
   const [side,setSide]=useState(viewState.templateSide||'template');
   const [importOpen,setImportOpen]=useState(false);
-  const [menu,setMenu]=useState(null);
+  const listScroll=useRef(null);
   const [,forceRefresh]=useState(0);
   const accountID=state.accountId;
   const catalog=[...executableJournalTemplates(),...presetJournalTemplates().map(item=>({...item,origin:'reference'})),...(state.userTemplates||[])];
@@ -396,7 +403,11 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
     const value={...filters,...next};setFilters(value);viewState.templateFilters=value;
     setSelectedID(null);viewState.templateID=null;
   };
-  const choose=item=>{setSelectedID(item.id);viewState.templateID=item.id;
+  useLayoutEffect(()=>{
+    if(selectedID)window.scrollTo(0,0);
+    else if(listScroll.current!==null){window.scrollTo(0,listScroll.current);listScroll.current=null;}
+  },[selectedID]);
+  const choose=item=>{listScroll.current=window.scrollY;setSelectedID(item.id);viewState.templateID=item.id;
     setSide('template');viewState.templateSide='template';};
   const found=catalog.filter(item=>{
     const query=filters.query.trim().toLocaleLowerCase();
@@ -425,8 +436,9 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
       value=>change({sort:basis+'-'+value})]
   ];
   const available=selected&&!!(selected.exampleBlobId||selected.exampleImagePath||selected.exampleSourceNumbers?.length);
-  const showCase=side==='case'&&available;
   const composition=journalTemplateComposition(selected);
+  const activeSide=(side==='case'&&!available)||(side==='elements'&&!composition)?'template':side;
+  const showCase=activeSide==='case';
   return <div className="works-page">{!selected?<div className="catalog-toolbar">
     <PageHeading title="我的作品"/>
     <CatalogTabs tabs={WORK_TABS} active="templates" onChange={onTabChange}/>
@@ -434,44 +446,31 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
       <input type="search" id="work-search" placeholder="搜索模板名称或标签"
         aria-label="搜索模板" value={filters.query}
         onChange={event=>change({query:event.currentTarget.value})}/>
-      <div className="four-filter-controls">{controls.map(([heading,glyph,value,options,update])=>{
-        const label=options.find(([id])=>id===value)?.[1]||'';
-        const longest=options.map(([,text])=>text).sort((a,b)=>b.length-a.length)[0]||'';
-        return <button type="button" key={heading} className="filter-control"
-          data-filter-heading={heading} title={`${heading}：${label}`}
-          aria-label={`${heading}：${label}${heading==='排序顺序'?'，点击切换':''}`}
-          aria-haspopup={heading==='排序顺序'?undefined:'menu'}
-          onClick={event=>{
-            if(heading==='排序顺序'){update(value==='asc'?'desc':'asc');return;}
-            const bounds=event.currentTarget.getBoundingClientRect();
-            setMenu(menu?.heading===heading?null:{heading,left:Math.max(8,
-              Math.min(bounds.left,window.innerWidth-258)),top:bounds.bottom+6,options,update});
-          }}><i aria-hidden="true">{glyph}</i><span>{label}</span>
-          <span className="filter-width-reserve" aria-hidden="true">{longest}</span>
-        </button>;
-      })}</div>
+      <div className="four-filter-controls">{controls.map(([heading,glyph,value,options,update])=><ReactFilterMenu
+        key={heading} heading={heading} glyph={glyph} value={value} options={options}
+        toggle={heading==='排序顺序'} onChange={update}/>)}</div>
       <span className="catalog-total">{found.length} 个{filters.type==='reference'?'参考案例':'模板'}</span>
     </div></div>:null}
     <div className={`grid works-grid journal-template-grid ${selected?'journal-template-detail':''}`}>
       {selected?<article className="journal-template-detail-card detail-page">
-        <div className="detail-topline"><button type="button" className="detail-back" data-template-back onClick={()=>{
+        <div className="detail-topline"><DetailBackButton data-template-back onClick={()=>{
           setSelectedID(null);viewState.templateID=null;
-        }}>‹　返回模板</button><span className="detail-category">{selected.origin==='preset'?'排版模板':selected.origin==='reference'?'参考案例':'我的模板'}</span></div>
+        }}>返回模板</DetailBackButton><span className="detail-category">{selected.origin==='preset'?'排版模板':selected.origin==='reference'?'参考案例':'我的模板'}</span></div>
         <section className="detail-columns"><div className="journal-template-preview">
         <div className="journal-template-switch" role="tablist" aria-label="模板展示方式">
-          <button type="button" className={`btn ${side==='template'?'primary':''}`}
-            role="tab" aria-selected={side==='template'}
+          <button type="button" className={`btn ${activeSide==='template'?'primary':''}`}
+            role="tab" aria-selected={activeSide==='template'}
             data-template-side="template" onClick={()=>{setSide('template');viewState.templateSide='template';}}>
             抽象模板</button>
-          <button type="button" className={`btn ${showCase?'primary':''}`}
-            role="tab" aria-selected={side==='case'}
-            data-template-side="case" disabled={!available}
-            onClick={()=>{setSide('case');viewState.templateSide='case';}}>{selected.exampleIsReference?'案例参考':'真实案例'}</button>
-          <button type="button" className={`btn ${side==='elements'?'primary':''}`}
-            role="tab" aria-selected={side==='elements'} data-template-side="elements"
+          {available?<button type="button" className={`btn ${showCase?'primary':''}`}
+            role="tab" aria-selected={showCase}
+            data-template-side="case"
+            onClick={()=>{setSide('case');viewState.templateSide='case';}}>{selected.exampleIsReference?'案例参考':'真实案例'}</button>:null}
+          <button type="button" className={`btn ${activeSide==='elements'?'primary':''}`}
+            role="tab" aria-selected={activeSide==='elements'} data-template-side="elements"
             disabled={!composition} onClick={()=>{setSide('elements');viewState.templateSide='elements';}}>元素构成</button>
-        </div>{side==='elements'&&composition?<JournalTemplateElements composition={composition}/>:
-          <JournalTemplateVisual key={`${selected.id}:${side}`} item={selected}
+        </div>{activeSide==='elements'?<JournalTemplateElements composition={composition}/>:
+          <JournalTemplateVisual key={`${selected.id}:${activeSide}`} item={selected}
             side={showCase?'case':'template'} db={db} accountId={state.accountId} detail/>}
         </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
           <h1>{selected.title}</h1><p className="detail-description">{selected.structure}</p>
@@ -496,13 +495,6 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
               className="chip" key={tag}>{tag}</span>)}</div></div>
         </button>):<p className="empty">没有匹配的模板，试试其他标签。</p>}</>}
     </div>
-    {menu?createPortal(<div className="swift-popover library-filter-menu" role="menu"
-      style={{position:'fixed',left:menu.left,top:menu.top,zIndex:70}}>
-      {menu.options.map(([value,label])=><button type="button" key={value}
-        role="menuitemradio" aria-checked={String(filters[menu.heading==='类型'?'type':
-          menu.heading==='状态'?'status':'sort']===value)}
-        onClick={()=>{menu.update(value);setMenu(null);}}>{label}</button>)}
-    </div>,document.body):null}
     {importOpen?<JournalTemplateImport db={db} onClose={()=>setImportOpen(false)}
       onSaved={record=>{if(state.accountId!==accountID)return;
         state.userTemplates=[...(state.userTemplates||[]),record];
@@ -1098,7 +1090,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
-    <details className="panel match-direction"><summary className="match-panel-head"><span className="match-panel-title"><h2>确定方向</h2><small>{[styles.filter(name=>name!=='随材而定'&&name!=='自动安排').join(' · '),chosenPurposes.filter(name=>name!=='自由创作').join(' · ')].filter(Boolean).join(' · ')||'随素材自由创作'}</small></span></summary>
+    <details className="panel match-direction"><summary className="match-panel-head"><span className="match-panel-title"><h2>确定方向</h2></span><span className="match-panel-state"><span className="when-closed">展开</span><span className="when-open">收起</span></span></summary>
       <div className="match-direction-body">
       <div className="match-creative-controls">
         <DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/>
@@ -1114,7 +1106,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       {scope.candidateAssetIDs.length&&guidance.summary?<p className="muted" data-creation-guidance>{guidance.summary}</p>:null}
       </div>
     </details>
-    <div className="matching-layout"><details className="panel match-stage-section" open><summary className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small></summary><div className="match-fold-body">
+    <div className="matching-layout"><details className="panel match-stage-section" open><summary className="match-panel-head"><h2>本页画布</h2><small>{stageItems.length} 件素材</small><span className="match-panel-state"><span className="when-closed">展开</span><span className="when-open">收起</span></span></summary><div className="match-fold-body">
       <div className="match-stage-settings"><select id="match-mode" aria-label="页面模式" value={state.matchMode} onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select>
         <select id="match-ratio" aria-label="纸张规格" value={state.matchRatio} onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></div>
       <div className="match-stage-board" style={{'--match-page-ratio':pageSize.width/pageSize.height}}><div className={`match-stage-paper ${state.matchMode==='single'?'single':''}`} ref={stageRef} onPointerDown={event=>{if(event.target===event.currentTarget)setActiveMaterial(null);}}>
@@ -1134,7 +1126,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
           <button type="button" data-act="basket" data-id={activeAsset.id} data-react-action="true" onClick={()=>{setActiveMaterial(null);onAction('basket',activeAsset.id);}}>移出本页</button></div></div>:<p className="match-stage-hint">点选素材可标星或移除，拖动素材可调整位置。</p>}</div>
       <p className="muted match-stage-count">必须 {scope.required.length} · 优先 {scope.preferred.length} · {(state.aiSettings.autoIncludeRecommendations||state.aiSettings.autoUsePresets)?'可选推荐 '+scope.available.length:'可选推荐未开启'}</p>
     </div></details>
-      <details className="panel match-recommendations" open><summary className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small></summary><div className="match-fold-body">
+      <details className="panel match-recommendations" open><summary className="match-panel-head"><h2>素材架</h2><small>{shelfRows.length} 件</small><span className="match-panel-state"><span className="when-closed">展开</span><span className="when-open">收起</span></span></summary><div className="match-fold-body">
         <div className="match-shelf-tabs" role="tablist" aria-label="素材来源">{[['recommend','智能搭配'],['all','全部素材'],['used','已使用素材']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={shelfTab===id} onClick={()=>{setShelfTab(id);setShelfLimit(80);}}>{label}</button>)}</div>
         <input className="match-shelf-search" type="search" value={shelfQuery} onChange={event=>{setShelfQuery(event.target.value);setShelfLimit(80);}} placeholder="搜索名称、标签或类型" aria-label="搜索素材"/>
         {shelfTab==='all'?<div className="match-shelf-filters"><select aria-label="筛选系列" value={shelfSeries} onChange={event=>{setShelfSeries(event.target.value);setShelfLimit(80);}}><option value="all">全部系列</option><option value="none">系列外</option>{state.series.map(series=><option key={series.id} value={series.id}>{series.title}</option>)}</select>
@@ -1579,7 +1571,7 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
   const act=name=>()=>onAction(name);
   return <div className="detail-page" data-react-page="assetDetail">
-    <div className="detail-topline"><button className="detail-back" data-act="detail-back" data-react-action="true" onClick={act('detail-back')}>‹　返回素材库</button>
+    <div className="detail-topline"><DetailBackButton data-act="detail-back" data-react-action="true" onClick={act('detail-back')}>返回素材库</DetailBackButton>
     <span className="detail-category">{asset.isCreativePreset?'预设素材':seriesTitle||'系列外'}</span></div>
     <section className="detail-columns"><div className="detail-picture"><span>▣　透明素材预览</span>
       <RouteImage asset={asset} source={source} priority/>

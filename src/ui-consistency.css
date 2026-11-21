@@ -81,7 +81,9 @@
 .material-editor-dialog .material-tag-fields{display:grid;gap:9px}
 /* Series context is a label beside the back action, never a floating heading. */
 #view .detail-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px}
-#view .detail-topline .detail-back{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:0}
+#view .detail-topline .detail-back{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0}
+#view .detail-back svg,#modal .detail-back svg{display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#modal .dialog-head>.detail-back{display:inline-flex;align-items:center;gap:7px;min-width:0;padding:0;border:0;border-radius:0;background:transparent;color:#52634b;font-size:15px}
 #view .detail-topline .detail-category{float:none;display:inline-flex;align-items:center;min-height:36px;text-align:right}
 /* Three numbered cutout controls are the step navigation and sit below the image. */
 #modal .cutout-steps button{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:34px;padding:5px 3px;border:0;border-radius:9px;background:#eef2e9;color:#667862;font-size:clamp(10px,2.5vw,12px);line-height:1.2;cursor:pointer}
@@ -151,7 +153,8 @@
 .journal-template-detail-card .detail-topline{display:flex;align-items:center;justify-content:space-between}
 .journal-template-detail-card .detail-category{float:none}
 .journal-template-preview{width:100%;max-width:560px;min-width:0;border:1px solid #e2e5db;border-radius:12px;background:#eef2e9;padding:12px}
-.journal-template-preview .journal-template-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 10px}
+.journal-template-preview .journal-template-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 10px}
+.journal-template-preview .journal-template-switch:has([data-template-side="case"]){grid-template-columns:repeat(3,minmax(0,1fr))}
 .journal-template-preview .journal-template-switch .btn{min-width:0;padding:8px 3px;border-radius:10px;font-size:13px}
 .journal-template-preview .journal-template-switch .btn:disabled{opacity:.45}
 .journal-template-preview .journal-template-detail-image{position:relative;width:100%;min-height:0;aspect-ratio:1;max-height:none;background:transparent}
@@ -171,15 +174,15 @@
 .matching-page .matching-layout>.match-stage-section,
 .matching-page .matching-layout>.match-recommendations{padding:0}
 .matching-page .match-direction>.match-panel-head,
-.matching-page .matching-layout>.panel>.match-panel-head{display:flex;align-items:center;height:62px;min-height:62px;box-sizing:border-box;padding:10px 16px;gap:10px;border-bottom:1px solid transparent;background:#f4f7f1;border-radius:14px;list-style:none;cursor:pointer}
+.matching-page .matching-layout>.panel>.match-panel-head{display:flex;align-items:center;height:50px;min-height:50px;box-sizing:border-box;padding:7px 14px;gap:8px;border-bottom:1px solid transparent;background:#f4f7f1;border-radius:14px;list-style:none;cursor:pointer}
 .matching-page details[open]>.match-panel-head{border-bottom-color:#e2e9df;border-radius:14px 14px 0 0}
 .matching-page .match-panel-head::-webkit-details-marker{display:none}
 .matching-page .match-panel-head h2{flex:none;margin:0;font-size:18px;line-height:1.3}
 .matching-page .match-panel-title{display:grid;gap:2px;min-width:0;flex:1}
-.matching-page .match-panel-title small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#718273;font-size:11px}
 .matching-page .match-panel-head>small{margin-left:auto;white-space:nowrap}
-.matching-page .match-panel-head::after{display:grid;place-items:center;flex:none;width:29px;height:29px;border-radius:50%;background:#e3eae0;content:'⌄';font-size:18px;color:#45604a;transition:transform .18s}
-.matching-page details:not([open])>.match-panel-head::after{transform:rotate(-90deg)}
+.matching-page .match-panel-head::after{display:none;content:none}
+.matching-page .match-panel-state{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:34px;margin-left:6px;color:#52634b;font-size:13px;font-weight:500;white-space:nowrap}
+.matching-page details[open]>.match-panel-head .when-closed,.matching-page details:not([open])>.match-panel-head .when-open{display:none}
 .matching-page .match-direction-body{padding:12px 16px 16px;border:0}
 .matching-page .match-fold-body{padding:0 16px 16px}
 /* Range controls must not inherit the text field's 11px side padding. That
