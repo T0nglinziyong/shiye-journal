@@ -218,6 +218,42 @@
       }
     },
     {
+      "id": "title-tape",
+      "skill": "journal-lettering",
+      "title": "半透明胶带标题",
+      "recipe": "title",
+      "when": "短标题需要轻薄底色，与附近纸片或照片连成局部图文组",
+      "defaults": {
+        "treatment": "tape",
+        "pattern": "stripes"
+      },
+      "example": {
+        "text": "散步手记",
+        "fontFamily": "HongLeiZhuoShu",
+        "widthMm": 56,
+        "colors": ["#304B42", "#809588", "#E7DAC0"],
+        "tapeOpacity": 0.55
+      },
+      "lesson": {
+        "principle": "根据实际字行生成轻薄的可编辑数字胶带，让标题和相邻素材有接触关系，而不是铺满一张底卡。",
+        "steps": [
+          "从相邻素材取字色、胶带纹样色与底色",
+          "按完整标题和可用宽度决定换行；长标题每行各有短胶带",
+          "把标题组跨在纸片或照片的边缘，观察真实预览后调整位置与透明度。"
+        ],
+        "check": [
+          "标题文字完整且可读",
+          "胶带没有遮住主体和关键印刷字",
+          "数字胶带未被误算为实体素材。"
+        ],
+        "source": {
+          "kind": "project-synthesis",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "受 journal-page 的标题与胶带连接关系启发；拾页独立实现可编辑 Scene 图形，未复制其代码或案例图片。"
+        }
+      }
+    },
+    {
       "id": "title-label",
       "skill": "journal-lettering",
       "title": "标签承载标题",

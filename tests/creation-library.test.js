@@ -90,6 +90,19 @@ test('long titles retain their full content and unsupported parameters are expli
  const doc=await document([]);assert.equal(apply(doc,compiled.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'x',text:'你好',dangerous:1}}),/不支持/);
 });
+test('tape title follows actual wrapped lines and remains an editable digital group',async()=>{
+ const content='今天沿着河岸慢慢走，看见了很久没有留意的颜色';
+ const compiled=compileTechnique({methodId:'title-tape',parameters:{id:'tape-title',text:content,widthMm:35,fontFamily:'HongLeiZhuoShu',pattern:'grid',tapeOpacity:.48}});
+ const children=compiled.operations[0].children,text=children.find(o=>o.op==='text.add'&&o.content===content);
+ const tapes=children.filter(o=>/^tape-title-tape\d+$/.test(o.id));
+ assert.ok(tapes.length>1,'wrapped lines need separate tape strips');
+ assert.equal(text.style.fontFamily,'HongLeiZhuoShu');
+ assert.ok(tapes.every(o=>o.geometry.kind==='path'&&o.style.fillOpacity===.48));
+ assert.ok(children.indexOf(text)>children.indexOf(tapes.at(-1)),'text is above tape');
+ assert.ok(children.every(o=>o.op!=='material.add'),'digital tape does not consume real materials');
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-tape',parameters:{id:'invalid-tape',text:'短题',tapeOpacity:1}}),/透明度/);
+});
 test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
  const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};
  const compiled=compileTechnique({methodId:'title-underline',parameters});

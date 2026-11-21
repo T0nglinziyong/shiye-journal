@@ -6,7 +6,7 @@ const extent=(text,fontSize)=>segments(text).reduce((sum,ch)=>sum+fontSize*pt*(/
 const roles={primary:1.35,secondary:.78,normal:1};
 const at=(x,y)=>({reference:'parent',at:[x,y],unit:'mm',anchor:'top-left'});
 
-export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm'];
+export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm','tapeOpacity'];
 export const titleHelp={
  runs:'可选词组数组；每项 {text,role:primary|secondary|normal,fontFamily?,breakBefore?,rotationDeg?,offsetMm?,style?}。fontFamily 可给某个词组换字体；text 拼接必须等于完整标题；按词义分组，不随机旋转每字',
  emphasis:'需底色或圈注的精确词组，必须在 text 中出现；多个同词默认均强调',
@@ -14,6 +14,7 @@ export const titleHelp={
  curveHeightMm:'弧形标题弯曲高度，-80–80 mm；正负改变方向，必须单行',
  caption:'标题旁的小注，用户事实或本任务允许的随写；不自动编造',
  captionFontFamily:'小注字体；默认沿用标题字体，可选预装字体或本机已安装字体',
+ tapeOpacity:'数字胶带透明度，0.15–0.9；只影响标题后的胶带，不改变文字或真实素材',
  gapMm:'词组间距，0–20 mm'
 };
 
@@ -21,6 +22,7 @@ export function validateTitle(p){
  if(p.emphasis!==undefined&&(typeof p.emphasis!=='string'||!p.emphasis.trim()||!p.text.includes(p.emphasis)))throw Error('强调词必须出现在完整标题中');
  if(p.curveHeightMm!==undefined&&(!Number.isFinite(p.curveHeightMm)||Math.abs(p.curveHeightMm)>80))throw Error('弧高须为 -80–80 mm');
  if(p.gapMm!==undefined&&p.gapMm>20)throw Error('词组间距须为 0–20 mm');
+ if(p.tapeOpacity!==undefined&&(!Number.isFinite(p.tapeOpacity)||p.tapeOpacity<.15||p.tapeOpacity>.9))throw Error('数字胶带透明度须为 0.15–0.9');
  if(p.style!==undefined&&(!p.style||typeof p.style!=='object'||Array.isArray(p.style)))throw Error('标题 style 无效');
  if(p.runs!==undefined){
   if(!Array.isArray(p.runs)||!p.runs.length||p.runs.length>24)throw Error('词组须为 1–24 项');
@@ -100,6 +102,22 @@ export function compileTitle(p,{widthExplicit=false}={}){
  if(p.treatment==='seal')height=Math.max(height,width);
  if(p.caption){const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:p.captionFontFamily||style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
  if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,p.treatment==='seal'?width:height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
+ if(p.treatment==='tape'){
+  const lines=mainTexts.flatMap(t=>t.inkLines);
+  for(const [index,line] of lines.entries()){
+   const x=Math.max(0,line.x-2),y=Math.max(0,line.y+line.height*.12),w=Math.min(width-x,line.width+4),h=Math.max(2.4,line.height*1.15);
+   const notch=Math.min(.7,h*.18),d=`M 0 0 L ${w} 0 L ${w-notch} ${h*.24} L ${w} ${h*.47} L ${w-notch} ${h*.72} L ${w} ${h} L 0 ${h} L ${notch} ${h*.75} L 0 ${h*.53} L ${notch} ${h*.27} Z`;
+   background.push({op:'graphic.add',id:p.id+'-tape'+index,geometry:{kind:'path',viewBox:[0,0,w,h],paths:[{d}]},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:ground,fillOpacity:p.tapeOpacity??.62,stroke:accent,strokeWidthMm:.12}});
+   if(p.pattern==='dots')for(let dx=2;dx<w-1;dx+=3.8)background.push(shape('ellipse',x+dx,y+h*.75,.45,.45,{fill:accent,fillOpacity:.34}));
+   if(p.pattern==='stripes'||p.pattern==='grid'){
+    const paths=[];
+    for(let dx=2;dx<w-1;dx+=4.2)paths.push({d:p.pattern==='stripes'?`M ${dx} ${h*.85} L ${Math.min(w-1,dx+1.8)} ${h*.15}`:`M ${dx} ${h*.15} L ${dx} ${h*.85}`});
+    if(p.pattern==='grid')paths.push({d:`M 1 ${h*.5} L ${w-1} ${h*.5}`});
+    background.push({op:'graphic.add',id:p.id+'-tape-pattern'+index,geometry:{kind:'path',viewBox:[0,0,w,h],paths},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:null,stroke:accent,strokeWidthMm:.12,opacity:.34}});
+   }
+  }
+  notes.push('标题后方为可编辑数字胶带，不消耗实体胶带来源。');
+ }
  if(p.treatment==='underline'){
   const last=mainTexts.at(-1),bottom=last.y+last.inkHeight;
   const sameRow=last.lineCount===1?mainTexts.filter(t=>t.lineCount===1&&Math.abs(t.y-last.y)<1):[last];
@@ -108,7 +126,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
   children.push({op:'graphic.add',id:p.id+'-underline',geometry:{kind:'stroke',unit:'mm',points:Array.from({length:9},(_,i)=>({x:i*lineWidth/8,y:Math.sin(i*.8)*.22,pressure:.6}))},place:at(left,bottom+1),style:{stroke:accent,strokeWidthMm:.55,penStyle:'fountain'}});
   height=Math.max(height,bottom+5);
  }
- if(p.pattern&&p.pattern!=='plain'){
+ if(p.pattern&&p.pattern!=='plain'&&p.treatment!=='tape'){
   const count=p.count||8;
   for(let i=0;i<count;i++){
    const x=(i+.5)*width/count;
