@@ -21,15 +21,26 @@ test('an outdated task contract fails before any model invocation',async()=>{
   assert.throws(()=>initialHarnessState({document,skills:{catalog(){throw Error('must not load');}},brief:{}}),/合同已变化/);
 });
 
-test('only superseded automatic previews are pruned; sources, tool pairs and reasoning remain unchanged',()=>{
+test('model context keeps the global index and recent tool pair while dropping superseded previews',()=>{
+  const system={role:'system',content:'system'};
   const source={role:'user',content:[{type:'image_url',image_url:{url:'source'}}]};
   const reasoning={role:'assistant',reasoning_content:'required provider reasoning',tool_calls:[{id:'call'}]};
   const receipt={role:'tool',tool_call_id:'call',content:'receipt'};
   const previews=Array.from({length:5},(_,i)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+i+'\n最新 Scene：many coordinates'},{type:'image_url',image_url:{url:'preview'+i}}]}));
-  const input=[source,reasoning,receipt,...previews],before=JSON.stringify(input),out=modelContext(input);
-  assert.equal(out[0],source);assert.equal(out[1],reasoning);assert.equal(out[2],receipt);assert.equal(out.at(-1),previews.at(-1));assert.equal(out.at(-2),previews.at(-2));
-  assert.equal(out.filter(m=>Array.isArray(m.content)).length,3);assert.equal(JSON.stringify(input),before);
-  assert.match(out[3].content,/历史预览/);assert.doesNotMatch(out[3].content,/many coordinates/);
+  const input=[system,source,reasoning,receipt,...previews],before=JSON.stringify(input),out=modelContext(input);
+  assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2],reasoning);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
+  assert.equal(out.filter(m=>Array.isArray(m.content)).length,2);assert.equal(JSON.stringify(input),before);
+});
+
+test('model context stays bounded as checkpoint history grows',()=>{
+ const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'text',text:'素材索引'},{type:'image_url',image_url:{url:'index'}}]};
+ const messages=[system,index];
+ for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
+ const out=modelContext(messages);
+ assert.equal(out[0],system);assert.deepEqual(out[1],index);
+ assert.ok(out.length<=8);assert.equal(out.filter(m=>m.role==='assistant').length,2);
+ assert.equal(out.filter(m=>m.role==='tool').length,2);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
+ assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
 });
 
 test('skill routing uses explicit direction and respects no-text tasks',async()=>{

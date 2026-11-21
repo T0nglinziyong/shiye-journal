@@ -19,7 +19,7 @@ export function initialToolGuide(document){
   if(document.source.textMode!=='none')topics.push('text.add','text.lettering');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   return {catalog:creationHelp(),common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全部素材图与尺寸已加载，直接使用；只有未提供的参数才查询帮助。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切，不能当胶带延展。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 必须同时提供 geometry.unit="mm" 与 points=[{x,y,pressure}]。style 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
+    notes:['常用操作、全局素材编号图与尺寸已加载；只有未提供的参数才查询帮助。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切，不能当胶带延展。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','letters.index 从 0 开始；所有颜色（含 shadow.color）用六位 HEX。','geometry.kind=stroke 必须同时提供 geometry.unit="mm" 与 points=[{x,y,pressure}]。style 使用 stroke、strokeWidthMm、penStyle；透明度用 opacity，不要带 fill（即使是 null）、fillOpacity、strokeOpacity。','penStyle 仅用于笔迹，sketch 图形使用 stroke 和 strokeWidthMm。']};
 }
 
 export function materialBrief(document){
@@ -32,7 +32,7 @@ export function materialBrief(document){
 
 export function automaticSceneFeedback(document){
   const inspection=inspectCreationDocument(document),byID=new Map(inspection.layers.map(l=>[l.id,l]));
-  const visible=l=>!l.hidden&&l.opacity>0&&(!l.parent||visible(byID.get(l.parent)));
+  const visible=l=>l.surface==='page'&&!l.hidden&&l.opacity>0&&(!l.parent||visible(byID.get(l.parent)));
   const placed=new Set(inspection.layers.filter(l=>l.asset&&visible(l)).map(l=>l.asset));
   const required=materialBrief(document).filter(m=>m.required).map(m=>({alias:m.alias,title:m.title,present:placed.has(m.alias)}));
   let finalValidation={ok:true};
@@ -41,13 +41,21 @@ export function automaticSceneFeedback(document){
   return {required,finalValidation};
 }
 
-// Keep the full journal for recovery; only superseded automatic preview payloads
-// are shortened in the API view. Tool receipts and reasoning remain intact.
-export function modelContext(messages){
-  const previews=[];
-  messages.forEach((m,i)=>{if(m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text?.startsWith('当前真实画面：'))previews.push(i);});
-  const obsolete=new Set(previews.slice(0,-2));
-  return messages.map((m,i)=>obsolete.has(i)?{role:'user',content:m.content[0].text.split('\n')[0]+'\n历史预览已由后面的最新画面替代；完整记录保留在检查点。'}:m);
+export function modelContext(messages,state={}){
+  if(messages.length<=2)return messages;
+  const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
+  const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||i===parts.findIndex(p=>p.type==='image_url'))}:first;
+  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=turns.at(-2)??turns.at(0)??2;
+  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
+  const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview);
+  const recent=tail.filter((message,i)=>!isPreview(message)||i===lastPreview);
+  if(!state.document)return [messages[0],index,...recent];
+  const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
+  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','creation_help'].includes(names.get(message.tool_call_id))).flatMap(message=>{
+    try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,3500)}]:[];}catch{return [];}
+  }).slice(-3);
+  const summary={plan:state.plan,spaces:state.spaces,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),undoAvailable:(state.undoStack||[]).length,review:state.review?.approved?'approved':null};
+  return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
 }
 
 export function iterationAdvice(messages){

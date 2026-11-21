@@ -24,7 +24,7 @@ const skills=await loadCreationSkills(),renderer=await createHarnessRenderer({so
 }}),network=createCreativeNetwork({dns:process.env.SHIYE_CREATIVE_DNS||'system'}),start=Date.now();
 const harness=createCreativeHarness({skills,...renderer,checkpointer:await new JournalCheckpointSaver(fileCheckpointJournal(join(output,'checkpoint.jsonl'))).restore(),model:createDeepSeekCreativeModel({key:process.env.SHIYE_CREATIVE_API_KEY,effort:'high',fetcher:network.fetcher}),onProgress:event=>console.log(JSON.stringify(event))});
 try{
- const state=initialHarnessState({document,skills,brief:{intent:document.source.intent},images:await renderer.inspectMaterials(assets.map(a=>a.alias))});
+ const state=initialHarnessState({document,skills,brief:{intent:document.source.intent},tray:await renderer.index(document)});
  const result=await harness.run({id:'library-synthetic',state});
  const calls=result.messages.filter(m=>m.role==='assistant').flatMap(m=>(m.tool_calls||[]).map(c=>({name:c.function.name,args:JSON.parse(c.function.arguments)})));
  const report={status:result.status,synthetic:true,liveApp:false,totalMs:Date.now()-start,turns:result.turns,usage:result.usage,preview:result.preview,review:result.review,calls};await writeFile(join(output,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({status:report.status,turns:report.turns,totalMs:report.totalMs}));
