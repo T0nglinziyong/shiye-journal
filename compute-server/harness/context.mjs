@@ -45,7 +45,7 @@ export function modelContext(messages,state={}){
   if(messages.length<=2)return messages;
   const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
   const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||i===parts.findIndex(p=>p.type==='image_url'))}:first;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=turns.at(-2)??turns.at(0)??2;
+  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=Number.isInteger(state.compactedUntil)?state.compactedUntil:turns.at(-2)??turns.at(0)??2;
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview);
   const recent=tail.filter((message,i)=>!isPreview(message)||i===lastPreview);
@@ -54,8 +54,35 @@ export function modelContext(messages,state={}){
   const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','creation_help'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,3500)}]:[];}catch{return [];}
   }).slice(-3);
-  const summary={plan:state.plan,spaces:state.spaces,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),undoAvailable:(state.undoStack||[]).length,review:state.review?.approved?'approved':null};
+  const summary={creativeMemory:state.creativeMemory||null,plan:state.plan,spaces:state.spaces,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),undoAvailable:(state.undoStack||[]).length,review:state.review?.approved?'approved':null};
   return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
+}
+
+export function creativeCompactionCandidate(messages,state={}){
+  const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
+  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
+  const cutoff=turns.at(-2);
+  if(!Number.isInteger(cutoff)||cutoff<=from)return null;
+  const older=messages.slice(from,cutoff);
+  if(older.filter(message=>message.role==='assistant').length<4)return null;
+  return {cutoff,history:creativeCompactionTranscript(older)};
+}
+
+export function creativeCompactionTranscript(messages){
+  const compactCall=call=>{
+    const name=call.function?.name;
+    let args;try{const parsed=JSON.parse(call.function?.arguments||'{}');args=parsed&&typeof parsed==='object'?parsed:{};}catch{return {name,invalidArguments:true};}
+    if(name==='creation_apply')return {name,transactionId:args.transactionId,operations:(Array.isArray(args.operations)?args.operations:[]).map(raw=>{const op=raw&&typeof raw==='object'?raw:{};return {op:op.op,id:op.id,target:op.target,asset:op.asset,content:typeof op.content==='string'?op.content.slice(0,120):undefined,size:op.size,fontFamily:op.style?.fontFamily,surface:op.place?.surface||op.patch?.place?.surface,reference:op.place?.reference,at:op.place?.at,rotationDeg:op.place?.rotationDeg};})};
+    return {name,args:JSON.stringify(args).slice(0,800)};
+  };
+  return messages.map(message=>{
+    if(message.role==='assistant')return {role:'assistant',text:typeof message.content==='string'?message.content.slice(0,1000):'',calls:(message.tool_calls||[]).map(compactCall)};
+    if(message.role==='tool'){
+      try{const receipt=JSON.parse(message.content);return {role:'tool',ok:receipt.ok,code:receipt.code,detail:String(receipt.detail||'').slice(0,500)};}catch{return {role:'tool',detail:String(message.content).slice(0,300)};}
+    }
+    if(message.role==='user'&&typeof message.content==='string')return {role:'user',text:message.content.slice(0,500)};
+    return null;
+  }).filter(Boolean);
 }
 
 export function iterationAdvice(messages){

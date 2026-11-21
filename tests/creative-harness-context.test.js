@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,preloadCreationSkills,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
+import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,preloadCreationSkills,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 
 test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
@@ -41,6 +41,38 @@ test('model context stays bounded as checkpoint history grows',()=>{
  assert.ok(out.length<=8);assert.equal(out.filter(m=>m.role==='assistant').length,2);
  assert.equal(out.filter(m=>m.role==='tool').length,2);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
  assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
+});
+
+test('creative compaction carries design decisions and rejected attempts into later turns',async()=>{
+ const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'image_url',image_url:{url:'index'}}]}];
+ for(let i=0;i<7;i++)messages.push(
+   {role:'assistant',content:i===1?'试过居中排布，但主图太拥挤，改为左侧留白。':null,reasoning_content:'private reasoning',tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:JSON.stringify({transactionId:'t'+i,operations:[{op:'layer.update',target:'photo',place:{surface:'page',at:[i,40]}}]})}}]},
+   {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
+   {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
+ );
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2});
+ assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,5);
+ assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
+ assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const {draft}=await import('../src/domain.js');
+ const state={compactedUntil:candidate.cutoff,creativeMemory:'居中排布拥挤，改为左侧留白。',document:await createCreationDocument({draft:draft(),assets:[]})};
+ const out=modelContext(messages,state);
+ assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
+ assert.equal(out.filter(m=>m.role==='assistant').length,2);
+ assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,2);
+});
+
+test('malformed historical tool arguments cannot break compaction',()=>{
+ const history=creativeCompactionTranscript([{role:'assistant',tool_calls:[
+   {function:{name:'creation_apply',arguments:'null'}},
+   {function:{name:'creation_apply',arguments:'{"operations":{}}'}},
+   {function:{name:'creation_apply',arguments:'not json'}}
+ ]}]);
+ assert.equal(history[0].calls.length,3);
+ assert.deepEqual(history[0].calls[0].operations,[]);
+ assert.deepEqual(history[0].calls[1].operations,[]);
+ assert.equal(history[0].calls[2].invalidArguments,true);
 });
 
 test('skill routing uses explicit direction and respects no-text tasks',async()=>{
