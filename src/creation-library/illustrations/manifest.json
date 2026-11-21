@@ -626,6 +626,54 @@
       "height": 149
     },
     {
+      "id": "title-cross-shadow",
+      "file": "title-cross-shadow.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "3bb2be106a102a84f2bd10812acce81a5a15e6fccc0426aeee1534498d2cc8b6",
+      "width": 360,
+      "height": 114
+    },
+    {
+      "id": "title-scattered-round",
+      "file": "title-scattered-round.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "d6945dcefd74e08e505dfef1a40516d8ac233f41418df3816ac978db10e8d372",
+      "width": 360,
+      "height": 169
+    },
+    {
+      "id": "title-scattered-triangle",
+      "file": "title-scattered-triangle.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "f78213c097b8aca9cb34ae14933369a8c5070df881a0497fb9a5aa9f25a6f243",
+      "width": 360,
+      "height": 163
+    },
+    {
+      "id": "title-number-route",
+      "file": "title-number-route.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "c1798163a2c599bd525b4ff4ad11edba3806893357953fe37a53465f6efc80ae",
+      "width": 360,
+      "height": 97
+    },
+    {
+      "id": "title-script-dots",
+      "file": "title-script-dots.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "d9ae0888890b7cab9d5d1b9f61bc871e699ffa5e26ecf387b1e62ff27b12b158",
+      "width": 360,
+      "height": 124
+    },
+    {
+      "id": "title-paper-lettering",
+      "file": "title-paper-lettering.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "496de1f203368bc688ccabf20364ab50000cf4b0d6ec43c36a7c83d2ddae843a",
+      "width": 360,
+      "height": 171
+    },
+    {
       "id": "title-underline",
       "file": "title-underline.png",
       "kind": "rendered-editable-commands",
@@ -645,9 +693,9 @@
       "id": "title-highlight",
       "file": "title-highlight.png",
       "kind": "rendered-editable-commands",
-      "sha256": "91b775d5330881d064ed1cfe661489d969433d1b23df81efe52fddb087426273",
+      "sha256": "c90795602ac3e65e7935e7b1f013e3db98887cb6b37bcfb8eb7a865b1095c70f",
       "width": 360,
-      "height": 113
+      "height": 101
     },
     {
       "id": "title-stack",
@@ -669,17 +717,17 @@
       "id": "title-stagger",
       "file": "title-stagger.png",
       "kind": "rendered-editable-commands",
-      "sha256": "1cf29c607dbc2bd2ac326b7841cd4ebc256187a689bd9de1d0e143d0d36df4e0",
+      "sha256": "4defd152ccb250fe635ea369d2472cd760edf8db0d45bda5d57685f0b3724417",
       "width": 360,
-      "height": 173
+      "height": 151
     },
     {
       "id": "title-label",
       "file": "title-label.png",
       "kind": "rendered-editable-commands",
-      "sha256": "3db9fa62c16d163eaceeded6d475636729e454ddab8b0f1e8237df812f0449ef",
+      "sha256": "627db55376db110e6151674952730f089efacd65f595710d9749740d78b8bc1b",
       "width": 360,
-      "height": 126
+      "height": 125
     },
     {
       "id": "title-curve",
@@ -925,17 +973,17 @@
       "id": "title-phrases",
       "file": "title-phrases.png",
       "kind": "rendered-editable-commands",
-      "sha256": "ece7cf3d9f8547ba4f93e30cfde58f1a286e8aba7acc5a607a5a896d472d8b03",
+      "sha256": "859f9a9ffc8874d55667f27d05dc24cf40dba69e2adf12ccf9919110a2ec1159",
       "width": 360,
-      "height": 288
+      "height": 259
     },
     {
       "id": "title-circle",
       "file": "title-circle.png",
       "kind": "rendered-editable-commands",
-      "sha256": "dbb96eddc8ce9b6eb36c56ce8f6b117531fdd08fc54cad5864d4f401b6bd8ee7",
+      "sha256": "31e141798a50db56269fd71cbc2727d99f57451b2629d91a3446a635cdd2b980",
       "width": 360,
-      "height": 136
+      "height": 121
     },
     {
       "id": "title-caption",

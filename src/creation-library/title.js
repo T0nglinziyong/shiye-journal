@@ -6,7 +6,7 @@ const extent=(text,fontSize)=>segments(text).reduce((sum,ch)=>sum+fontSize*pt*(/
 const roles={primary:1.35,secondary:.78,normal:1};
 const at=(x,y)=>({reference:'parent',at:[x,y],unit:'mm',anchor:'top-left'});
 
-export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm','tapeOpacity'];
+export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm','tapeOpacity','backdrop'];
 export const titleHelp={
  runs:'可选词组数组；每项 {text,role:primary|secondary|normal,fontFamily?,breakBefore?,rotationDeg?,offsetMm?,style?}。fontFamily 可给某个词组换字体；text 拼接必须等于完整标题；按词义分组，不随机旋转每字',
  emphasis:'需底色或圈注的精确词组，必须在 text 中出现；多个同词默认均强调',
@@ -15,7 +15,8 @@ export const titleHelp={
  caption:'标题旁的小注，用户事实或本任务允许的随写；不自动编造',
  captionFontFamily:'小注字体；默认沿用标题字体，可选预装字体或本机已安装字体',
  tapeOpacity:'数字胶带透明度，0.15–0.9；只影响标题后的胶带，不改变文字或真实素材',
- gapMm:'词组间距，0–20 mm'
+ gapMm:'词组间距，0–20 mm',
+ backdrop:'可编辑文字底形 {kind:paper|band|brush|oval|dots|none,paddingMm?:1–8,color?:HEX,opacity?:0.1–1,pattern?:plain|dots|stripes|grid,patternColor?:HEX,densityMm?:2–12}；自动随字行宽度变化'
 };
 
 export function validateTitle(p){
@@ -24,6 +25,15 @@ export function validateTitle(p){
  if(p.gapMm!==undefined&&p.gapMm>20)throw Error('词组间距须为 0–20 mm');
  if(p.tapeOpacity!==undefined&&(!Number.isFinite(p.tapeOpacity)||p.tapeOpacity<.15||p.tapeOpacity>.9))throw Error('数字胶带透明度须为 0.15–0.9');
  if(p.style!==undefined&&(!p.style||typeof p.style!=='object'||Array.isArray(p.style)))throw Error('标题 style 无效');
+ if(p.backdrop!==undefined){
+  const b=p.backdrop;
+  if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!['kind','paddingMm','color','opacity','pattern','patternColor','densityMm'].includes(k))||!['paper','band','brush','oval','dots','none'].includes(b.kind))throw Error('文字底形参数无效');
+  if(b.paddingMm!==undefined&&(!Number.isFinite(b.paddingMm)||b.paddingMm<1||b.paddingMm>8))throw Error('文字底形边距须为 1–8 mm');
+  if(b.opacity!==undefined&&(!Number.isFinite(b.opacity)||b.opacity<.1||b.opacity>1))throw Error('文字底形透明度须为 0.1–1');
+  if(b.densityMm!==undefined&&(!Number.isFinite(b.densityMm)||b.densityMm<2||b.densityMm>12))throw Error('文字底形纹样间距须为 2–12 mm');
+  if(b.pattern!==undefined&&!['plain','dots','stripes','grid'].includes(b.pattern))throw Error('文字底形纹样无效');
+  for(const c of [b.color,b.patternColor])if(c!==undefined&&!/^#[\da-f]{6}$/i.test(c))throw Error('文字底形颜色须为 HEX');
+ }
  if(p.runs!==undefined){
   if(!Array.isArray(p.runs)||!p.runs.length||p.runs.length>24)throw Error('词组须为 1–24 项');
   for(const r of p.runs){
@@ -49,11 +59,11 @@ export function compileTitle(p,{widthExplicit=false}={}){
  const style={fontFamily:p.fontFamily||'Xiaolai',fontSizePt:fontSize,color:colors[0]};
  if(p.treatment==='outline')Object.assign(style,{fillOpacity:0,outline:{color:colors[0],widthMm:.35,offsetMm:[0,0]}});
  if(p.treatment==='offset-outline')style.outline={color:accent,widthMm:.4,offsetMm:[.6,.7]};
- if(p.treatment==='shadow')style.shadow={color:accent,offsetMm:[.6,.7],blurMm:.1};
+ if(['shadow','cross-shadow'].includes(p.treatment))style.shadow={color:accent,offsetMm:[.6,.7],blurMm:.1};
  if(['gradient','gradient-outline'].includes(p.treatment))style.gradient={angleDeg:90,stops:[{offset:0,color:accent},{offset:1,color:colors[0]}]};
  if(p.treatment==='gradient-outline')style.outline={color:colors[0],widthMm:.35,offsetMm:[0,0]};
  Object.assign(style,p.style);
- const children=[],texts=[],background=[],notes=[];let next=0;
+ const children=[],texts=[],background=[],overlay=[],notes=[];let next=0;
  const shape=(kind,x,y,w,h,paint={})=>({op:'graphic.add',id:p.id+'-mark'+(++next),geometry:{kind},place:at(x,y),size:{width:w,height:h,unit:'mm'},style:{fill:accent,...paint}});
  const addText=(content,x,y,w,s)=>{
   const size=s.fontSizePt||fontSize,rowHeight=size*pt*(s.lineHeight||1.3),lineWidth=Math.max(1,w-1);
@@ -105,8 +115,18 @@ export function compileTitle(p,{widthExplicit=false}={}){
  const mainTexts=texts.slice();
  let height=Math.max(p.heightMm||14,...texts.map(t=>t.y+t.h+5));
  if(p.treatment==='seal')height=Math.max(height,width);
- if(p.caption){const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:p.captionFontFamily||style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
- if(['label','bubble','seal'].includes(p.treatment))background.unshift(shape(['bubble','seal'].includes(p.treatment)?'ellipse':'rect',0,0,width,p.treatment==='seal'?width:height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
+ if(p.caption){
+  if(p.treatment==='cross-shadow'){
+   const first=mainTexts[0],available=width-12,initial=Math.min(9,fontSize*.34),needed=extent(p.caption,initial)*1.2+3;
+   const small=needed>available?initial*(available-3)/(needed-3):initial;
+   if(small<6||p.caption.includes('\n'))throw Error('穿字横带的小字过长；缩短 caption 或增大 widthMm');
+   const w=Math.min(available,extent(p.caption,small)*1.2+3),y=first.y+first.inkHeight*.68;
+   overlay.push(shape('rect',Math.max(2,first.x+first.w*.5-w*.5)-1,y-.35,w+2,small*pt*1.2+.7,{fill:ground,fillOpacity:.82}));
+   const t=addText(p.caption,Math.max(3,first.x+first.w*.5-w*.5),y,w,{fontFamily:p.captionFontFamily||style.fontFamily,fontSizePt:small,color:colors[0]});
+   overlay.push(t.op);height=Math.max(height,t.y+t.h+5);
+  }else{const y=p.treatment==='seal'?width+3:Math.max(...texts.map(t=>t.y+t.inkHeight))+3;const t=addText(p.caption,5,y,width-10,{fontFamily:p.captionFontFamily||style.fontFamily,fontSizePt:Math.min(12,fontSize*.65),color:colors[0]});height=t.y+t.h+5;}
+ }
+ if(['bubble','seal'].includes(p.treatment))background.unshift(shape('ellipse',0,0,width,p.treatment==='seal'?width:height,{fill:ground,...(p.treatment==='seal'?{stroke:colors[0],strokeWidthMm:.4}:{})}));
  if(p.treatment==='tape'){
   const lines=mainTexts.flatMap(t=>t.inkLines);
   for(const [index,line] of lines.entries()){
@@ -139,5 +159,53 @@ export function compileTitle(p,{widthExplicit=false}={}){
    else {const g=shape('rect',x,1,width/count,3,{fill:null,stroke:accent,strokeWidthMm:.25});g.geometry={kind:'path',viewBox:[0,0,10,10],paths:[{d:p.pattern==='grid'?'M 5 0 L 5 10 M 0 5 L 10 5':'M 0 10 L 10 0'}]};background.push(g);}
   }
  }
- return {children:[...background,...texts.map(t=>t.op),...children],width,height,notes};
+ const backdrop=p.backdrop||({label:{kind:'paper',paddingMm:3},'script-dots':{kind:'dots',densityMm:4},'paper-lettering':{kind:'paper',paddingMm:4,pattern:'stripes',opacity:.95}}[p.treatment]);
+ if(backdrop&&backdrop.kind!=='none'){
+  const pad=backdrop.paddingMm??3,density=backdrop.densityMm??4,ink=mainTexts.flatMap(t=>t.inkLines),base=backdrop.color||(p.treatment==='paper-lettering'?colors[0]:ground),patternColor=backdrop.patternColor||accent,opacity=backdrop.opacity??.86;
+  const boxes=backdrop.kind==='dots'?[{x:2,y:2,w:width-4,h:Math.max(6,Math.max(...ink.map(l=>l.y+l.height))+density*1.5)}]:ink.map(l=>({x:Math.max(0,l.x-pad),y:Math.max(0,l.y-pad*.65),w:Math.min(width-Math.max(0,l.x-pad),l.width+pad*2),h:l.height+pad*1.4}));
+  let dots=0;
+  for(const [i,b] of boxes.entries()){
+   if(backdrop.kind==='dots'){
+    for(let yy=b.y+1;yy<b.y+b.h-1;yy+=density)for(let xx=b.x+1+(Math.floor(yy/density)%2)*density*.5;xx<b.x+b.w-1;xx+=density){
+     if(ink.some(l=>xx>l.x-1&&xx<l.x+l.width+1&&yy>l.y-1&&yy<l.y+l.height+1))continue;
+     if(++dots<=180)background.unshift(shape('ellipse',xx,yy,.75,.75,{fill:patternColor,fillOpacity:opacity*.55}));
+    }
+    height=Math.max(height,b.y+b.h+2);continue;
+   }
+   let geometry={kind:backdrop.kind==='oval'?'ellipse':'rect'};
+   if(backdrop.kind==='paper'||backdrop.kind==='brush'){
+    const {w,h}=b,soft=backdrop.kind==='brush';
+    geometry={kind:'path',viewBox:[0,0,w,h],paths:[{d:soft?`M 0 ${h*.34} Q ${w*.18} ${-h*.08} ${w*.52} ${h*.08} L ${w} ${h*.24} L ${w*.94} ${h*.8} Q ${w*.5} ${h*1.04} 0 ${h*.77} Z`:`M 0 ${h*.13} L ${w*.23} 0 L ${w*.62} ${h*.04} L ${w} 0 L ${w*.98} ${h*.89} L ${w*.69} ${h} L ${w*.32} ${h*.96} L 0 ${h} Z`}]};
+   }
+   background.unshift({op:'graphic.add',id:p.id+'-backdrop'+i,geometry,place:at(b.x,b.y),size:{width:b.w,height:b.h,unit:'mm'},style:{fill:base,fillOpacity:opacity}});
+   if(backdrop.pattern&&backdrop.pattern!=='plain'){
+    const paths=[];
+    for(let xx=density;xx<b.w-1;xx+=density){
+     if(backdrop.pattern==='dots')background.push(shape('ellipse',b.x+xx,b.y+b.h*.79,.45,.45,{fill:patternColor,fillOpacity:.4}));
+     else paths.push({d:backdrop.pattern==='stripes'?`M ${xx} ${b.h*.8} L ${Math.min(b.w-1,xx+1.5)} ${b.h*.2}`:`M ${xx} ${b.h*.15} L ${xx} ${b.h*.85}`});
+    }
+    if(backdrop.pattern==='grid')paths.push({d:`M 1 ${b.h*.5} L ${b.w-1} ${b.h*.5}`});
+    if(paths.length)background.push({op:'graphic.add',id:p.id+'-backdrop-pattern'+i,geometry:{kind:'path',viewBox:[0,0,b.w,b.h],paths},place:at(b.x,b.y),size:{width:b.w,height:b.h,unit:'mm'},style:{fill:null,stroke:patternColor,strokeWidthMm:.12,opacity:.35}});
+   }
+   height=Math.max(height,b.y+b.h+2);
+  }
+ }
+ if(['scatter-round','scatter-triangle','number-route'].includes(p.treatment)){
+  const box=mainTexts[0],y=Math.min(height-3,box.y+box.inkHeight+1),x=Math.max(2,box.x+box.lastLineWidth+1);
+  if(p.treatment==='scatter-round'){
+   children.push(shape('ellipse',Math.min(width-5,x),y,2.5,2.5,{fill:accent}));
+   children.push(shape('ellipse',Math.min(width-4,box.x+box.lastLineWidth*.4),Math.max(1,box.y-2),1,1,{fill:accent,fillOpacity:.8}));
+  }
+  if(p.treatment==='scatter-triangle'){
+   children.push({op:'graphic.add',id:p.id+'-triangle',geometry:{kind:'path',viewBox:[0,0,3,3],paths:[{d:'M 1.5 0 L 3 3 L 0 3 Z'}]},place:at(Math.min(width-5,x),y),size:{width:3,height:3,unit:'mm'},style:{fill:accent}});
+   children.push(shape('ellipse',Math.min(width-4,box.x+box.lastLineWidth*.45),Math.max(1,box.y-2),.8,.8,{fill:accent,fillOpacity:.8}));
+  }
+  if(p.treatment==='number-route'){
+   const endY=Math.min(height-2,y+1);
+   children.push({op:'graphic.add',id:p.id+'-route',geometry:{kind:'path',viewBox:[0,0,width,height],paths:[{d:`M 2 ${Math.min(height-2,y+3)} Q ${width*.5} ${Math.min(height-1,y+4)} ${width-2} ${endY}`}]},place:at(0,0),size:{width,height,unit:'mm'},style:{fill:null,stroke:accent,strokeWidthMm:.35}});
+   children.push(shape('ellipse',width-3,endY-.65,1.3,1.3,{fill:accent}));
+  }
+ }
+ const ordinaryTexts=texts.filter(t=>!overlay.includes(t.op)).map(t=>t.op);
+ return {children:[...background,...ordinaryTexts,...overlay,...children],width,height,notes};
 }

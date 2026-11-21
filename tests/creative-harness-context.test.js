@@ -152,8 +152,8 @@ test('lettering effects remain discoverable with compact first-turn instructions
   const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'做一页有手写感的记录',styles:['丰富层叠']}});
-  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-gradient-outline','title-shadow','color-bands']);
-  for(const id of ['title-shadow','title-outline','title-offset-outline','title-gradient-outline','title-tape','title-phrases'])
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-bands']);
+  for(const id of ['title-shadow','title-outline','title-offset-outline','title-gradient-outline','title-tape','title-phrases','title-cross-shadow','title-scattered-round','title-scattered-triangle','title-number-route','title-script-dots','title-paper-lettering'])
     assert.ok(state.messages[0].content.includes(id),id);
   assert.ok(state.messages[0].content.length<30000);
 });

@@ -103,6 +103,44 @@ test('tape title follows actual wrapped lines and remains an editable digital gr
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-tape',parameters:{id:'invalid-tape',text:'短题',tapeOpacity:1}}),/透明度/);
 });
+test('six video lettering methods remain editable and expose their distinct constructions',async()=>{
+ const ids=['title-cross-shadow','title-scattered-round','title-scattered-triangle','title-number-route','title-script-dots','title-paper-lettering'];
+ for(const id of ids){
+  const {parameters}=techniqueExample(techniqueCatalog.methods.find(m=>m.id===id));
+  const compiled=compileTechnique({methodId:id,parameters}),children=compiled.operations[0].children;
+  assert.equal(children.filter(o=>o.op==='text.add'&&o.content!==parameters.caption).map(o=>o.content).join(''),parameters.text,id+' editable main text');
+  assert.ok(children.some(o=>o.op==='graphic.add'),id+' editable visual construction');
+  assert.equal(apply(await document([]),compiled.operations,[]).changed,true,id);
+ }
+ const cross=compileTechnique({methodId:'title-cross-shadow',parameters:{id:'cross',text:'秋日来信',caption:'AUTUMN',widthMm:75}}).operations[0].children;
+ assert.ok(cross.findIndex(o=>o.content==='AUTUMN')>cross.findIndex(o=>o.content==='秋日来信'));
+ assert.ok(cross.some(o=>o.op==='graphic.add'&&o.style.fillOpacity===.82));
+ assert.throws(()=>compileTechnique({methodId:'title-cross-shadow',parameters:{id:'x',text:'秋日'}}),/caption/);
+ assert.throws(()=>compileTechnique({methodId:'title-cross-shadow',parameters:{id:'x',text:'秋日',caption:'A very long line of explanatory words that cannot fit',widthMm:36}}),/小字过长/);
+ assert.throws(()=>compileTechnique({methodId:'title-number-route',parameters:{id:'x',text:'2026'}}),/runs/);
+});
+test('title backdrops adapt to line width, remain behind text, and accept controlled visual variants',async()=>{
+ const compile=(id,text,backdrop)=>compileTechnique({methodId:'title-paper-lettering',parameters:{id,text,widthMm:45,backdrop}});
+ const opts={kind:'paper',color:'#345948',pattern:'grid',patternColor:'#E7C98A',paddingMm:4,densityMm:4,opacity:.9};
+ const short=compile('short','春',opts),long=compile('long','春日去公园走一走',opts);
+ const a=short.operations[0].children,b=long.operations[0].children;
+ assert.ok(a.find(o=>o.id==='short-backdrop0').size.width<b.find(o=>o.id==='long-backdrop0').size.width);
+ assert.ok(b.filter(o=>o.id.startsWith('long-backdrop')&&!o.id.includes('pattern')).length>1,'wrapped text has multiple paper pieces');
+ assert.ok(b.findIndex(o=>o.op==='text.add')>b.findIndex(o=>o.id==='long-backdrop0'));
+ assert.equal(b.find(o=>o.content==='春日去公园走一走').style.color,'#FFF8EB');
+ assert.equal(apply(await document([]),long.operations,[]).changed,true);
+ const dots=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,patternColor:'#C78962'}}}).operations[0].children;
+ assert.ok(dots.filter(o=>o.op==='graphic.add'&&o.geometry.kind==='ellipse').length>8);
+ assert.ok(dots.findIndex(o=>o.op==='text.add')>dots.findIndex(o=>o.op==='graphic.add'));
+ for(const kind of ['band','brush','oval']){
+  const variant=compileTechnique({methodId:'title-label',parameters:{id:'back-'+kind,text:'晴天',backdrop:{kind,color:'#DBB66C',opacity:.7,paddingMm:5}}});
+  const shape=variant.operations[0].children.find(o=>o.id==='back-'+kind+'-backdrop0');
+  assert.equal(shape.geometry.kind,kind==='brush'?'path':kind==='oval'?'ellipse':'rect');
+  assert.equal(shape.style.fillOpacity,.7);
+  assert.equal(apply(await document([]),variant.operations,[]).changed,true,kind);
+ }
+ assert.throws(()=>compile('bad','春',{kind:'paper',densityMm:.5}),/纹样间距/);
+});
 test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
  const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};
  const compiled=compileTechnique({methodId:'title-underline',parameters});

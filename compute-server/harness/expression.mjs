@@ -6,6 +6,8 @@ const expressiveIDs=new Set([
   'title-outline','title-highlight','title-stack','title-vertical','title-stagger',
   'title-tape','title-label','title-curve','title-shadow','title-offset-outline',
   'title-gradient','title-gradient-outline','title-phrases','title-circle',
+  'title-cross-shadow','title-scattered-round','title-scattered-triangle',
+  'title-number-route','title-script-dots','title-paper-lettering',
   'color-echo','color-bands','graphic-flower','graphic-arch',
   'graphic-scallop-frame','graphic-bubble','pattern-scallop',
   'accent-sprig','accent-stitch','accent-rings'
@@ -21,6 +23,12 @@ export function letteringEffectMenu(){
     {id:'title-offset-outline',effect:'偏移轮廓',when:'需要清晰的错位线条而非模糊投影'},
     {id:'title-gradient-outline',effect:'渐变描边',when:'需要取自素材的两色字形与背景分离'},
     {id:'title-tape',effect:'局部纸带承字',when:'标题需要与附近纸片或照片连接'},
+    {id:'title-cross-shadow',effect:'中部横带穿字',when:'大字与小字形成一组，保留统一阴影'},
+    {id:'title-scattered-round',effect:'错落字群与圆点',when:'词组有主次层级；用 runs 明确位置'},
+    {id:'title-scattered-triangle',effect:'错落字群与三角',when:'标题需要轻快的几何节奏'},
+    {id:'title-number-route',effect:'倾斜数字与外围线',when:'真实年份或日期做成局部焦点'},
+    {id:'title-script-dots',effect:'连写字与圆点底纹',when:'短英文标题要有可调间距的背景点'},
+    {id:'title-paper-lettering',effect:'有色纸片承浅字',when:'字行长度变化时纸片自动跟随'},
     {id:'title-phrases',effect:'主次词组',when:'标题要有词组层级；可与上述文字 style 组合'}
   ];
 }
@@ -37,7 +45,7 @@ export function expressionCards(document,brief){
   const style=[brief.style,...(Array.isArray(brief.styles)?brief.styles:[]),...(document.source.styles||[])].filter(Boolean).join(' ');
   const rich=/丰富|层叠|拼贴|童趣|复古|杂志/.test(style);
   const quiet=/留白|极简|清新|淡雅|安静|疏朗/.test(style);
-  const title=document.source.textMode==='none'?[rich?'graphic-flower':'graphic-arch']:rich?['title-gradient-outline','title-shadow']:quiet?['title-phrases']:['title-offset-outline','title-highlight'];
+  const title=document.source.textMode==='none'?[rich?'graphic-flower':'graphic-arch']:rich?['title-paper-lettering','title-cross-shadow']:quiet?['title-phrases']:['title-offset-outline','title-highlight'];
   const color=rich?'color-bands':'color-echo';
   if(document.source.materials.length&&document.source.textMode!=='none')title.push('graphic-route');
   return [...title,color].map(id=>{
