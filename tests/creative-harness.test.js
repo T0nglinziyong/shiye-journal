@@ -11,6 +11,7 @@ import {createCreativeHarness,initialHarnessState} from '../compute-server/harne
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
 import {createDeepSeekCreativeModel} from '../compute-server/harness/deepseek.mjs';
+import {searchLibraryReferences} from '../compute-server/harness/library.mjs';
 
 const pngHash='sha256:'+'a'.repeat(64);
 const call=(name,args,id=name)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
@@ -29,6 +30,20 @@ const lastScene=messages=>{
   const entry=[...messages].reverse().find(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
   return JSON.parse(entry.content[0].text.split('\n')[0].replace('当前真实画面：',''));
 };
+const revise=(messages,issue='当前排版需要调整')=>call('creation_review',{...lastScene(messages),approved:false,observations:'已检查当前真实预览',issues:[issue],nextStep:'合批修正后重新看图'});
+
+test('reference search returns sourced, actionable matches with stable page fit',async t=>{
+ const f=await fixture(t);
+ const templates=searchLibraryReferences(f.document,{query:'旅行票据模板',kind:'templates',limit:6});
+ assert.ok(templates.results.length>0);
+ assert.ok(templates.results.every(row=>row.kind==='template'&&row.source?.id&&row.readWith.tool==='read_template'));
+ const titleSources=searchLibraryReferences(f.document,{query:'标题',kind:'templates',limit:6});
+ assert.ok(new Set(titleSources.results.map(row=>row.source.id)).size>1);
+ const methods=searchLibraryReferences(f.document,{query:'标题',kind:'techniques',limit:4});
+ assert.ok(methods.results.length>0);
+ assert.ok(methods.results.every(row=>row.readWith.tool==='read_skill'&&row.readWith.methodId===row.id));
+ assert.deepEqual(searchLibraryReferences(f.document,{query:'毫无关系的唯一关键词',kind:'techniques'}).results,[]);
+});
 
 test('harness restores after an actual render failure without replaying model or material transaction',async t=>{
   const f=await fixture(t);let modelCalls=0;
@@ -53,13 +68,66 @@ test('an unsatisfactory batch can be undone and rebuilt from the restored scene'
  const f=await fixture(t);let turns=0;
  const harness=createCreativeHarness({...f,model:async({messages})=>{
   if(++turns===1)return answer(plan(),add(f.document));
-  if(turns===2)return answer(call('creation_undo',{}));
+  if(turns===2)return answer(revise(messages,'第一版不满意'),call('creation_undo',{}));
   if(turns===3){const scene=lastScene(messages);assert.equal(scene.sceneRevision,creationSceneRevision(f.document));
-   return answer(call('creation_apply',{protocolVersion:2,transactionId:'replacement',baseSceneRevision:scene.sceneRevision,operations:[{op:'text.add',id:'replacement',content:'重排之后',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]}));}
+   return answer(revise(messages,'空白纸面需重新排版'),call('creation_apply',{protocolVersion:2,transactionId:'replacement',baseSceneRevision:scene.sceneRevision,operations:[{op:'text.add',id:'replacement',content:'重排之后',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]}));}
   return answer(call('creation_finish',{review:{observations:'已检查重排后的纸面',issues:[]}}));
  },checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
  const result=await harness.run({id:'undo-rebuild',state:f.state});
  assert.equal(result.status,'completed');assert.deepEqual(result.document.page.layers.map(node=>node.id),['replacement']);assert.equal(turns,4);
+});
+
+test('each rendered edit requires a screenshot review before the next mutation',async t=>{
+ const f=await fixture(t);let turns=0;
+ const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
+  if(++turns===1)return answer(plan(),add(f.document));
+  const current=lastScene(messages);
+  const update=call('creation_apply',{protocolVersion:2,transactionId:'revised',baseSceneRevision:current.sceneRevision,operations:[{op:'layer.update',target:'text',content:'调整后的标题'}],decision:'根据截图审查把标题改短'});
+  if(turns===2)return answer(update);
+  if(turns===3){assert.match(JSON.parse(messages.at(-1).content).detail,/先审查当前真实预览/);return answer(revise(messages,'标题过长'),update);}
+  assert.match(messages.findLast(m=>m.role==='user'&&Array.isArray(m.content))?.content[0]?.text||'',/标题过长/);
+  return answer(call('creation_finish',{review:{observations:'标题清晰，版面符合任务',issues:[]}}));
+ }});
+ const done=await harness.run({id:'review-gate',state:f.state});
+ assert.equal(done.status,'completed');assert.equal(turns,4);assert.equal(done.document.page.layers[0].content,'调整后的标题');
+ const review=done.decisions.find(entry=>entry.kind==='review'&&!entry.approved);
+ assert.deepEqual(review.issues,['标题过长']);assert.equal(review.pngHash,pngHash);
+ assert.equal(done.decisions.find(entry=>entry.transactionId==='revised').reason,'根据截图审查把标题改短');
+ assert.equal(done.reviewPending,false);
+});
+
+test('a failed visual review cannot be approved again without a changed render',async t=>{
+ const f=await fixture(t);let turns=0;
+ const harness=createCreativeHarness({...f,model:async({messages})=>{
+  if(++turns===1)return answer(plan(),add(f.document));
+  if(turns===2)return answer(revise(messages,'标题遮挡主图'));
+  if(turns===3)return answer(call('creation_finish',{review:{observations:'直接改口',issues:[]}}));
+  assert.match(JSON.parse(messages.at(-1).content).detail,/待修问题尚未通过修改与重新预览验证/);
+  throw Error('unresolved review guarded');
+ },checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
+ await assert.rejects(harness.run({id:'review-unresolved',state:f.state}),/unresolved review guarded/);
+});
+
+test('parallel draft agents keep isolated scenes until a viewed candidate is selected',async t=>{
+ const f=await fixture(t);let parentTurns=0,children=0;
+ const model=async({messages,tools})=>{
+  if(messages[0].content.startsWith('你是拾页的独立构图草稿子 Agent')){
+   children++;assert.deepEqual(tools.map(tool=>tool.function.name),['creation_apply']);
+   const prompt=messages.at(-1).content[0].text,id=prompt.match(/transactionId：(draft_\d+_[12])/)[1],goal=prompt.match(/独立草稿方向：([^\n]+)/)[1];
+   return answer(call('creation_apply',{protocolVersion:2,transactionId:id,baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:id+'_title',content:goal,place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]},id));
+  }
+  if(++parentTurns===1)return answer(plan(),call('explore_drafts',{goals:['左侧文字主导构图','右侧文字主导构图']}));
+  if(parentTurns===2){
+   const gallery=messages.at(-1).content;assert.equal(gallery.filter(part=>part.type==='image_url').length,2);
+   return answer(call('select_draft',{id:'draft_1_2',decision:'右侧版本留白更清晰'}));
+  }
+  return answer(call('creation_finish',{review:{observations:'比较两个草稿后选定右侧方案，文字可读',issues:[]}}));
+ };
+ const harness=createCreativeHarness({...f,model,renderDraft:async doc=>({pngHash,sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,ZHJhZnQ='}),checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
+ const done=await harness.run({id:'parallel-drafts',state:f.state});
+ assert.equal(done.status,'completed');assert.equal(children,2);assert.equal(parentTurns,3);
+ assert.equal(done.document.page.layers[0].content,'右侧文字主导构图');
+ assert.equal(done.decisions.find(entry=>entry.kind==='select_draft').reason,'右侧版本留白更清晰');
 });
 
 test('a separate workspace sends only changed nonempty images and can move its group to the page',async t=>{
@@ -74,7 +142,7 @@ test('a separate workspace sends only changed nonempty images and can move its g
   if(turns===2){assert.match(messages[2].content,/"study":\{"signature":"empty","empty":true/);return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-add',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'title',content:'试排标题',place:{reference:'page',at:[50,50],unit:'mm',surface:'study'},size:{width:45,unit:'mm'}}]}));}
   if(turns===3){const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
    assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['study']);
-   return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
+   return answer(revise(messages,'标题还在试摆区'),call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
   const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
   assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['page']);
   assert.equal(JSON.parse(latest.content[0].text.split('\n')[1].replace('工作空间状态：','')).changed.find(space=>space.id==='study').empty,true);
@@ -99,9 +167,9 @@ test('finish cannot pass when a new edit invalidates a viewed preview',async t=>
   const f=await fixture(t);let n=0;
   const model=async({messages})=>{
     if(++n===1)return answer(skill(),plan(),add(f.document));
-    if(n===2){const p=lastScene(messages);return answer(call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]}),call('creation_finish',{}));}
-    const replies=messages.filter(m=>m.role==='tool').slice(-3).map(m=>JSON.parse(m.content));
-    assert.equal(replies[0].ok,true);assert.equal(replies[1].ok,false);assert.equal(replies[2].ok,false);
+    if(n===2){const p=lastScene(messages);return answer(revise(messages,'文字需要改写'),call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]},'stale-review'),call('creation_finish',{}));}
+    const replies=messages.filter(m=>m.role==='tool').slice(-4).map(m=>JSON.parse(m.content));
+    assert.equal(replies[0].ok,true);assert.equal(replies[1].ok,true);assert.equal(replies[2].ok,false);assert.equal(replies[3].ok,false);
     throw Error('verified stale guard');
   };
   const harness=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
@@ -200,7 +268,7 @@ test('automatic bootstrap allows first-turn editing and combined visual review/f
   const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
     if(++n===1)return answer(plan(),add(f.document));
     const p=lastScene(messages),feedback=messages.at(-1).content[0].text;
-    assert.match(feedback,/自动交付检查/);assert.match(feedback,/自动视觉检查任务/);
+    assert.match(feedback,/自动交付检查/);assert.match(feedback,/自动视觉审查/);
     return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
   }});
   const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
@@ -231,7 +299,7 @@ test('combined finish rejects unseen edits and nonempty blocking issues',async t
     if(++n===1)return answer(plan(),add(f.document));
     const p=lastScene(messages);
     if(n===2)return answer(call('creation_finish',{review:{observations:'发现问题',issues:['文字遮挡']}}));
-    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{review:{observations:'旧图',issues:[]}}));}
+    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(revise(messages,'文字遮挡'),call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{review:{observations:'旧图',issues:[]}}));}
     assert.ok(messages.filter(m=>m.role==='tool').map(m=>JSON.parse(m.content)).some(v=>v.detail==='请先查看当前版本的真实预览'));throw Error('stale inline verified');
   }});
   await assert.rejects(harness.run({id:'inline-stale',state:f.state}),/stale inline verified/);

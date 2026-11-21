@@ -54,7 +54,7 @@ export function modelContext(messages,state={}){
   const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_template','creation_help'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,3500)}]:[];}catch{return [];}
   }).slice(-3);
-  const summary={creativeMemory:state.creativeMemory||null,plan:state.plan,decisions:(state.decisions||[]).slice(-8),spaces:state.spaces,visualState:state.visualState||null,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),undoAvailable:(state.undoStack||[]).length,review:state.review?.approved?'approved':null};
+  const summary={creativeMemory:state.creativeMemory||null,plan:state.plan,decisions:(state.decisions||[]).slice(-8),spaces:state.spaces,visualState:state.visualState||null,scene:inspectCreationDocument(state.document),loadedSkills:state.loadedSkills,references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
   return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
 }
 

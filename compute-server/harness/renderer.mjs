@@ -58,6 +58,12 @@ export async function createHarnessRenderer({source,images,saveArtifact}){
     return {imageURL:await modelImage(data,3000),items:unplaced.map((material,index)=>({number:index+1,alias:material.alias,title:source.sourceSnapshots.find(snapshot=>snapshot.assetID===material.assetID)?.title||''})),parkedIDs:parked.map(node=>node.id),signature:hash(data)};
   };
   return {
+    async renderDraft(document,signal){
+      signal?.throwIfAborted();
+      const {png}=await renderOfflinePNG(document.page,source,images,canvas,{decodedCache});
+      signal?.throwIfAborted();
+      return {pngHash:hash(png),sceneRevision:creationSceneRevision(document),imageURL:await modelImage(png)};
+    },
     async inspectMaterials(keys){return Promise.all(keys.map(async alias=>{
       if(!sourceImages.has(alias))throw Error('素材不在本次授权来源中');
       if(!detailImages.has(alias))detailImages.set(alias,await modelImage(sourceImages.get(alias)));

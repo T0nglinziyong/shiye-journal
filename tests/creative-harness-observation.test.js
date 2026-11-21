@@ -39,7 +39,8 @@ test('visual observation rejects missing, duplicated or contradictory space fram
 
 test('real page screenshot version follows rendered pixels through an edit',async()=>{
   const document=await createCreationDocument({draft:draft(),assets:[]});
-  const renderer=await createHarnessRenderer({source:document.source,images:{},saveArtifact:async()=>null});
+  let saved=0;
+  const renderer=await createHarnessRenderer({source:document.source,images:{},saveArtifact:async()=>{saved++;return null;}});
   const before=await renderer.render(document);
   assert.equal(before.spaceViews[0].signature,before.pngHash);
   assert.equal(before.spaceViews[0].imageURL,null);
@@ -51,4 +52,9 @@ test('real page screenshot version follows rendered pixels through an edit',asyn
   assert.match(after.spaceViews[0].imageURL,/^data:image\/jpeg;base64,/);
   assert.notEqual(after.spaceViews[0].signature,before.spaceViews[0].signature);
   assert.equal((await renderer.render(changed)).spaceViews[0].signature,after.spaceViews[0].signature);
+  const [draftA,draftB]=await Promise.all([renderer.renderDraft(changed),renderer.renderDraft(changed)]);
+  assert.equal(draftA.pngHash,after.pngHash);
+  assert.equal(draftB.sceneRevision,creationSceneRevision(changed));
+  assert.match(draftB.imageURL,/^data:image\/jpeg;base64,/);
+  assert.equal(saved,3);
 });
