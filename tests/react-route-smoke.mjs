@@ -63,6 +63,7 @@ window.document.querySelector('.series-contents [aria-label="上一页"]').click
 await waitFor(()=>window.document.querySelectorAll('.series-contents [data-act="detail"]').length===40);
 window.document.querySelector('.series-contents [data-act="detail"]').click();
 await waitFor(()=>!!window.document.querySelector('.detail-page h1'));
+assert.equal(window.document.querySelectorAll('.detail-topline [data-act="detail-back"] svg').length,1);
 window.document.querySelector('[data-act="detail-back"]').click();
 await waitFor(()=>!!window.document.querySelector('[data-react-page="seriesContents"]'));
 window.document.querySelector('#series-return').click();
@@ -75,6 +76,7 @@ await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detai
 window.document.querySelector('.asset-grid [data-act="detail"]').click();
 await waitFor(()=>!!window.document.querySelector('.detail-page h1'));
 assert.match(window.document.querySelector('.detail-page h1').textContent,/素材/);
+assert.equal(window.document.querySelectorAll('.detail-topline [data-act="detail-back"] svg').length,1);
 window.document.querySelector('[data-act="detail-back"]').click();
 await waitFor(()=>!!window.document.querySelector('.asset-grid'));
 window.document.querySelector('.catalog-page-controls [aria-label="上一页"]').click();
@@ -90,6 +92,7 @@ await waitFor(()=>heart.getAttribute('aria-pressed')==='false');
 window.document.querySelector('.main-nav [data-route="matching"]').click();
 await waitFor(()=>!!window.document.querySelector('.matching-page'));
 assert.equal(window.document.querySelector('.matching-page').dataset.reactPage,'matching');
+assert.match(window.document.querySelector('.match-stage-section .match-panel-head small').textContent,/^\d+件$/);
 assert.ok(window.document.querySelector('.match-direction').compareDocumentPosition(
   window.document.querySelector('.match-recommendations'))&window.Node.DOCUMENT_POSITION_FOLLOWING);
 assert.ok(window.document.querySelector('#match-content-policy'));
