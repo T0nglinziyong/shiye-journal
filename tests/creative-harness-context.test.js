@@ -142,6 +142,20 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   const noText=initialHarnessState({document:visual,skills,brief:{intent:'只用数字图形创作',styles:['丰富层叠']}});
   assert.equal(noText.expressionRequired,true);
   assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-flower','color-bands']);
+  assert.ok(!noText.messages[0].content.includes('可直接调用的文字效果选法'));
+});
+
+test('lettering effects remain discoverable with compact first-turn instructions',async()=>{
+  const skills=await loadCreationSkills();
+  const {createCreationDocument}=await import('../src/creation-document.js');
+  const {draft}=await import('../src/domain.js');
+  const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
+  const document=await createCreationDocument({draft:draft(),assets:[]});
+  const state=initialHarnessState({document,skills,brief:{intent:'做一页有手写感的记录',styles:['丰富层叠']}});
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-gradient-outline','title-shadow','color-bands']);
+  for(const id of ['title-shadow','title-outline','title-offset-outline','title-gradient-outline','title-tape','title-phrases'])
+    assert.ok(state.messages[0].content.includes(id),id);
+  assert.ok(state.messages[0].content.length<30000);
 });
 
 test('repeated local edits get a batch correction hint without forcing acceptance',()=>{

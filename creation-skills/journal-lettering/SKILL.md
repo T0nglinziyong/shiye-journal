@@ -12,6 +12,8 @@ description: 建立手帐标题、正文和局部批注的层级；用于文字�
 
 标题可断行、疏密变化、局部描边或有含义的小符号。用 text.lettering 建可编辑逐字组合，text.add 做段落，graphic.add 做底线、圈注或局部色块。先查精确合同及可用字体，不能凭空假设本机有某款字体，也不能把字体描边当成可自由改笔画的书法。
 
+视频中的字效可直接落在可编辑文字上：`title-shadow` 做同向投影，`title-outline` 做字心真正透明的空心字，`title-offset-outline` 做线条错位，`title-gradient-outline` 做渐变字加细描边。用 `creation_recipe(kind="technique",recipeId=方法 ID,parameters={id,text,at,colors,fontFamily,widthMm,style})` 一次创建；`style` 可继续调整描边宽度、阴影方向与颜色。先按周围素材选一种主效果，预览看底色是否透过字心、线条是否糊住笔画、投影是否与背景分开。若只需改已有标题，使用 `layer.update` 的同一套 `style`，无需重新生成文字。
+
 ## 手写字形
 
 服务器已预装的字体会在任务开始时列出；底层 `text.add` 用 `style.fontFamily`，教程 `creation_recipe` 用 `parameters.fontFamily`。HongLeiZhuoShu 适合拙趣、有张力的短标题；FontQu Smile 适合随性连笔的短句；Like JianJian 适合自然的青春手记。Xiaolai 适合清楚的日常正文，Sophora 适合松散随笔，Otsutome 适合笔刷标题；Ma Shan Zheng 仅用于需要毛笔感的短题，不把它当作所有手帐的默认笔迹。通常只需一种正文笔触和一种标题笔触，不用每段换字库。部分字体缺字由 Xiaolai 补字；看实际预览核对粗细和基线。不要要求手机传送字体，也不要向任意网址下载字体。

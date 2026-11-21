@@ -12,6 +12,19 @@ const expressiveIDs=new Set([
 ]);
 const colorIDs=new Set(['color-echo','color-bands']);
 
+// Keep the choice set visible after conversation compaction without loading
+// every long lettering lesson or its image into the first model request.
+export function letteringEffectMenu(){
+  return [
+    {id:'title-shadow',effect:'同侧阴影',when:'字形需要轻微立体感；阴影方向统一'},
+    {id:'title-outline',effect:'透明空心字',when:'底色或照片需要透过字心；检查细线可读性'},
+    {id:'title-offset-outline',effect:'偏移轮廓',when:'需要清晰的错位线条而非模糊投影'},
+    {id:'title-gradient-outline',effect:'渐变描边',when:'需要取自素材的两色字形与背景分离'},
+    {id:'title-tape',effect:'局部纸带承字',when:'标题需要与附近纸片或照片连接'},
+    {id:'title-phrases',effect:'主次词组',when:'标题要有词组层级；可与上述文字 style 组合'}
+  ];
+}
+
 export const expressiveTask=brief=>Boolean(typeof brief?.intent==='string'&&brief.intent.trim());
 export const isExpressiveTechnique=id=>expressiveIDs.has(id);
 export function missingExpressionDirections(ids=[]){
@@ -24,7 +37,7 @@ export function expressionCards(document,brief){
   const style=[brief.style,...(Array.isArray(brief.styles)?brief.styles:[]),...(document.source.styles||[])].filter(Boolean).join(' ');
   const rich=/丰富|层叠|拼贴|童趣|复古|杂志/.test(style);
   const quiet=/留白|极简|清新|淡雅|安静|疏朗/.test(style);
-  const title=document.source.textMode==='none'?[rich?'graphic-flower':'graphic-arch']:rich?['title-stagger','title-gradient-outline']:quiet?['title-phrases']:['title-highlight','title-phrases'];
+  const title=document.source.textMode==='none'?[rich?'graphic-flower':'graphic-arch']:rich?['title-gradient-outline','title-shadow']:quiet?['title-phrases']:['title-offset-outline','title-highlight'];
   const color=rich?'color-bands':'color-echo';
   if(document.source.materials.length&&document.source.textMode!=='none')title.push('graphic-route');
   return [...title,color].map(id=>{
