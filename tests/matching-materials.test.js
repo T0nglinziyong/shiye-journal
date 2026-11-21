@@ -16,6 +16,15 @@ test('four material states are disjoint and excluded records never enter model i
  assert.deepEqual(scope.required,['photo']);assert.deepEqual(scope.preferred,['paper']);assert.deepEqual(scope.available,['ticket']);assert.deepEqual(scope.excluded,['flower']);assert.deepEqual(scope.candidateAssetIDs,['photo','paper','ticket']);
  assert.deepEqual(buildMaterialScope({...scope,basket:['photo','paper'],coreIDs:['photo'],recommendations:[{asset:assets[2]}],autoIncludeRecommendations:false}).candidateAssetIDs,['photo','paper']);
 });
+test('historical basket IDs missing from the current library do not enter creation input',async()=>{
+ const {matchingScopeForState}=await import('../src/matching-view.js');
+ const state={assets:[assets[1]],basket:['removed','photo'],coreIDs:['removed','photo'],excludedAssetIDs:[],
+  aiSettings:{autoIncludeRecommendations:false,requireAllCandidates:false},matchStyles:[],matchPurposes:[]};
+ const scope=matchingScopeForState(state);
+ assert.deepEqual(scope.candidateAssetIDs,['photo']);
+ assert.deepEqual(scope.required,['photo']);
+ assert.deepEqual(matchingViewModel(state).selected.map(asset=>asset.id),['photo']);
+});
 test('all candidates become required by default setting, while off keeps pinned required and others preferred',()=>{
  const options={basket:['photo','paper'],coreIDs:['photo'],recommendations:[{asset:assets[2]},{asset:assets[3]}],excluded:['flower'],autoIncludeRecommendations:true};
  const all=buildMaterialScope({...options,requireAllCandidates:true});

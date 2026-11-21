@@ -82,7 +82,11 @@ export function createBackgroundCreationSession({getAccount,getAssets,getProject
       guard();
       const parameters=creativeRunParameters({project,draft,assets,ids,prompt,settings:{}}),document=await createCreationDocument(parameters);
       const images=await boundedMap(document.source.materials,4,async m=>{
-        guard();const asset=assets.find(a=>a.id===m.assetID),data=await createImage(asset,null,1280,true);
+        guard();const asset=assets.find(a=>a.id===m.assetID);
+        if(!asset)throw Error('所选素材已不在素材库：'+m.assetID);
+        let data;
+        try{data=await createImage(asset,null,1280,true);}
+        catch(error){throw Error('素材「'+asset.title+'」预览读取失败：'+error.message,{cause:error});}
         if(!/^data:image\/png;base64,/.test(data||''))throw Error('创作素材预览未生成');
         return {alias:m.alias,blob:await (await fetch(data)).blob()};
       });guard();

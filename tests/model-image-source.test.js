@@ -14,5 +14,14 @@ test('model recognition loads only the cover and never requests the original',as
 test('missing recognition cover fails without fetching the original',async()=>{
   await assert.rejects(loadModelImageSource({blobId:'material'},{
     preview:async()=>undefined
-  }),/封面无法读取/);
+ }),/封面无法读取/);
+});
+
+test('a historical material uses its fixed cover when a larger preview is unavailable',async()=>{
+  const cover=new Blob(['fixed-cover']),calls=[];
+  const source=await loadModelImageSource({blobId:'material'},{
+    preview:async(id,edge)=>{calls.push([id,edge]);if(edge>480)throw Error('large preview unavailable');return cover;}
+  },{edge:1280});
+  assert.equal(source,cover);
+  assert.deepEqual(calls,[['material',1280],['material',480]]);
 });
