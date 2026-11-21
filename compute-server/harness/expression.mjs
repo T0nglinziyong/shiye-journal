@@ -1,0 +1,47 @@
+import {describeTechnique} from '../../src/creation-library/techniques.js';
+import {inspectCreationDocument} from '../../src/creation-inspection.js';
+
+// A visible treatment, rather than merely a method mentioned in the plan.
+const expressiveIDs=new Set([
+  'title-outline','title-highlight','title-stack','title-vertical','title-stagger',
+  'title-tape','title-label','title-curve','title-shadow','title-offset-outline',
+  'title-gradient','title-gradient-outline','title-phrases','title-circle',
+  'color-echo','color-bands','graphic-flower','graphic-arch',
+  'graphic-scallop-frame','graphic-bubble','pattern-scallop',
+  'accent-sprig','accent-stitch','accent-rings'
+]);
+const colorIDs=new Set(['color-echo','color-bands']);
+
+export const expressiveTask=brief=>Boolean(typeof brief?.intent==='string'&&brief.intent.trim());
+export const isExpressiveTechnique=id=>expressiveIDs.has(id);
+export function missingExpressionDirections(ids=[]){
+  const selected=new Set(ids);
+  return [...(![...selected].some(id=>expressiveIDs.has(id)&&!colorIDs.has(id))?['标题或图形']:[]),...(![...selected].some(id=>colorIDs.has(id))?['配色']:[])];
+}
+
+export function expressionCards(document,brief){
+  if(!expressiveTask(brief))return [];
+  const style=[brief.style,...(Array.isArray(brief.styles)?brief.styles:[]),...(document.source.styles||[])].filter(Boolean).join(' ');
+  const rich=/丰富|层叠|拼贴|童趣|复古|杂志/.test(style);
+  const quiet=/留白|极简|清新|淡雅|安静|疏朗/.test(style);
+  const title=document.source.textMode==='none'?[rich?'graphic-flower':'graphic-arch']:rich?['title-stagger','title-gradient-outline']:quiet?['title-phrases']:['title-highlight','title-phrases'];
+  const color=rich?'color-bands':'color-echo';
+  if(document.source.materials.length&&document.source.textMode!=='none')title.push('graphic-route');
+  return [...title,color].map(id=>{
+    const method=describeTechnique(id,{includeFontSuggestions:false});
+    return {id,skill:method.skill,title:method.title,when:method.when,
+      principle:method.lesson.principle,check:method.lesson.check,
+      example:method.tool.arguments.parameters,
+      use:'creation_recipe kind=technique；recipeId='+id+'；另传唯一 transactionId 与最新 baseSceneRevision。示例文字、位置和颜色须替换成本页内容。'};
+  });
+}
+
+export function visibleExpressiveRecipes(document,receipts={}){
+  const layers=new Map(inspectCreationDocument(document).layers.map(layer=>[layer.id,layer]));
+  const visible=layer=>Boolean(layer&&layer.surface==='page'&&!layer.hidden&&layer.opacity!==0&&(!layer.parent||visible(layers.get(layer.parent))));
+  return Object.values(receipts).flatMap(receipt=>(receipt?.data?.recipes||[receipt?.data?.recipe]).flatMap(recipe=>{
+    const layer=layers.get(recipe?.groupId);
+    return expressiveIDs.has(recipe?.methodId)&&visible(layer)
+      ?[{id:recipe.methodId,groupId:recipe.groupId}]:[];
+  }));
+}

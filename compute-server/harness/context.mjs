@@ -44,7 +44,12 @@ export function initialToolGuide(document){
   if(document.source.textMode!=='none')topics.push('text.add');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   return {topics:creationHelp().topics,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；复杂图形、裁切、文字特效和不熟悉的参数先用 creation_help 查询。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','颜色用六位 HEX；笔迹使用 geometry.unit="mm" 与 points=[{x,y,pressure}]，复杂笔迹参数先查询。']};
+    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。','颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。笔迹使用 geometry.unit="mm" 与 points=[{x,y,pressure}]。']};
+}
+
+export function compactInitialToolGuide(document){
+  const guide=initialToolGuide(document);
+  return {topics:guide.topics,common:guide.common.descriptions.map(({name,summary,required,examples,notes})=>({name,summary,required,example:examples?.[0],notes})),tapeAliases:guide.tapeAliases,fieldDefinitions:guide.fieldDefinitions,notes:guide.notes};
 }
 
 export function materialBrief(document){
@@ -69,7 +74,9 @@ export function automaticSceneFeedback(document){
 export function modelContext(messages,state={}){
   if(messages.length<=2)return messages;
   const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
-  const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||i===parts.findIndex(p=>p.type==='image_url'))}:first;
+  const afterFirstPreview=Boolean(state.qualityFrames?.length);
+  const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
+    afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
   const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-2)??turns.at(0)??2);
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
@@ -84,8 +91,10 @@ export function modelContext(messages,state={}){
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
   }).slice(-2);
   const inspected=inspectCreationDocument(state.document);
-  const scene=state.phase==='review'?{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>layer.surface==='page')}:inspected;
-  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'composition',plan:state.plan,decisions:(state.decisions||[]).slice(-8),spaces:state.spaces,visualState:state.visualState||null,scene,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
+  // The newest automatic observation already carries the same Scene. Keep only
+  // its revision in the state summary so a long page is not billed twice.
+  const scene=lastPreview>=0?{sceneRevision:inspected.sceneRevision}:state.phase==='review'?{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>layer.surface==='page')}:inspected;
+  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'composition',plan:state.plan,decisions:(state.decisions||[]).slice(-4),spaces:state.spaces,visualState:state.visualState||null,scene,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
   return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
 }
 
