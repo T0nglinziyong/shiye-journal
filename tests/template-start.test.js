@@ -28,6 +28,7 @@ test('template element view uses the exact layout passed to the creation tool',(
   const catalog=executableJournalTemplates();
   assert.equal(catalog.length,78);
   assert.equal(catalog.filter(template=>template.isCallable).length,59);
+  assert.ok(catalog.every(template=>!template.exampleImagePath&&!template.exampleIsReference));
   const item=catalog.find(template=>template.id==='center-1');
   const layout=journalTemplateComposition(item);
   assert.equal(layout.toolTemplateId,'center-1');

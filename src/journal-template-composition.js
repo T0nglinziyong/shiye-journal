@@ -1,16 +1,6 @@
 import {templateCatalog,templateManualEnabled} from './creation-library/matcher.js';
 
 const byId=new Map(templateCatalog.templates.map(template=>[template.id,template]));
-const caseByFamily={
-  'photo-editorial':'photo-editorial','photo-cluster':'quiet-day',route:'travel-route',
-  'shape-composition':'photo-editorial',center:'handwritten-observation',
-  's-route':'travel-route','photo-thirds':'photo-editorial',
-  'writing-alternate':'handwritten-observation','writing-top-anchor':'handwritten-observation',
-  'writing-bottom-anchor':'handwritten-observation'
-};
-const caseImage=family=>`/journal-cases/${caseByFamily[family]||
-  (family.startsWith('frame-')?'gentle-planner':'photo-editorial')}.png`;
-
 export function executableJournalTemplates(){
   return templateCatalog.templates.map(template=>({
     id:template.id,title:template.title,origin:'preset',
@@ -18,8 +8,7 @@ export function executableJournalTemplates(){
     tags:[...new Set([...template.styles,...template.content])],
     styles:template.styles,purposes:template.content,
     toolTemplateId:template.id,templateImagePath:`/template-illustrations/${template.id}.webp`,
-    elements:template.elements,aspect:template.aspect,isCallable:templateManualEnabled(template),
-    exampleImagePath:caseImage(template.family),exampleIsReference:true
+    elements:template.elements,aspect:template.aspect,isCallable:templateManualEnabled(template)
   }));
 }
 

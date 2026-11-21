@@ -588,8 +588,8 @@ render();
   const matchingViewport=name==='matching'&&
     matchingScrollMemory?.account===(state.accountId||'browser')
     ?matchingScrollMemory.scroll.viewport:null;
-  const targetScroll=restoreSnapshot?.scrollY??matchingViewport?.top??
-    (routeScroll.get(routeScrollKey(name))||0);
+  const targetScroll=name==='works'&&parity.workTab==='templates'&&parity.templateID?0:
+    (restoreSnapshot?.scrollY??matchingViewport?.top??(routeScroll.get(routeScrollKey(name))||0));
   cancelRouteScroll=restoreRouteScroll(view,{left:matchingViewport?.left??0,top:targetScroll});
   if(navigationScope){
     const depth=history.state?.shiyeNavigation?.scope===navigationScope

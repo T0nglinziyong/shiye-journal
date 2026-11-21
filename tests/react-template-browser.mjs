@@ -28,24 +28,34 @@ try{
   await wait('.journal-template-detail-card');
   assert.ok(await evaluate('document.querySelector(".journal-template-detail-card h1").textContent.includes("React 模板导入验收")'));
   assert.ok(await evaluate('document.querySelector("[data-template-side=elements]").disabled'));
+  assert.equal(await evaluate('!!document.querySelector("[data-template-side=case]")'),false);
   assert.equal(await evaluate('!!document.querySelector(".journal-template-filters")'),false);
   await click('[data-template-back]','.journal-template-card');
-  await click('[data-template-id="center-1"]','.journal-template-detail-card');
-  await click('[data-template-side="case"]','.journal-template-detail-image');
-  assert.ok(await evaluate('document.querySelector(".journal-template-detail-image img")?.src.includes("/journal-cases/handwritten-observation.png")'));
+  await evaluate('window.scrollTo(0,500);document.querySelector("[data-template-id=center-1]").click()');
+  await wait('.journal-template-detail-card');
+  assert.equal(await evaluate('window.scrollY'),0);
+  assert.ok(await evaluate('document.querySelector("[data-template-back] svg path")?.getAttribute("d")==="m15 18-6-6 6-6"'));
+  assert.equal(await evaluate('!!document.querySelector("[data-template-side=case]")'),false);
   await click('[data-template-side="elements"]','.journal-template-elements-view');
   assert.equal(await evaluate('document.querySelector(".journal-template-elements-view").dataset.toolTemplateId'),'center-1');
   assert.ok(await evaluate('document.querySelectorAll(".journal-template-element[data-slot-id]").length>10'));
+  await evaluate('window.scrollTo(0,500)');
+  await click('[data-route="matching"]','.match-recommendations');
+  await click('[data-route="works"]','.journal-template-detail-card');
+  assert.equal(await evaluate('window.scrollY'),0);
   for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),`Template detail overflow at ${width}×${height}`);
   }
   await click('[data-template-back]','.journal-template-card');
   await click('[data-filter-heading="类型"]','.swift-popover');
+  assert.ok(await evaluate('!!document.querySelector(".swift-popover .popover-content")'));
   await evaluate('[...document.querySelectorAll(".swift-popover [role=menuitemradio]")].find(button=>button.textContent==="参考案例").click()');
   assert.ok(await evaluate('!!document.querySelector("[data-template-id=centered-writing-sheet]")'));
   await click('[data-template-id="centered-writing-sheet"]','.journal-template-detail-card');
-  assert.ok(await evaluate('!document.querySelector("[data-template-side=case]").disabled'));
+  assert.ok(await evaluate('!!document.querySelector("[data-template-side=case]")'));
+  await click('[data-template-side="case"]','.journal-template-detail-image');
+  assert.ok(await evaluate('document.querySelector("[data-template-side=case]").getAttribute("aria-selected")==="true"'));
   await click('[data-template-back]','.journal-template-card');
   assert.ok(await evaluate(`(()=>{const cover=document.querySelector('.journal-template-card .card-image').getBoundingClientRect(),entry=document.querySelector('.journal-template-import-card .card-image').getBoundingClientRect();return Math.abs(cover.height/cover.width-entry.height/entry.width)<.02})()`));
   await click('[data-filter-heading="类型"]','.swift-popover');
@@ -56,10 +66,14 @@ try{
   await click('.journal-template-card','.journal-template-detail-card');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await click('[data-route="matching"]','.match-recommendations');
+  assert.equal(await evaluate('!!document.querySelector(".match-direction .match-panel-title small")'),false);
+  assert.deepEqual(await evaluate('([...document.querySelectorAll(".match-direction,.match-stage-section,.match-recommendations")].map(node=>node.querySelector(".match-panel-state .when-closed").textContent))'),['展开','展开','展开']);
   const folded=await evaluate('([...document.querySelectorAll(".match-direction>.match-panel-head,.match-stage-section>.match-panel-head,.match-recommendations>.match-panel-head")].map(node=>node.getBoundingClientRect().height))');
   assert.equal(new Set(folded).size,1,`Matching fold headers differ: ${folded}`);
+  assert.ok(folded[0]<=50,`Matching fold headers too tall: ${folded}`);
   await click('.match-direction>.match-panel-head','.match-direction[open]');
   assert.equal(await evaluate('document.querySelector(".match-direction>.match-panel-head").getBoundingClientRect().height'),folded[0]);
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".match-direction .when-open")).display!=="none"'),true);
   assert.deepEqual(errors,[]);
   console.log('React template import, filter and detail verified in isolated Chromium');
 }finally{await browser.close();}
