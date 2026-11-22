@@ -11,7 +11,7 @@ export async function exploreCreativeDrafts({model,document,goals,sourceMessage,
     try{
       signal?.throwIfAborted();
       const reply=await model({messages:[
-        {role:'system',content:'你是拾页的独立构图草稿子 Agent。只完成一个与目标明确不同的可编辑 Scene 草稿。只调用一次 creation_apply，传入给定的最新 baseSceneRevision，用一个原子事务完成构图；不得调用其他工具。保留真实素材来源、毫米尺寸和用量，不虚构素材与用户经历。新建图层 ID 使用 '+id+'_ 前缀；已有图层用 layer.update。当前 Scene 是唯一位置真相。不要输出完工声明。'},
+        {role:'system',content:'你是拾页的独立构图草稿子 Agent。只完成一个与目标明确不同的可编辑 Scene 草稿。只调用一次 creation_apply，传入给定的最新 baseSceneRevision，用一个原子事务完成构图；不得调用其他工具。保留真实素材来源、毫米尺寸和用量，不虚构素材；原创叙事可有想象片段，但不冒称用户亲历。新建图层 ID 使用 '+id+'_ 前缀；已有图层用 layer.update。当前 Scene 是唯一位置真相。不要输出完工声明。'},
         sourceMessage,
         {role:'user',content:[{type:'text',text:'独立草稿方向：'+goal+'\n当前权威 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n当前纸面画面版本：'+basePreview.pngHash+'\nbaseSceneRevision：'+baseSceneRevision+'\ntransactionId：'+id+'\n只返回 creation_apply 工具调用。'},{type:'image_url',image_url:{url:basePreview.imageURL}}]}
       ],tools:[tool],signal,remainingMs});

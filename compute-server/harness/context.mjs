@@ -8,11 +8,11 @@ import {techniqueCatalog} from '../../src/creation-library/techniques.js';
 export function recommendCreationSkills(skills,document,brief={}){
   if(document.source.materials?.length===0){
     const catalog=new Map(skills.catalog().map(skill=>[skill.name,skill]));
-    const names=[...(document.source.textMode==='none'?[]:['journal-lettering']),'journal-graphics','pattern-and-doodle','journal-composition','journal-color'];
+    const names=[...(document.source.textMode==='none'?[]:['journal-writing','journal-lettering']),'journal-graphics','pattern-and-doodle','journal-composition','journal-color'];
     return names.filter(name=>catalog.has(name)).map(name=>catalog.get(name));
   }
   const names=['journal-composition','journal-color','paper-layering','journal-accents'];
-  if(document.source.textMode!=='none')names.push('journal-lettering');
+  if(document.source.textMode!=='none')names.push('journal-writing','journal-lettering');
   const styles=new Set([...(brief.styles||[]),...(document.source.styles||[]),brief.style]);
   const routes={'童趣可爱':'playful-journal','复古旧物':'vintage-journal','清新淡雅':'quiet-photo-journal','极简留白':'quiet-photo-journal','疏朗留白':'quiet-photo-journal','丰富层叠':'layered-journal','美式拼贴':'magazine-journal','杂志排版':'magazine-journal','日系文具':'functional-journal'};
   for(const [style,name] of Object.entries(routes))if(styles.has(style))names.push(name);
