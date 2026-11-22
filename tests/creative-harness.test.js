@@ -24,13 +24,13 @@ const previewOf=messages=>{
   const summary=messages.find(message=>message.role==='user'&&typeof message.content==='string'&&message.content.startsWith('当前创作状态'));
   return summary&&JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
 };
-async function fixture(t,model){
+async function fixture(t,model,{clock,afterRender}={}){
   const dir=await mkdtemp(join(tmpdir(),'shiye-new-harness-'));t.after(()=>rm(dir,{recursive:true,force:true}));
   const document=await createCreationDocument({draft:draft(),assets:[]}),skills=await loadCreationSkills();
   const state=initialHarnessState({document,skills,brief:{style:'丰富层叠',intent:'写一页周末记录'}});
   const checkpointer=await new JournalCheckpointSaver(fileCheckpointJournal(join(dir,'checkpoint.jsonl'))).restore();
   let renders=0;
-  const harness=createCreativeHarness({skills,checkpointer,render:async doc=>({pngHash:'sha256:'+String(++renders).padStart(64,'a'),sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='}),model});
+  const harness=createCreativeHarness({skills,checkpointer,clock,render:async doc=>{const result={pngHash:'sha256:'+String(++renders).padStart(64,'a'),sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='};afterRender?.(renders);return result;},model});
   return {harness,state,document,renders:()=>renders};
 }
 
@@ -42,6 +42,26 @@ test('reference lookup exposes sourced templates only as layout guidance',async(
   const first=templateDetails(templates[0].id);
   assert.equal(first.available,true);
   assert.ok(first.slots?.every(slot=>slot.role&&slot.box.length===4));
+});
+
+test('time pacing removes editing tools and enforces a real layout stage check',async t=>{
+  let now=0,turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout-a',[text('title','夏日手帐',[35,30])]));
+    if(turn===3)return answer(edit(p.sceneRevision,'layout-b',[text('note','在路上',[42,75])]));
+    if(turn===4){
+      assert.ok(!tools.some(tool=>tool.function.name==='creation_apply'));
+      return answer(edit(p.sceneRevision,'late-edit',[text('late','不应执行',[50,100])]),phase('craft','标题和短句已建立两个区域，装饰书写继续补齐'));
+    }
+    throw Error('paced stop');
+  },{clock:()=>now,afterRender:count=>{if(count===2)now=151000;}});
+  f.state.startedAt=0;f.state.deadlineAt=570000;
+  await assert.rejects(f.harness.run({id:'paced-layout',state:f.state}),/paced stop/);
+  const saved=await f.harness.state('paced-layout');
+  assert.equal(saved.phase,'craft');
+  assert.deepEqual(saved.results.map(result=>result.ok),[false,true]);
+  assert.ok(!saved.document.page.layers.some(layer=>layer.id==='late'));
 });
 
 test('rich layered spreads rank a layered reference above sparse diary cases',async()=>{
@@ -80,10 +100,10 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
         {op:'graphic.add',id:'paper',geometry:{kind:'shape',preset:'rect'},place:{at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},title
       ]));
     }
-    if(turn===3){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
+    if(turn===3){assert.equal(reasoningEffort,'none');assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
     if(turn===4)return answer(phase('craft','两处文字形成基础结构，还有空间可加手写点缀'));
     if(turn===5)return answer(edit(p.sceneRevision,'third',[text('body','把潮湿的风留在这一页。',[45,100])]));
-    if(turn===6)return answer(phase('review','三段文字层级清楚，纸面有内容和节奏'));
+    if(turn===6){assert.equal(reasoningEffort,'none');return answer(phase('review','三段文字层级清楚，纸面有内容和节奏'));}
     return answer(call('creation_finish',{review:{observations:'标题、边注和正文分布在三个位置，文字清晰',issues:[]}}));
   });
   const result=await f.harness.run({id:'stage-guidance',state:f.state});

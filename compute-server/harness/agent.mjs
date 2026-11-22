@@ -68,8 +68,11 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
     }
     if(operation.geometry?.kind==='rectangle')operation.geometry.kind='rect';
     if(operation.geometry?.kind==='shape'&&typeof operation.geometry.preset==='string')operation.geometry.kind=operation.geometry.preset;
+    if(operation.geometry?.kind==='shape'&&typeof operation.geometry.shape==='string')operation.geometry.kind=operation.geometry.shape;
+    if(operation.geometry?.shape&&operation.geometry.shape===operation.geometry.kind)delete operation.geometry.shape;
     if(operation.geometry?.preset&&operation.geometry.preset===operation.geometry.kind)delete operation.geometry.preset;
     if(Number.isFinite(operation.style?.letterSpacing)&&operation.style?.letterSpacingMm===undefined){operation.style.letterSpacingMm=operation.style.letterSpacing;delete operation.style.letterSpacing;}
+    if(typeof operation.style?.align==='string'&&operation.style.textAlign===undefined){operation.style.textAlign=operation.style.align;delete operation.style.align;}
     if(operation.op==='graphic.add'&&operation.geometry?.kind==='path'&&!operation.geometry.paths&&!operation.geometry.viewBox){
       operation.geometry={kind:'sketch',motif:'trail',seed:[...(operation.id||'line')].reduce((sum,char)=>sum+char.charCodeAt(0),0),waypoints:[[.02,.5],[.98,.5]]};
     }
@@ -85,6 +88,12 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
     if(Number.isFinite(operation.style?.rotationDeg)){
       operation.place={...(operation.place||{}),rotationDeg:operation.place?.rotationDeg??operation.style.rotationDeg};
       delete operation.style.rotationDeg;
+    }
+    if(Number.isFinite(operation.place?.angle)&&operation.place.rotationDeg===undefined){operation.place.rotationDeg=operation.place.angle;delete operation.place.angle;}
+    if(operation.place){
+      const anchorAliases={'left-center':'middle-left','right-center':'middle-right','center-left':'middle-left','center-right':'middle-right'};
+      if(anchorAliases[operation.place.referenceAnchor])operation.place.referenceAnchor=anchorAliases[operation.place.referenceAnchor];
+      if(anchorAliases[operation.place.anchor])operation.place.anchor=anchorAliases[operation.place.anchor];
     }
     if(operation.place?.reference&&workspaceIDs.has(operation.place.reference)&&operation.place.reference!=='page'){
       if(!operation.place.surface)operation.place.surface=operation.place.reference;
@@ -123,9 +132,11 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
   const caseCandidates=document.source.materials.length?matchJournalCases(document,{limit:2}):[];
   const referenceCases=caseCandidates.map(candidate=>{
     const detail=caseDetails(candidate.id,document);
-    return {id:detail.id,title:detail.title,score:candidate.score,composition:detail.composition,palette:detail.palette,objects:detail.objects,elements:detail.elements,adaptation:detail.adaptation};
+    return {id:detail.id,title:detail.title,score:candidate.score,match:candidate.why,composition:detail.composition,palette:detail.palette,objects:detail.objects,elements:detail.elements,adaptation:detail.adaptation};
   });
-  const referenceTemplates=document.source.materials.length?searchLibraryReferences(document,{kind:'templates',limit:8}).results.map(candidate=>({candidate,detail:templateDetails(candidate.id)})).filter(({detail})=>detail.available&&detail.slots.length<=14).slice(0,2).map(({candidate,detail})=>({id:detail.id,title:detail.title,score:candidate.score,slots:detail.slots.map(({id,role,box,input,whenUnassigned})=>({id,role,box,input,whenUnassigned}))})):[];
+  const templateCandidates=document.source.materials.length?searchLibraryReferences(document,{kind:'templates',limit:8}).results.map(candidate=>({candidate,detail:templateDetails(candidate.id)})).filter(({detail})=>detail.available&&detail.slots.length<=14):[];
+  const aspectMatched=templateCandidates.filter(({candidate})=>candidate.why.paperAspect>=60);
+  const referenceTemplates=(aspectMatched.length?aspectMatched:templateCandidates).slice(0,2).map(({candidate,detail})=>({id:detail.id,title:detail.title,score:candidate.score,match:candidate.why,slots:detail.slots.map(({id,role,box,input,whenUnassigned})=>({id,role,box,input,whenUnassigned}))}));
   const fonts=offlineBundledFonts().map(({family,label})=>({family,label}));
   const writing=writingTopicBrief(document,brief,startedAt);
   const resources={libraryVersion,release:resourceVersion,fontVersion:fontManifest.version,skills:skills.catalog().map(({name,version})=>({name,version})),protocolVersion:2};
@@ -134,7 +145,7 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
     :'\n本次是零素材创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。原创可编辑文字、程序绘制图形、荧光笔效果、线条与笔迹都可以使用。风格不等于内容主题；除非用户指定，否则从 365 个话题候选或素材细节选一个具体主题；允许写虚构的小场景，但不冒称用户亲历。文字方法卡会在装饰书写阶段自动提供；需要更多方法时再 read_skill。不要调用实体素材或胶带操作。';
   return {resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],referenceTemplateIDs:referenceTemplates.map(item=>item.id),startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
     messages:[{role:'system',content:system+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可按需读取的核心 Skill：'+JSON.stringify(catalog.filter(({name})=>['journal-composition','paper-layering','journal-color','journal-writing','journal-lettering','journal-text-layout','journal-accents','journal-graphics'].includes(name)).map(({name,description,methodCount})=>({name,description,methodCount})))+'\n风格或专门技巧可用 read_skill 按需读取；具体方法候选将在对应阶段提供。\n常用工具合同：'+JSON.stringify(compactInitialToolGuide(document))},
-      {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（先按素材选，用户指定主题优先；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源与尺寸：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（借构图、配色和叠放，不复制来源图文；按本次素材比例改造）：'+JSON.stringify(referenceCases)+'\n匹配的轻量模板位置（仅作构图参考，空位置可以省略；如需精确工具参数用 read_template）：'+JSON.stringify(referenceTemplates)},
+      {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（先按素材选，用户指定主题优先；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源与尺寸：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（依据页面模式、风格和素材角色排序；选择适用的对象簇、叠放和配色关系，按本次素材与纸张的真实尺寸比例改造）：'+JSON.stringify(referenceCases)+'\n匹配的轻量模板位置（依据素材与纸张比例评分；选择适用的区域骨架，不能为了填满位置而放大素材；空位置可以省略）：'+JSON.stringify(referenceTemplates)},
         {type:'text',text:document.source.materials.length?'素材选择原则：只有 required=true 的素材必须放上页面，其余可留暂存区。先选择能形成共同配色与叠放关系的几件，再看实际空位补充；不要先把全部素材放上纸面。已有印字或信息密集的卡片只作图像层，正文写在真正空白且对比足够的地方。':'本次没有实体素材，靠文字与可编辑图形构图。'},
         ...(tray?[{type:'text',text:'全局素材编号图；始终可对照此图。需要局部细节时再调用 inspect_materials。'},{type:'image_url',image_url:{url:tray.imageURL}}]:[]),
         ]}]};
@@ -143,6 +154,18 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
 export function createCreativeHarness({model,skills,render,renderDraft,viewSpace,inspectMaterials,segmentMaterial,checkpointer,capabilities={},clock=Date.now,onProgress=()=>{}}){
   const availableTools=harnessTools.filter(t=>(segmentMaterial||!['segment_material','creation_apply_crops'].includes(t.function.name))&&(renderDraft||!['explore_drafts','select_draft'].includes(t.function.name)));
   const toolsForState=s=>toolsForCreativePhase(availableTools,s.phase);
+  const stagePacing=s=>{
+    const renders=(s.qualityFrames||[]).filter(frame=>frame.phase===s.phase).length;
+    const lastAudit=(s.independentReviews||[]).filter(audit=>audit.phase===s.phase&&audit.pngHash===s.preview?.pngHash).at(-1);
+    const blocked=Boolean(lastAudit?.blockingIssues?.length);
+    const elapsed=clock()-s.startedAt;
+    const next=!blocked&&s.phase==='layout'&&renders>=2&&elapsed>150000?'craft':!blocked&&s.phase==='craft'&&renders>=2&&elapsed>250000?'review':null;
+    return {next,blocked,renders};
+  };
+  const activeToolsForState=s=>{
+    const tools=toolsForState(s);
+    return stagePacing(s).next?tools.filter(tool=>['creation_phase','creation_inspect','creation_preview'].includes(tool.function.name)):tools;
+  };
   const traceEvent=(s,event)=>[...(s.trace||[]),{elapsedMs:clock()-s.startedAt,...event}];
   const State=Annotation.Root({run:Annotation()});
   const live=(s,config)=>{
@@ -174,23 +197,19 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
       if(s.phase==='craft'&&stageRenders===0)apiMessages.splice(2,0,{role:'system',content:'本阶段已自动给出标题、配色与局部点缀的可执行方法卡。先从卡片选合适的组合直接调用 creation_recipe 或 creation_apply，看到效果后再决定是否需要查更深的 Skill；不要连续数轮只查教程和参数。'});
       if(s.phase==='direction'&&s.turns>=2)apiMessages.splice(2,0,{role:'system',content:'已完成素材观察。现在只调用 creation_plan 提交主题、素材筛选、配色、构图和文字区，不再连续查阅；可选素材不必全用。'});
       if(s.deadlineAt-clock()<180000)apiMessages.splice(2,0,{role:'system',content:'剩余创作时间不足三分钟。停止新一轮资料检索和无关微调；当前阶段完成一批关键编辑后立刻提交阶段检查。review 阶段可继续修具体问题，随后用最新截图的 creation_finish.review 交付。'});
-      const blockedAudit=(s.independentReviews||[]).filter(audit=>audit.phase===s.phase).at(-1);
-      const blockedStageCheck=Boolean(blockedAudit?.blockingIssues?.length);
-      const moveToCraft=s.phase==='layout'&&stageRenders>=2&&clock()-s.startedAt>150000&&!blockedStageCheck;
-      const moveToReview=s.phase==='craft'&&stageRenders>=2&&clock()-s.startedAt>270000&&!blockedStageCheck;
-      if(moveToCraft||moveToReview)apiMessages.splice(2,0,{role:'system',content:'本阶段已经完成多次真实画面调整。现在提交 creation_phase，phase 填 '+(moveToCraft?'craft':'review')+'，assessment 写具体画面观察；非阻断细节留到下一阶段继续编辑。若独立审查发现阻断问题，编辑工具会重新开放。'});
-      if(blockedStageCheck)apiMessages.splice(2,0,{role:'system',content:'独立画面审查阻断了阶段切换：'+blockedAudit.blockingIssues.join('；')+'。只修这些遮挡或裁切，优先把非必需的印字大卡移回暂存区，或把正文移到清晰空白处；每批最多 6 个操作，不重排整页。修好后用最新预览重新提交 creation_phase。'});
+      const blockedAudit=(s.independentReviews||[]).filter(audit=>audit.phase===s.phase&&audit.pngHash===s.preview?.pngHash).at(-1);
+      const {next:nextPhase,blocked:blockedStageCheck}=stagePacing(s);
+      if(nextPhase)apiMessages.splice(2,0,{role:'system',content:'本阶段已经完成多次真实画面调整。现在只调用 creation_phase，phase 填 '+nextPhase+'，assessment 写具体画面观察；非阻断细节留到下一阶段继续编辑。若独立审查发现阻断问题，编辑工具会重新开放。'});
+      if(blockedStageCheck)apiMessages.splice(2,0,{role:'system',content:'独立画面审查阻断了阶段切换：'+blockedAudit.blockingIssues.join('；')+'。按问题类型一次合批修复：布局失衡或一页空白时，参考已匹配案例和模板，把素材、底纸、书写区分配到两页；遮挡文字时再做局部避让。不要只挪几毫米反复试错。修好后用最新预览重新提交 creation_phase。'});
       const modelStarted=clock();
-      const activeTools=moveToCraft||moveToReview?toolsForState(s).filter(tool=>['creation_phase','creation_inspect','creation_preview'].includes(tool.function.name)):toolsForState(s);
+      const activeTools=activeToolsForState(s);
       const stageEnteredAt=(s.phaseReviews||[]).at(-1)?.turn??0;
       if(s.phase==='layout'&&s.turns===stageEnteredAt&&s.referenceTemplateIDs?.[0]){
         try{apiMessages.push({role:'user',content:[{type:'text',text:'匹配的抽象模板缩略图。只借位置、叠放与疏密关系，按本次素材真实比例改造；不复制示意图内容。'},...(await recipeImages([s.referenceTemplateIDs[0]]))]});}
         catch{/* 文本参考仍可用，缩略图不阻断创作。 */}
       }
       const deliberateTurn=['layout','craft'].includes(s.phase)&&s.turns===stageEnteredAt;
-      const routineAdjustment=['layout','craft','review'].includes(s.phase)&&stageRenders>=2&&!blockedStageCheck;
-      const directionReady=s.phase==='direction';
-      const reply=await model({messages:apiMessages,tools:activeTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),reasoningEffort:deliberateTurn?undefined:directionReady||routineAdjustment?'none':'low',recoveringFromTruncation:Boolean(s.usage.at(-1)?.truncated)});
+      const reply=await model({messages:apiMessages,tools:activeTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),reasoningEffort:deliberateTurn?undefined:blockedStageCheck?'low':'none',recoveringFromTruncation:Boolean(s.usage.at(-1)?.truncated)});
       live(s,config);
       const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages];
       const trace=traceEvent(contextState,{kind:'model',turn:s.turns+1,phase:s.phase||'composition',model:reply.model||null,durationMs:clock()-modelStarted,toolCount:activeTools.length,inputImages:usage.at(-1).inputImages,inputTokens:reply.usage?.prompt_tokens||null,outputTokens:reply.usage?.completion_tokens||null,truncated:Boolean(reply.truncated)});
@@ -232,15 +251,16 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
       for(const [index,call] of s.calls.entries()){
         live(s,config);const name=call.function?.name,toolStarted=clock();let args;
         try{
-          if(!toolsForState({...s,phase,qualityFrames}).some(t=>t.function.name===name))throw Error('当前阶段工具不可用；若已完成多轮预览，请先提交阶段检查进入下一阶段再继续编辑：'+name);
+          if(!activeToolsForState({...s,phase,qualityFrames,independentReviews}).some(t=>t.function.name===name))throw Error('当前阶段工具不可用；若已完成多轮预览，请先提交阶段检查进入下一阶段再继续编辑：'+name);
           args=JSON.parse(call.function.arguments||'{}');
           if(name==='creation_plan'&&typeof args.composition?.quietZone==='string'){
             args.composition.writingSpace=[args.composition.writingSpace,args.composition.quietZone].filter(Boolean).join('；');
             delete args.composition.quietZone;
           }
           if(name==='creation_apply'&&args.protocolVersion===undefined)args.protocolVersion=2;
-          if(name==='creation_apply'&&independentReviews.filter(audit=>audit.phase===phase).at(-1)?.blockingIssues?.length&&args.operations?.length>6)throw Error('独立审查后的局部修复单批最多 6 个操作；只处理遮挡与裁切，不要重排整页');
+          if(name==='creation_apply'&&phase!=='layout'&&independentReviews.filter(audit=>audit.phase===phase&&audit.pngHash===s.preview?.pngHash).at(-1)?.blockingIssues?.length&&args.operations?.length>8)throw Error('独立审查后的修复单批最多 8 个操作；按当前画面阻断问题合批处理');
           if(name==='creation_apply')normalizeCreationOperations(args.operations,new Set(spaces.map(space=>space.id)));
+          if(name==='creation_help'&&Array.isArray(args.topics))args.topics=args.topics.map(topic=>topic==='anchor'?'place':topic);
           validateValue(args,schemas.get(name));let data;
           if(name==='read_skill'){
             data=skills.read(args.name,args);const selection=[args.level||'overview',args.methodId||'',args.page||0].join(':');
@@ -300,6 +320,8 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
           }
           else if(name==='creation_phase'){
             const from=phase,fromIndex=creativePhases.indexOf(from),toIndex=creativePhases.indexOf(args.phase);
+            const pacedNext=stagePacing({...s,phase,qualityFrames,independentReviews}).next;
+            if(pacedNext&&args.phase!==pacedNext)throw Error('当前画面已达到阶段检查点；请提交 creation_phase，phase 填 '+pacedNext);
             if(toIndex>fromIndex+1)throw Error('请依次完成每个创作阶段');
             if(toIndex>fromIndex){
               if(args.assessment.issues.length&&!visualReviewHasDetail(args.assessment.adjustments))throw Error('阶段检查还有待修问题；请先在本阶段解决，或在 adjustments 写明下一阶段的具体处理方式');
