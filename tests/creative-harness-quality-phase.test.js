@@ -6,22 +6,22 @@ import {harnessTools} from '../compute-server/harness/agent.mjs';
 
 const names=phase=>toolsForCreativePhase(harnessTools,phase).map(tool=>tool.function.name);
 
-test('four-stage toolsets reserve editing for layout onward and completion for review',()=>{
+test('direction reserves editing until planning; later modes can revise or finish',()=>{
   assert.ok(!names('direction').includes('creation_apply'));
   assert.ok(names('layout').includes('explore_drafts'));
   assert.ok(names('layout').includes('read_template'));
   assert.ok(names('craft').includes('segment_material'));
-  assert.ok(!names('craft').includes('creation_finish'));
+  assert.ok(names('craft').includes('creation_finish'));
   assert.ok(names('review').includes('creation_apply'));
   assert.ok(names('review').includes('creation_finish'));
 });
 
-test('layout observation shows full scene while final review focuses on page',()=>{
+test('layout and review keep the full scene available for revision',()=>{
   const input={capture:{pngHash:'hash'},spaceStatus:{spaces:[],current:{},changed:[]},scene:{sceneRevision:'revision',layers:[{surface:'page',id:'visible'},{surface:'tray',id:'parked'}]},feedback:{required:[]},advisory:{observations:['check'],typography:{},pages:[],materialFrames:[{large:true}]},previousReview:null,remainingSeconds:10};
   const layout=phaseObservation('layout',input),review=phaseObservation('review',input);
   assert.equal(layout.scene.layers.length,2);
-  assert.deepEqual(review.scene.layers.map(layer=>layer.id),['visible']);
-  assert.equal(review.advisory.materialFrames,undefined);
+  assert.deepEqual(review.scene.layers.map(layer=>layer.id),['visible','parked']);
+  assert.equal(review.advisory.materialFrames.length,1);
   assert.equal(review.remainingSeconds,10);
 });
 

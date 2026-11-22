@@ -23,15 +23,15 @@ const previewOf=messages=>{
   return summary&&JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
 };
 
-test('four stages give distinct tools and stage-specific technique guidance',()=>{
+test('direction starts with a plan while later modes remain flexible',()=>{
   const names=stage=>toolsForCreativePhase(harnessTools,stage).map(item=>item.function.name);
   assert.ok(!names('direction').includes('creation_apply'));
   assert.ok(names('layout').includes('read_template'));
   assert.ok(names('layout').includes('explore_drafts'));
-  assert.ok(!names('craft').includes('explore_drafts'));
+  assert.ok(names('craft').includes('explore_drafts'));
   assert.ok(names('review').includes('creation_apply'));
   assert.ok(names('review').includes('creation_finish'));
-  assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/多个|多焦点/);
+  assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/可以交错/);
   assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/充实/);
 });
 

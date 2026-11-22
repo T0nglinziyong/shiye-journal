@@ -221,6 +221,65 @@ test('lettering effects are delayed until the craft stage',async()=>{
   assert.ok(state.messages[0].content.length<30000);
 });
 
+test('material tasks offer an editable paper carrier without forcing it',async()=>{
+  const {expressionCards}=await import('../compute-server/harness/expression.mjs');
+  const cards=expressionCards({source:{materials:[{alias:'m1'}],textMode:'automatic',styles:[]}},{style:'丰富层叠'});
+  assert.ok(cards.some(card=>card.id==='paper-color-card'));
+  assert.match(cards.find(card=>card.id==='paper-color-card').principle,/素色纸/);
+  const withRealPaper=expressionCards({source:{materials:[{alias:'m1'}],sourceSnapshots:[{kind:'paper',role:'support'}],textMode:'automatic',styles:[]}},{style:'丰富层叠'});
+  assert.ok(!withRealPaper.some(card=>card.id==='paper-color-card'));
+  const methods=shortlistCreationMethods({source:{materials:[{alias:'m1'}],sourceSnapshots:[{kind:'paper',role:'support'}],textMode:'automatic',styles:['丰富层叠']}},{styles:['丰富层叠']});
+  assert.ok(!methods.some(method=>method.id==='paper-color-card'));
+  assert.ok(methods.slice(0,4).some(method=>method.id==='record-on-material'));
+  assert.ok(cards.some(card=>card.id==='accent-sprig'));
+});
+
+test('foundation feedback rejects a near invisible page tint and accepts visible paper',async()=>{
+  const {paperFoundationStatus}=await import('../compute-server/harness/context.mjs');
+  const document={page:{pageMode:'single',physicalPageHeightMM:210,canvas:{width:705,height:1000},paperColor:'#FCFAF0'},
+    source:{styles:['丰富层叠'],materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[{assetID:'a',kind:'paper',role:'focal'}]}};
+  const base={id:'base',type:'shape',surface:'page',opacity:1,hidden:false,fill:'#FBF6EC',world:{sizeMm:[148,210],centerMm:[74,105]}};
+  assert.deepEqual(paperFoundationStatus(document,{layers:[base]}).missingPages,['page']);
+  const backing={...base,id:'backing',fill:'#6696AA',world:{sizeMm:[90,120],centerMm:[74,105]}};
+  assert.deepEqual(paperFoundationStatus(document,{layers:[base,backing]}).missingPages,[]);
+  assert.deepEqual(paperFoundationStatus(document,{layers:[{...backing,fill:'#DCE4E9'}]}).missingPages,[]);
+});
+
+test('paper foundation applies to ordinary multi-material pages and flags cloned spread boards',async()=>{
+  const {paperFoundationStatus}=await import('../compute-server/harness/context.mjs');
+  const document={page:{pageMode:'spread',physicalPageHeightMM:210,canvas:{width:1410,height:1000},paperColor:'#FCFAF0'},
+    source:{styles:['丰富层叠'],materials:[{alias:'a',assetID:'a'},{alias:'b',assetID:'b'}],sourceSnapshots:[]}};
+  const paper=(id,x,y,width,height,fill='#C4D8E3')=>({id,type:'shape',surface:'page',opacity:1,hidden:false,fill,world:{sizeMm:[width,height],centerMm:[x,y]}});
+  assert.deepEqual(paperFoundationStatus(document,{layers:[]}).missingPages,['page.left','page.right']);
+  const repeated=paperFoundationStatus(document,{layers:[paper('left',74,105,112,170),paper('right',222,105,112,170)]});
+  assert.deepEqual(repeated.missingPages,[]);
+  assert.equal(repeated.flatBoards,true);
+  assert.equal(paperFoundationStatus(document,{layers:[paper('left',74,105,112,170,'#DCE4E9'),paper('right',222,105,112,170,'#D7DFE4')]}).flatBoards,true);
+  assert.equal(paperFoundationStatus(document,{layers:[paper('left',74,105,112,170,'#E9DFC9'),paper('right',222,105,112,170,'#A9CDE4')]}).flatBoards,true);
+  assert.equal(paperFoundationStatus(document,{layers:[paper('left',74,105,112,170),paper('right',225,121,90,145)]}).flatBoards,false);
+  const graphic=(id,x,y)=>({id,type:'material',surface:'page',opacity:1,hidden:false,asset:id,world:{sizeMm:[25,25],centerMm:[x,y]}});
+  assert.deepEqual(paperFoundationStatus(document,{layers:[paper('left',74,105,112,170),paper('right',225,121,90,145),graphic('a',74,105),graphic('b',300,105)]}).unconnectedPages,['page.right']);
+  assert.deepEqual(paperFoundationStatus(document,{layers:[paper('left',74,105,112,170),paper('right',225,121,90,145),graphic('a',74,105),graphic('b',225,120)]}).unconnectedPages,[]);
+  document.source.styles=['清新淡雅'];
+  assert.equal(paperFoundationStatus(document,{layers:[]}).required,true);
+  document.source.styles=['极简'];
+  assert.equal(paperFoundationStatus(document,{layers:[]}).required,false);
+});
+
+test('a source writing card or patterned paper can be the foundation when text or artwork connects to it',async()=>{
+  const {paperFoundationStatus}=await import('../compute-server/harness/context.mjs');
+  const document={page:{pageMode:'single',physicalPageHeightMM:210,canvas:{width:705,height:1000},paperColor:'#FCFAF0'},
+    source:{styles:['丰富层叠'],materials:[{alias:'journey',assetID:'journey-id'},{alias:'star',assetID:'star-id'}],sourceSnapshots:[{assetID:'journey-id',kind:'paper',role:'support'},{assetID:'star-id',kind:'paper',role:'support'}]}};
+  const card={id:'card',type:'material',surface:'page',opacity:1,hidden:false,asset:'journey',world:{sizeMm:[65,90],centerMm:[74,100]}};
+  const words={id:'words',type:'text',surface:'page',opacity:1,hidden:false,world:{sizeMm:[38,20],centerMm:[74,100]}};
+  assert.deepEqual(paperFoundationStatus(document,{layers:[card,words]}).missingPages,[]);
+  assert.deepEqual(paperFoundationStatus(document,{layers:[card,words]}).unconnectedPages,[]);
+  const stars={...card,id:'stars',asset:'star'};
+  assert.deepEqual(paperFoundationStatus(document,{layers:[stars,words]}).missingPages,[]);
+  const smallerPattern={...stars,world:{sizeMm:[65,63],centerMm:[74,100]}};
+  assert.deepEqual(paperFoundationStatus(document,{layers:[smallerPattern,words]}).missingPages,[]);
+});
+
 test('repeated local edits get a batch correction hint without forcing acceptance',()=>{
   const message=target=>({role:'assistant',tool_calls:[{function:{name:'creation_apply',arguments:JSON.stringify({operations:[{op:'layer.update',target}]})}}]});
   assert.equal(iterationAdvice([message('a'),message('b')]),'');

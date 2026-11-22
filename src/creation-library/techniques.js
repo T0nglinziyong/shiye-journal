@@ -18,12 +18,13 @@ const fields={
  film:['aliases','gapMm','bendMm','frameInset','holesPerFrame','colors'],
  title:titleFields,materials:['aliases','caption','fontFamily','fontSizePt','gapMm','colors'],
  graphic:[...graphic,'waypoints','strokeWidthMm','options','fill','opacity'],pattern:['widthMm','heightMm','colors','options','strokeWidthMm'],
- paper:['widthMm','heightMm','colors','tearSides','roughnessMm','periodMm','holeSide','holeCount','holeRadiusMm','seed','opacity'],
+ paper:['widthMm','heightMm','colors','tearSides','roughnessMm','periodMm','holeSide','holeCount','holeRadiusMm','seed','opacity','layerRole'],
  tape:['aliases','widthMm','heightMm','lengthMm','segments'],record:[...graphic,'items','fontFamily','fontSizePt','gapMm'],
  write:['target','box','text','fontFamily','fontSizePt','colors'],relate:['target','referenceTarget','edge','amountMm'],tear:['target','path','keep','depthMm','periodMm','seed'],window:['target','box','corePlace'],split:['target','parts','gapRatio'],weave:['strip','through']
 };
 const required={accent:[],film:['aliases'],title:['text'],materials:['aliases'],graphic:[],pattern:[],paper:['widthMm','heightMm','at'],tape:['aliases'],record:['items'],write:['target','box','text'],relate:['target','referenceTarget'],tear:['target','path'],window:['target','box'],split:['target'],weave:['strip','through']};
 const fieldHelp={...titleHelp,motif:'rings/spark/sprig/stitch/confetti/materials；同页优先保持一种语言',arrangement:'corner/edge/arc；positions 可覆盖布局',motifSizeMm:'数字点缀单元基准尺寸 1–30 mm，不影响实体尺寸',positions:'本组内比例中心 [[x,y],...]，实体时与 aliases 一一对应；数字时数量由位置数决定',protectedBoxes:'本组内须避开的比例区域 [[x,y,width,height],...]；不自动识别内容',clearanceMm:'保护区和点缀彼此之间的最小间距 0–20 mm',bendMm:'照片组的弧形排布高度，-80–80 mm；只旋转和平移，不变形照片',frameInset:'边带占边框高度的比例 0.02–0.25；照片保持真实尺寸，边框据此向外扩展',holesPerFrame:'每格上下边各 2–32 个透明齿孔',tearSides:'需要撕边的边，可选 top/right/bottom/left；其余边保持平直',roughnessMm:'撕边起伏 0 至纸片短边的 10%，建议 0.4–1.5 mm',holeSide:'打孔所在边 top/right/bottom/left，省略则不打孔',holeCount:'该边透明孔洞数量 0–12，孔洞真实镂空',holeRadiusMm:'孔半径 0.5–5 mm，须小于孔洞间距',options:'结构参数：花瓣数、星角、波浪起伏等；保留为可编辑 geometry.options，具体键见方法示例及 geometry 帮助',fill:'数字图形填充 HEX 或 null（空心）',opacity:'数字图形透明度 0–1',id:'本次结果唯一编号',reference:'page/page.left/page.right/node:<已有组ID>，默认 page',at:'中心位置 [x,y]，毫米，默认 [70,70]',rotationDeg:'整体旋转角度',widthMm:'数字图形或文字区域宽度，毫米；不会缩放实体',heightMm:'数字区域高度，毫米',colors:'1–4 个六位 HEX 颜色',seed:'固定纹样或撕口种子',text:'完整文字，长标题自动换行',fontFamily:'服务器已安装字体名',fontSizePt:'字号 pt',pattern:'plain/dots/stripes/grid',count:'纹样数量 1–30',aliases:'本任务中 1–8 个不重复的素材别名',caption:'可选图下注释，不自动编造',gapMm:'材料或条目间距毫米',waypoints:'路线 2–6 个 [x,y] 比例点',strokeWidthMm:'线宽毫米',lengthMm:'每段真实胶带默认取用长度，毫米',segments:'每段的局部摆放 [{at:[x,y],rotationDeg?,lengthMm?},...]；单段方法 1 项，双角方法 2 项；省略角度时沿用方法默认值，坐标位于 widthMm × heightMm 范围内',items:'1–12 条用户提供或任务允许的文字',target:'已放置实体素材节点 ID',referenceTarget:'已有参照节点 ID',edge:'top/right/bottom/left',amountMm:'露出宽度毫米',path:'局部轨迹 {points:[[x,y],...],unit:"ratio"|"mm",closed?:boolean}',keep:'left/right/inside/outside',depthMm:'撕口深度毫米',periodMm:'撕口周期毫米',box:'开窗局部比例 [x,y,width,height]',parts:'分成 2–8 段',gapRatio:'段间保留余料占原长的比例'};
+fieldHelp.layerRole='纸片相对同级对象的图层：underlay（默认，垫在已有素材和文字下方）或 overlay（有意覆盖可牺牲区域）。新增底纸即使在素材之后调用，也会放到后方。';
 function methodFields(method){
  const base=['write','relate','tear','window','split','weave'].includes(method.recipe)?['id']:common;
  let specific=fields[method.recipe];
@@ -54,6 +55,7 @@ function validate(method,params){
  for(const key of ['widthMm','heightMm','fontSizePt','strokeWidthMm','lengthMm','periodMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<=0||params[key]>1000))throw Error('尺寸参数无效：'+key);
  for(const key of ['gapMm','amountMm','depthMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<0||params[key]>200))throw Error('间距参数无效：'+key);
  if(params.opacity!==undefined&&(!Number.isFinite(params.opacity)||params.opacity<0||params.opacity>1))throw Error('透明度须为 0–1');
+ if(params.layerRole!==undefined&&!['underlay','overlay'].includes(params.layerRole))throw Error('纸片图层角色须为 underlay 或 overlay');
  if(params.fill!==undefined&&params.fill!==null&&!/^#[\da-f]{6}$/i.test(params.fill))throw Error('填充须为 HEX 或 null');
  if(params.colors&&(!Array.isArray(params.colors)||!params.colors.length||params.colors.length>4||params.colors.some(c=>!/^#[\da-f]{6}$/i.test(c))))throw Error('颜色必须为六位 HEX');
  if(params.at&&(!Array.isArray(params.at)||params.at.length!==2||!params.at.every(Number.isFinite)))throw Error('位置无效');
@@ -192,5 +194,5 @@ export function compileTechnique({methodId,parameters,materials=[]}){
   if(method.recipe==='split'){const count=p.parts||2,gap=p.gapRatio??.02,w=(1-gap*(count-1))/count;operations=[{op:'material.split',target,keepRemainder:true,pieces:Array.from({length:count},(_,i)=>({id:id+'-part'+i,region:{shape:'rect',space:'local',unit:'ratio',box:[i*(w+gap),0,w,1]}}))}];}
   return {operations,report:{methodId,output:method.recipe==='relate'?target:method.recipe==='split'?id+'-part0':id,...(method.recipe==='split'?{outputs:Array.from({length:p.parts||2},(_,i)=>id+'-part'+i)}:{}),notes:['裁片与余料保存在真实来源账本；后续用现有裁片节点继续处理。'],...(method.recipe==='window'?{retainedNode:id+'-core',coreVisible:Boolean(p.corePlace),reuse:'使用现有窗芯节点继续处理；隐藏时先 layer.update hidden:false，再按窗芯裁片的外接框定位'}:{})}};
  }
- return {operations:[{op:'group.compose',id,layoutBox:{width,height,unit:'mm'},place:{reference:p.reference||'page',at:placementAt,unit:'mm',rotationDeg:p.rotationDeg||0},children}],report:{methodId,groupId:id,widthMm:width,heightMm:height,notes,...accentReport}};
+ return {operations:[{op:'group.compose',id,layoutBox:{width,height,unit:'mm'},place:{reference:p.reference||'page',at:placementAt,unit:'mm',rotationDeg:p.rotationDeg||0},...(method.recipe==='paper'?{order:{edge:p.layerRole==='overlay'?'front':'back'}}:{}),children}],report:{methodId,groupId:id,widthMm:width,heightMm:height,notes,...accentReport}};
 }

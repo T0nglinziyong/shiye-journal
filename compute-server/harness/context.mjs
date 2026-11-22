@@ -35,8 +35,11 @@ export function shortlistCreationMethods(document,brief={}){
     /杂志|照片|旅行/.test(text)?['magazine-offset','photo-stagger','photo-caption','paper-underlay','graphic-route']:
     ['paper-color-card','composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
   const chosen=materialCount<3?ids.filter(id=>!['composition-s','layered-center','layered-diagonal','photo-stagger'].includes(id)):ids;
+  const hasSourcePaper=document.source.sourceSnapshots?.some(snapshot=>snapshot.kind==='paper');
   const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
-  return chosen.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
+  const candidates=chosen.filter(id=>id!=='paper-color-card'||!hasSourcePaper);
+  if(hasSourcePaper&&document.source.textMode!=='none')candidates.splice(Math.min(2,candidates.length),0,'record-on-material');
+  return candidates.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
 }
 
 export function initialToolGuide(document){
@@ -68,7 +71,61 @@ export function automaticSceneFeedback(document){
   let finalValidation={ok:true};
   try{validateWebScene(document.page,document.source,document.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true})),{final:true});}
   catch(e){finalValidation={ok:false,issue:e.message};}
-  return {required,finalValidation};
+  return {required,finalValidation,foundation:paperFoundationStatus(document,inspection)};
+}
+
+const rgb=hex=>/^#[0-9a-f]{6}$/i.test(hex||'')?[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)):null;
+const colorDistance=(a,b)=>{const aa=rgb(a),bb=rgb(b);return aa&&bb?Math.hypot(...aa.map((value,index)=>value-bb[index])):0;};
+
+export function paperFoundationStatus(document,inspection=inspectCreationDocument(document)){
+  const rich=(document.source.styles||[]).some(style=>/丰富|层叠|拼贴/.test(style));
+  const required=document.source.materials.length>0&&(rich||document.source.materials.length>=2)&&!(document.source.styles||[]).some(style=>/极简|无打底/.test(style));
+  if(!required)return {required:false,missingPages:[],unconnectedPages:[],flatBoards:false};
+  const page=document.page,height=page.physicalPageHeightMM;
+  const leaves=page.pageMode==='spread'?2:1;
+  const leafWidth=page.canvas.width/page.canvas.height*height/leaves;
+  const leafArea=leafWidth*height;
+  const sourceByAlias=new Map(document.source.materials.map(material=>[material.alias,document.source.sourceSnapshots.find(snapshot=>snapshot.assetID===material.assetID)]));
+  const found=Array(leaves).fill(false),papers=Array.from({length:leaves},()=>[]),carriers=Array.from({length:leaves},()=>[]),contents=Array.from({length:leaves},()=>[]);
+  const box=layer=>{const [w,h]=layer.world.sizeMm,[x,y]=layer.world.centerMm;return {l:x-w/2,r:x+w/2,t:y-h/2,b:y+h/2,area:w*h};};
+  const overlap=(a,b)=>Math.max(0,Math.min(a.r,b.r)-Math.max(a.l,b.l))*Math.max(0,Math.min(a.b,b.b)-Math.max(a.t,b.t));
+  for(const layer of inspection.layers){
+    if(layer.surface!=='page'||layer.hidden||layer.opacity<0.6||!layer.world?.sizeMm||!layer.world?.centerMm)continue;
+    const [width,layerHeight]=layer.world.sizeMm;
+    const pageIndex=leaves===1?0:Math.min(1,Math.floor(layer.world.centerMm[0]/leafWidth));
+    if(layer.type==='material'||layer.type==='text')contents[pageIndex].push({id:layer.id,box:box(layer)});
+    const area=width*layerHeight;
+    if(layer.type==='shape'&&area>=leafArea*0.14&&layer.fill&&colorDistance(layer.fill,page.paperColor)>=30){
+      found[pageIndex]=true;
+      papers[pageIndex].push({fill:layer.fill.toLowerCase(),width,height:layerHeight,centerY:layer.world.centerMm[1],area:width*layerHeight});
+      carriers[pageIndex].push({id:layer.id,box:box(layer)});
+    }
+    if(layer.type==='material'){
+      const source=sourceByAlias.get(layer.asset);
+      // A real card can carry a collage even when it covers a little less
+      // area than a generated color panel; its printed edge remains visible.
+      if(area>=leafArea*0.1&&source?.kind==='paper'){
+        found[pageIndex]=true;
+        carriers[pageIndex].push({id:layer.id,box:box(layer)});
+      }
+    }
+  }
+  // Two identical oversized color panels satisfy a color check but read as a
+  // presentation board, not as paper pieces supporting a journal collage.
+  const prominent=papers.map(rows=>rows.filter(row=>row.area>=leafArea*0.35));
+  const [left,right]=prominent.map(rows=>rows.length===1?rows[0]:null);
+  const close=(a,b,scale)=>Math.abs(a-b)<=scale;
+  const flatBoards=Boolean(rich&&leaves===2&&left&&right&&
+    close(left.width,right.width,leafWidth*0.12)&&close(left.height,right.height,height*0.12)&&
+    close(left.centerY,right.centerY,height*0.08));
+  const pageName=index=>leaves===1?'page':index?'page.right':'page.left';
+  const unconnectedPages=rich?carriers.flatMap((rows,index)=>{
+    if(!rows.length||!contents[index].length)return [];
+    const connected=rows.some(paper=>contents[index].some(content=>content.id!==paper.id&&overlap(paper.box,content.box)>=Math.min(paper.box.area,content.box.area)*0.05));
+    return connected?[]:[pageName(index)];
+  }):[];
+  return {required:true,missingPages:found.flatMap((value,index)=>value?[]:[pageName(index)]),unconnectedPages,flatBoards,
+    hint:'承托层可以是已有的纹样纸、可写卡、纸片或数字纸形；先试摆真实素材，只有缺少合适写面或色彩关系时再加数字纸。'};
 }
 
 export function modelContext(messages,state={}){
@@ -82,7 +139,7 @@ export function modelContext(messages,state={}){
   const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
   let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-4)??turns.at(0)??2);
   while(start>2&&messages[start]?.role==='tool')start--;
-  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&(/^(当前真实画面：|本轮最先核对的画面问题)/.test(message.content[0]?.text||''));
+  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&(/^(当前真实画面：|本轮最先核对的画面问题|独立构图审查发现必须先修复|独立文字与画面审查发现必须先修复)/.test(message.content[0]?.text||''));
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
   const recent=tail.filter((message,i)=>{
     if(isPreview(message))return i===lastPreview&&i>lastAssistant;

@@ -32,12 +32,14 @@ const skills=await loadCreationSkills(),assets=task.sourceContext.sourceSnapshot
 let document,initial;
 if(resume){initial=JSON.parse(await readFile(join(output,'input.json'),'utf8'));document=initial.document;}
 else {
-  const prompt=task.materials.length
+  const fallbackPrompt=task.materials.length
     ?'使用本次真实素材创作一份完成态的'+style+'手帐。图文共同构图，有具体内容与手作层次；不要做商品目录。'
     :'创作一份完成态的'+style+'手帐。本次没有任何素材；不得调用预设素材、模板中的素材或外部图片。可使用原创可编辑文字、荧光笔、程序绘制的图形、线条和笔迹。风格只约束视觉表达；自行选择一个具体的日常主题，用原创文字写出有内容和阅读节奏的观察，不要用空标题或占位文字凑版。';
+  const prompt=(typeof task.intent==='string'&&task.intent.trim()?task.intent.trim():fallbackPrompt)+(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS||'');
   document=await createCreationDocument({draft:draft({mode:task.page.mode,ratio:task.page.ratio}),assets,
     aliases:Object.fromEntries(task.sourceContext.materials.map(m=>[m.alias,m.assetID])),title:style+'手帐',
-    styles:[style],prompt:prompt+(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS||''),
+    styles:[...new Set([style,...(Array.isArray(task.styles)?task.styles:[])])],pagePurposes:task.purposes,
+    prompt,userText:task.userText||'',providedFacts:task.providedFacts||'',
     contentPolicy:task.contentPolicy||'original',processing:task.processing,requiredAssetIDs:task.requiredAssetIDs,materialPriority:task.sourceContext.materialPriority});
 }
 const renderer=await createHarnessRenderer({source:document.source,images,saveArtifact:async({png,pngHash,document,report})=>{
@@ -61,7 +63,7 @@ const harness=createCreativeHarness({skills,checkpointer,...renderer,segmentMate
 try{
   const result=await harness.run({id:'acceptance',state:resume?undefined:initial});
   const evaluation=summarizeCreativeEvaluation(result.qualityFrames||[]);
-  const report={status:result.status,totalMs:Date.now()-initial.startedAt,turns:result.turns,loadedSkills:result.loadedSkills,review:result.review,preview:result.preview,usage:result.usage,evaluation:evaluation.comparison,traceEvents:result.trace?.length||0,style,materialCount:task.materials.length,source:'existing-private-v3-package',liveApp:false};
+  const report={status:result.status,totalMs:Date.now()-initial.startedAt,turns:result.turns,loadedSkills:result.loadedSkills,review:result.review,independentReviews:result.independentReviews||[],preview:result.preview,usage:result.usage,auxiliaryUsage:result.auxiliaryUsage||[],compactions:result.compactions||[],evaluation:evaluation.comparison,traceEvents:result.trace?.length||0,style,materialCount:task.materials.length,source:'existing-private-v3-package',liveApp:false};
   await writeFile(join(output,'project.shiyeproject.json'),JSON.stringify(result.document),{mode:0o600});
   await writeFile(join(output,'evaluation.json'),JSON.stringify(evaluation,null,2),{mode:0o600});
   await writeFile(join(output,'trace.json'),JSON.stringify(result.trace||[],null,2),{mode:0o600});

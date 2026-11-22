@@ -6,11 +6,19 @@ import {join} from 'node:path';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision} from '../src/creation-transaction.js';
-import {createCreativeHarness,initialHarnessState} from '../compute-server/harness/agent.mjs';
+import {createCreativeHarness,initialHarnessState,canonicalToolRevision} from '../compute-server/harness/agent.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
 import {searchLibraryReferences,templateDetails} from '../compute-server/harness/library.mjs';
 import {createDeepSeekCreativeModel} from '../compute-server/harness/deepseek.mjs';
+import {isManagedUnchanged} from '../src/craft-fingerprint.js';
+
+test('the single-writer harness repairs one copied revision digit but rejects stale hashes',()=>{
+ const current='sha256:'+'a'.repeat(64);
+ assert.equal(canonicalToolRevision('sha256:'+'b'+'a'.repeat(63),current),current);
+ assert.equal(canonicalToolRevision('sha256:'+'bb'+'a'.repeat(62),current),'sha256:'+'bb'+'a'.repeat(62));
+ assert.equal(canonicalToolRevision('not-a-revision',current),'not-a-revision');
+});
 
 const call=(name,args)=>({id:name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}});
 const answer=(...calls)=>({message:{role:'assistant',content:null,tool_calls:calls}});
@@ -107,6 +115,8 @@ test('an off-page text placement is translated before its transaction receipt is
   const saved=await f.harness.state('snapped-title');
   const receipt=saved.document.v3Transactions['snapped-title'];
   assert.equal(receipt.sceneRevision,creationSceneRevision(saved.document));
+  assert.ok(saved.messages.some(message=>message.role==='tool'&&message.content.includes('layoutCorrections')));
+  assert.equal(isManagedUnchanged(saved.document.page.layers.find(layer=>layer.id==='title')),true);
   assert.ok(saved.results[0]?.ok||saved.qualityFrames.length===1);
   assert.equal(saved.qualityFrames.length,1);
 });

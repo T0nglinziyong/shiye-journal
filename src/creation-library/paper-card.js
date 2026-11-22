@@ -9,7 +9,7 @@ const noise=(seed,index)=>{
 const point=([x,y],first)=>`${first?'M':'L'}${round(x)} ${round(y)}`;
 
 export function paperCardPath({widthMm:w,heightMm:h,tearSides=[],roughnessMm=1.2,periodMm=4,holeSide='none',holeCount=0,holeRadiusMm=1.5,seed=17}){
- if(!(w>=12&&w<=500&&h>=12&&h<=500))throw Error('底纸宽高须在 12–500 mm');
+ if(!(w>=12&&w<=500&&h>=12&&h<=500))throw Error('底纸宽高须在 12–500 mm；更窄的纸条用 graphic.add');
  if(!Array.isArray(tearSides)||tearSides.some(side=>!['top','right','bottom','left'].includes(side))||new Set(tearSides).size!==tearSides.length)throw Error('撕边须为不重复的 top/right/bottom/left');
  if(!Number.isFinite(roughnessMm)||roughnessMm<0||roughnessMm>Math.min(w,h)*.1)throw Error('撕边起伏超出纸片尺寸');
  if(!Number.isFinite(periodMm)||periodMm<1||periodMm>30)throw Error('撕边周期须在 1–30 mm');
@@ -38,7 +38,7 @@ export function paperCardPath({widthMm:w,heightMm:h,tearSides=[],roughnessMm=1.2
  let d=points.map((p,i)=>point(p,i===0)).join(' ')+' Z';
  if(holeCount){
   const span=['left','right'].includes(holeSide)?h-2*edgeInset:w-2*edgeInset;
-  if(span/(holeCount+1)<holeRadiusMm*2.8)throw Error('孔洞间距不足');
+  if(span/(holeCount+1)<holeRadiusMm*2.8)throw Error('孔洞间距不足；减小 holeCount 或 holeRadiusMm，普通纸片用 holeCount:0 与 holeSide:none');
   for(let i=1;i<=holeCount;i++){
    // Keep each punched circle wholly inside the paper silhouette. A circle
    // crossing the edge looks like an accidental notch instead of a hole.

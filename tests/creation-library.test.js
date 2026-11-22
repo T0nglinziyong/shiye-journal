@@ -65,6 +65,28 @@ for(const method of techniqueCatalog.methods)test('technique transaction is exec
   assert.ok(y-dy>=-box.h/2-.5&&y+dy<=box.h/2+.5,method.id+'/'+child.id+' group height');
  }
 });
+test('late paper foundation stays behind existing material unless explicitly overlaid',async()=>{
+ const step=(doc,id,operations)=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:id,baseSceneRevision:creationSceneRevision(doc),operations},exampleMaterials).document;
+ const first=step(await document(exampleMaterials),'subject-tx',[{op:'material.add',id:'subject',asset:'m1',place:{reference:'page',at:[72,90],unit:'mm'}}]);
+ const underlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-base',widthMm:70,heightMm:92,at:[72,90]}});
+ assert.deepEqual(underlay.operations[0].order,{edge:'back'});
+ const result=step(first,'underlay-tx',underlay.operations);
+ const ordered=result.page.layers.slice().sort((a,b)=>a.zIndex-b.zIndex);
+ assert.equal(ordered[0].id,'paper-base');
+ assert.equal(ordered[1].type,'material');
+ const overlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-front',widthMm:30,heightMm:30,at:[72,90],layerRole:'overlay'}});
+ assert.deepEqual(overlay.operations[0].order,{edge:'front'});
+ const layered=step(result,'overlay-tx',overlay.operations);
+ const top=layered.page.layers.slice().sort((a,b)=>a.zIndex-b.zIndex).at(-1);
+ assert.equal(top.id,'paper-front');
+ assert.throws(()=>compileTechnique({methodId:'paper-color-card',parameters:{id:'bad-paper',widthMm:30,heightMm:30,at:[72,90],layerRole:'middle'}}),/图层角色/);
+});
+test('plain paper strips do not inherit punched holes from the recipe',()=>{
+ const paper=techniqueCatalog.methods.find(method=>method.id==='paper-color-card');
+ assert.equal(paper.defaults.holeCount,0);
+ assert.equal(paper.defaults.holeSide,'none');
+ assert.doesNotThrow(()=>compileTechnique({methodId:'paper-color-card',parameters:{id:'plain-strip',widthMm:12,heightMm:80,at:[72,90]}}));
+});
 test('basic tools keep executable examples without illustration assets',()=>{
  const basicRecipes=new Set(['graphic','relate','tear','window','split','weave','write']);
  const basicPatterns=new Set(['pattern-dots','pattern-stripes','pattern-grid','pattern-scallop']);

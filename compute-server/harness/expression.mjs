@@ -49,7 +49,11 @@ export function expressionCards(document,brief){
   const color=rich?'color-bands':'color-echo';
   const accents=rich?['accent-sprig','accent-stitch']:['accent-rings'];
   if(document.source.materials.length&&document.source.textMode!=='none')title.push('graphic-route');
-  return [...title,color,...accents].map(id=>{
+  // A small physical illustration can stay small: offer an editable paper
+  // carrier as an actual method card, without prescribing a fixed layout.
+  const hasPaperSource=document.source.sourceSnapshots?.some(snapshot=>snapshot.kind==='paper');
+  const foundation=document.source.materials.length&&!hasPaperSource?['paper-color-card']:[];
+  return [...title,color,...accents,...foundation].map(id=>{
     const method=describeTechnique(id,{includeFontSuggestions:false});
     return {id,skill:method.skill,title:method.title,when:method.when,
       principle:method.lesson.principle,check:method.lesson.check,
