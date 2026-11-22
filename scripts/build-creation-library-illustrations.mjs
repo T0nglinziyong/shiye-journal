@@ -68,7 +68,9 @@ for(const [i,a] of exampleMaterials.entries()){
 for(const method of techniqueCatalog.methods){
  if(!method.illustration)continue;
  const {before,parameters}=techniqueExample(method),compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
- const doc=await createCreationDocument({draft:draft({ratio:'a5'}),assets:exampleMaterials,aliases:Object.fromEntries(exampleMaterials.map(a=>[a.alias,a.id]))});
+ const previewPage=draft({ratio:'a5'});
+ if(method.id==='title-outline-block-ring')previewPage.paperColor='#20272B';
+ const doc=await createCreationDocument({draft:previewPage,assets:exampleMaterials,aliases:Object.fromEntries(exampleMaterials.map(a=>[a.alias,a.id]))});
  const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'illustration-'+method.id,baseSceneRevision:creationSceneRevision(doc),operations:[...before,...compiled.operations]},exampleMaterials).document;
  const {png}=await renderOfflinePNG(done.page,done.source,images,canvas),im=await canvas.loadImage(png),full=canvas.createCanvas(im.width,im.height),ctx=full.getContext('2d');ctx.drawImage(im,0,0);
  const pixels=ctx.getImageData(0,0,im.width,im.height).data,bg=pixels.slice(0,3);let left=im.width,top=im.height,right=0,bottom=0;

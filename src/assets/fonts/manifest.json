@@ -1,5 +1,5 @@
 {
-  "version": "handwriting-2026-11-20-v2",
+  "version": "handwriting-2026-11-22-v3",
   "fonts": [
     {
       "name": "MaShanZheng-Regular",
@@ -150,6 +150,46 @@
         {
           "file": "LikeJianJian.ttf",
           "sha256": "8074e624c7f3a31fb763605b6f3992cf172abac32b91d7a40d3b56748b7885a5"
+        }
+      ]
+    },
+    {
+      "name": "BaiLuBangBang",
+      "family": "BaiLuBangBang",
+      "label": "白路棒棒 · 有力度的标题",
+      "coverage": "简体中文、英文",
+      "file": "BaiLuBangBang.ttf",
+      "webFile": "BaiLuBangBang.ttf",
+      "fallbacks": [
+        "Xiaolai"
+      ],
+      "version": "user-supplied-2026-11-22",
+      "source": "用户于 2026-11-22 提供的字体文件",
+      "license": "BaiLuBangBang-NOTICE.txt",
+      "files": [
+        {
+          "file": "BaiLuBangBang.ttf",
+          "sha256": "f795aa685e21b114d69f16159dd67a2ed255c4b4ebce0193542b9bc746414b21"
+        }
+      ]
+    },
+    {
+      "name": "WoAiWanWeiWei",
+      "family": "WoAiWanWeiWei",
+      "label": "我爱万伟伟 · 轻快手写",
+      "coverage": "简体中文、英文",
+      "file": "WoAiWanWeiWei.ttf",
+      "webFile": "WoAiWanWeiWei.ttf",
+      "fallbacks": [
+        "Xiaolai"
+      ],
+      "version": "user-supplied-2026-11-22",
+      "source": "用户于 2026-11-22 提供的字体文件",
+      "license": "WoAiWanWeiWei-NOTICE.txt",
+      "files": [
+        {
+          "file": "WoAiWanWeiWei.ttf",
+          "sha256": "178f32d8011a69f488abd7d92c9f03642c3f37509cccd386eb87dfb0fd487060"
         }
       ]
     }

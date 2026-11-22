@@ -2,11 +2,13 @@ import React,{useState} from 'react';
 import './editor-lettering.css';
 import {letteringEditorState} from './editor-lettering.js';
 import {letteringCharacters} from './scene-lettering.js';
-const fonts=[['hand','手写'],['serif','宋体'],['sans','黑体'],['rounded','圆体']];
+import {journalBundledFonts} from './journal-font-catalog.js';
+const fonts=[...journalBundledFonts.map(({family,label})=>['font:'+family,label]),['hand','系统手写'],['serif','宋体'],['sans','黑体'],['rounded','圆体']];
+const fontStyle=value=>value.startsWith('font:')?{fontFamily:value.slice(5)}:{fontPreset:value};
 export function NewLetteringForm({page,defaults,onCreate}){
- const [content,setContent]=useState(''),[font,setFont]=useState(defaults?.style||'hand'),[error,setError]=useState('');
+ const [content,setContent]=useState(''),[font,setFont]=useState(defaults?.fontName?'font:'+defaults.fontName:'font:BaiLuBangBang'),[error,setError]=useState('');
  const [size,setSize]=useState(Number(((defaults?.fontSize||40)*page.physicalPageHeightMM/page.canvas.height*72/25.4).toFixed(1)));
- return <form className="stack lettering-controls" onSubmit={e=>{e.preventDefault();try{letteringCharacters(content);setError('');onCreate({content,style:{fontPreset:font,fontSizePt:size,color:defaults?.color||'#30463d'}});}catch(error){setError(error.message);}}}>
+ return <form className="stack lettering-controls" onSubmit={e=>{e.preventDefault();try{letteringCharacters(content);setError('');onCreate({content,style:{...fontStyle(font),fontSizePt:size,color:defaults?.color||'#30463d'}});}catch(error){setError(error.message);}}}>
   <label>标题文字<input value={content} maxLength={128} placeholder="例如：脑内电台" onChange={e=>setContent(e.target.value)} required/></label>
   <small>适合 1–32 个字的短标题。创建后可整体改字、重排，也能单独编辑每个字。</small>
   <div className="form-grid"><label>标题字体<select value={font} onChange={e=>setFont(e.target.value)}>{fonts.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
@@ -28,7 +30,7 @@ function LetteringForm({initial,onApply}){
  const apply=()=>{
   let count;try{count=letteringCharacters(content).length;setError('');}catch(error){setError(error.message);return;}
   const change={};if(content!==initial.content)change.content=content;if(gap!==initial.gapMm)change.gapMm=gap;
-  const style={};if(font)style.fontPreset=font;if(size!=='')style.fontSizePt=Number(size);if(uniformColor)style.color=color;
+  const style=font?fontStyle(font):{};if(size!=='')style.fontSizePt=Number(size);if(uniformColor)style.color=color;
   if(Object.keys(style).length)change.style=style;
   if(changed.length)change.letters=changed.filter(index=>index<count).map(index=>({index,rotationDeg:letters[index].rotationDeg,offsetMm:letters[index].offsetMm}));
   if(Object.keys(change).length)onApply(change);

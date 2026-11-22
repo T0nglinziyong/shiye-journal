@@ -4,7 +4,7 @@ import {inspectCreationDocument} from '../../src/creation-inspection.js';
 // A visible treatment, rather than merely a method mentioned in the plan.
 const expressiveIDs=new Set([
   'title-outline','title-highlight','title-stack','title-vertical','title-stagger',
-  'title-tape','title-label','title-curve','title-shadow','title-offset-outline',
+  'title-tape','title-label','title-curve','title-shadow','title-gap-shadow','title-offset-outline',
   'title-gradient','title-gradient-outline','title-phrases','title-circle',
   'title-cross-shadow','title-scattered-round','title-scattered-triangle',
   'title-number-route','title-script-dots','title-paper-lettering',
@@ -19,6 +19,7 @@ const colorIDs=new Set(['color-echo','color-bands']);
 export function letteringEffectMenu(){
   return [
     {id:'title-shadow',effect:'同侧阴影',when:'字形需要轻微立体感；阴影方向统一'},
+    {id:'title-gap-shadow',effect:'留白间隔阴影',when:'大标题需要硬边错位投影；colors[2] 设为标题所在纸面色'},
     {id:'title-outline',effect:'透明空心字',when:'底色或照片需要透过字心；检查细线可读性'},
     {id:'title-offset-outline',effect:'偏移轮廓',when:'需要清晰的错位线条而非模糊投影'},
     {id:'title-gradient-outline',effect:'渐变描边',when:'需要取自素材的两色字形与背景分离'},
