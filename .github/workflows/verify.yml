@@ -144,7 +144,7 @@ jobs:
   deploy-cloudbase-test:
     name: Deploy CloudBase test
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
+    if: always() && needs.verify.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/test'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: cloudbase-test
