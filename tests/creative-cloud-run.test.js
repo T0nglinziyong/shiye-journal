@@ -27,23 +27,27 @@ test('cloud worker commits hash-verified editable output after real rendering an
       assert.equal(name,'shiye_update_creative_job_v1');updates.push(args);return {id,status:args.p_result_path?'completed':'running'};
     },model:async({messages})=>{
       if(modelCalls===0){assert.match(messages[0].content,/Xiaolai/);assert.ok(messages[0].content.includes(fontManifest.version));}
-      if(++modelCalls===1)return reply(call('read_skill',{name:'journal-composition'}),call('creation_plan',{intent:'测试',steps:[{task:'添加可编辑文字并看图',status:'in_progress'}]}),
-        call('creation_apply',{protocolVersion:2,transactionId:'text',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
+      if(++modelCalls===1)return reply(call('creation_plan',{intent:'测试',themeEvidence:{supportedBy:['用户要求'],conflicts:[],response:'用一句话记录想法'},palette:{source:'纸面',main:'#445566',secondary:'#EEEEDD',relationship:'echo',distribution:'浅底深字'},composition:{visualAnchors:'标题和正文共同构成焦点',layout:'左上标题，右下正文',connector:'颜色呼应'},writingZones:[{role:'title',surface:'page',anchor:'左上',capacity:'short',legibility:'深字浅底'},{role:'body',surface:'page',anchor:'右下',capacity:'short',legibility:'浅底'}],steps:[{task:'添加可编辑文字并看图',status:'in_progress'}]}),call('creation_phase',{phase:'layout',reason:'方向已确定',assessment:{observations:'主题、配色和双焦点布局已确定',issues:[]}}));
+      if(modelCalls===2)return reply(call('creation_apply',{protocolVersion:2,transactionId:'text',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
       const visual=messages.findLast(m=>Array.isArray(m.content)&&m.content[0]?.text?.startsWith('当前真实画面：'));
-      assert.ok(visual.content.find(part=>part.type==='image_url').image_url.url.startsWith('data:image/jpeg;base64,'));
-      const preview=JSON.parse(visual.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
-      return reply(call('creation_review',{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,approved:true,observations:'测试图像已渲染，非审美验收',issues:[]}),call('creation_finish',{}));
+      if(modelCalls===3)assert.ok(visual.content.find(part=>part.type==='image_url').image_url.url.startsWith('data:image/jpeg;base64,'));
+      const summary=messages.find(m=>m.role==='user'&&typeof m.content==='string'&&m.content.startsWith('当前创作状态'));
+      const preview=visual?JSON.parse(visual.content[0].text.split('\n')[0].slice('当前真实画面：'.length)):JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
+      if(modelCalls===3)return reply(call('creation_phase',{phase:'craft',reason:'构图已确定',assessment:{observations:'左上标题清晰，右下仍有正文位置',issues:[]}}));
+      if(modelCalls===4)return reply(call('creation_apply',{protocolVersion:2,transactionId:'body',baseSceneRevision:preview.sceneRevision,operations:[{op:'text.add',id:'body',content:'把今天的新想法写下来。',place:{reference:'page',at:[55,85],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
+      if(modelCalls===5)return reply(call('creation_phase',{phase:'review',reason:'书写已完成',assessment:{observations:'左上标题与下方正文形成清楚的文字层级',issues:[]}}));
+      return reply(call('creation_finish',{review:{observations:'标题与正文均清楚，页面有完整的文字层级',issues:[]}}));
     }});
   assert.ok(entries.length>4);assert.ok(notifications>=2);assert.ok(updates.some(v=>v.p_progress?.stage==='preview'));
   const completed=updates.findLast(v=>v.p_progress?.stage==='completed').p_progress;
-  assert.deepEqual({turns:completed.turns,inputTokens:completed.inputTokens,outputTokens:completed.outputTokens},{turns:2,inputTokens:240,outputTokens:60});
+  assert.deepEqual({turns:completed.turns,inputTokens:completed.inputTokens,outputTokens:completed.outputTokens},{turns:6,inputTokens:720,outputTokens:180});
   const output=JSON.parse(objects.get(result.resultPath));assert.equal(output.page.layers[0].content,'一页新的想法');
   const evaluation=JSON.parse(objects.get(prefix+'reports/evaluation.json'));
   const trace=JSON.parse(objects.get(prefix+'reports/trace.json'));
-  assert.equal(evaluation.comparison.revisions,1);
+  assert.equal(evaluation.comparison.revisions,2);
   assert.ok(trace.some(event=>event.kind==='model')&&trace.some(event=>event.kind==='tool')&&trace.some(event=>event.kind==='render'));
   assert.equal(creativeObjectHash(objects.get(result.resultPath)).slice(7)+'.json',result.resultPath.split('/').at(-1));
-  const publicProgress=JSON.stringify(updates);assert.ok(!publicProgress.includes('test-only'));assert.equal(modelCalls,2);
+  const publicProgress=JSON.stringify(updates);assert.ok(!publicProgress.includes('test-only'));assert.equal(modelCalls,6);
 });
 
 test('creative job payload accepts task facts only, never fonts skills or executable resources',async()=>{

@@ -3,577 +3,283 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createHash} from 'node:crypto';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision} from '../src/creation-transaction.js';
-import {harnessTools,createCreativeHarness,initialHarnessState} from '../compute-server/harness/agent.mjs';
+import {createCreativeHarness,initialHarnessState,canonicalToolRevision} from '../compute-server/harness/agent.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
+import {searchLibraryReferences,templateDetails} from '../compute-server/harness/library.mjs';
 import {createDeepSeekCreativeModel} from '../compute-server/harness/deepseek.mjs';
-import {searchLibraryReferences,caseDetails,matchJournalCases} from '../compute-server/harness/library.mjs';
+import {isManagedUnchanged} from '../src/craft-fingerprint.js';
 
-const pngHash='sha256:'+'a'.repeat(64);
-const call=(name,args,id=name)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
-const answer=(...calls)=>({message:{role:'assistant',content:null,reasoning_content:'test',tool_calls:calls}});
-async function fixture(t){
-  const dir=await mkdtemp(join(tmpdir(),'shiye-harness-'));t.after(()=>rm(dir,{recursive:true,force:true}));
-  const document=await createCreationDocument({draft:draft(),assets:[]}),skills=await loadCreationSkills();
-  const journal=fileCheckpointJournal(join(dir,'journal.jsonl'));
-  const render=async doc=>({pngHash,sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='});
-  return {document,skills,journal,render,state:initialHarnessState({document,skills,brief:{title:'测试'}})};
-}
-const plan=()=>call('creation_plan',{intent:'图文共同构图',steps:[{task:'试摆并看图',status:'in_progress'}]});
-const skill=()=>call('read_skill',{name:'journal-composition'});
-const add=doc=>call('creation_apply',{protocolVersion:2,transactionId:'first',baseSceneRevision:creationSceneRevision(doc),operations:[{op:'text.add',id:'text',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]});
-const lastScene=messages=>{
-  const entry=[...messages].reverse().find(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
-  return JSON.parse(entry.content[0].text.split('\n')[0].replace('当前真实画面：',''));
+test('the single-writer harness repairs one copied revision digit but rejects stale hashes',()=>{
+ const current='sha256:'+'a'.repeat(64);
+ assert.equal(canonicalToolRevision('sha256:'+'b'+'a'.repeat(63),current),current);
+ assert.equal(canonicalToolRevision('sha256:'+'bb'+'a'.repeat(62),current),'sha256:'+'bb'+'a'.repeat(62));
+ assert.equal(canonicalToolRevision('not-a-revision',current),'not-a-revision');
+});
+
+const call=(name,args)=>({id:name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}});
+const answer=(...calls)=>({message:{role:'assistant',content:null,tool_calls:calls}});
+const phase=(to,observations,issues=[])=>call('creation_phase',{phase:to,reason:'阶段检查',assessment:{observations,issues}});
+const plan=()=>call('creation_plan',{intent:'记录具体日常',themeEvidence:{supportedBy:['用户要求制作手帐'],conflicts:[],response:'以短文记录具体小事'},palette:{source:'纸张和标题',main:'#465D54',secondary:'#E8DFC2',relationship:'echo',distribution:'浅底深字，少量绿色呼应'},composition:{visualAnchors:'标题、正文和色块形成多处视觉锚点',layout:'标题偏上，正文穿插在底纸上',connector:'绿色小点连接'},writingZones:[{role:'title',surface:'page',anchor:'左上',capacity:'short',legibility:'深字浅底'},{role:'body',surface:'page',anchor:'中下',capacity:'medium',legibility:'浅底'}],steps:[{task:'构图',status:'in_progress'}]});
+const edit=(revision,transactionId,operations)=>call('creation_apply',{protocolVersion:2,transactionId,baseSceneRevision:revision,operations});
+const text=(id,content,at)=>({op:'text.add',id,content,size:{width:55,unit:'mm'},place:{reference:'page',at,unit:'mm'},style:{fontSizePt:id==='title'?20:11}});
+const previewOf=messages=>{
+  const entry=messages.findLast(message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：'));
+  if(entry)return JSON.parse(entry.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
+  const summary=messages.find(message=>message.role==='user'&&typeof message.content==='string'&&message.content.startsWith('当前创作状态'));
+  return summary&&JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
 };
-const revise=(messages,issue='当前排版需要调整')=>call('creation_review',{...lastScene(messages),approved:false,observations:'已检查当前真实预览',issues:[issue],nextStep:'合批修正后重新看图'});
+async function fixture(t,model,{clock,afterRender}={}){
+  const dir=await mkdtemp(join(tmpdir(),'shiye-new-harness-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+  const document=await createCreationDocument({draft:draft(),assets:[]}),skills=await loadCreationSkills();
+  const state=initialHarnessState({document,skills,brief:{style:'丰富层叠',intent:'写一页周末记录'}});
+  const checkpointer=await new JournalCheckpointSaver(fileCheckpointJournal(join(dir,'checkpoint.jsonl'))).restore();
+  let renders=0;
+  const harness=createCreativeHarness({skills,checkpointer,clock,render:async doc=>{const result={pngHash:'sha256:'+String(++renders).padStart(64,'a'),sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='};afterRender?.(renders);return result;},model});
+  return {harness,state,document,renders:()=>renders};
+}
 
-test('reference search returns sourced, actionable matches with stable page fit',async t=>{
- const f=await fixture(t);
- const templates=searchLibraryReferences(f.document,{query:'旅行票据模板',kind:'templates',limit:6});
- assert.ok(templates.results.length>0);
- assert.ok(templates.results.every(row=>row.kind==='template'&&row.source?.id&&row.readWith.tool==='read_template'));
- const titleSources=searchLibraryReferences(f.document,{query:'标题',kind:'templates',limit:6});
- assert.ok(new Set(titleSources.results.map(row=>row.source.id)).size>1);
- const methods=searchLibraryReferences(f.document,{query:'标题',kind:'techniques',limit:4});
- assert.ok(methods.results.length>0);
- assert.ok(methods.results.every(row=>row.readWith.tool==='read_skill'&&row.readWith.methodId===row.id));
- assert.deepEqual(searchLibraryReferences(f.document,{query:'毫无关系的唯一关键词',kind:'techniques'}).results,[]);
- const cases=searchLibraryReferences(f.document,{query:'照片',kind:'cases',limit:8});
- assert.ok(cases.results.length>0);
- assert.ok(cases.results.every(row=>row.id.startsWith('xhs-')));
- assert.ok(cases.results.every(row=>row.kind==='case'&&row.why.pageMode==='single'&&row.readWith.tool==='read_case'&&row.source.url.startsWith('https://')));
- assert.ok(!cases.results.some(row=>row.id==='digital-two-page-mirror'));
- assert.match(caseDetails(cases.results[0].id,f.document).usage,/不得直接放入作品/);
- assert.throws(()=>caseDetails('digital-two-page-mirror',f.document),/页面模式/);
- assert.deepEqual(matchJournalCases(f.document,{limit:2}).map(row=>row.kind),['case','case']);
- assert.ok(caseDetails('xhs-lemonade-single',f.document).elements.every(element=>element.box.length===4));
- assert.match(caseDetails('xhs-lemonade-single',f.document).source.imageSha256,/^[a-f0-9]{64}$/);
- assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选/);
- assert.match(f.state.messages[1].content[0].text,/电子手帐案例候选（可用 read_case 查看）：\[\]/);
- assert.match(f.state.messages[0].content,/不要把遮挡本身判为缺陷/);
- const spread=await createCreationDocument({draft:draft({mode:'spread'}),assets:[],styles:['丰富层叠']});
- const spreadCases=matchJournalCases(spread,{limit:3});
- assert.ok(spreadCases.some(row=>row.id.startsWith('xhs-')));
- assert.ok(spreadCases.every(row=>row.id.startsWith('xhs-')));
- assert.ok(spreadCases.every(row=>row.why.pageMode==='spread'));
+test('reference lookup exposes sourced templates only as layout guidance',async()=>{
+  const document=await createCreationDocument({draft:draft(),assets:[]});
+  const templates=searchLibraryReferences(document,{kind:'templates',limit:3}).results;
+  assert.ok(templates.length>0);
+  assert.ok(templates.every(row=>row.kind==='template'&&row.source?.id&&row.readWith.tool==='read_template'));
+  const first=templateDetails(templates[0].id);
+  assert.equal(first.available,true);
+  assert.ok(first.slots?.every(slot=>slot.role&&slot.box.length===4));
 });
 
-test('model can read a sourced case before editing and retain its advice through the turn',async t=>{
- const f=await fixture(t);let calls=0;
- const model=async({messages})=>{
-  calls++;
-  if(calls===1)return answer(call('read_case',{id:'digital-focal-photo-strip'}),plan(),add(f.document));
-  const caseReply=messages.find(message=>message.role==='tool'&&message.content.includes('digital-focal-photo-strip'));
-  assert.ok(caseReply);
-  assert.match(caseReply.content,/构图、配色与对象关系/);
-  assert.ok(messages.some(message=>Array.isArray(message.content)&&message.content.some(part=>part.text?.includes('按当前纸面素材占比复核正文篇幅'))));
-  const p=lastScene(messages);
-  return answer(call('creation_review',{...p,approved:true,observations:'已查看一页预览',issues:[]}),call('creation_finish',{}));
- };
- const harness=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
- const done=await harness.run({id:'case-reference',state:f.state});
- assert.equal(done.status,'completed');
- assert.ok(done.trace.some(event=>event.kind==='tool'&&event.name==='read_case'&&event.ok));
-});
-
-test('harness restores after an actual render failure without replaying model or material transaction',async t=>{
-  const f=await fixture(t);let modelCalls=0;
-  const model=async({messages})=>{
-    modelCalls++;
-    if(modelCalls===1)return answer(skill(),plan(),add(f.document));
-    const p=lastScene(messages);
-    assert.equal(messages.filter(m=>m.role==='assistant').length,1);
-    assert.equal(messages.find(m=>m.role==='assistant').reasoning_content,'test');
-    return answer(call('creation_review',{...p,approved:true,observations:'测试预览已查看',issues:[]}),call('creation_finish',{}));
-  };
-  const first=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),render:async()=>{throw Error('renderer offline');}});
-  await assert.rejects(first.run({id:'restore',state:f.state}),/renderer offline/);
-  const saved=await first.state('restore');assert.equal(saved.document.page.layers.length,1);
-  const second=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
-  const done=await second.run({id:'restore'});
-  assert.equal(done.status,'completed');assert.equal(modelCalls,2);assert.equal(done.document.page.layers.length,1);
-  assert.equal(Object.keys(done.document.v3Transactions).length,1);
-});
-
-test('an unsatisfactory batch can be undone and rebuilt from the restored scene',async t=>{
- const f=await fixture(t);let turns=0;
- const harness=createCreativeHarness({...f,model:async({messages})=>{
-  if(++turns===1)return answer(plan(),add(f.document));
-  if(turns===2)return answer(revise(messages,'第一版不满意'),call('creation_undo',{}));
-  if(turns===3){const scene=lastScene(messages);assert.equal(scene.sceneRevision,creationSceneRevision(f.document));
-   return answer(revise(messages,'空白纸面需重新排版'),call('creation_apply',{protocolVersion:2,transactionId:'replacement',baseSceneRevision:scene.sceneRevision,operations:[{op:'text.add',id:'replacement',content:'重排之后',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]}));}
-  return answer(call('creation_finish',{review:{observations:'已检查重排后的纸面',issues:[]}}));
- },checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
- const result=await harness.run({id:'undo-rebuild',state:f.state});
- assert.equal(result.status,'completed');assert.deepEqual(result.document.page.layers.map(node=>node.id),['replacement']);assert.equal(turns,4);
-});
-
-test('each rendered edit requires a screenshot review before the next mutation',async t=>{
- const f=await fixture(t);let turns=0;
- const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-  if(++turns===1)return answer(plan(),add(f.document));
-  const current=lastScene(messages);
-  const update=call('creation_apply',{protocolVersion:2,transactionId:'revised',baseSceneRevision:current.sceneRevision,operations:[{op:'layer.update',target:'text',content:'调整后的标题'}],decision:'根据截图审查把标题改短'});
-  if(turns===2)return answer(update);
-  if(turns===3){assert.match(JSON.parse(messages.at(-1).content).detail,/先审查当前真实预览/);return answer(revise(messages,'标题过长'),update);}
-  assert.match(messages.findLast(m=>m.role==='user'&&Array.isArray(m.content))?.content[0]?.text||'',/标题过长/);
-  return answer(call('creation_finish',{review:{observations:'标题清晰，版面符合任务',issues:[]}}));
- }});
- const done=await harness.run({id:'review-gate',state:f.state});
- assert.equal(done.status,'completed');assert.equal(turns,4);assert.equal(done.document.page.layers[0].content,'调整后的标题');
- const review=done.decisions.find(entry=>entry.kind==='review'&&!entry.approved);
- assert.deepEqual(review.issues,['标题过长']);assert.equal(review.pngHash,pngHash);
- assert.equal(done.decisions.find(entry=>entry.transactionId==='revised').reason,'根据截图审查把标题改短');
- assert.equal(done.reviewPending,false);
-});
-
-test('a failed visual review cannot be approved again without a changed render',async t=>{
- const f=await fixture(t);let turns=0;
- const harness=createCreativeHarness({...f,model:async({messages})=>{
-  if(++turns===1)return answer(plan(),add(f.document));
-  if(turns===2)return answer(revise(messages,'标题遮挡主图'));
-  if(turns===3)return answer(call('creation_finish',{review:{observations:'直接改口',issues:[]}}));
-  assert.match(JSON.parse(messages.at(-1).content).detail,/待修问题尚未通过修改与重新预览验证/);
-  throw Error('unresolved review guarded');
- },checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
- await assert.rejects(harness.run({id:'review-unresolved',state:f.state}),/unresolved review guarded/);
-});
-
-test('parallel draft agents keep isolated scenes until a viewed candidate is selected',async t=>{
- const f=await fixture(t);let parentTurns=0,children=0;
- const model=async({messages,tools})=>{
-  if(messages[0].content.startsWith('你是拾页的独立构图草稿子 Agent')){
-   children++;assert.deepEqual(tools.map(tool=>tool.function.name),['creation_apply']);
-   const prompt=messages.at(-1).content[0].text,id=prompt.match(/transactionId：(draft_\d+_[12])/)[1],goal=prompt.match(/独立草稿方向：([^\n]+)/)[1];
-   return answer(call('creation_apply',{protocolVersion:2,transactionId:id,baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:id+'_title',content:goal,place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'}}]},id));
-  }
-  if(++parentTurns===1)return answer(plan(),call('explore_drafts',{goals:['左侧文字主导构图','右侧文字主导构图']}));
-  if(parentTurns===2){
-   const gallery=messages.at(-1).content;assert.equal(gallery.filter(part=>part.type==='image_url').length,2);
-   return answer(call('select_draft',{id:'draft_1_2',decision:'右侧版本留白更清晰'}));
-  }
-  return answer(call('creation_finish',{review:{observations:'比较两个草稿后选定右侧方案，文字可读',issues:[]}}));
- };
- const harness=createCreativeHarness({...f,model,renderDraft:async doc=>({pngHash,sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,ZHJhZnQ='}),checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
- const done=await harness.run({id:'parallel-drafts',state:f.state});
- assert.equal(done.status,'completed');assert.equal(children,2);assert.equal(parentTurns,3);
- assert.equal(done.document.page.layers[0].content,'右侧文字主导构图');
- assert.equal(done.decisions.find(entry=>entry.kind==='select_draft').reason,'右侧版本留白更清晰');
-});
-
-test('a separate workspace sends only changed nonempty images and can move its group to the page',async t=>{
- const f=await fixture(t);let turns=0;
- const render=async(document,_signal,spaces)=>{
-  const root=document.page.layers,view=id=>root.filter(node=>(node.workspaceId||(node.isParked?'tray':'page'))===id);
-  const pageHash='sha256:'+createHash('sha256').update(JSON.stringify(view('page'))).digest('hex');
-  return {pngHash:pageHash,sceneRevision:creationSceneRevision(document),imageURL:'data:image/png;base64,cGFnZQ==',spaceViews:spaces.map(space=>({id:space.id,signature:space.id==='page'?pageHash:JSON.stringify(view(space.id)),imageURL:view(space.id).length?'data:image/png;base64,'+Buffer.from(space.id).toString('base64'):null,items:view(space.id).map(node=>node.id)}))};
- };
- const harness=createCreativeHarness({...f,render,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-  if(++turns===1)return answer(plan(),call('workspace_create',{id:'study',title:'局部试摆'}));
-  if(turns===2){assert.match(messages[2].content,/"study":\{"signature":"empty","empty":true/);return answer(call('creation_apply',{protocolVersion:2,transactionId:'study-add',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'title',content:'试排标题',place:{reference:'page',at:[50,50],unit:'mm',surface:'study'},size:{width:45,unit:'mm'}}]}));}
-  if(turns===3){const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
-   assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['study']);
-   return answer(revise(messages,'标题还在试摆区'),call('creation_apply',{protocolVersion:2,transactionId:'study-to-page',baseSceneRevision:lastScene(messages).sceneRevision,operations:[{op:'layer.update',target:'title',place:{reference:'page',at:[70,70],unit:'mm',surface:'page'}}]}));}
-  const latest=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0]?.text.startsWith('当前真实画面：'));
-  assert.deepEqual(latest.content.filter(part=>part.type==='image_url').map(part=>Buffer.from(part.image_url.url.split(',')[1],'base64').toString()),['page']);
-  const stage=JSON.parse(latest.content[0].text.split('\n')[1].replace(/^阶段观察：|^工作空间状态：/,''));
-  assert.equal(stage.changed.find(space=>space.id==='study').empty,true);
-  return answer(call('creation_finish',{review:{observations:'试摆后移入纸面',issues:[]}}));
- }});
- const result=await harness.run({id:'study-flow',state:f.state});assert.equal(result.status,'completed');assert.equal(turns,4);
-});
-
-test('closing an empty workspace removes its visual state without another render',async t=>{
-  const f=await fixture(t);let turns=0,renders=0;
-  const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},model:async({messages})=>{
-    if(++turns===1)return answer(call('workspace_create',{id:'study',title:'试摆'}));
-    if(turns===2){assert.match(messages[2].content,/"study":\{"signature":"empty"/);return answer(call('workspace_close',{id:'study'}));}
-    assert.doesNotMatch(messages[2].content,/"study":\{"signature":"empty"/);
-    throw Error('closed workspace verified');
-  }});
-  await assert.rejects(harness.run({id:'close-study',state:f.state}),/closed workspace verified/);
-  assert.equal(renders,0);
-});
-
-test('finish cannot pass when a new edit invalidates a viewed preview',async t=>{
-  const f=await fixture(t);let n=0;
-  const model=async({messages})=>{
-    if(++n===1)return answer(skill(),plan(),add(f.document));
-    if(n===2){const p=lastScene(messages);return answer(revise(messages,'文字需要改写'),call('creation_apply',{protocolVersion:2,transactionId:'move',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'新的文字'}]}),call('creation_review',{...p,approved:true,observations:'旧图',issues:[]},'stale-review'),call('creation_finish',{}));}
-    const replies=messages.filter(m=>m.role==='tool').slice(-4).map(m=>JSON.parse(m.content));
-    assert.equal(replies[0].ok,true);assert.equal(replies[1].ok,true);assert.equal(replies[2].ok,false);assert.equal(replies[3].ok,false);
-    throw Error('verified stale guard');
-  };
-  const harness=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
-  await assert.rejects(harness.run({id:'stale',state:f.state}),/verified stale guard/);
-  assert.equal((await harness.state('stale')).status,'running');
-});
-
-test('unauthorized source inspection and skill paths never reach host tools',async t=>{
-  const f=await fixture(t);let n=0,inspections=0;
-  const model=async({messages})=>{
-    if(++n===1)return answer(call('inspect_materials',{keys:['other-user-material']}),call('read_skill',{name:'../../secret'}));
-    const replies=messages.filter(m=>m.role==='tool').map(m=>JSON.parse(m.content));
-    assert.ok(replies.every(r=>!r.ok));throw Error('verified isolation');
-  };
-  const harness=createCreativeHarness({...f,model,inspectMaterials:async()=>{inspections++;},checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
-  await assert.rejects(harness.run({id:'isolated',state:f.state}),/verified isolation/);assert.equal(inspections,0);
-});
-
-test('recovery keeps original deadline and does not call a model after expiry',async t=>{
-  const f=await fixture(t);let calls=0;
-  const harness=createCreativeHarness({...f,model:async()=>{calls++;},clock:()=>f.state.deadlineAt+1,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
-  await assert.rejects(harness.run({id:'deadline',state:f.state}),e=>e.code==='CREATIVE_DEADLINE');assert.equal(calls,0);
-});
-
-test('cancellation cannot mark a result finished',async t=>{
-  const f=await fixture(t),controller=new AbortController();
-  const harness=createCreativeHarness({...f,model:async()=>{controller.abort(Error('cancelled'));return answer(skill());},checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
-  await assert.rejects(harness.run({id:'cancel',state:f.state,signal:controller.signal}),/cancelled/);
-  assert.notEqual((await harness.state('cancel'))?.status,'completed');
-});
-
-test('truncated output requests a smaller recovery call without executing or losing state',async t=>{
-  const f=await fixture(t);let n=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,recoveringFromTruncation})=>{
-    if(++n===1){assert.equal(recoveringFromTruncation,false);return {truncated:true};}
-    if(n===2){assert.equal(recoveringFromTruncation,true);assert.match(messages.at(-1).content,/一个完整的小工具调用/);return answer(plan(),add(f.document));}
-    assert.equal(recoveringFromTruncation,true);
-    return answer(call('creation_finish',{review:{observations:'检查当前完整预览',issues:[]}}));
-  }});
-  const result=await harness.run({id:'recover-truncated',state:f.state});
-  assert.equal(result.status,'completed');assert.equal(result.document.page.layers.length,1);
-  assert.equal(result.usage[0].truncated,true);
-});
-
-test('DeepSeek adapter enables thinking and round-trips reasoning without exposing credentials in errors',async()=>{
-  const messages=[{role:'assistant',reasoning_content:'earlier reasoning',content:null,tool_calls:[]}];let payload;
-  const model=createDeepSeekCreativeModel({key:'private-key',fetcher:async(url,request)=>{
-    assert.equal(url,'https://api.deepseek.com/chat/completions');payload=JSON.parse(request.body);
-    return Response.json({choices:[{finish_reason:'stop',message:{content:null,reasoning_content:'new reasoning',tool_calls:[]}}]});
-  }});
-  const result=await model({messages,tools:[],remainingMs:1000});
-  assert.deepEqual(payload.thinking,{type:'enabled'});assert.equal(payload.reasoning_effort,'high');assert.deepEqual(payload.messages,messages);
-  assert.equal(result.message.reasoning_content,'new reasoning');
-  await model({messages,tools:[],remainingMs:1000,reasoningEffort:'low'});
-  assert.equal(payload.reasoning_effort,'low');
-  await model({messages,tools:[],remainingMs:1000,recoveringFromTruncation:true});
-  assert.equal(payload.reasoning_effort,'low');assert.deepEqual(payload.thinking,{type:'enabled'});
-  const failing=createDeepSeekCreativeModel({key:'private-key',fetcher:async()=>new Response('private-key',{status:401})});
-  await assert.rejects(failing({messages,tools:[],remainingMs:1000}),e=>!e.message.includes('private-key')&&e.code==='CREATIVE_MODEL_HTTP');
-});
-
-test('DeepSeek compaction summarizes earlier creative choices without editing tools',async()=>{
- let payload;
- const model=createDeepSeekCreativeModel({key:'private-key',fetcher:async(_url,request)=>{
-   payload=JSON.parse(request.body);
-   return Response.json({choices:[{finish_reason:'stop',message:{content:'保留左侧留白；居中方案因主图拥挤已放弃。'}}],usage:{total_tokens:200}});
- }});
- const result=await model.compact({previousSummary:'试过居中',history:[{role:'assistant',text:'左侧更清晰'}],remainingMs:30000});
- assert.match(result.summary,/左侧留白/);assert.equal(result.usage.total_tokens,200);
- assert.equal(payload.reasoning_effort,'low');assert.equal(payload.tools,undefined);
- assert.match(payload.messages[1].content,/试过居中/);
-});
-
-test('harness preserves a compacted design decision in the persisted run',async t=>{
- const f=await fixture(t),state=structuredClone(f.state);
- for(let i=0;i<7;i++)state.messages.push({role:'assistant',content:i===1?'居中太拥挤，改为左侧留白。':'完成一次试摆。'},{role:'user',content:'继续检查构图。'});
- state.turns=7;
- let calls=0,compactions=0;
- const model=async({messages})=>{
-   calls++;
-   assert.match(messages[2].content,/左侧留白/);
-   if(calls===1){assert.equal(messages.filter(message=>message.role==='assistant').length,2);return answer(plan());}
-   throw Error('verified compacted context');
- };
- model.compact=async({history})=>{compactions++;assert.match(JSON.stringify(history),/居中太拥挤/);return {summary:'居中太拥挤，已决定改为左侧留白，右侧保留给手写文字。',usage:{total_tokens:30}};};
- const harness=createCreativeHarness({...f,model,checkpointer:await new JournalCheckpointSaver(f.journal).restore()});
- await assert.rejects(harness.run({id:'compacted',state}),/verified compacted context/);
- const saved=await harness.state('compacted');
- assert.equal(saved.creativeMemory,'居中太拥挤，已决定改为左侧留白，右侧保留给手写文字。');
- assert.equal(saved.compactions.length,1);
- assert.equal(compactions,1);
-});
-
-test('small task allows first-turn editing and combined visual review/finish without discovery calls',async t=>{
-  const f=await fixture(t);let n=0,renders=0;
-  assert.deepEqual(f.state.loadedSkills,[]);
-  assert.ok(f.state.messages[0].content.includes('journal-composition'));
-  assert.match(f.state.messages[0].content,/常用工具合同/);
-  const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(++n===1)return answer(plan(),add(f.document));
-    const p=lastScene(messages),feedback=messages.at(-1).content[0].text;
-    assert.match(feedback,/自动交付检查/);assert.match(feedback,/自动视觉审查/);
-    return answer(call('creation_finish',{review:{observations:'文字清晰，已检查最新图',issues:[]}}));
-  }});
-  const done=await harness.run({id:'automatic',state:f.state});assert.equal(done.status,'completed');assert.equal(n,2);assert.equal(renders,1);assert.equal(done.review.pngHash,pngHash);assert.equal(done.review.sceneRevision,creationSceneRevision(done.document));assert.ok(done.usage.every(u=>Number.isFinite(u.modelMs)));
-});
-
-test('a real creative brief preloads concise expressive cards and must execute one before finish',async t=>{
-  const f=await fixture(t),brief={intent:'写一页有关平常散步的手帐',styles:['疏朗留白']};
-  const state=initialHarnessState({document:f.document,skills:f.skills,brief});
-  assert.equal(state.expressionRequired,true);
-  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-phrases','color-echo']);
-  assert.ok(state.loadedSkills.some(skill=>skill.selection==='detail:title-phrases:0'));
-  assert.match(state.messages[0].content,/已预读、可直接执行的表达方法卡/);
-  let turn=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
-    if(++turn===1)return answer(
-      call('creation_plan',{intent:brief.intent,methods:[{id:'title-phrases',purpose:'形成有主次的手写标题'},{id:'color-echo',purpose:'以三处小色点呼应标题'}],palette:{source:'散步与纸色',main:'#37564B',secondary:'#E9E0CE',accent:'#BA7955',relationship:'tonal',distribution:'浅色为底，深色标题，小面积暖色'},steps:[{task:'建立标题组',status:'in_progress'}]}),
-      call('creation_apply',{protocolVersion:2,transactionId:'plain-first',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'plain-title',content:'散步',place:{reference:'page',at:[45,55],unit:'mm'},size:{width:40,unit:'mm'}}]})
-    );
-    if(turn===2){
-      assert.deepEqual(new Set(tools.map(tool=>tool.function.name)),new Set(['creation_review','creation_finish','creation_preview']));
-      return answer(call('creation_finish',{review:{observations:'标题位于纸面左上，背景留白',issues:[]}}));
-    }
-    assert.match(JSON.parse(messages.at(-1).content).detail,/尚未实际保留标题或图形与配色处理/);
-    throw Error('expressive gate observed');
-  }});
-  await assert.rejects(harness.run({id:'expressive-gate',state}),/expressive gate observed/);
-});
-
-test('two preloaded expressive recipes can be committed and previewed in one transaction',async t=>{
-  const f=await fixture(t),brief={intent:'写一页关于散步的短记',styles:['疏朗留白']};
-  const state=initialHarnessState({document:f.document,skills:f.skills,brief});
-  let turn=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async()=>{
-    if(++turn===1)return answer(
-      call('creation_plan',{intent:brief.intent,methods:[{id:'title-phrases',purpose:'区分主词与短引'},{id:'color-echo',purpose:'用三处色点联系标题与页脚'}],palette:{source:'散步主题',main:'#37564B',secondary:'#E9E0CE',accent:'#BA7955',relationship:'tonal',distribution:'浅底与深字'},steps:[{task:'建立可编辑标题组',status:'in_progress'}]}),
-      call('creation_recipe',{kind:'technique',recipeId:'title-phrases',transactionId:'expressive-title',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'walk-title',at:[70,60],text:'慢慢散步',runs:[{text:'慢慢',role:'secondary'},{text:'散步',role:'primary'}]},with:[{recipeId:'color-echo',parameters:{id:'walk-palette',at:[90,105],widthMm:70,heightMm:35,colors:['#37564B','#E9E0CE','#BA7955']}}],decision:'以主次词组建立标题焦点，三个色点呼应标题'})
-    );
-    return answer(call('creation_finish',{review:{observations:'短引与主词在纸面上形成大小变化，标题清楚',issues:[]}}));
-  }});
-  const done=await harness.run({id:'expressive-title',state});
-  assert.equal(done.status,'completed');
-  assert.equal(turn,2);
-  assert.ok(done.recipeReceipts['expressive-title'].data.recipe.groupId==='walk-title');
-  assert.deepEqual(done.recipeReceipts['expressive-title'].data.recipes.map(recipe=>recipe.methodId),['title-phrases','color-echo']);
-});
-
-test('reading a preloaded expression method does not resend the full lesson',async t=>{
-  const f=await fixture(t),state=initialHarnessState({document:f.document,skills:f.skills,brief:{intent:'一页散步记录',styles:['疏朗留白']}});
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(!messages.some(message=>message.role==='tool'))return answer(call('read_skill',{name:'journal-lettering',level:'detail',methodId:'title-phrases'}));
-    const reply=JSON.parse(messages.findLast(message=>message.role==='tool').content);
-    assert.equal(reply.data.alreadyLoaded,true);
-    assert.ok(!reply.data.methods);
-    throw Error('compact duplicate lesson observed');
-  }});
-  await assert.rejects(harness.run({id:'preloaded-lesson',state}),/compact duplicate lesson observed/);
-});
-
-test('common graphic and layer-order aliases execute without a correction round',async t=>{
-  const f=await fixture(t);let turn=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(++turn===1)return answer(plan(),call('creation_apply',{protocolVersion:2,transactionId:'aliases',baseSceneRevision:creationSceneRevision(f.document),operations:[
-      {op:'graphic.add',id:'card',geometry:{kind:'rectangle'},place:{reference:'page',at:[45,50]},size:{width:32,height:18,unit:'mm'},style:{fill:'#DDE8DF',stroke:null}},
-      {op:'order',target:'card',edge:'front'},
-      {op:'layer.update',target:'card',at:[50,55],place:{reference:'page'}}
-    ]}));
-    assert.equal(lastScene(messages).sceneRevision!==creationSceneRevision(f.document),true);
-    return answer(call('creation_finish',{review:{observations:'矩形卡片位于纸面左上',issues:[]}}));
-  }});
-  assert.equal((await harness.run({id:'command-aliases',state:f.state})).status,'completed');
-  assert.equal(turn,2);
-});
-
-test('batch recipe help accepts the with field as a topic',async t=>{
-  const f=await fixture(t);
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(!messages.some(message=>message.role==='tool'))return answer(call('creation_help',{topics:['with']}));
-    const reply=JSON.parse(messages.findLast(message=>message.role==='tool').content);
-    assert.equal(reply.ok,true);
-    assert.equal(reply.data.recipeBatch.tool,'creation_recipe');
-    throw Error('batch help observed');
-  }});
-  await assert.rejects(harness.run({id:'batch-help',state:f.state}),/batch help observed/);
-});
-
-test('after the first visual pass an expressive task offers recipes before more plain edits',async t=>{
-  const f=await fixture(t),brief={intent:'写一页散步手帐',styles:['疏朗留白']};
-  const state=initialHarnessState({document:f.document,skills:f.skills,brief});let turn=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
-    if(++turn===1)return answer(call('creation_plan',{intent:brief.intent,methods:[{id:'title-phrases',purpose:'标题层级'},{id:'color-echo',purpose:'颜色呼应'}],palette:{source:'主题',main:'#37564B',secondary:'#E9E0CE',relationship:'tonal',distribution:'主色标题，小面积辅色'},steps:[{task:'试摆',status:'in_progress'}]}),call('creation_apply',{protocolVersion:2,transactionId:'pass-1',baseSceneRevision:creationSceneRevision(f.document),operations:[{op:'text.add',id:'note',content:'散步',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:50,unit:'mm'}}]}));
-    if(turn===2)return answer(revise(messages,'标题尚缺设计'));
-    assert.ok(!tools.some(tool=>tool.function.name==='creation_apply'));
-    assert.ok(tools.some(tool=>tool.function.name==='creation_recipe'));
-    throw Error('expression gate observed');
-  }});
-  await assert.rejects(harness.run({id:'expression-timing',state}),/expression gate observed/);
-});
-
-test('rich task makes a specific method and material evidence available before editing',async t=>{
-  const f=await fixture(t);
-  const assets=Array.from({length:4},(_,i)=>({id:'paper-'+i,title:'纸片 '+i,kind:'paper',physicalWidthMM:30,physicalHeightMM:40}));
-  const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
-  const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});
-  assert.equal(state.methodStudyRequired,true);
-  assert.match(state.messages[1].content[0].text,/首选案例的元素布局.*xhs-.*elements/);
-  let turns=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
-    if(++turns===1){
-      assert.equal(tools.some(tool=>tool.function.name==='creation_apply'),false);
-      return answer(call('read_skill',{name:'paper-layering',level:'detail',methodId:'paper-peek'}),call('creation_plan',{intent:'用纸片建立有层次的主体',methods:[{id:'paper-peek',purpose:'用色边区分叠放关系'}],themeEvidence:{supportedBy:['四件纸片的色彩和形态'],conflicts:[],response:'以素材形态构图'},steps:[{task:'试摆纸片',status:'in_progress'}]}));
-    }
-    if(turns===2){
+test('time pacing suggests handoff while retaining editing tools',async t=>{
+  let now=0,turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout-a',[text('title','夏日手帐',[35,30])]));
+    if(turn===3)return answer(edit(p.sceneRevision,'layout-b',[text('note','在路上',[42,75])]));
+    if(turn===4){
       assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
-      return answer(call('creation_apply',{protocolVersion:2,transactionId:'rich-start',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'first-note',content:'第一层',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:40,unit:'mm'}}]}));
+      return answer(phase('craft','标题和短句已建立两个区域，装饰书写继续补齐'));
     }
-    if(turns===3){
-      assert.deepEqual(new Set(tools.map(tool=>tool.function.name)),new Set(['creation_review','creation_finish','creation_preview']));
-      return answer(revise(messages,'缺少纸片之间的实际叠放'));
-    }
+    throw Error('paced stop');
+  },{clock:()=>now,afterRender:count=>{if(count===2)now=151000;}});
+  f.state.startedAt=0;f.state.deadlineAt=570000;
+  await assert.rejects(f.harness.run({id:'paced-layout',state:f.state}),/paced stop/);
+  const saved=await f.harness.state('paced-layout');
+  assert.equal(saved.phase,'craft');
+  assert.deepEqual(saved.results.map(result=>result.ok),[true]);
+  assert.ok(!saved.document.page.layers.some(layer=>layer.id==='late'));
+});
+
+test('review pacing presents finish after five further edits',async t=>{
+  let turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'review-layout',[text('title','记一页',[35,30])]));
+    if(turn===3)return answer(phase('craft','标题构成左上视觉入口，正文区域留在下方'));
+    if(turn===4)return answer(edit(p.sceneRevision,'review-craft',[text('body','下午茶和窗边的风。',[45,75])]));
+    if(turn===5)return answer(phase('review','标题与正文形成可读的图文层级'));
+    if(turn<=10)return answer(edit(p.sceneRevision,'review-edit-'+turn,[text('accent-'+turn,'小记',[35+turn,100+turn*3])]));
+    assert.ok(tools.some(tool=>tool.function.name==='creation_finish'));
     assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
-    throw Error('method gate observed');
-  }});
-  await assert.rejects(harness.run({id:'rich-method',state}),/method gate observed/);
-  const saved=await harness.state('rich-method');
-  assert.equal(saved.loadedSkills[0].selection,'detail:paper-peek:0');
-  assert.equal(saved.plan.methods[0].id,'paper-peek');
-  assert.ok(saved.skillReferences[0].principle);
+    return answer(call('creation_finish',{review:{observations:'标题、正文和多处边注分布在纸面，文字层级清楚',issues:[]}}));
+  });
+  const result=await f.harness.run({id:'paced-finish',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.equal(result.turns,11);
 });
 
-test('a many-material first draft cannot cover the page before its first visual check',async t=>{
-  const f=await fixture(t);
-  const assets=Array.from({length:8},(_,i)=>({id:'sheet-'+i,title:'纸片 '+i,kind:'paper',physicalWidthMM:35,physicalHeightMM:50}));
-  const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
-  const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});
-  let turn=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(++turn===1)return answer(call('read_skill',{name:'paper-layering',level:'detail',methodId:'paper-peek'}),call('creation_plan',{intent:'先铺核心',methods:[{id:'paper-peek',purpose:'让底层露边'}],themeEvidence:{supportedBy:['纸片色彩'],conflicts:[],response:'按形态构图'},steps:[{task:'放置纸片',status:'in_progress'}]}));
-    if(turn===2)return answer(call('creation_apply',{protocolVersion:2,transactionId:'overfull',baseSceneRevision:creationSceneRevision(document),operations:Array.from({length:5},(_,i)=>({op:'material.add',id:'item-'+i,asset:'m'+(i+1),place:{reference:'page',at:[25+i*20,50],unit:'mm'}}))}));
-    assert.match(messages.at(-1).content,/首批最多摆四件/);
-    throw Error('first draft limit observed');
-  }});
-  await assert.rejects(harness.run({id:'many-materials',state}),/first draft limit observed/);
-  assert.equal((await harness.state('many-materials')).document.page.layers.length,0);
+test('a complete page can finish without mandatory phase transitions',async t=>{
+  let turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan());
+    if(turn===2){assert.ok(tools.some(tool=>tool.function.name==='creation_finish'));return answer(edit(creationSceneRevision(f.document),'whole-page',[
+      text('title','周末手记',[35,30]),text('body','午后的小雨落在窗沿，我把散开的纸片重新收好。',[45,85])
+    ]));}
+    return answer(call('creation_finish',{review:{observations:'标题在上方，正文位于下方的可读区域，留出纸边',issues:[],pngHash:p.pngHash,sceneRevision:p.sceneRevision}}));
+  });
+  const result=await f.harness.run({id:'no-required-phases',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout']);
 });
 
-test('a screenshot, edit rationale and final review stay linked in the recoverable run',async t=>{
-  const f=await fixture(t);let turns=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
-    assert.ok(tools.find(tool=>tool.function.name==='creation_apply').function.parameters.properties.decision);
-    if(++turns===1)return answer(plan(),call('creation_apply',{...JSON.parse(add(f.document).function.arguments),decision:'素材总图显示可用空间较大，先以短标题建立阅读起点'}));
-    assert.match(messages[2].content,/素材总图显示可用空间较大/);
-    assert.match(messages[2].content,/visualState/);
-    assert.match(messages.findLast(message=>message.role==='user'&&Array.isArray(message.content)).content[0].text,/工作空间状态：.*lastSeenTurn/);
-    return answer(call('creation_finish',{review:{observations:'标题清晰，留白可供后续手写',issues:[]}}));
-  }});
-  const done=await harness.run({id:'visual-decision',state:f.state});
-  assert.equal(done.status,'completed');assert.equal(done.visualState.page.lastSeenTurn,1);
-  assert.equal(done.decisions.find(entry=>entry.kind==='creation_apply').reason,'素材总图显示可用空间较大，先以短标题建立阅读起点');
-  assert.equal(done.decisions.at(-1).observations,'标题清晰，留白可供后续手写');
-  assert.equal(done.decisions.at(-1).pngHash,pngHash);
-  const restored=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async()=>{throw Error('completed run should not resume');}});
-  assert.deepEqual((await restored.state('visual-decision')).decisions,done.decisions);
-});
-test('multi-material completion rejects a placeholder visual review',async t=>{
- const f=await fixture(t),assets=Array.from({length:4},(_,i)=>({id:'sheet-'+i,title:'纸片 '+i,kind:'paper',physicalWidthMM:30,physicalHeightMM:40}));
- const document=await createCreationDocument({draft:draft(),assets,aliases:Object.fromEntries(assets.map((asset,i)=>['m'+(i+1),asset.id]))});
- const state=initialHarnessState({document,skills:f.skills,brief:{styles:['丰富层叠']}});let turns=0;
- const harness=createCreativeHarness({...f,viewSpace:async()=>({imageURL:'data:image/png;base64,dGVzdA==',signature:pngHash,items:['title']}),checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages,tools})=>{
-  if(++turns===1)return answer(call('read_skill',{name:'paper-layering',level:'detail',methodId:'paper-peek'}),call('creation_plan',{intent:'先试摆',methods:[{id:'paper-peek',purpose:'建立叠放'}],themeEvidence:{supportedBy:['四张纸'],conflicts:[],response:'按纸片关系构图'},composition:{focal:'左侧主纸片',quietArea:'右侧书写区',connector:'共享蓝色'},steps:[{task:'试摆',status:'in_progress'}]}));
-  if(turns===2)return answer(call('creation_apply',{protocolVersion:2,transactionId:'review-placeholder',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'小记',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:40,unit:'mm'}}]}));
-  if(turns===3){const prompt=messages.findLast(m=>m.role==='user'&&Array.isArray(m.content)).content[0].text;assert.match(prompt,/构图意图.*左侧主纸片/);assert.match(prompt,/计划技巧.*paper-peek/);assert.ok(tools.some(tool=>tool.function.name==='workspace_view'));return answer(call('workspace_view',{id:'page'}));}
-  if(turns===4){assert.ok(messages.at(-1).content.some(part=>part.type==='image_url'));return answer(call('creation_finish',{review:{observations:'test',issues:[]}}));}
-  assert.match(JSON.parse(messages.findLast(m=>m.role==='tool').content).detail,/具体位置、对象或阅读关系/);throw Error('placeholder review rejected');
- }});
- await assert.rejects(harness.run({id:'review-placeholder',state}),/placeholder review rejected/);
+test('an off-page text placement is translated before its transaction receipt is returned',async t=>{
+  let turn=0;const f=await fixture(t,async({messages})=>{
+    turn++;
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'snapped-title',[text('title','周末手记',[0,32])]));
+    throw Error('stop after snapped preview');
+  });
+  await assert.rejects(f.harness.run({id:'snapped-title',state:f.state}),/stop after snapped preview/);
+  const saved=await f.harness.state('snapped-title');
+  const receipt=saved.document.v3Transactions['snapped-title'];
+  assert.equal(receipt.sceneRevision,creationSceneRevision(saved.document));
+  assert.ok(saved.messages.some(message=>message.role==='tool'&&message.content.includes('layoutCorrections')));
+  assert.equal(isManagedUnchanged(saved.document.page.layers.find(layer=>layer.id==='title')),true);
+  assert.ok(saved.results[0]?.ok||saved.qualityFrames.length===1);
+  assert.equal(saved.qualityFrames.length,1);
 });
 
-test('combined finish rejects unseen edits and nonempty blocking issues',async t=>{
-  const f=await fixture(t);let n=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(++n===1)return answer(plan(),add(f.document));
-    const p=lastScene(messages);
-    if(n===2)return answer(call('creation_finish',{review:{observations:'发现问题',issues:['文字遮挡']}}));
-    if(n===3){assert.equal(JSON.parse(messages.at(-1).content).ok,false);return answer(revise(messages,'文字遮挡'),call('creation_apply',{protocolVersion:2,transactionId:'edit',baseSceneRevision:p.sceneRevision,operations:[{op:'layer.update',target:'text',content:'已修改'}]}),call('creation_finish',{review:{observations:'旧图',issues:[]}}));}
-    assert.ok(messages.filter(m=>m.role==='tool').map(m=>JSON.parse(m.content)).some(v=>v.detail==='请先查看当前版本的真实预览'));throw Error('stale inline verified');
-  }});
-  await assert.rejects(harness.run({id:'inline-stale',state:f.state}),/stale inline verified/);
+test('rich layered spreads rank a layered reference above sparse diary cases',async()=>{
+  const document=await createCreationDocument({draft:draft({mode:'spread'}),assets:[]});
+  document.source.styles=['丰富层叠'];
+  const cases=searchLibraryReferences(document,{kind:'cases',limit:3}).results;
+  assert.equal(cases[0].id,'user-layered-spread');
+  assert.ok(cases.every(item=>item.why.pageMode==='spread'));
 });
 
-test('unchanged preview reuses the current render without another upload',async t=>{
-  const f=await fixture(t);let n=0,renders=0;
-  const harness=createCreativeHarness({...f,render:async doc=>{renders++;return f.render(doc);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(++n===1)return answer(plan(),add(f.document));
-    if(n===2)return answer(call('creation_preview',{}));
-    assert.equal(JSON.parse(messages.at(-1).content).data.reused,true);
-    const p=lastScene(messages);return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'同版本预览',issues:[]}}));
-  }});
-  assert.equal((await harness.run({id:'reuse',state:f.state})).status,'completed');assert.equal(renders,1);
+test('stage transition rejects skipping, unresolved issues and empty plans',async t=>{
+  let turn=0;const f=await fixture(t,async()=>{
+    turn++;
+    if(turn===1)return answer(phase('layout','没有实际计划也想进入布局'));
+    if(turn===2)return answer(plan(),phase('review','想跳过布局和书写'));
+    if(turn===3)return answer(phase('craft','仍有构图问题未解决',['颜色未决定']));
+    throw Error('intentional stop');
+  });
+  await assert.rejects(f.harness.run({id:'invalid-stage',state:f.state}),/intentional stop/);
+  const saved=await f.harness.state('invalid-stage');
+  assert.equal(saved.phase,'layout');
+  assert.deepEqual(saved.results.map(item=>item.ok),[false]);
+  assert.equal(saved.plan.intent,'记录具体日常');
 });
 
-test('finish review accepts a current image hash and rejects a stale one',async t=>{
- const f=await fixture(t);let n=0;
- const harness=createCreativeHarness({...f,model:async({messages})=>{
-  if(++n===1)return answer(plan(),add(f.document));
-  const p=lastScene(messages);
-  if(n===2)return answer(call('creation_finish',{review:{pngHash:'sha256:'+'0'.repeat(64),sceneRevision:p.sceneRevision,observations:'旧图',issues:[]}}));
-  const failure=JSON.parse(messages.at(-1).content);assert.match(failure.detail,/旧画面/);assert.deepEqual(failure.currentPreview,{pngHash:p.pngHash,sceneRevision:p.sceneRevision});
-  return answer(call('creation_finish',{review:{pngHash:p.pngHash,sceneRevision:p.sceneRevision,observations:'已核对当前图',issues:[]}}));
- }});
- assert.equal((await harness.run({id:'finish-hash',state:f.state})).status,'completed');
-});
-
-test('recipe discovery is paged, image-backed and does not resend the overview',async t=>{
- const f=await fixture(t);let n=0;
- const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-  if(++n===1)return answer(call('read_skill',{name:'journal-lettering',level:'methods'}));
-  const result=JSON.parse(messages.findLast(m=>m.role==='tool').content);assert.equal(result.ok,true);assert.equal(result.data.methods.length,8);assert.equal(messages.at(-1).content.filter(p=>p.type==='image_url').length,result.data.methods.filter(m=>m.illustration).length);
-  assert.ok(result.data.methods.every(m=>m.tool.name==='creation_recipe'));assert.equal(result.data.guidance,f.skills.read('journal-lettering').content);throw Error('library discovery verified');
- }});
- await assert.rejects(harness.run({id:'method-gallery',state:f.state}),/library discovery verified/);
-});
-test('recipe edits render automatically and repeated transaction IDs never duplicate groups',async t=>{
- const f=await fixture(t);let n=0,renders=0;
- const args={kind:'technique',recipeId:'title-label',transactionId:'recipe-once',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'title',text:'今天的小记'}};
- const harness=createCreativeHarness({...f,render:async d=>{renders++;return f.render(d);},checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-  if(++n===1)return answer(plan(),call('creation_recipe',args));
-  if(n===2)return answer(call('creation_recipe',args));
-  assert.equal(JSON.parse(messages.at(-1).content).data.replayed,true);
-  return answer(call('creation_finish',{review:{observations:'已查看标题组合',issues:[]}}));
- }});
- const done=await harness.run({id:'recipe-replay',state:f.state});assert.equal(done.status,'completed');assert.equal(done.document.page.layers.length,1);assert.equal(renders,1);
-});
-test('recipe failure is atomic and cannot be accepted as a finished artwork',async t=>{
- const f=await fixture(t);let n=0;
- const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-  if(++n===1)return answer(plan(),call('creation_recipe',{kind:'technique',recipeId:'paper-tear',transactionId:'bad',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'tear',target:'other-account',path:{points:[[0,.5],[1,.5]],unit:'ratio'}}}));
-  assert.equal(JSON.parse(messages.at(-1).content).ok,false);throw Error('recipe isolation verified');
- }});
- await assert.rejects(harness.run({id:'recipe-isolation',state:f.state}),/recipe isolation verified/);assert.equal((await harness.state('recipe-isolation')).document.page.layers.length,0);
-});
-
-test('automatic creation excludes template candidates and template tools while keeping manual library search',async t=>{
-  const f=await fixture(t);
-  const toolNames=harnessTools.map(tool=>tool.function.name);
-  assert.ok(!toolNames.includes('match_templates'));
-  assert.ok(!toolNames.includes('read_template'));
-  const recipe=harnessTools.find(tool=>tool.function.name==='creation_recipe');
-  assert.deepEqual(recipe.function.parameters.properties.kind.enum,['technique']);
-  const search=harnessTools.find(tool=>tool.function.name==='search_references');
-  assert.deepEqual(search.function.parameters.properties.kind.enum,['all','techniques','cases']);
-  assert.doesNotMatch(f.state.messages[1].content[0].text,/模板候选|read_template|match_templates/);
-  assert.doesNotMatch(f.state.messages[0].content,/read_template|match_templates|模板位置/);
-  const manual=searchLibraryReferences(f.document,{kind:'templates',limit:2});
-  assert.ok(manual.results.some(row=>row.kind==='template'));
-  let turns=0;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({tools,messages})=>{
-    if(++turns===1){
-      assert.ok(!tools.some(tool=>['match_templates','read_template'].includes(tool.function.name)));
-      return answer(call('search_references',{kind:'all',limit:8}));
+test('stage-specific guidance arrives when needed and repeated edits need no separate review',async t=>{
+  let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools,reasoningEffort})=>{
+    turn++;instructions.push(messages[1].content);
+    const p=previewOf(messages),names=tools.map(item=>item.function.name);
+    if(turn===1){assert.equal(reasoningEffort,'none');assert.ok(!names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
+    if(turn===2){
+      assert.ok(names.includes('read_template'));
+      const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
+      title.style.letterSpacing=.3;title.style.letterSpacingPt=1.5;title.style.align='center';title.place.angle=2;
+      return answer(edit(creationSceneRevision(f.document),'first',[
+        {op:'graphic.add',id:'paper',geometry:{kind:'shape',preset:'rect'},place:{at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},
+        {op:'graphic.add',id:'paper-accent',geometry:{kind:'shape',shape:'rect'},place:{reference:'page',at:[50,50],unit:'mm'},size:{width:4,height:4,unit:'mm'},style:{fill:'#465D54'}},title
+      ]));
     }
-    const reply=JSON.parse(messages.findLast(message=>message.role==='tool').content);
-    assert.ok(reply.ok);
-    assert.ok(reply.data.results.length>0);
-    assert.ok(reply.data.results.every(row=>row.kind!=='template'));
-    throw Error('automatic template exclusion verified');
+    if(turn===3){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
+    if(turn===4)return answer(phase('craft','两处文字形成基础结构，还有空间可加手写点缀'));
+    if(turn===5)return answer(edit(p.sceneRevision,'third',[text('body','把潮湿的风留在这一页。',[45,100])]));
+    if(turn===6){assert.equal(reasoningEffort,'low');return answer(phase('review','三段文字层级清楚，纸面有内容和节奏'));}
+    return answer(call('creation_finish',{review:{observations:'标题、边注和正文分布在三个位置，文字清晰',issues:[]}}));
+  });
+  const result=await f.harness.run({id:'stage-guidance',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout','craft','review']);
+  assert.ok(!instructions[0].includes('表达方法卡'));
+  assert.ok(instructions[1].includes('可选构图与叠放方法'));
+  assert.ok(instructions[1].includes('表达方法卡'));
+  assert.ok(instructions[4].includes('这些动作可以交错'));
+  assert.equal(f.renders(),3);
+});
+
+test('finish refuses an old screenshot hash and then accepts the current revision',async t=>{
+  let turn=0;const f=await fixture(t,async({messages})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan(),phase('layout','主题配色及多锚点布局已决定'));
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout',[text('title','一页记录',[50,45])]));
+    if(turn===3)return answer(phase('craft','标题已形成构图，正文位置仍可用'));
+    if(turn===4)return answer(edit(p.sceneRevision,'craft',[text('body','今天终于等到一场雨。',[50,85])]));
+    if(turn===5)return answer(phase('review','标题和正文构成可读的两层内容'));
+    if(turn===6)return answer(call('creation_finish',{review:{observations:'已看标题和正文的当前图',issues:[],pngHash:'sha256:'+'0'.repeat(64)}}));
+    return answer(call('creation_finish',{review:{observations:'标题和正文清楚，层次与颜色协调',issues:[],pngHash:p.pngHash,sceneRevision:p.sceneRevision}}));
+  });
+  const result=await f.harness.run({id:'stale-review',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.equal(result.review.pngHash,result.preview.pngHash);
+  assert.ok(result.trace.some(item=>item.name==='creation_finish'&&item.ok===false));
+});
+
+test('layout remains editable after four previews and common ordering aliases work in craft',async t=>{
+  let turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages),names=tools.map(item=>item.function.name);
+    if(turn===1)return answer(plan());
+    if(turn>=2&&turn<=5)return answer(edit(p?.sceneRevision||creationSceneRevision(f.document),'pass-'+turn,[text('note-'+turn,'第 '+turn+' 段文字',[40,20+turn*14])]));
+    if(turn===6){assert.ok(names.includes('creation_apply'));return answer(phase('craft','四版构图已建立文字阅读路线，细节交由下一阶段'));}
+    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'order',target:'note-2',after:'note-3'},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'tray',at:[30,30],unit:'mm'}},text('body','今天写下一段新的记录。',[65,105]),{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect',options:{radius:0.02}},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC',shadow:{offsetMm:[1,1],blurMm:2,color:'#00000022'}}}]));}
+    if(turn===8)return answer(phase('review','纸面文字与暂存对象各在正确空间，层序已调整'));
+    return answer(call('creation_finish',{review:{observations:'纸面四段文字可读，暂存标题没有进入纸面',issues:[]}}));
+  });
+  const result=await f.harness.run({id:'layout-handoff',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.equal(result.qualityFrames.filter(frame=>frame.phase==='layout').length,4);
+  assert.equal(result.qualityFrames.filter(frame=>frame.phase==='craft').length,1);
+  assert.ok(result.trace.some(item=>item.name==='creation_apply'&&item.turn===7&&item.ok));
+});
+
+test('a timed-out DeepSeek call retries once with a smaller low-effort response budget',async()=>{
+  const bodies=[];
+  const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+    bodies.push(JSON.parse(options.body));
+    if(bodies.length===1)throw Object.assign(Error('timeout'),{code:23});
+    return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'继续创作'},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
   }});
-  await assert.rejects(harness.run({id:'no-templates',state:f.state}),/automatic template exclusion verified/);
+  const result=await model({messages:[{role:'user',content:'测试'}],tools:[],remainingMs:60000});
+  assert.equal(result.message.content,'继续创作');
+  assert.equal(bodies.length,2);
+  assert.equal(bodies[1].reasoning_effort,'low');
+  assert.equal(bodies[1].max_tokens,8000);
+});
+
+test('routine visual adjustments use bounded non-thinking tool calls',async()=>{
+ let request;
+ const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+   request=JSON.parse(options.body);
+   return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:null,tool_calls:[]},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
+ }});
+ await model({messages:[{role:'user',content:'调整刚才画面'}],tools:[],reasoningEffort:'none',remainingMs:60000});
+ assert.equal(request.thinking.type,'disabled');
+ assert.equal(request.reasoning_effort,undefined);
+ assert.equal(request.max_tokens,5000);
+});
+
+test('a truncated creative answer recovers with one bounded non-thinking call',async()=>{
+ let request;
+ const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+   request=JSON.parse(options.body);
+   return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:null,tool_calls:[]},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
+ }});
+ await model({messages:[{role:'user',content:'只提交计划'}],tools:[],recoveringFromTruncation:true,remainingMs:60000});
+ assert.equal(request.thinking.type,'disabled');
+ assert.equal(request.max_tokens,5000);
+});
+
+test('independent visual critique uses a short non-thinking image call',async()=>{
+  let request;
+  const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+    request=JSON.parse(options.body);
+    return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'{"blockingIssues":["右页正文被遮挡"],"notes":["配色可再统一"]}'},finish_reason:'stop'}],usage:{prompt_tokens:20,completion_tokens:30}}),{status:200});
+  }});
+  const result=await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'single',remainingMs:30000});
+  assert.equal(request.thinking.type,'disabled');
+  assert.equal(request.max_tokens,1600);
+  assert.ok(request.messages[1].content.some(part=>part.type==='image_url'));
+  assert.match(request.messages[0].content,/单页不要假设有中缝/);
+  assert.doesNotMatch(request.messages[0].content,/重要内容越界\/跨中缝/);
+  assert.deepEqual(result.blockingIssues,['右页正文被遮挡']);
+  assert.deepEqual(result.notes,['配色可再统一']);
+  await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'spread',remainingMs:30000});
+  assert.match(request.messages[0].content,/双页还要比较左右总重量和中缝/);
+});
+
+test('a finish near the deadline cannot silently bypass independent review',async t=>{
+  let now=0,turn=0,critiques=0;
+  const model=async()=>{
+    turn++;
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'deadline-page',[
+      text('title','冬日手记',[35,30]),text('body','走出门后才发现风很轻，路边还有一片未融的雪。',[45,85])
+    ]));
+    if(turn===3)return answer(call('creation_finish',{review:{observations:'标题与正文都已写入，画面可读',issues:[]}}));
+    throw Error('stop after rejected finish');
+  };
+  model.critique=async()=>{critiques++;return {blockingIssues:[],notes:[]};};
+  const f=await fixture(t,model,{clock:()=>now,afterRender:()=>{now=562000;}});
+  f.state.startedAt=0;f.state.deadlineAt=570000;
+  await assert.rejects(f.harness.run({id:'deadline-review',state:f.state}),/stop after rejected finish/);
+  const saved=await f.harness.state('deadline-review');
+  assert.equal(saved.status,'running');
+  assert.equal(critiques,0);
+  assert.match(saved.results[0].detail,/独立画面审查尚未完成/);
 });

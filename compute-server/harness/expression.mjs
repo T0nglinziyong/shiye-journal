@@ -42,14 +42,18 @@ export function missingExpressionDirections(ids=[]){
 }
 
 export function expressionCards(document,brief){
-  if(!expressiveTask(brief))return [];
   const style=[brief.style,...(Array.isArray(brief.styles)?brief.styles:[]),...(document.source.styles||[])].filter(Boolean).join(' ');
   const rich=/丰富|层叠|拼贴|童趣|复古|杂志/.test(style);
   const quiet=/留白|极简|清新|淡雅|安静|疏朗/.test(style);
   const title=document.source.textMode==='none'?[rich?'graphic-flower':'graphic-arch']:rich?['title-paper-lettering','title-cross-shadow']:quiet?['title-phrases']:['title-offset-outline','title-highlight'];
   const color=rich?'color-bands':'color-echo';
+  const accents=rich?['accent-sprig','accent-stitch']:['accent-rings'];
   if(document.source.materials.length&&document.source.textMode!=='none')title.push('graphic-route');
-  return [...title,color].map(id=>{
+  // A small physical illustration can stay small: offer an editable paper
+  // carrier as an actual method card, without prescribing a fixed layout.
+  const hasPaperSource=document.source.sourceSnapshots?.some(snapshot=>snapshot.kind==='paper');
+  const foundation=document.source.materials.length&&!hasPaperSource?['paper-color-card']:[];
+  return [...title,color,...accents,...foundation].map(id=>{
     const method=describeTechnique(id,{includeFontSuggestions:false});
     return {id,skill:method.skill,title:method.title,when:method.when,
       principle:method.lesson.principle,check:method.lesson.check,

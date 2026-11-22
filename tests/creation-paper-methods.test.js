@@ -9,6 +9,7 @@ import {exampleMaterials,techniqueExample} from '../src/creation-library/example
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {renderSceneCanvas} from '../src/scene-renderer.js';
 import {materialMaskGeometry} from '../src/material-mask.js';
+import {paperCardPath} from '../src/creation-library/paper-card.js';
 
 const make=()=>createCreationDocument({draft:draft({ratio:'a5'}),assets:exampleMaterials,aliases:Object.fromEntries(exampleMaterials.map(a=>[a.alias,a.id]))});
 let transaction=0;
@@ -21,6 +22,21 @@ async function render(doc){
  }});return canvas;
 }
 function paperLedger(doc){const units=buildMaterialLedger(doc.page,exampleMaterials).units.filter(u=>u.assetId==='example-paper');assert.equal(units.length,1);assert.ok(Math.abs(units[0].usedAreaMM2-42*32)<1e-5);assert.ok(units[0].remainingAreaMM2<1e-5);return units[0];}
+
+test('editable colour paper keeps punched holes and torn edges in one vector',async()=>{
+ const options={widthMm:70,heightMm:92,tearSides:['right','bottom'],roughnessMm:.8,holeSide:'left',holeCount:3,holeRadiusMm:1.3,seed:43};
+ const geometry=paperCardPath(options);
+ assert.equal(geometry.paths[0].fillRule,'evenodd');
+ assert.equal((geometry.paths[0].d.match(/ M/g)||[]).length,3,'outer path plus three independent holes');
+ assert.deepEqual(paperCardPath(options),geometry,'identical parameters must reproduce the same torn contour');
+ assert.throws(()=>compileTechnique({methodId:'paper-color-card',parameters:{id:'missing-position',colors:['#8195B4'],...options}}),/缺少参数：at/);
+ const recipe=compileTechnique({methodId:'paper-color-card',parameters:{id:'colour-paper',at:[74,105],colors:['#8195B4'],...options}});
+ assert.equal(recipe.operations[0].op,'group.compose');
+ assert.equal(recipe.operations[0].children[0].geometry.paths[0].fillRule,'evenodd');
+ const doc=run(await make(),recipe.operations);
+ assert.ok(node(doc,'colour-paper'));
+ assert.throws(()=>paperCardPath({...options,holeCount:12,holeRadiusMm:5}),/间距不足/);
+});
 
 test('window core is visible, moved with cropped physical dimensions and conserved without a second source',async()=>{
  const e=example('paper-window-reuse'),c=compileTechnique({methodId:'paper-window-reuse',parameters:e.parameters});

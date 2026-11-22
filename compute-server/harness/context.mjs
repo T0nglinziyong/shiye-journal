@@ -30,13 +30,16 @@ export function shortlistCreationMethods(document,brief={}){
     const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
     return ids.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
   }
-  const ids=/丰富|层叠|拼贴/.test(text)?['layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','title-tape']:
-    /极简|留白|清新|淡雅/.test(text)?['quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption','title-tape']:
+  const ids=/丰富|层叠|拼贴/.test(text)?['paper-color-card','layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','accent-spark','accent-rings','title-tape']:
+    /极简|留白|清新|淡雅/.test(text)?['paper-color-card','quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption','title-tape']:
     /杂志|照片|旅行/.test(text)?['magazine-offset','photo-stagger','photo-caption','paper-underlay','graphic-route']:
-    ['composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
+    ['paper-color-card','composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
   const chosen=materialCount<3?ids.filter(id=>!['composition-s','layered-center','layered-diagonal','photo-stagger'].includes(id)):ids;
+  const hasSourcePaper=document.source.sourceSnapshots?.some(snapshot=>snapshot.kind==='paper');
   const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
-  return chosen.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
+  const candidates=chosen.filter(id=>id!=='paper-color-card'||!hasSourcePaper);
+  if(hasSourcePaper&&document.source.textMode!=='none')candidates.splice(Math.min(2,candidates.length),0,'record-on-material');
+  return candidates.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
 }
 
 export function initialToolGuide(document){
@@ -68,24 +71,91 @@ export function automaticSceneFeedback(document){
   let finalValidation={ok:true};
   try{validateWebScene(document.page,document.source,document.source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true})),{final:true});}
   catch(e){finalValidation={ok:false,issue:e.message};}
-  return {required,finalValidation};
+  return {required,finalValidation,foundation:paperFoundationStatus(document,inspection)};
+}
+
+const rgb=hex=>/^#[0-9a-f]{6}$/i.test(hex||'')?[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)):null;
+const colorDistance=(a,b)=>{const aa=rgb(a),bb=rgb(b);return aa&&bb?Math.hypot(...aa.map((value,index)=>value-bb[index])):0;};
+
+export function paperFoundationStatus(document,inspection=inspectCreationDocument(document)){
+  const rich=(document.source.styles||[]).some(style=>/丰富|层叠|拼贴/.test(style));
+  const required=document.source.materials.length>0&&(rich||document.source.materials.length>=2)&&!(document.source.styles||[]).some(style=>/极简|无打底/.test(style));
+  if(!required)return {required:false,missingPages:[],unconnectedPages:[],flatBoards:false};
+  const page=document.page,height=page.physicalPageHeightMM;
+  const leaves=page.pageMode==='spread'?2:1;
+  const leafWidth=page.canvas.width/page.canvas.height*height/leaves;
+  const leafArea=leafWidth*height;
+  const sourceByAlias=new Map(document.source.materials.map(material=>[material.alias,document.source.sourceSnapshots.find(snapshot=>snapshot.assetID===material.assetID)]));
+  const found=Array(leaves).fill(false),papers=Array.from({length:leaves},()=>[]),carriers=Array.from({length:leaves},()=>[]),contents=Array.from({length:leaves},()=>[]);
+  const box=layer=>{const [w,h]=layer.world.sizeMm,[x,y]=layer.world.centerMm;return {l:x-w/2,r:x+w/2,t:y-h/2,b:y+h/2,area:w*h};};
+  const overlap=(a,b)=>Math.max(0,Math.min(a.r,b.r)-Math.max(a.l,b.l))*Math.max(0,Math.min(a.b,b.b)-Math.max(a.t,b.t));
+  for(const layer of inspection.layers){
+    if(layer.surface!=='page'||layer.hidden||layer.opacity<0.6||!layer.world?.sizeMm||!layer.world?.centerMm)continue;
+    const [width,layerHeight]=layer.world.sizeMm;
+    const pageIndex=leaves===1?0:Math.min(1,Math.floor(layer.world.centerMm[0]/leafWidth));
+    if(layer.type==='material'||layer.type==='text')contents[pageIndex].push({id:layer.id,box:box(layer)});
+    const area=width*layerHeight;
+    if(layer.type==='shape'&&area>=leafArea*0.14&&layer.fill&&colorDistance(layer.fill,page.paperColor)>=30){
+      found[pageIndex]=true;
+      papers[pageIndex].push({fill:layer.fill.toLowerCase(),width,height:layerHeight,centerY:layer.world.centerMm[1],area:width*layerHeight});
+      carriers[pageIndex].push({id:layer.id,box:box(layer)});
+    }
+    if(layer.type==='material'){
+      const source=sourceByAlias.get(layer.asset);
+      // A real card can carry a collage even when it covers a little less
+      // area than a generated color panel; its printed edge remains visible.
+      if(area>=leafArea*0.1&&source?.kind==='paper'){
+        found[pageIndex]=true;
+        carriers[pageIndex].push({id:layer.id,box:box(layer)});
+      }
+    }
+  }
+  // Two identical oversized color panels satisfy a color check but read as a
+  // presentation board, not as paper pieces supporting a journal collage.
+  const prominent=papers.map(rows=>rows.filter(row=>row.area>=leafArea*0.35));
+  const [left,right]=prominent.map(rows=>rows.length===1?rows[0]:null);
+  const close=(a,b,scale)=>Math.abs(a-b)<=scale;
+  const flatBoards=Boolean(rich&&leaves===2&&left&&right&&
+    close(left.width,right.width,leafWidth*0.12)&&close(left.height,right.height,height*0.12)&&
+    close(left.centerY,right.centerY,height*0.08));
+  const pageName=index=>leaves===1?'page':index?'page.right':'page.left';
+  const unconnectedPages=rich?carriers.flatMap((rows,index)=>{
+    if(!rows.length||!contents[index].length)return [];
+    const connected=rows.some(paper=>contents[index].some(content=>content.id!==paper.id&&overlap(paper.box,content.box)>=Math.min(paper.box.area,content.box.area)*0.05));
+    return connected?[]:[pageName(index)];
+  }):[];
+  return {required:true,missingPages:found.flatMap((value,index)=>value?[]:[pageName(index)]),unconnectedPages,flatBoards,
+    hint:'承托层可以是已有的纹样纸、可写卡、纸片或数字纸形；先试摆真实素材，只有缺少合适写面或色彩关系时再加数字纸。'};
 }
 
 export function modelContext(messages,state={}){
-  if(messages.length<=2)return messages;
+  // The stage prompt is inserted into the outgoing request. Never let that
+  // insertion mutate the checkpoint's source messages.
+  if(messages.length<=2)return [...messages];
   const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
   const afterFirstPreview=Boolean(state.qualityFrames?.length);
   const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
     afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-2)??turns.at(0)??2);
-  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
+  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
+  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-4)??turns.at(0)??2);
+  while(start>2&&messages[start]?.role==='tool')start--;
+  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&(/^(当前真实画面：|本轮最先核对的画面问题|独立构图审查发现必须先修复|独立文字与画面审查发现必须先修复)/.test(message.content[0]?.text||''));
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
   const recent=tail.filter((message,i)=>{
-    if(isPreview(message))return i===lastPreview;
+    if(isPreview(message))return i===lastPreview&&i>lastAssistant;
     if(message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))return i>lastAssistant;
     return true;
   });
-  if(!state.document)return [messages[0],index,...recent];
+  const recentToolNames=new Map(recent.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
+  const recentAssistants=recent.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
+  const compactedRecent=recent.map((message,i)=>{
+    if(message.role==='tool'&&recentToolNames.get(message.tool_call_id)==='creation_help'&&i<(recentAssistants.at(-2)??-1))return {...message,content:'{"ok":true,"detail":"参数已读取；需要再次查看时调用 creation_help。"}'};
+    if(message.role==='tool'&&['creation_apply','creation_recipe'].includes(recentToolNames.get(message.tool_call_id))&&i<(recentAssistants.at(-2)??-1)){
+      try{const receipt=JSON.parse(message.content);if(receipt.ok)return {...message,content:'{"ok":true,"detail":"较早的编辑已生效；对象和最新版本见当前 Scene。"}'};}catch{/* Keep the original response. */}
+    }
+    return message;
+  });
+  if(!state.document)return [messages[0],index,...compactedRecent];
   const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
   const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
@@ -93,15 +163,22 @@ export function modelContext(messages,state={}){
   const inspected=inspectCreationDocument(state.document);
   // The newest automatic observation already carries the same Scene. Keep only
   // its revision in the state summary so a long page is not billed twice.
-  const scene=lastPreview>=0?{sceneRevision:inspected.sceneRevision}:state.phase==='review'?{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>layer.surface==='page')}:inspected;
-  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'composition',plan:state.plan,decisions:(state.decisions||[]).slice(-4),spaces:state.spaces,visualState:state.visualState||null,scene,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
-  return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
+  const previewVisible=lastPreview>=0&&lastPreview>lastAssistant;
+  const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
+  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-6),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:(state.recommendedMethods||[]).map(({id,skill,title})=>({id,skill,title})),skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).slice(-6).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
+  return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...compactedRecent];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
   const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  const cutoff=turns.at(-2);
+  let cutoff=(state.phaseReviews||[]).at(-1)?.messageIndex;
+  if(!Number.isInteger(cutoff)||cutoff<=from){
+    // A soft creative loop may never emit creation_phase. Compact completed
+    // turns on cadence while retaining the latest four assistant/tool cycles.
+    const assistants=messages.flatMap((message,index)=>message.role==='assistant'?[index]:[]);
+    cutoff=assistants.at(-4);
+  }
+  while(cutoff>2&&messages[cutoff]?.role==='tool')cutoff--;
   if(!Number.isInteger(cutoff)||cutoff<=from)return null;
   const older=messages.slice(from,cutoff);
   if(older.filter(message=>message.role==='assistant').length<4)return null;
