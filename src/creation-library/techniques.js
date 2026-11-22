@@ -25,6 +25,7 @@ const fieldHelp={...titleHelp,motif:'rings/spark/sprig/stitch/confetti/materials
 function methodFields(method){
  const base=['write','relate','tear','window','split','weave'].includes(method.recipe)?['id']:common;
  let specific=fields[method.recipe];
+ if(method.id==='title-composed')specific=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents'];
  if(method.recipe==='graphic'){
   specific=specific.filter(k=>method.defaults.shape?!['seed','waypoints'].includes(k):k!=='options'&&(k!=='waypoints'||method.defaults.motif==='trail'));
   if(method.defaults.shape==='bubble')specific=[...specific,'text','fontFamily','fontSizePt'];

@@ -238,6 +238,8 @@ test('title backdrops mix scattered dots and squares with page-wide line and has
  assert.equal(apply(await document([]),compileTechnique({methodId:'title-composed',parameters}).operations,[]).changed,true);
 });
 test('composed lettering also works as smaller second and third level headings',async()=>{
+ const contract=describeTechnique('title-composed',{includeFontSuggestions:false});
+ assert.deepEqual(Object.keys(contract.parameters),['id','reference','at','rotationDeg','text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents']);
  const second=compileTechnique({methodId:'title-composed',parameters:{id:'heading-two',text:'今日片段',fontSizePt:20,widthMm:52,backgrounds:[{kind:'lines',count:3,color:'#B7C7BC',opacity:.45}]}});
  const third=compileTechnique({methodId:'title-composed',parameters:{id:'heading-three',text:'天气记录',fontSizePt:14,widthMm:42,backgrounds:[{kind:'dots',diameterMm:1.5,gapMm:3,color:'#DDAA78'}]}});
  assert.ok(second.report.heightMm>third.report.heightMm);
