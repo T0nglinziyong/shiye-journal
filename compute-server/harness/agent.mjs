@@ -71,8 +71,9 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
     if(operation.geometry?.kind==='shape'&&typeof operation.geometry.shape==='string')operation.geometry.kind=operation.geometry.shape;
     if(operation.geometry?.shape&&operation.geometry.shape===operation.geometry.kind)delete operation.geometry.shape;
     if(operation.geometry?.preset&&operation.geometry.preset===operation.geometry.kind)delete operation.geometry.preset;
-    if(Number.isFinite(operation.style?.letterSpacing)&&operation.style?.letterSpacingMm===undefined){operation.style.letterSpacingMm=operation.style.letterSpacing;delete operation.style.letterSpacing;}
-    if(typeof operation.style?.align==='string'&&operation.style.textAlign===undefined){operation.style.textAlign=operation.style.align;delete operation.style.align;}
+    if(Number.isFinite(operation.style?.letterSpacing)){operation.style.letterSpacingMm??=operation.style.letterSpacing;delete operation.style.letterSpacing;}
+    if(Number.isFinite(operation.style?.letterSpacingPt)){operation.style.letterSpacingMm??=operation.style.letterSpacingPt*25.4/72;delete operation.style.letterSpacingPt;}
+    if(typeof operation.style?.align==='string'){operation.style.textAlign??=operation.style.align;delete operation.style.align;}
     if(operation.op==='graphic.add'&&operation.geometry?.kind==='path'&&!operation.geometry.paths&&!operation.geometry.viewBox){
       operation.geometry={kind:'sketch',motif:'trail',seed:[...(operation.id||'line')].reduce((sum,char)=>sum+char.charCodeAt(0),0),waypoints:[[.02,.5],[.98,.5]]};
     }
@@ -89,7 +90,7 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
       operation.place={...(operation.place||{}),rotationDeg:operation.place?.rotationDeg??operation.style.rotationDeg};
       delete operation.style.rotationDeg;
     }
-    if(Number.isFinite(operation.place?.angle)&&operation.place.rotationDeg===undefined){operation.place.rotationDeg=operation.place.angle;delete operation.place.angle;}
+    if(Number.isFinite(operation.place?.angle)){operation.place.rotationDeg??=operation.place.angle;delete operation.place.angle;}
     if(operation.place){
       const anchorAliases={'left-center':'middle-left','right-center':'middle-right','center-left':'middle-left','center-right':'middle-right'};
       if(anchorAliases[operation.place.referenceAnchor])operation.place.referenceAnchor=anchorAliases[operation.place.referenceAnchor];
@@ -158,13 +159,13 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
     const renders=(s.qualityFrames||[]).filter(frame=>frame.phase===s.phase).length;
     const lastAudit=(s.independentReviews||[]).filter(audit=>audit.phase===s.phase&&audit.pngHash===s.preview?.pngHash).at(-1);
     const blocked=Boolean(lastAudit?.blockingIssues?.length);
-    const elapsed=clock()-s.startedAt;
-    const next=!blocked&&s.phase==='layout'&&renders>=2&&elapsed>150000?'craft':!blocked&&s.phase==='craft'&&renders>=2&&elapsed>250000?'review':null;
+    const elapsed=clock()-s.startedAt,stageTurns=s.turns-((s.phaseReviews||[]).at(-1)?.turn??0);
+    const next=!blocked&&s.phase==='layout'&&renders>=2&&(elapsed>150000||stageTurns>=8)?'craft':!blocked&&s.phase==='craft'&&renders>=2&&(elapsed>250000||stageTurns>=6)?'review':null;
     return {next,blocked,renders};
   };
   const activeToolsForState=s=>{
     const tools=toolsForState(s);
-    return stagePacing(s).next?tools.filter(tool=>['creation_phase','creation_inspect','creation_preview'].includes(tool.function.name)):tools;
+    return stagePacing(s).next?tools.filter(tool=>tool.function.name==='creation_phase'):tools;
   };
   const traceEvent=(s,event)=>[...(s.trace||[]),{elapsedMs:clock()-s.startedAt,...event}];
   const State=Annotation.Root({run:Annotation()});
@@ -175,7 +176,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
   const graph=new StateGraph(State)
     .addNode('model',async({run:s},config)=>{
       live(s,config);
-      if(s.turns>=32||s.noProgress>=5)throw error('CREATIVE_STALLED','创作未能继续推进，成功步骤已保留');
+      if(s.turns>=40||s.noProgress>=5)throw error('CREATIVE_STALLED','创作未能继续推进，成功步骤已保留');
       await onProgress({stage:'thinking',turn:s.turns+1,elapsedMs:clock()-s.startedAt});
       let contextState=s;
       const candidate=typeof model.compact==='function'&&s.deadlineAt-clock()>45000?creativeCompactionCandidate(s.messages,s):null;
@@ -257,9 +258,11 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
             args.composition.writingSpace=[args.composition.writingSpace,args.composition.quietZone].filter(Boolean).join('；');
             delete args.composition.quietZone;
           }
+          if(name==='creation_phase'&&args.assessment){delete args.assessment.from;delete args.assessment.to;}
           if(name==='creation_apply'&&args.protocolVersion===undefined)args.protocolVersion=2;
           if(name==='creation_apply'&&phase!=='layout'&&independentReviews.filter(audit=>audit.phase===phase&&audit.pngHash===s.preview?.pngHash).at(-1)?.blockingIssues?.length&&args.operations?.length>8)throw Error('独立审查后的修复单批最多 8 个操作；按当前画面阻断问题合批处理');
           if(name==='creation_apply')normalizeCreationOperations(args.operations,new Set(spaces.map(space=>space.id)));
+          if(name==='creation_apply'&&args.operations?.some(operation=>operation.style?.edge))throw Error('数字图形不支持 style.edge 撕边。请去掉该字段直接保留纸片，或对真实纸张素材单独调用 material.edge；不要反复查询 style.edge。');
           if(name==='creation_help'&&Array.isArray(args.topics))args.topics=args.topics.map(topic=>topic==='anchor'?'place':topic);
           validateValue(args,schemas.get(name));let data;
           if(name==='read_skill'){

@@ -95,7 +95,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
     if(turn===2){
       assert.ok(names.includes('read_template'));
       const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
-      title.style.letterSpacing=.3;title.style.align='center';title.place.angle=2;
+      title.style.letterSpacing=.3;title.style.letterSpacingPt=1.5;title.style.align='center';title.place.angle=2;
       return answer(edit(creationSceneRevision(f.document),'first',[
         {op:'graphic.add',id:'paper',geometry:{kind:'shape',preset:'rect'},place:{at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},
         {op:'graphic.add',id:'paper-accent',geometry:{kind:'shape',shape:'rect'},place:{reference:'page',at:[50,50],unit:'mm'},size:{width:4,height:4,unit:'mm'},style:{fill:'#465D54'}},title
