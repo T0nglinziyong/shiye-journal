@@ -77,8 +77,10 @@ export function searchLibraryReferences(document,{query='',kind='all',styles=[],
   if(query&&!match.hits.length&&match.overlap<.25)continue;
   const materialKinds=new Set(context.materials.map(material=>normalized(material.kind)));
   const roleFit=study.roles.filter(role=>materialKinds.has(normalized(role))).length;
-  const styleFit=study.styles.some(style=>context.styles.some(value=>similar(style,value)))?15:0;
-  results.push({kind:'case',id:study.id,title:study.title,score:match.score+roleFit*6+styleFit+(study.id.startsWith('xhs-')?16:0),why:{matched:match.hits,materialRoles:roleFit,pageMode:study.pageMode},styles:study.styles,content:study.content,source:study.source,summary:study.composition,readWith:{tool:'read_case',id:study.id}});
+  const styleFit=context.styles.length?study.styles.some(style=>context.styles.some(value=>similar(style,value)))?42:-18:0;
+  const rich=context.styles.some(style=>/丰富|层叠|拼贴|杂志/.test(style));
+  const layeringFit=rich?(/[叠压盖交错]/.test(study.composition+' '+study.objects)?18:0)+(/[底纸纸片]/.test(study.composition+' '+study.objects)?8:0)-(/留白|疏排/.test(study.composition+' '+study.objects)?14:0):0;
+  results.push({kind:'case',id:study.id,title:study.title,score:match.score+roleFit*6+styleFit+layeringFit+(study.id.startsWith('xhs-')?8:0),why:{matched:match.hits,materialRoles:roleFit,styleFit,layeringFit,pageMode:study.pageMode},styles:study.styles,content:study.content,source:study.source,summary:study.composition,readWith:{tool:'read_case',id:study.id}});
  }
  const remaining=results.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id)),selected=[];
  const sources=new Map(),skills=new Map();
@@ -87,7 +89,7 @@ export function searchLibraryReferences(document,{query='',kind='all',styles=[],
   for(let i=0;i<remaining.length;i++){
    const item=remaining[i],group=item.kind==='technique'?item.skill:item.source?.url||item.source?.id;
    const count=(item.kind==='technique'?skills:sources).get(group)||0;
-   const value=item.score-count*12;
+   const value=item.score-count*(item.kind==='case'?5:12);
    if(value>bestValue){bestValue=value;bestIndex=i;}
   }
   const [item]=remaining.splice(bestIndex,1),group=item.kind==='technique'?item.skill:item.source?.url||item.source?.id;

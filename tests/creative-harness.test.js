@@ -44,6 +44,14 @@ test('reference lookup exposes sourced templates only as layout guidance',async(
   assert.ok(first.slots?.every(slot=>slot.role&&slot.box.length===4));
 });
 
+test('rich layered spreads rank a layered reference above sparse diary cases',async()=>{
+  const document=await createCreationDocument({draft:draft({mode:'spread'}),assets:[]});
+  document.source.styles=['丰富层叠'];
+  const cases=searchLibraryReferences(document,{kind:'cases',limit:3}).results;
+  assert.equal(cases[0].id,'xhs-wishes-dessert');
+  assert.ok(cases.every(item=>item.why.pageMode==='spread'));
+});
+
 test('stage transition rejects skipping, unresolved issues and empty plans',async t=>{
   let turn=0;const f=await fixture(t,async()=>{
     turn++;
@@ -64,7 +72,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
     turn++;instructions.push(messages[1].content);
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.ok(!names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
-    if(turn===2){assert.ok(names.includes('read_template'));return answer(edit(creationSceneRevision(f.document),'first',[text('title','周末小记',[45,40])]));}
+    if(turn===2){assert.ok(names.includes('read_template'));return answer(edit(creationSceneRevision(f.document),'first',[{...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}}]));}
     if(turn===3){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
     if(turn===4)return answer(phase('craft','两处文字形成基础结构，还有空间可加手写点缀'));
     if(turn===5)return answer(edit(p.sceneRevision,'third',[text('body','把潮湿的风留在这一页。',[45,100])]));
@@ -75,7 +83,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   assert.equal(result.status,'completed');
   assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout','craft','review']);
   assert.ok(!instructions[0].includes('本阶段表达方法卡'));
-  assert.ok(instructions[1].includes('匹配的模板参考'));
+  assert.ok(instructions[1].includes('匹配案例和轻量模板'));
   assert.ok(instructions[4].includes('本阶段表达方法卡'));
   assert.equal(f.renders(),3);
 });
@@ -126,6 +134,18 @@ test('a timed-out DeepSeek call retries once with a smaller low-effort response 
   assert.equal(bodies.length,2);
   assert.equal(bodies[1].reasoning_effort,'low');
   assert.equal(bodies[1].max_tokens,8000);
+});
+
+test('routine visual adjustments use bounded non-thinking tool calls',async()=>{
+ let request;
+ const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+   request=JSON.parse(options.body);
+   return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:null,tool_calls:[]},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
+ }});
+ await model({messages:[{role:'user',content:'调整刚才画面'}],tools:[],reasoningEffort:'none',remainingMs:60000});
+ assert.equal(request.thinking.type,'disabled');
+ assert.equal(request.reasoning_effort,undefined);
+ assert.equal(request.max_tokens,5000);
 });
 
 test('independent visual critique uses a short non-thinking image call',async()=>{

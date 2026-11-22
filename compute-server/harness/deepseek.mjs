@@ -9,12 +9,13 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
       const remaining=remainingMs-(Date.now()-started);
       if(remaining<1000)throw Object.assign(Error('创作时间已用完'),{code:'CREATIVE_DEADLINE'});
       const effectiveEffort=summary||recoveringFromTruncation||attempt>0?'low':reasoningEffort||effort;
+      const actionMode=quick||effectiveEffort==='none';
       const timeout=AbortSignal.timeout(Math.min(quick?25000:summary?35000:150000,remaining));
       let response;
       try{
         response=await fetcher(endpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,timeout]):timeout,
           headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
-          body:JSON.stringify({model,messages,...(summary?{}:{tools,tool_choice:'auto'}),thinking:{type:quick?'disabled':'enabled'},...(quick?{}:{reasoning_effort:effectiveEffort}),stream:false,max_tokens:quick?1600:summary?3000:effectiveEffort==='low'?8000:14000})});
+          body:JSON.stringify({model,messages,...(summary?{}:{tools,tool_choice:'auto'}),thinking:{type:actionMode?'disabled':'enabled'},...(actionMode?{}:{reasoning_effort:effectiveEffort}),stream:false,max_tokens:quick?1600:summary?3000:actionMode?5000:effectiveEffort==='low'?8000:14000})});
       }catch(cause){
         if(signal?.aborted)throw cause;
         if((timeout.aborted||cause?.name==='TimeoutError'||cause?.code===23)&&attempt<2&&remainingMs-(Date.now()-started)>30000)continue;

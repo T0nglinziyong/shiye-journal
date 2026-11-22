@@ -28,8 +28,17 @@ test('model context keeps the global index and recent tool pair while dropping s
   const receipt={role:'tool',tool_call_id:'call',content:'receipt'};
   const previews=Array.from({length:5},(_,i)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+i+'\n最新 Scene：many coordinates'},{type:'image_url',image_url:{url:'preview'+i}}]}));
   const input=[system,source,reasoning,receipt,...previews],before=JSON.stringify(input),out=modelContext(input);
-  assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2],reasoning);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
+  assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2].reasoning_content,undefined);assert.deepEqual(out[2].tool_calls,reasoning.tool_calls);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
   assert.equal(out.filter(m=>Array.isArray(m.content)).length,2);assert.equal(JSON.stringify(input),before);
+});
+
+test('adding the first stage prompt cannot alter checkpoint messages or move the source index',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'original source index'}];
+ const request=modelContext(messages);
+ request.splice(1,0,{role:'system',content:'stage'});
+ assert.equal(messages.length,2);
+ assert.equal(messages[1].content,'original source index');
+ assert.deepEqual(request.map(message=>message.role),['system','system','user']);
 });
 
 test('after a real preview the model can request the saved source board instead of paying for it every turn',()=>{
@@ -62,9 +71,19 @@ test('model context stays bounded as checkpoint history grows',()=>{
  for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
  const out=modelContext(messages);
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
- assert.ok(out.length<=20);assert.equal(out.filter(m=>m.role==='assistant').length,8);
- assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
+ assert.ok(out.length<=20);assert.equal(out.filter(m=>m.role==='assistant').length,6);
+ assert.equal(out.filter(m=>m.role==='tool').length,6);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
  assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
+});
+
+test('old parameter help is shortened while its tool pair stays valid',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
+ for(let i=0;i<3;i++)messages.push({role:'assistant',tool_calls:[{id:'h'+i,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'h'+i,content:'{"ok":true,"data":"'+('long schema '.repeat(100))+'"}'});
+ const out=modelContext(messages);
+ assert.ok(out.find(m=>m.tool_call_id==='h0').content.length<150);
+ assert.ok(out.find(m=>m.tool_call_id==='h2').content.length>1000);
+ const calls=new Set(out.flatMap(m=>m.role==='assistant'?(m.tool_calls||[]).map(call=>call.id):[]));
+ assert.ok(out.filter(m=>m.role==='tool').every(m=>calls.has(m.tool_call_id)));
 });
 
 test('temporary material detail images leave the model context after they are used',()=>{

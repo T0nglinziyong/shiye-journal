@@ -72,13 +72,15 @@ export function automaticSceneFeedback(document){
 }
 
 export function modelContext(messages,state={}){
-  if(messages.length<=2)return messages;
+  // The stage prompt is inserted into the outgoing request. Never let that
+  // insertion mutate the checkpoint's source messages.
+  if(messages.length<=2)return [...messages];
   const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
   const afterFirstPreview=Boolean(state.qualityFrames?.length);
   const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
     afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
   const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-8)??turns.at(0)??2);
+  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-6)??turns.at(0)??2);
   while(start>2&&messages[start]?.role==='tool')start--;
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
@@ -87,7 +89,14 @@ export function modelContext(messages,state={}){
     if(message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))return i>lastAssistant;
     return true;
   });
-  if(!state.document)return [messages[0],index,...recent];
+  const recentToolNames=new Map(recent.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
+  const recentAssistants=recent.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
+  const compactedRecent=recent.map((message,i)=>{
+    if(message.role==='assistant'&&'reasoning_content'in message)return (({reasoning_content,...visible})=>visible)(message);
+    if(message.role==='tool'&&recentToolNames.get(message.tool_call_id)==='creation_help'&&i<(recentAssistants.at(-2)??-1))return {...message,content:'{"ok":true,"detail":"参数已读取；需要再次查看时调用 creation_help。"}'};
+    return message;
+  });
+  if(!state.document)return [messages[0],index,...compactedRecent];
   const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
   const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
@@ -97,8 +106,8 @@ export function modelContext(messages,state={}){
   // its revision in the state summary so a long page is not billed twice.
   const previewVisible=lastPreview>=0&&lastPreview>lastAssistant;
   const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
-  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-4),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
-  return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
+  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-6),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:(state.recommendedMethods||[]).map(({id,skill,title})=>({id,skill,title})),skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).slice(-6).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
+  return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...compactedRecent];
 }
 
 export function creativeCompactionCandidate(messages,state={}){

@@ -67,6 +67,9 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
       continue;
     }
     if(operation.geometry?.kind==='rectangle')operation.geometry.kind='rect';
+    if(operation.op==='graphic.add'&&operation.geometry?.kind==='path'&&!operation.geometry.paths&&!operation.geometry.viewBox){
+      operation.geometry={kind:'sketch',motif:'trail',seed:[...(operation.id||'line')].reduce((sum,char)=>sum+char.charCodeAt(0),0),waypoints:[[.02,.5],[.98,.5]]};
+    }
     if(operation.geometry?.kind==='rect'&&Number.isFinite(operation.geometry.options?.radius)){
       operation.style={...(operation.style||{}),cornerRadiusRatio:operation.style?.cornerRadiusRatio??operation.geometry.options.radius};
       delete operation.geometry.options;
@@ -84,6 +87,7 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
       if(!operation.place.surface)operation.place.surface=operation.place.reference;
       operation.place.reference='page';
     }
+    if(operation.place&&!operation.place.reference&&(operation.place.at||operation.place.referenceAnchor))operation.place.reference='page';
     if(Array.isArray(operation.at)&&operation.place&&!operation.place.at){operation.place.at=operation.at;delete operation.at;}
     if(Array.isArray(operation.place?.at)&&!operation.place.unit)
       operation.place.unit=operation.place.at.every(value=>value>=0&&value<=1)?'ratio':'mm';
@@ -114,7 +118,11 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
   const cards=expressionCards(document,brief),catalog=skills.catalog();
   const cardIDs=new Set(cards.map(card=>card.id));
   const caseCandidates=document.source.materials.length?matchJournalCases(document,{limit:2}):[];
-  const featuredCase=caseCandidates.length?caseDetails(caseCandidates[0].id,document):null;
+  const referenceCases=caseCandidates.map(candidate=>{
+    const detail=caseDetails(candidate.id,document);
+    return {id:detail.id,title:detail.title,score:candidate.score,composition:detail.composition,palette:detail.palette,objects:detail.objects,elements:detail.elements,adaptation:detail.adaptation};
+  });
+  const referenceTemplates=document.source.materials.length?searchLibraryReferences(document,{kind:'templates',limit:8}).results.map(candidate=>({candidate,detail:templateDetails(candidate.id)})).filter(({detail})=>detail.available&&detail.slots.length<=14).slice(0,2).map(({candidate,detail})=>({id:detail.id,title:detail.title,score:candidate.score,slots:detail.slots.map(({id,role,box,input,whenUnassigned})=>({id,role,box,input,whenUnassigned}))})):[];
   const fonts=offlineBundledFonts().map(({family,label})=>({family,label}));
   const writing=writingTopicBrief(document,brief,startedAt);
   const resources={libraryVersion,release:resourceVersion,fontVersion:fontManifest.version,skills:skills.catalog().map(({name,version})=>({name,version})),protocolVersion:2};
@@ -123,7 +131,8 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
     :'\n本次是零素材创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。原创可编辑文字、程序绘制图形、荧光笔效果、线条与笔迹都可以使用。风格不等于内容主题；除非用户指定，否则从 365 个话题候选或素材细节选一个具体主题；允许写虚构的小场景，但不冒称用户亲历。文字方法卡会在装饰书写阶段自动提供；需要更多方法时再 read_skill。不要调用实体素材或胶带操作。';
   return {resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
     messages:[{role:'system',content:system+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可按需读取的核心 Skill：'+JSON.stringify(catalog.filter(({name})=>['journal-composition','paper-layering','journal-color','journal-writing','journal-lettering','journal-text-layout','journal-accents','journal-graphics'].includes(name)).map(({name,description,methodCount})=>({name,description,methodCount})))+'\n风格或专门技巧可用 read_skill 按需读取；具体方法候选将在对应阶段提供。\n常用工具合同：'+JSON.stringify(compactInitialToolGuide(document))},
-      {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（先按素材选，用户指定主题优先；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源与尺寸：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n电子手帐案例候选（可用 read_case 查看）：'+JSON.stringify(caseCandidates)+'\n首选案例的元素布局（仅作参考；按本次素材和纸张调整，不复制来源文字或图像）：'+JSON.stringify(featuredCase&&{id:featuredCase.id,composition:featuredCase.composition,palette:featuredCase.palette,objects:featuredCase.objects,elements:featuredCase.elements,adaptation:featuredCase.adaptation})},
+      {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（先按素材选，用户指定主题优先；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源与尺寸：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（借构图、配色和叠放，不复制来源图文；按本次素材比例改造）：'+JSON.stringify(referenceCases)+'\n匹配的轻量模板位置（仅作构图参考，空位置可以省略；如需精确工具参数用 read_template）：'+JSON.stringify(referenceTemplates)},
+        {type:'text',text:document.source.materials.length?'素材选择原则：只有 required=true 的素材必须放上页面，其余可留暂存区。先选择能形成共同配色与叠放关系的几件，再看实际空位补充；不要先把全部素材放上纸面。已有印字或信息密集的卡片只作图像层，正文写在真正空白且对比足够的地方。':'本次没有实体素材，靠文字与可编辑图形构图。'},
         ...(tray?[{type:'text',text:'全局素材编号图；始终可对照此图。需要局部细节时再调用 inspect_materials。'},{type:'image_url',image_url:{url:tray.imageURL}}]:[]),
         ]}]};
 }
@@ -155,17 +164,24 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
         }catch(error){if(config.signal?.aborted)throw error;}
       }
       const apiMessages=modelContext(s.messages,contextState);
-      apiMessages.splice(1,0,{role:'system',content:phaseGuide(s.phase,{styles:s.document.source.styles||[],textMode:s.document.source.textMode})+(s.phase==='layout'?'\n本阶段可选构图方法：'+JSON.stringify((s.recommendedMethods||[]).filter(method=>/composition|layering|photo|journal/.test(method.skill)).slice(0,6))+'\n按本次素材和纸张匹配的模板参考（只参考元素关系，可用 read_template 看位置）：'+JSON.stringify(searchLibraryReferences(s.document,{kind:'templates',limit:2}).results):'')+(s.phase==='craft'?'\n本阶段表达方法卡：'+JSON.stringify(s.expressionCards||[])+'\n文字效果选法：'+JSON.stringify(letteringEffectMenu())+'\n本阶段其他方法：'+JSON.stringify((s.recommendedMethods||[]).filter(method=>/lettering|accent|graphic|color/.test(method.skill)).slice(0,8)):'')+'\n上阶段带入的待办与独立审查建议：'+JSON.stringify({issues:(s.phaseReviews||[]).at(-1)?.issues||[],notes:(s.phaseReviews||[]).at(-1)?.independentReview?.notes||[]})});
+      apiMessages.splice(1,0,{role:'system',content:phaseGuide(s.phase,{styles:s.document.source.styles||[],textMode:s.document.source.textMode})+(s.phase==='layout'?'\n先从任务输入的匹配案例和轻量模板提炼一条适合本次素材的构图骨架，再合批摆放。不要把所有素材先堆在纸面量测；未用素材留在暂存区。可选构图方法：'+JSON.stringify((s.recommendedMethods||[]).filter(method=>/composition|layering|photo|journal/.test(method.skill)).slice(0,6)):'')+(s.phase==='craft'?'\n本阶段表达方法卡：'+JSON.stringify(s.expressionCards||[])+'\n文字效果选法：'+JSON.stringify(letteringEffectMenu())+'\n本阶段其他方法：'+JSON.stringify((s.recommendedMethods||[]).filter(method=>/lettering|accent|graphic|color/.test(method.skill)).slice(0,8)):'')+'\n上阶段带入的待办与独立审查建议：'+JSON.stringify({issues:(s.phaseReviews||[]).at(-1)?.issues||[],notes:(s.phaseReviews||[]).at(-1)?.independentReview?.notes||[]})});
       const stageRenders=(s.qualityFrames||[]).filter(frame=>frame.phase===s.phase).length;
       if(s.phase==='layout'&&stageRenders>=3)apiMessages.splice(2,0,{role:'system',content:'布局已有 '+stageRenders+' 张真实预览。现在优先检查底纸、素材簇、文字区和阅读路线，调用 creation_phase 进入 craft；无需在布局阶段完成标题、正文和点缀。非阻断的待办写在 assessment.adjustments，留到 craft 继续编辑。只有构图仍有明确阻断问题时再改一批。'});
       if(s.phase==='craft'&&stageRenders>=2)apiMessages.splice(2,0,{role:'system',content:'装饰书写已有 '+stageRenders+' 张真实预览。若文字和装饰已足以表达主题，请提交阶段检查进入 review；局部问题仍可在 review 阶段修改，不必把每处微调留在 craft。'});
       if(s.phase==='craft'&&stageRenders===0)apiMessages.splice(2,0,{role:'system',content:'本阶段已自动给出标题、配色与局部点缀的可执行方法卡。先从卡片选合适的组合直接调用 creation_recipe 或 creation_apply，看到效果后再决定是否需要查更深的 Skill；不要连续数轮只查教程和参数。'});
       if(s.deadlineAt-clock()<180000)apiMessages.splice(2,0,{role:'system',content:'剩余创作时间不足三分钟。停止新一轮资料检索和无关微调；当前阶段完成一批关键编辑后立刻提交阶段检查。review 阶段可继续修具体问题，随后用最新截图的 creation_finish.review 交付。'});
+      const blockedAudit=(s.independentReviews||[]).filter(audit=>audit.phase===s.phase).at(-1);
+      const blockedStageCheck=Boolean(blockedAudit?.blockingIssues?.length);
+      const moveToCraft=s.phase==='layout'&&stageRenders>=4&&clock()-s.startedAt>180000&&!blockedStageCheck;
+      const moveToReview=s.phase==='craft'&&stageRenders>=2&&clock()-s.startedAt>270000&&!blockedStageCheck;
+      if(moveToCraft||moveToReview)apiMessages.splice(2,0,{role:'system',content:'本阶段已经完成多次真实画面调整。现在提交 creation_phase，phase 填 '+(moveToCraft?'craft':'review')+'，assessment 写具体画面观察；非阻断细节留到下一阶段继续编辑。若独立审查发现阻断问题，编辑工具会重新开放。'});
+      if(blockedStageCheck)apiMessages.splice(2,0,{role:'system',content:'独立画面审查阻断了阶段切换：'+blockedAudit.blockingIssues.join('；')+'。只修这些遮挡或裁切，优先把非必需的印字大卡移回暂存区，或把正文移到清晰空白处；每批最多 6 个操作，不重排整页。修好后用最新预览重新提交 creation_phase。'});
       const modelStarted=clock();
-      const activeTools=toolsForState(s);
+      const activeTools=moveToCraft||moveToReview?toolsForState(s).filter(tool=>['creation_phase','creation_inspect','creation_preview'].includes(tool.function.name)):toolsForState(s);
       const stageEnteredAt=(s.phaseReviews||[]).at(-1)?.turn??0;
       const deliberateTurn=s.phase==='direction'&&s.turns===0||['layout','craft'].includes(s.phase)&&s.turns===stageEnteredAt;
-      const reply=await model({messages:apiMessages,tools:activeTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),reasoningEffort:deliberateTurn?undefined:'low',recoveringFromTruncation:s.usage.some(u=>u.truncated)});
+      const routineAdjustment=['layout','craft','review'].includes(s.phase)&&stageRenders>=2&&!blockedStageCheck;
+      const reply=await model({messages:apiMessages,tools:activeTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),reasoningEffort:deliberateTurn?undefined:routineAdjustment?'none':'low',recoveringFromTruncation:s.usage.some(u=>u.truncated)});
       live(s,config);
       const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages];
       const trace=traceEvent(contextState,{kind:'model',turn:s.turns+1,phase:s.phase||'composition',model:reply.model||null,durationMs:clock()-modelStarted,toolCount:activeTools.length,inputImages:usage.at(-1).inputImages,inputTokens:reply.usage?.prompt_tokens||null,outputTokens:reply.usage?.completion_tokens||null,truncated:Boolean(reply.truncated)});
@@ -209,7 +225,12 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
         try{
           if(!toolsForState({...s,phase,qualityFrames}).some(t=>t.function.name===name))throw Error('当前阶段工具不可用；若已完成多轮预览，请先提交阶段检查进入下一阶段再继续编辑：'+name);
           args=JSON.parse(call.function.arguments||'{}');
+          if(name==='creation_plan'&&typeof args.composition?.quietZone==='string'){
+            args.composition.writingSpace=[args.composition.writingSpace,args.composition.quietZone].filter(Boolean).join('；');
+            delete args.composition.quietZone;
+          }
           if(name==='creation_apply'&&args.protocolVersion===undefined)args.protocolVersion=2;
+          if(name==='creation_apply'&&independentReviews.filter(audit=>audit.phase===phase).at(-1)?.blockingIssues?.length&&args.operations?.length>6)throw Error('独立审查后的局部修复单批最多 6 个操作；只处理遮挡与裁切，不要重排整页');
           if(name==='creation_apply')normalizeCreationOperations(args.operations,new Set(spaces.map(space=>space.id)));
           validateValue(args,schemas.get(name));let data;
           if(name==='read_skill'){
