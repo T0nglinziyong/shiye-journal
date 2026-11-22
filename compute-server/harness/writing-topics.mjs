@@ -54,13 +54,17 @@ export function searchWritingTopics({materials=[],query='',month=null,seed=0,lim
 export function writingLengthPlan({page,materials=[],textMode='automatic',purposes=[]}={}){
   if(textMode==='none'||purposes.includes('主题封面'))return {level:'标题为主',characters:[0,40],reason:'本页用途不要求长正文'};
   const area=(page?.canvas?.width||700)*(page?.physicalPageHeightMM||210)**2/(page?.canvas?.height||1000);
-  const occupied=materials.reduce((sum,material)=>sum+Math.max(0,Number(material.widthMM||material.physicalWidthMM)||0)*Math.max(0,Number(material.heightMM||material.physicalHeightMM)||0),0);
+  const occupied=materials.reduce((sum,material)=>{
+    const surface=[material.title,material.description,...(material.tags||[])].filter(Boolean).join(' ');
+    const writable=Number.isFinite(material.writableFraction)?Math.max(0,Math.min(.85,material.writableFraction)):/可写|写字区|空白|留白|浅色底|素色底|无字便签/.test(surface)?.6:0;
+    return sum+Math.max(0,Number(material.widthMM||material.physicalWidthMM)||0)*Math.max(0,Number(material.heightMM||material.physicalHeightMM)||0)*(1-writable);
+  },0);
   const density=occupied/Math.max(area,1);
-  if(textMode==='rich')return {level:'展开',characters:density>.75?[80,160]:[130,260],reason:'按真实可写面积修订，必要时让素材为正文留位置'};
+  if(textMode==='rich')return {level:'展开',characters:density>.75?[80,160]:[130,260],reason:'按真实可写面积修订，素材内可读区域也可写字'};
   if(textMode==='minimal')return {level:'简短',characters:[25,65],reason:'保留具体细节，不以口号凑字'};
-  if(density>.8)return {level:'精简',characters:[25,75],reason:'素材占比高，允许改成分散边注或清单'};
+  if(density>.8)return {level:'精简',characters:[25,75],reason:'可见面积较满；若素材内部有可读写面，可增加正文'};
   if(density>.4)return {level:'适中',characters:[65,130],reason:'先安排主体和可写区，再按预览调节'};
-  return {level:'展开',characters:[110,220],reason:'有较多可写空间，写出有推进的完整内容'};
+  return {level:'展开',characters:[110,220],reason:'纸面或素材内有较多可写空间，写出有推进的完整内容'};
 }
 
 export function writingTopicBrief(document,brief={},seed=0){
@@ -73,5 +77,5 @@ export function writingTopicBrief(document,brief={},seed=0){
   const userTheme=String(source.intent||brief.intent||'').trim();
   const fiction=source.contentPolicy!=='documentary';
   const topics=searchWritingTopics({materials,query:userTheme,month:new Date(seed).getUTCMonth()+1,seed,limit:3,allowFiction:fiction});
-  return {userTheme:userTheme||null,selected:topics[0],alternatives:topics.slice(1),length:writingLengthPlan({page:document.page,materials:(source.sourceSnapshots||[]).map(snapshot=>({widthMM:snapshot.descriptor?.widthMM,heightMM:snapshot.descriptor?.heightMM})),textMode:source.textMode,purposes:source.purposes||[]}),styles:['细节片段：从具体动作或物件开头，写一个转折','观察清单：两三项有差异的发现，结尾留一个问题','写给某物或某时刻：亲近、自然，不做空泛鼓励',...(fiction?['想象练习：可以虚构场景，写出感官和小意外']:[])],source:'用户提供的 365 主题 PDF；仅供启发，不照抄题目作正文'};
+  return {userTheme:userTheme||null,selected:topics[0],alternatives:topics.slice(1),length:writingLengthPlan({page:document.page,materials:(source.sourceSnapshots||[]).map(snapshot=>({widthMM:snapshot.descriptor?.widthMM,heightMM:snapshot.descriptor?.heightMM,title:snapshot.title,description:snapshot.description,tags:snapshot.tags})),textMode:source.textMode,purposes:source.purposes||[]}),styles:['细节片段：从具体动作或物件开头，写一个转折','观察清单：两三项有差异的发现，结尾留一个问题','写给某物或某时刻：亲近、自然，不做空泛鼓励',...(fiction?['想象练习：可以虚构场景，写出感官和小意外']:[])],source:'用户提供的 365 主题 PDF；仅供启发，不照抄题目作正文'};
 }

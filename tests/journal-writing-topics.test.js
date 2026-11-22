@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {journalWritingTopics,searchWritingTopics,writingLengthPlan,writingTopicBrief} from '../compute-server/harness/writing-topics.mjs';
-import {initialHarnessState} from '../compute-server/harness/agent.mjs';
+import {initialHarnessState,harnessTools} from '../compute-server/harness/agent.mjs';
+import {creativePageBrief} from '../src/creative-page-brief.js';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 import {createCreationDocument} from '../src/creation-document.js';
 import {draft} from '../src/domain.js';
@@ -26,6 +27,7 @@ test('body length responds to available area and policy',()=>{
   const page={canvas:{width:700,height:1000},physicalPageHeightMM:210};
   assert.equal(writingLengthPlan({page}).level,'展开');
   assert.equal(writingLengthPlan({page,materials:[{widthMM:150,heightMM:200}]}).level,'精简');
+  assert.equal(writingLengthPlan({page,materials:[{widthMM:150,heightMM:200,title:'浅色留白便签'}]}).level,'展开');
   assert.equal(writingLengthPlan({page,textMode:'minimal'}).level,'简短');
   assert.equal(writingLengthPlan({page,purposes:['主题封面']}).level,'标题为主');
   assert.equal(writingLengthPlan({page,textMode:'none'}).characters[1],40);
@@ -34,11 +36,18 @@ test('body length responds to available area and policy',()=>{
 test('live harness receives a short topic shortlist and can fetch more on demand',async()=>{
   const skills=await loadCreationSkills();
   assert.ok(skills.catalog().some(item=>item.name==='journal-writing'));
+  assert.ok(skills.catalog().some(item=>item.name==='journal-text-layout'));
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'为春天写一页'},startedAt:1795266000000});
   assert.match(state.messages[1].content[0].text,/写作选题与篇幅建议/);
   assert.match(state.messages[1].content[0].text,/365 主题 PDF/);
   assert.match(state.messages[0].content,/journal-writing/);
+  assert.match(state.messages[0].content,/writingZones/);
+  const plan=harnessTools.find(tool=>tool.function.name==='creation_plan').function.parameters;
+  assert.ok(plan.properties.writingZones.items.properties.flowGroup);
+  assert.ok(plan.properties.writingZones.items.properties.sequence);
+  assert.ok(plan.properties.composition.properties.layering);
+  assert.match(creativePageBrief({}),/一段文字也可按意思分成连续数块/);
   const short=writingTopicBrief(document,{},1795266000000);
   assert.equal(short.alternatives.length,2);
   assert.equal(short.length.level,'展开');
