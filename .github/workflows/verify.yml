@@ -15,7 +15,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      creative_only: ${{ steps.changed.outputs.creative_only }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: changed
+        name: Detect creation harness only changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          creative_only=false
+          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            creative_only=true
+            while IFS= read -r path; do
+              case "$path" in
+                compute-server/harness/*|creation-skills/*|tests/creative-harness*.test.js|tests/creation-skill-illustrations.test.js|tests/journal-writing-topics.test.js) ;;
+                *) creative_only=false; break ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+          fi
+          echo "creative_only=$creative_only" >> "$GITHUB_OUTPUT"
+
+  creative_only:
+    needs: scope
+    if: needs.scope.outputs.creative_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run pretest
+      - name: Creative harness, library and writing regressions
+        run: node --test --test-force-exit --test-concurrency=2 tests/creative*.test.js tests/creation-library.test.js tests/creation-skill-illustrations.test.js tests/journal-writing-topics.test.js
+
   unit-and-ui:
+    needs: scope
+    if: needs.scope.outputs.creative_only != 'true'
     name: checks / ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -73,10 +121,24 @@ jobs:
           compression-level: 6
 
   verify:
-    needs: unit-and-ui
+    if: always()
+    needs: [scope, creative_only, unit-and-ui]
     runs-on: ubuntu-latest
     steps:
-      - run: echo 'All unit-test partitions and built UI checks succeeded'
+      - name: Require the selected verification path
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          CREATIVE_ONLY: ${{ needs.scope.outputs.creative_only }}
+          CREATIVE_RESULT: ${{ needs.creative_only.result }}
+          FULL_RESULT: ${{ needs.unit-and-ui.result }}
+        shell: bash
+        run: |
+          test "$SCOPE_RESULT" = success
+          if [[ "$CREATIVE_ONLY" == true ]]; then
+            test "$CREATIVE_RESULT" = success
+          else
+            test "$FULL_RESULT" = success
+          fi
 
   deploy-cloudbase-test:
     name: Deploy CloudBase test

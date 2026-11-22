@@ -3,11 +3,22 @@ name: Interface browser regression
 on:
   push:
     branches: [main, test]
+    paths:
+      - 'src/**'
+      - 'tests/*browser*.mjs'
+      - 'tests/fixtures/**'
+      - 'tests/browser-harness.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'index.html'
+      - '.github/workflows/interface-browser.yml'
   pull_request:
     branches: [main, test]
     paths:
       - 'src/**'
-      - 'tests/**'
+      - 'tests/*browser*.mjs'
+      - 'tests/fixtures/**'
+      - 'tests/browser-harness.mjs'
       - 'package.json'
       - 'package-lock.json'
       - 'index.html'
