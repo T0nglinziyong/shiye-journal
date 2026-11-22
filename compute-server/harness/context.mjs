@@ -77,11 +77,13 @@ export function modelContext(messages,state={}){
   const afterFirstPreview=Boolean(state.qualityFrames?.length);
   const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
     afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]),start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-2)??turns.at(0)??2);
+  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
+  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-8)??turns.at(0)??2);
+  while(start>2&&messages[start]?.role==='tool')start--;
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
   const recent=tail.filter((message,i)=>{
-    if(isPreview(message))return i===lastPreview;
+    if(isPreview(message))return i===lastPreview&&i>lastAssistant;
     if(message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))return i>lastAssistant;
     return true;
   });
@@ -93,15 +95,16 @@ export function modelContext(messages,state={}){
   const inspected=inspectCreationDocument(state.document);
   // The newest automatic observation already carries the same Scene. Keep only
   // its revision in the state summary so a long page is not billed twice.
-  const scene=lastPreview>=0?{sceneRevision:inspected.sceneRevision}:state.phase==='review'?{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>layer.surface==='page')}:inspected;
-  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'composition',plan:state.plan,decisions:(state.decisions||[]).slice(-4),spaces:state.spaces,visualState:state.visualState||null,scene,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
+  const previewVisible=lastPreview>=0&&lastPreview>lastAssistant;
+  const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
+  const summary={creativeMemory:state.creativeMemory||null,phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-4),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:state.recommendedMethods,skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
   return [messages[0],index,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...recent];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
   const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  const cutoff=turns.at(-2);
+  let cutoff=(state.phaseReviews||[]).at(-1)?.messageIndex;
+  while(cutoff>2&&messages[cutoff]?.role==='tool')cutoff--;
   if(!Number.isInteger(cutoff)||cutoff<=from)return null;
   const older=messages.slice(from,cutoff);
   if(older.filter(message=>message.role==='assistant').length<4)return null;

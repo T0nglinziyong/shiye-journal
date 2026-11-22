@@ -62,8 +62,8 @@ test('model context stays bounded as checkpoint history grows',()=>{
  for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
  const out=modelContext(messages);
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
- assert.ok(out.length<=8);assert.equal(out.filter(m=>m.role==='assistant').length,2);
- assert.equal(out.filter(m=>m.role==='tool').length,2);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
+ assert.ok(out.length<=20);assert.equal(out.filter(m=>m.role==='assistant').length,8);
+ assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
  assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
 });
 
@@ -79,6 +79,19 @@ test('temporary material detail images leave the model context after they are us
  assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,1);
 });
 
+test('an unchanged preview image is sent once and then retained by hash',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const {draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"pngHash":"sha256:abc"}'},{type:'image_url',image_url:{url:'data:image/png;base64,dGVzdA=='}}]};
+ const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'text',text:'index'}]},{role:'assistant',tool_calls:[]},preview];
+ assert.equal(modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}}).filter(item=>item===preview).length,1);
+ messages.push({role:'assistant',tool_calls:[{id:'help',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'help',content:'{"ok":true}'});
+ const next=modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}});
+ assert.equal(next.some(item=>item===preview),false);
+ assert.match(next[2].content,/sha256:abc/);
+});
+
 test('creative compaction carries design decisions and rejected attempts into later turns',async()=>{
  const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'image_url',image_url:{url:'index'}}]}];
  for(let i=0;i<7;i++)messages.push(
@@ -86,7 +99,7 @@ test('creative compaction carries design decisions and rejected attempts into la
    {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
    {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
  );
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
  assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,5);
  assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
  assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
@@ -97,6 +110,19 @@ test('creative compaction carries design decisions and rejected attempts into la
  assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
  assert.equal(out.filter(m=>m.role==='assistant').length,2);
  assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,2);
+});
+
+test('compaction never starts between two responses to one assistant tool batch',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
+ for(let i=0;i<4;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
+ messages.push({role:'assistant',tool_calls:[{id:'first',function:{name:'creation_phase',arguments:'{}'}},{id:'second',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'first',content:'{"ok":true}'},{role:'tool',tool_call_id:'second',content:'{"ok":true}'});
+ const cutoff=messages.length-1;
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,phaseReviews:[{messageIndex:cutoff}]});
+ assert.equal(candidate.cutoff,messages.length-3);
+ const context=modelContext(messages,{compactedUntil:cutoff});
+ const calls=new Set(context.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>call.id):[]));
+ assert.ok(context.filter(message=>message.role==='tool').every(message=>calls.has(message.tool_call_id)));
+ assert.ok(context.some(message=>message.role==='assistant'&&message.tool_calls?.length===2));
 });
 
 test('malformed historical tool arguments cannot break compaction',()=>{
@@ -140,21 +166,23 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   assert.ok(!recommendCreationSkills(skills,visual).some(skill=>skill.name==='journal-lettering'));
   assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['layered-center','layered-diagonal']);
   const noText=initialHarnessState({document:visual,skills,brief:{intent:'只用数字图形创作',styles:['丰富层叠']}});
-  assert.equal(noText.expressionRequired,true);
-  assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-flower','color-bands']);
+  assert.equal(noText.expressionRequired,false);
+  assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-flower','color-bands','accent-sprig','accent-stitch']);
   assert.ok(!noText.messages[0].content.includes('可直接调用的文字效果选法'));
 });
 
-test('lettering effects remain discoverable with compact first-turn instructions',async()=>{
+test('lettering effects are delayed until the craft stage',async()=>{
   const skills=await loadCreationSkills();
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
   const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'做一页有手写感的记录',styles:['丰富层叠']}});
-  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-bands']);
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-bands','accent-sprig','accent-stitch']);
+  assert.ok(!state.messages[0].content.includes('title-cross-shadow'));
+  const {letteringEffectMenu}=await import('../compute-server/harness/expression.mjs');
   for(const id of ['title-shadow','title-outline','title-offset-outline','title-gradient-outline','title-tape','title-phrases','title-cross-shadow','title-scattered-round','title-scattered-triangle','title-number-route','title-script-dots','title-paper-lettering'])
-    assert.ok(state.messages[0].content.includes(id),id);
+    assert.ok(letteringEffectMenu().some(item=>item.id===id),id);
   assert.ok(state.messages[0].content.length<30000);
 });
 
