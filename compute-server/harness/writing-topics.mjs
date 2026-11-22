@@ -60,11 +60,15 @@ export function writingLengthPlan({page,materials=[],textMode='automatic',purpos
     return sum+Math.max(0,Number(material.widthMM||material.physicalWidthMM)||0)*Math.max(0,Number(material.heightMM||material.physicalHeightMM)||0)*(1-writable);
   },0);
   const density=occupied/Math.max(area,1);
-  if(textMode==='rich')return {level:'展开',characters:density>.75?[80,160]:[130,260],reason:'按真实可写面积修订，素材内可读区域也可写字'};
-  if(textMode==='minimal')return {level:'简短',characters:[25,65],reason:'保留具体细节，不以口号凑字'};
-  if(density>.8)return {level:'精简',characters:[25,75],reason:'可见面积较满；若素材内部有可读写面，可增加正文'};
-  if(density>.4)return {level:'适中',characters:[65,130],reason:'先安排主体和可写区，再按预览调节'};
-  return {level:'展开',characters:[110,220],reason:'纸面或素材内有较多可写空间，写出有推进的完整内容'};
+  // Scale the opening range by page area, then revise it after placing actual
+  // writable surfaces. No paper format or number of cards is prescribed here.
+  const areaScale=Math.max(.48,Math.min(1.45,(Math.max(area,1)/62000)**.8));
+  const scaled=range=>range.map(value=>Math.round(value*areaScale));
+  if(textMode==='rich')return {level:'展开',characters:scaled(density>.75?[80,160]:[130,260]),reason:'按纸面面积预估首稿；依据实际可写区域、字号和图文关系增减'};
+  if(textMode==='minimal')return {level:'简短',characters:scaled([25,65]),reason:'保留具体细节，不以口号凑字'};
+  if(density>.8)return {level:'精简',characters:scaled([25,75]),reason:'可见面积较满；若素材内部有可读写面，可增加正文'};
+  if(density>.4)return {level:'适中',characters:scaled([65,130]),reason:'先安排主体和可写区，再按预览调节'};
+  return {level:'展开',characters:scaled([110,220]),reason:'按可写面积安排有推进的内容；段落可分布在纸面、底纸或素材内部'};
 }
 
 export function writingTopicBrief(document,brief={},seed=0){

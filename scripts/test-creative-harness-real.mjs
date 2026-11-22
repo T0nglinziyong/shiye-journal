@@ -47,7 +47,7 @@ const renderer=await createHarnessRenderer({source:document.source,images,saveAr
   return name;
 }});
 if(!resume){
-  initial=initialHarnessState({document,skills,brief:{style,page:task.page,intent:document.source.intent,contentPolicy:document.source.contentPolicy,processing:task.processing,priority:task.sourceContext.materialPriority},tray:await renderer.index(document),startedAt:started});
+  initial=initialHarnessState({document,skills,brief:{style,page:task.page,intent:document.source.intent,contentPolicy:document.source.contentPolicy,processing:task.processing,priority:task.sourceContext.materialPriority},tray:await renderer.index(document),startedAt:started,deadlineAt:started+(Number(process.env.SHIYE_ACCEPTANCE_DEADLINE_MS)||570000)});
   await writeFile(join(output,'input.json'),JSON.stringify(initial),{mode:0o600,flag:'wx'});
 }
 const checkpointer=await new JournalCheckpointSaver(fileCheckpointJournal(join(output,'checkpoints.jsonl'))).restore();

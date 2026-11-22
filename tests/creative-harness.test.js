@@ -241,10 +241,35 @@ test('independent visual critique uses a short non-thinking image call',async()=
     request=JSON.parse(options.body);
     return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'{"blockingIssues":["右页正文被遮挡"],"notes":["配色可再统一"]}'},finish_reason:'stop'}],usage:{prompt_tokens:20,completion_tokens:30}}),{status:200});
   }});
-  const result=await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',remainingMs:30000});
+  const result=await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'single',remainingMs:30000});
   assert.equal(request.thinking.type,'disabled');
   assert.equal(request.max_tokens,1600);
   assert.ok(request.messages[1].content.some(part=>part.type==='image_url'));
+  assert.match(request.messages[0].content,/单页不要假设有中缝/);
+  assert.doesNotMatch(request.messages[0].content,/重要内容越界\/跨中缝/);
   assert.deepEqual(result.blockingIssues,['右页正文被遮挡']);
   assert.deepEqual(result.notes,['配色可再统一']);
+  await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'spread',remainingMs:30000});
+  assert.match(request.messages[0].content,/双页还要比较左右总重量和中缝/);
+});
+
+test('a finish near the deadline cannot silently bypass independent review',async t=>{
+  let now=0,turn=0,critiques=0;
+  const model=async()=>{
+    turn++;
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'deadline-page',[
+      text('title','冬日手记',[35,30]),text('body','走出门后才发现风很轻，路边还有一片未融的雪。',[45,85])
+    ]));
+    if(turn===3)return answer(call('creation_finish',{review:{observations:'标题与正文都已写入，画面可读',issues:[]}}));
+    throw Error('stop after rejected finish');
+  };
+  model.critique=async()=>{critiques++;return {blockingIssues:[],notes:[]};};
+  const f=await fixture(t,model,{clock:()=>now,afterRender:()=>{now=562000;}});
+  f.state.startedAt=0;f.state.deadlineAt=570000;
+  await assert.rejects(f.harness.run({id:'deadline-review',state:f.state}),/stop after rejected finish/);
+  const saved=await f.harness.state('deadline-review');
+  assert.equal(saved.status,'running');
+  assert.equal(critiques,0);
+  assert.match(saved.results[0].detail,/独立画面审查尚未完成/);
 });

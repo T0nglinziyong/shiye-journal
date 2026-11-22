@@ -32,6 +32,11 @@ test('body length responds to available area and policy',()=>{
   assert.equal(writingLengthPlan({page,textMode:'minimal'}).level,'简短');
   assert.equal(writingLengthPlan({page,purposes:['主题封面']}).level,'标题为主');
   assert.equal(writingLengthPlan({page,textMode:'none'}).characters[1],40);
+  const small={...page,pageMode:'single'};
+  const large={...page,canvas:{width:700,height:1000},physicalPageHeightMM:297,pageMode:'single'};
+  assert.ok(writingLengthPlan({page:small}).characters[1]<writingLengthPlan({page:large}).characters[1]);
+  assert.ok(writingLengthPlan({page:small,textMode:'rich'}).characters[1]<writingLengthPlan({page:large,textMode:'rich'}).characters[1]);
+  assert.ok(writingLengthPlan({page:small,materials:[{widthMM:150,heightMM:200}]}).characters[1]<writingLengthPlan({page:small}).characters[1]);
 });
 
 test('live harness receives a short topic shortlist and can fetch more on demand',async()=>{
@@ -58,7 +63,7 @@ test('live harness receives a short topic shortlist and can fetch more on demand
   const materialDocument=await createCreationDocument({draft:draft({ratio:'a5'}),assets:[material],aliases:{m1:material.id}});
   const suggested=writingTopicBrief(materialDocument,{},1795266000000);
   assert.match(suggested.selected.prompt,/海|天空|日落/);
-  assert.equal(suggested.length.level,'展开');
+  assert.ok(suggested.length.characters[1]>suggested.length.characters[0]);
   const documentary=await createCreationDocument({draft:draft(),assets:[],contentPolicy:'documentary'});
   assert.ok(!writingTopicBrief(documentary,{},1795266000000).styles.some(style=>style.startsWith('想象练习')));
 });

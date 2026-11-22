@@ -30,10 +30,10 @@ export function shortlistCreationMethods(document,brief={}){
     const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
     return ids.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
   }
-  const ids=/丰富|层叠|拼贴/.test(text)?['layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','title-tape']:
-    /极简|留白|清新|淡雅/.test(text)?['quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption','title-tape']:
+  const ids=/丰富|层叠|拼贴/.test(text)?['paper-color-card','layered-center','layered-diagonal','paper-peek','accent-materials','graphic-route','accent-spark','accent-rings','title-tape']:
+    /极简|留白|清新|淡雅/.test(text)?['paper-color-card','quiet-pair','quiet-note','paper-peek','graphic-loop','title-caption','title-tape']:
     /杂志|照片|旅行/.test(text)?['magazine-offset','photo-stagger','photo-caption','paper-underlay','graphic-route']:
-    ['composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
+    ['paper-color-card','composition-triangle','composition-s','paper-underlay','accent-materials','title-label'];
   const chosen=materialCount<3?ids.filter(id=>!['composition-s','layered-center','layered-diagonal','photo-stagger'].includes(id)):ids;
   const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
   return chosen.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
@@ -82,7 +82,7 @@ export function modelContext(messages,state={}){
   const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
   let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-4)??turns.at(0)??2);
   while(start>2&&messages[start]?.role==='tool')start--;
-  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
+  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&(/^(当前真实画面：|本轮最先核对的画面问题)/.test(message.content[0]?.text||''));
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
   const recent=tail.filter((message,i)=>{
     if(isPreview(message))return i===lastPreview&&i>lastAssistant;
@@ -93,6 +93,9 @@ export function modelContext(messages,state={}){
   const recentAssistants=recent.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
   const compactedRecent=recent.map((message,i)=>{
     if(message.role==='tool'&&recentToolNames.get(message.tool_call_id)==='creation_help'&&i<(recentAssistants.at(-2)??-1))return {...message,content:'{"ok":true,"detail":"参数已读取；需要再次查看时调用 creation_help。"}'};
+    if(message.role==='tool'&&['creation_apply','creation_recipe'].includes(recentToolNames.get(message.tool_call_id))&&i<(recentAssistants.at(-2)??-1)){
+      try{const receipt=JSON.parse(message.content);if(receipt.ok)return {...message,content:'{"ok":true,"detail":"较早的编辑已生效；对象和最新版本见当前 Scene。"}'};}catch{/* Keep the original response. */}
+    }
     return message;
   });
   if(!state.document)return [messages[0],index,...compactedRecent];
@@ -112,6 +115,12 @@ export function modelContext(messages,state={}){
 export function creativeCompactionCandidate(messages,state={}){
   const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
   let cutoff=(state.phaseReviews||[]).at(-1)?.messageIndex;
+  if(!Number.isInteger(cutoff)||cutoff<=from){
+    // A soft creative loop may never emit creation_phase. Compact completed
+    // turns on cadence while retaining the latest four assistant/tool cycles.
+    const assistants=messages.flatMap((message,index)=>message.role==='assistant'?[index]:[]);
+    cutoff=assistants.at(-4);
+  }
   while(cutoff>2&&messages[cutoff]?.role==='tool')cutoff--;
   if(!Number.isInteger(cutoff)||cutoff<=from)return null;
   const older=messages.slice(from,cutoff);

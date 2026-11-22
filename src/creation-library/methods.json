@@ -3225,6 +3225,32 @@
           ]
         ]
       }
+    },
+    {
+      "id": "paper-color-card",
+      "skill": "paper-layering",
+      "title": "纯色撕边打孔底纸",
+      "recipe": "paper",
+      "when": "用可编辑纯色纸片建立大面积层次、可写区和纸边，不需要实体素材",
+      "defaults": {
+        "widthMm": 70,
+        "heightMm": 92,
+        "colors": ["#8399B5"],
+        "tearSides": ["right"],
+        "roughnessMm": 0.9,
+        "periodMm": 3.8,
+        "holeSide": "left",
+        "holeCount": 3,
+        "holeRadiusMm": 1.2,
+        "seed": 17
+      },
+      "lesson": {
+        "principle": "大块素色纸先决定写面和遮挡关系，小图案素材只在转折处点题；撕边与孔洞来自同一可编辑矢量纸片。",
+        "steps": ["按实页尺寸确定纸片的物理宽高和叠放位置", "选撕边方向、起伏与孔洞所在边", "试摆第二块相邻色纸，确认露边与正文位置，再加入小图案"],
+        "check": ["孔洞露出下层而非画成同色圆点", "纸片与正文或小图案形成重叠簇", "不要用大面积印花素材替代纯色纸层"],
+        "source": {"kind": "source-observation", "guide": "creation-skills/paper-layering/SKILL.md", "url": "https://www.xiaohongshu.com/explore/6a30c64c000000002100b393", "relatedUrl": "https://www.xiaohongshu.com/explore/6a644e7a0000000006013d98", "scope": "参考小小彩虹成长记 Day129/Day152 的成品与试摆两张图所呈现的纸层、撕边和打孔关系；工具为拾页独立实现。"}
+      },
+      "example": {"widthMm": 66, "heightMm": 94, "at": [72, 103], "colors": ["#8195B4"], "tearSides": ["right", "bottom"], "roughnessMm": 0.8, "holeSide": "left", "holeCount": 3, "holeRadiusMm": 1.3, "seed": 43}
     }
   ]
 }

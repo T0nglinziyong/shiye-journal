@@ -151,6 +151,15 @@ test('compaction never starts between two responses to one assistant tool batch'
  assert.ok(context.some(message=>message.role==='assistant'&&message.tool_calls?.length===2));
 });
 
+test('soft creative loops compact completed turns without a phase transition',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
+ for(let i=0;i<9;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,phaseReviews:[]});
+ assert.ok(candidate);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,5);
+ assert.equal(messages[candidate.cutoff].role,'assistant');
+});
+
 test('malformed historical tool arguments cannot break compaction',()=>{
  const history=creativeCompactionTranscript([{role:'assistant',tool_calls:[
    {function:{name:'creation_apply',arguments:'null'}},
@@ -190,7 +199,7 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   const visualState=initialHarnessState({document:visual,skills,brief:{styles:['丰富层叠']}});
   assert.ok(!visualState.recommendedMethods.some(method=>method.skill==='journal-lettering'));
   assert.ok(!recommendCreationSkills(skills,visual).some(skill=>skill.name==='journal-lettering'));
-  assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['layered-center','layered-diagonal']);
+  assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['paper-color-card','layered-center']);
   const noText=initialHarnessState({document:visual,skills,brief:{intent:'只用数字图形创作',styles:['丰富层叠']}});
   assert.equal(noText.expressionRequired,false);
   assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-flower','color-bands','accent-sprig','accent-stitch']);
