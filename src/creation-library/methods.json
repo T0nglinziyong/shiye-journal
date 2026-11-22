@@ -2,6 +2,97 @@
   "version": 2,
   "methods": [
     {
+      "id": "title-composed",
+      "skill": "journal-lettering",
+      "title": "组合手写标题",
+      "recipe": "title",
+      "when": "用手写笔、荧光笔或打字把字形、字效与背景自由组合，不使用实体素材",
+      "defaults": {
+        "treatment": "compose",
+        "fontFamily": "BaiLuBangBang"
+      },
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-composed"
+      },
+      "example": {
+        "text": "听风的声音",
+        "fontFamily": "BaiLuBangBang",
+        "fontSizePt": 31,
+        "widthMm": 110,
+        "colors": [
+          "#25344C",
+          "#E8B65F",
+          "#FFFDF6"
+        ],
+        "glyph": {
+          "strokes": [
+            {
+              "index": 0,
+              "kind": "hotdog",
+              "box": [
+                0.42,
+                0.09,
+                0.2,
+                0.77
+              ]
+            }
+          ]
+        },
+        "backgrounds": [
+          {
+            "kind": "mixed",
+            "diameterMm": 2.5,
+            "gapMm": 3.2,
+            "colors": [
+              "#E8B65F",
+              "#94B5A3",
+              "#DB8E72"
+            ]
+          }
+        ],
+        "accents": [
+          {
+            "kind": "notes",
+            "placement": "upper-right",
+            "color": "#38869A",
+            "sizeMm": 2.5,
+            "count": 3
+          }
+        ],
+        "style": {
+          "shadow": {
+            "color": "#8AA3AF",
+            "offsetMm": [
+              0.7,
+              0.8
+            ],
+            "blurMm": 0
+          }
+        }
+      },
+      "lesson": {
+        "principle": "分别决定字形笔画、文字颜色/阴影/描边、字下背景与边缘点缀，再叠成可编辑标题。",
+        "steps": [
+          "先选短标题与字体",
+          "给需要变化的单字指定笔画区域或拆字中部文字",
+          "选择一两种字效；圆点和方块作为分离的小点缀，横线和井字作为覆盖整组标题的底纹，也可使用反白底或包围线",
+          "预览检查遮挡、间距和读序"
+        ],
+        "check": [
+          "拆字标题的中间英文上下居中，首尾与中文标题对齐；中文整体比英文更高、横向更紧凑",
+          "圆点、方块大小与位置有变化、彼此分离且小于主字；横线或井字底纹覆盖整组标题且不妨碍阅读",
+          "替换笔画确实落在指定字上",
+          "标题和点缀都是文字或数字笔画，没有 material.add"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "按用户提供的手写标题照片拆解字形、字效与背景关系；拾页参数和数字笔画独立实现。"
+        }
+      }
+    },
+    {
       "id": "title-cross-shadow",
       "skill": "journal-lettering",
       "title": "横带穿字与同侧阴影",
@@ -313,7 +404,11 @@
         "fontFamily": "BaiLuBangBang",
         "fontSizePt": 24,
         "widthMm": 78,
-        "colors": ["#2D4C49", "#E7BD75", "#FFF9EF"],
+        "colors": [
+          "#2D4C49",
+          "#E7BD75",
+          "#FFF9EF"
+        ],
         "backdrop": {
           "kind": "squares",
           "densityMm": 5,
@@ -325,8 +420,16 @@
       },
       "lesson": {
         "principle": "若干略有错位的色块先垫在字下，深色标题覆盖在上面；可以改为圆形或圆方混合。",
-        "steps": ["取页面已有的强调色", "调方块直径与密度，使色块部分露出字边", "检查每个字仍可辨认"],
-        "check": ["色块与字重叠", "不形成周边装饰边框", "标题保持完整可读"],
+        "steps": [
+          "取页面已有的强调色",
+          "调方块直径与密度，使色块部分露出字边",
+          "检查每个字仍可辨认"
+        ],
+        "check": [
+          "色块与字重叠",
+          "不形成周边装饰边框",
+          "标题保持完整可读"
+        ],
         "source": {
           "kind": "tutorial-mapping",
           "guide": "creation-skills/journal-lettering/SKILL.md",
@@ -343,25 +446,74 @@
       "defaults": {
         "treatment": "phrases",
         "fontFamily": "BaiLuBangBang",
-        "colors": ["#A7D9DE", "#D08371", "#20272B"]
+        "colors": [
+          "#A7D9DE",
+          "#D08371",
+          "#20272B"
+        ]
       },
-      "illustration": {"kind": "executable-schematic", "id": "title-outline-block-ring"},
+      "illustration": {
+        "kind": "executable-schematic",
+        "id": "title-outline-block-ring"
+      },
       "example": {
         "text": "喜欢薄荷",
         "fontFamily": "BaiLuBangBang",
         "fontSizePt": 26,
         "widthMm": 74,
-        "colors": ["#A7D9DE", "#D08371", "#20272B"],
+        "colors": [
+          "#A7D9DE",
+          "#D08371",
+          "#20272B"
+        ],
         "runs": [
-          {"text": "喜欢", "role": "normal", "backdrop": {"kind": "squares", "strokeOnly": true, "strokeWidthMm": 0.85, "diameterMm": 11, "patternColor": "#2869A5", "opacity": 1}},
-          {"text": "薄荷", "role": "normal", "breakBefore": true, "offsetMm": [13, 0], "backdrop": {"kind": "ring", "diameterMm": 17, "strokeWidthMm": 0.7, "patternColor": "#D08371", "opacity": 1}}
+          {
+            "text": "喜欢",
+            "role": "normal",
+            "backdrop": {
+              "kind": "squares",
+              "strokeOnly": true,
+              "strokeWidthMm": 0.85,
+              "diameterMm": 11,
+              "patternColor": "#2869A5",
+              "opacity": 1
+            }
+          },
+          {
+            "text": "薄荷",
+            "role": "normal",
+            "breakBefore": true,
+            "offsetMm": [
+              13,
+              0
+            ],
+            "backdrop": {
+              "kind": "ring",
+              "diameterMm": 17,
+              "strokeWidthMm": 0.7,
+              "patternColor": "#D08371",
+              "opacity": 1
+            }
+          }
         ]
       },
       "lesson": {
         "principle": "按视频先画四个大小略错开的空心蓝方框，再让第一段浅色字压在框线上；第二段字压在松散的红色大圈线上。两种底形都随词组定位。",
-        "steps": ["按词义把标题拆成两段 runs", "给前段指定空心方框，后段指定大圈，并分别调线色与尺寸", "检查轮廓线穿过字后仍保持可读"],
-        "check": ["方框为空心粗线，不是填充色块", "圈线在字下并与字重叠", "两段底形不重复铺满整行"],
-        "source": {"kind": "tutorial-mapping", "guide": "creation-skills/journal-lettering/SKILL.md", "scope": "按水岸芝芝《大标题教程 2.0》空心方框、圈线与标题的层次关系实现；文字与矢量均可编辑。"}
+        "steps": [
+          "按词义把标题拆成两段 runs",
+          "给前段指定空心方框，后段指定大圈，并分别调线色与尺寸",
+          "检查轮廓线穿过字后仍保持可读"
+        ],
+        "check": [
+          "方框为空心粗线，不是填充色块",
+          "圈线在字下并与字重叠",
+          "两段底形不重复铺满整行"
+        ],
+        "source": {
+          "kind": "tutorial-mapping",
+          "guide": "creation-skills/journal-lettering/SKILL.md",
+          "scope": "按水岸芝芝《大标题教程 2.0》空心方框、圈线与标题的层次关系实现；文字与矢量均可编辑。"
+        }
       }
     },
     {

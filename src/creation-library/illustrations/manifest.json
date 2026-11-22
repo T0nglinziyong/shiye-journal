@@ -626,6 +626,14 @@
       "height": 149
     },
     {
+      "id": "title-composed",
+      "file": "title-composed.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "80531cdcbe225114139ca773e9b001af0ebec26327b330adb19eb9772784c033",
+      "width": 360,
+      "height": 127
+    },
+    {
       "id": "title-cross-shadow",
       "file": "title-cross-shadow.png",
       "kind": "rendered-editable-commands",
@@ -661,17 +669,17 @@
       "id": "title-script-dots",
       "file": "title-script-dots.png",
       "kind": "rendered-editable-commands",
-      "sha256": "7554760dbc2aef9fb8a214ab9beef97aac4b4f52f7ac8369c6b73583e5c5f8d3",
+      "sha256": "5ab1c449da52bcec4a1399054d613fae637b8b7d5818b4cd48ad4aae40d4d401",
       "width": 360,
-      "height": 131
+      "height": 134
     },
     {
       "id": "title-block-lettering",
       "file": "title-block-lettering.png",
       "kind": "rendered-editable-commands",
-      "sha256": "89e72afc367a137e3a6c7160be4ceed63d7c1e483fdfc0c8a38d38d005dfb0e5",
+      "sha256": "02e61d2679ea7368864e2798851a8e6a87ba41a375cabaf31f350ea30d3f10ce",
       "width": 360,
-      "height": 133
+      "height": 123
     },
     {
       "id": "title-outline-block-ring",

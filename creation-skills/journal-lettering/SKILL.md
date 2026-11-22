@@ -26,6 +26,16 @@ description: 建立手帐标题、正文和局部批注的层级；用于文字�
 
 文字可以写在纸片空区、顺着照片组边缘，或由小纸条承载。深色底适合清楚的浅字；浅色底使用深字。小面积强调色对应重点，避免每行一种颜色。不要在复杂图案上叠长正文。英文与中文混用须有内容理由，不随意生成无关英文装饰。
 
+### 三层组合手写标题
+
+`title-composed` 将短标题分为可独立设定的三层，全部由可编辑的文字、荧光笔色块和手写笔路径组成，不调用素材库：
+
+1. **字形**：`glyph.split` 把每字上下两段分开，`middleText` 在中间写一条短字，英文首尾分别对齐中文标题左右边界，并在上下半字之间垂直居中；中文字距略收紧；`waveMm` 控制字位起伏，`gapMm` 拉开上下半字并拉长整体比例；默认比普通标题更高。`glyph.strokes` 对指定字位的指定竖撇局部先做非破坏遮罩，再画热狗形圆棒或倒三角；必须依据预览指定 `index` 与 `box:[x,y,w,h]`，不会自动猜出汉字笔顺。`glyph.numberShadow` 给选中的数字加小半圆影。拆字与替换笔画分别使用，其他两个笔画选项可在同一标题内组合。
+2. **字效**：`style.color`、`style.shadow`、`style.outline`、`style.gradient` 与 `letterStyles` 的逐字样式可以独立调整和叠加。留白间隔阴影用与实际纸色相同的细 `outline` 再加无模糊 `shadow`；浅字反白时显式设置浅色 `style.color`。
+3. **字下与周围**：`backgrounds` 可叠放 `dots`、`squares`、`lines`、`hashes`、`mixed`、`reverse`、`enclosure`；`accents` 将独立的小圆点、星芒或音符放在周围、右上或四角。`mixed` 混排小圆与方块，大小、颜色、纵向位置和方块角度有变化，彼此留空；`lines` 横跨整个标题宽度，`hashes` 将横竖线交错为整片井字底纹，`count` 调线数。点缀相对大标题保持小比例，整片底纹用较低不透明度放在字后。右上音符与包围线也由手写笔路径绘制。
+
+先用 `read_skill level=methods` 查 `title-composed` 的完整参数和可执行示例。用 `creation_recipe(kind="technique",recipeId="title-composed",parameters={id,text,at,fontFamily,fontSizePt,widthMm,glyph,style,letterStyles,backgrounds,accents,colors})` 创建。六种建议起点：拆字加小字与同向影；热狗笔画加右上音符；倒三角笔画加少量小方块；数字半圆影加包围线；英文连写加分离圆点；浅字加深色反白底与角落星芒。每种都需看真实预览，确认笔画覆盖的是目标竖撇、底纹不挡读字、不同颜色有主次。对于复杂字体或不确定笔画位置，先只做字效与背景，待观察单字后再指定 `box`。
+
 预览检查实际断行、标点、最小字是否可读、文字与纸边的距离；不要只看文本框。修正字号、宽度或位置后重渲染，旧预览不能证明修订后的可读性。文字太多先删重复的表达，文字太少先补内容关系，不能用无意义短词凑密度。
 
 ## 按需用法与组合
@@ -70,15 +80,15 @@ GitHub 仓库中的 `creation-contract/release-v3/design/LETTERING.md` 是底层
 
 | 原教程的做法 | 当前可执行部分 | 尚未具备的部分 |
 | --- | --- | --- |
-| 细长中文字、中间穿过小字、同侧阴影 | `title-cross-shadow`；分别调整主字、小字字体、字号和颜色，横带随小字长度变化 | 改写字形比例 |
-| 分散字位、把部分笔画改成圆棒 | `title-scattered-round`；用 `runs` 调角度、位置、字体，数字圆点跟随字群 | 指定竖撇笔画变形及笔画内高光 |
-| 分散字位、部分笔画改成三角形 | `title-scattered-triangle`；错落词组加局部三角点缀 | 识别并替换指定笔画 |
-| 数字倾斜、局部笔画涂色、外围线条 | `title-number-route`；数字词组可调角度，外围线条留出字脚 | 只涂某一笔画的一半；不能用全字渐变冒充 |
-| 连写英文与圆点背景 | `title-script-dots`；大颗圆点在字下、字覆盖其上，直径、密度与颜色可调 | 手绘字形与笔触的完全复刻 |
-| 有色纸片承载浅字、局部加粗 | `title-paper-lettering`；整块深色底卡在字下，浅字覆盖其上 | 指定笔画局部加粗与纸张真实纹理生成 |
+| 细长中文字、中间穿过小字、同侧阴影 | `title-composed` 的 `glyph.split`、`style.shadow`；`title-cross-shadow` 可保留原横带形式 | 当前按字裁开，无法自动把任意字体压窄、拉高 |
+| 分散字位、把部分笔画改成圆棒 | `title-composed` 的 `glyph.strokes.kind=hotdog`，指定字位和局部比例框 | 不自动识别汉字笔顺；需检查选框是否正对竖撇 |
+| 分散字位、部分笔画改成三角形 | `title-composed` 的 `glyph.strokes.kind=triangle`，可与热狗笔画在同组使用 | 同上 |
+| 数字倾斜、局部半圆影、外围线条 | `title-composed` 的 `glyph.numberShadow` 与 `backgrounds.kind=enclosure` | 不自动找出数字印刷字体的某一笔作局部涂色 |
+| 连写英文与圆点背景 | `title-composed` 的 `backgrounds.kind=dots`，或 `title-script-dots`；小圆点彼此分离 | 手绘字形与笔触的完全复刻 |
+| 深色反白底承载浅字 | `title-composed` 的 `backgrounds.kind=reverse`、浅色 `style.color`，或 `title-paper-lettering` | 纸张真实纹理生成 |
 
-`text.lettering` 操作整字，`text.add` 保持整词连写，`graphic.add` 可画路径；这三者都不提供自动偏旁拆分。缺少笔画能力时选择已支持的排版关系，不把字体旋转描述为已实现原教程的手写变形。
+`text.lettering` 操作整字，`text.add` 保持整词连写，`graphic.add` 可画路径。`title-composed` 的笔画替换是用户或模型明确给出局部区域后的可编辑遮罩与数字笔画，不声称自动恢复原作者笔顺，也不把周围三角点缀冒充字内三角笔画。
 
-以上工具都是可编辑的文字与矢量底形组。**字下背景与字旁点缀是两种不同关系**：`backdrop.kind=dots|squares|mixed` 将尺寸可调的圆形、方形或混合色块先铺在文字笔画下方，允许重叠；再画文字。`densityMm` 调数量，`diameterMm` 调几何尺寸，`staggerMm` 调上下错列，`patternColor` 调底纹色。`title-script-dots` 默认是大颗黄色圆点和深色连写字，参考《六种写法拆解》可见的 Daily 标题；`title-block-lettering` 使用字下填充方块。**《大标题教程 2.0》中另一种关系是空心方框和大圈线**：使用 `title-outline-block-ring`，前一组词的 `runs[].backdrop={kind:'squares',strokeOnly:true,...}` 生成四个错位蓝框，后一组词的 `{kind:'ring',...}` 生成宽松的红圈，再让浅色手写字盖上去。方框和圈线分别跟随相应的词组，不均匀铺满标题，也不画到字群外圈。深色整块底卡配浅字选 `title-paper-lettering`。`paper`、`band`、`brush`、`oval` 继续用于整行承载；`ornament` 才是字旁花、叶、星等可选点缀，不能拿它替代字下底形。`title-cross-shadow` 必须提供真实的小字 `caption`；错落和数字工具必须给出语义明确的 `runs`。字形笔画本身的变形留给单独的字形工具，不能用周围符号冒充。
+以上工具都是可编辑的文字与矢量底形组。**字下背景与字旁点缀是两种不同关系**：传统标题方法的 `backdrop.kind=dots|squares|mixed` 与新组合方法的 `backgrounds` 都先画底形，再画文字；`ornament` 和 `accents` 则放在文字周围。填充圆点、方块按主字比例缩小并保持间隙；`title-script-dots` 默认用分离的小黄色圆点。**《大标题教程 2.0》中另一种关系是空心方框和大圈线**：使用 `title-outline-block-ring`，前一组词的 `runs[].backdrop={kind:'squares',strokeOnly:true,...}` 生成四个错位蓝框，后一组词的 `{kind:'ring',...}` 生成宽松的红圈，再让浅色手写字盖上去。方框和圈线分别跟随相应的词组，不均匀铺满标题，也不画到字群外圈。深色整块底卡配浅字选 `title-paper-lettering`。`title-cross-shadow` 必须提供真实的小字 `caption`；错落和数字工具必须给出语义明确的 `runs`。
 
 [闹钟为什么赖床：手帐标题字写法分享](https://www.xiaohongshu.com/explore/693e8a11000000001f00a194)，2026-11-20 阅读全部五图与正文；第三图明确展示窄标题与聚合字群，并提示后者可读性稍差。示意图用于判断整页关系，不提供字体文件。
