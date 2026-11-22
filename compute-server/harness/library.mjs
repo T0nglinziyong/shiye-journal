@@ -50,10 +50,10 @@ function relevance(query,fields){
  const overlap=queryPairs.size?common/queryPairs.size:0;
  return {score:Math.min(100,direct+Math.round(overlap*30)),hits,overlap};
 }
-export function searchLibraryReferences(document,{query='',kind='all',styles=[],content=[],reference='page',limit=6}={}){
+export function searchLibraryReferences(document,{query='',kind='all',styles=[],content=[],reference='page',limit=6,includeTemplates=true}={}){
  const context=libraryContext(document,reference),results=[];
  if(!['all','templates','techniques','cases'].includes(kind))throw Error('未知参考类型');
- if(['all','templates'].includes(kind))for(const template of templateCatalog.templates.filter(templateEnabled)){
+ if(includeTemplates&&['all','templates'].includes(kind))for(const template of templateCatalog.templates.filter(templateEnabled)){
   if(styles.length&&!styles.some(style=>template.styles.some(value=>normalized(value).includes(normalized(style))||normalized(style).includes(normalized(value)))))continue;
   if(content.length&&!content.some(term=>template.content.some(value=>normalized(value).includes(normalized(term))||normalized(term).includes(normalized(value)))))continue;
   const source=templateCatalog.sources.find(source=>source.id===template.sourceId);
