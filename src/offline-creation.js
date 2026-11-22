@@ -37,7 +37,7 @@ export function createEditablePackageGuide(source,selected,settings={}){
  const materialDirection=!selected.length
   ?'本次没有实体素材：直接用文字、手绘、图形、表格或图案完成整页。先确定想表达的内容与视觉主块，再形成有节奏的大小和疏密关系；无需查看空素材总览，不虚构照片或素材引用，不把图形堆成模板占位。'
   :creationMaterialContext(selected).mainCount<=3
-  ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空，也不要虚构经历。'
+  ?'本次素材较少：看 assets/size-map.jpg 核对实物大小。辨认哪一件能承载书写、哪一件做主角；画布空白本身也是手帐纸，可以直接写随想与旁注。让可读的正文、短注或数字图形与素材产生关系，避免三件物品各占一格、旁边只写几句解释。不要放大实物填空；原创模式可写虚构片段，但不冒称用户亲历。'
   :'本次素材较多：看 assets/size-map.jpg 核对相对实物大小。先分清印刷标题、主角、书写面、底纸与小件，组成少数有内在关系的局部，而非等大卡片陈列。画布空白本身也能直接书写，不必把全部正文塞进唯一一张卡片。可让人物或小贴纸压住纸边、让正文沿实物边缘展开；露出有用轮廓，避免多件同心堆叠。';
  // START_HERE and REVIEW own the reusable composition workflow. Keep this
  // per-task guide short so the model can reach the actual materials sooner.

@@ -29,6 +29,11 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
  if(types.material<=2)observations.push('素材少：文字块、艺术标题、几何底色与矢量可以担当主体，不要把它们限为点缀。');
  if(types.text>1&&Math.max(...fontSizes)-Math.min(...fontSizes)<2)observations.push('文字字号接近：看真实 PNG 是否仍有标题、正文与插话的视觉层级。');
  if(fontSizes.length&&Math.max(...fontSizes)<11)observations.push('所有新增文字都偏小：核对整页正常显示时的可读性，优先重排而不是继续缩字。');
+ const narrowText=entries.filter(node=>node.type==='text'&&String(node.content||'').replace(/\s/g,'').length>=10).filter(node=>{
+  const box=boxes.find(item=>item.id===node.id);
+  return box&&box.width<Math.max(node.fontSize||0,1)*2.6;
+ }).map(node=>node.id);
+ if(narrowText.length)observations.push(`较长文字的文本框不足约 2.6 个字宽（${narrowText.join('、')}）：打开 PNG 检查是否挤成单字竖列；若不是有意的短竖批注，移到更宽的纸面或素材可写区，避免只缩小字号。`);
  if(!types.ink&&!types.shape)observations.push('没有新增图形或笔迹：检查小素材/印刷字是否已经提供层次；若仍平铺或孤立，进入点缀与连接阶段，不机械凑数量。');
  const graphicKinds=[...new Set(entries.filter(entry=>entry.type==='shape').map(entry=>entry.kind||'unknown'))].sort();
  const graphicBoxes=boxes.filter(box=>box.type==='shape'||box.type==='ink');

@@ -71,6 +71,7 @@ test('model can read a sourced case before editing and retain its advice through
   const caseReply=messages.find(message=>message.role==='tool'&&message.content.includes('digital-focal-photo-strip'));
   assert.ok(caseReply);
   assert.match(caseReply.content,/构图、配色与对象关系/);
+  assert.ok(messages.some(message=>Array.isArray(message.content)&&message.content.some(part=>part.text?.includes('按当前纸面素材占比复核正文篇幅'))));
   const p=lastScene(messages);
   return answer(call('creation_review',{...p,approved:true,observations:'已查看一页预览',issues:[]}),call('creation_finish',{}));
  };

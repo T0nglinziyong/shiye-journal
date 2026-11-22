@@ -8,11 +8,11 @@ import {techniqueCatalog} from '../../src/creation-library/techniques.js';
 export function recommendCreationSkills(skills,document,brief={}){
   if(document.source.materials?.length===0){
     const catalog=new Map(skills.catalog().map(skill=>[skill.name,skill]));
-    const names=[...(document.source.textMode==='none'?[]:['journal-lettering']),'journal-graphics','pattern-and-doodle','journal-composition','journal-color'];
+    const names=[...(document.source.textMode==='none'?[]:['journal-writing','journal-lettering','journal-text-layout']),'journal-graphics','pattern-and-doodle','journal-composition','journal-color'];
     return names.filter(name=>catalog.has(name)).map(name=>catalog.get(name));
   }
   const names=['journal-composition','journal-color','paper-layering','journal-accents'];
-  if(document.source.textMode!=='none')names.push('journal-lettering');
+  if(document.source.textMode!=='none')names.push('journal-writing','journal-lettering','journal-text-layout');
   const styles=new Set([...(brief.styles||[]),...(document.source.styles||[]),brief.style]);
   const routes={'童趣可爱':'playful-journal','复古旧物':'vintage-journal','清新淡雅':'quiet-photo-journal','极简留白':'quiet-photo-journal','疏朗留白':'quiet-photo-journal','丰富层叠':'layered-journal','美式拼贴':'magazine-journal','杂志排版':'magazine-journal','日系文具':'functional-journal'};
   for(const [style,name] of Object.entries(routes))if(styles.has(style))names.push(name);
@@ -56,7 +56,7 @@ export function materialBrief(document){
   const required=new Set(document.source.requiredAssetIDs||[]);
   return document.source.materials.map(m=>{
     const s=document.source.sourceSnapshots.find(s=>s.assetID===m.assetID),a=assetFromSourceSnapshot(s,{frozenRevision:true});
-    return {alias:m.alias,title:s.title,kind:s.kind,role:s.role,tags:s.tags,widthMM:a.physicalWidthMM,heightMM:a.physicalHeightMM,required:required.has(m.assetID),priority:Object.entries(document.source.materialPriority||{}).find(([,ids])=>Array.isArray(ids)&&ids.includes(m.assetID))?.[0],tapeAxis:s.tapeAxis};
+    return {alias:m.alias,title:s.title,description:String(s.description||'').slice(0,160)||undefined,kind:s.kind,role:s.role,journalRoles:s.journalRoles,tags:s.tags,widthMM:a.physicalWidthMM,heightMM:a.physicalHeightMM,required:required.has(m.assetID),priority:Object.entries(document.source.materialPriority||{}).find(([,ids])=>Array.isArray(ids)&&ids.includes(m.assetID))?.[0],tapeAxis:s.tapeAxis};
   });
 }
 
