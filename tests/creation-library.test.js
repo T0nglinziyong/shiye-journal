@@ -140,8 +140,13 @@ test('title backdrops adapt to line width, remain behind text, and accept contro
  assert.equal(apply(await document([]),long.operations,[]).changed,true);
  const dots=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,diameterMm:7,patternColor:'#E8B943'}}}).operations[0].children;
  const dotShapes=dots.filter(o=>o.op==='graphic.add'&&o.id.startsWith('dots-backdrop-'));
- assert.ok(dotShapes.length>8);
+ assert.ok(dotShapes.length>=4);
  assert.ok(dotShapes.every(o=>o.geometry.kind==='ellipse'));
+ assert.ok(dotShapes.every(o=>o.size.width<=25*25.4/72*.42+.01),'filled dots stay small relative to the title');
+ for(let i=0;i<dotShapes.length;i++)for(let j=i+1;j<dotShapes.length;j++){
+  const a=dotShapes[i],b=dotShapes[j],ac=[a.place.at[0]+a.size.width/2,a.place.at[1]+a.size.height/2],bc=[b.place.at[0]+b.size.width/2,b.place.at[1]+b.size.height/2];
+  assert.ok(Math.hypot(ac[0]-bc[0],ac[1]-bc[1])>(a.size.width+b.size.width)/2+.4,'background dots should not touch');
+ }
  assert.ok(dots.findIndex(o=>o.op==='text.add')>dots.indexOf(dotShapes.at(-1)));
  const word=dots.find(o=>o.op==='text.add'&&o.content==='Slow days');
  assert.ok(dotShapes.some(o=>o.place.at[0]>word.place.at[0]&&o.place.at[0]<word.place.at[0]+word.size.width-10),'large circles overlap the word instead of forming an outer border');
@@ -184,6 +189,66 @@ test('tutorial backgrounds and ornaments stay editable with both supplied handwr
  assert.ok(framed.indexOf(rings[0])<framed.findIndex(op=>op.op==='text.add'));
  assert.equal(apply(await document([]),tutorial.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'bad',text:'春',ornament:{kind:'flower',scaleMm:12}}}),/点缀尺寸/);
+});
+test('composed title keeps glyph, paint, and separated underlay layers independently editable',async()=>{
+ const id='composed',parameters={id,text:'2026听歌',fontFamily:'BaiLuBangBang',fontSizePt:31,widthMm:90,colors:['#233C64','#E5BC51','#FFFDF6'],glyph:{strokes:[{index:4,kind:'hotdog',box:[.38,.12,.18,.7]},{index:5,kind:'triangle',box:[.32,.17,.18,.65]}],numberShadow:{color:'#E5BC51',indices:[0,1,2,3]}},backgrounds:[{kind:'dots',color:'#E5BC51',diameterMm:2.3,gapMm:3},{kind:'squares',color:'#E5BC51',diameterMm:2.3,gapMm:3.2},{kind:'enclosure',color:'#E5BC51'}],accents:[{kind:'notes',placement:'upper-right',color:'#38869A',count:2}],style:{color:'#233C64',outline:{color:'#FFFDF6',widthMm:.22},shadow:{color:'#9AA7B4',offsetMm:[.7,.8],blurMm:0}}};
+ const compiled=compileTechnique({methodId:'title-composed',parameters}),children=compiled.operations[0].children;
+ assert.ok(children.every(op=>op.op!=='material.add'));
+ assert.equal(children.filter(op=>op.op==='text.add').map(op=>op.content).join(''),parameters.text);
+ assert.equal(children.filter(op=>op.op==='layer.mask').length,2);
+ assert.equal(children.filter(op=>op.id?.includes('-path-')&&op.style?.fill==='#E5BC51').length>=4,true,'number shadows are editable paths');
+ assert.ok(children.some(op=>op.geometry?.kind==='path'&&op.style?.stroke==='#E5BC51'),'enclosing line is a separate pen path');
+ const letters=children.filter(op=>op.op==='text.add');assert.ok(letters.every(op=>op.style.outline&&op.style.shadow),'native text effects are retained');
+ for(const kind of ['ellipse','rect']){
+  const dots=children.filter(op=>op.id?.includes('-'+kind+'-')&&op.geometry?.kind===kind);
+  assert.ok(dots.length>=2);
+  assert.ok(new Set(dots.map(op=>op.size.width.toFixed(2))).size>1,'backing marks should vary in size');
+  assert.ok(new Set(dots.map(op=>op.place.at[1].toFixed(2))).size>1,'backing marks should sit at irregular heights');
+  for(let i=0;i<dots.length;i++)for(let j=i+1;j<dots.length;j++){
+   const a=dots[i],b=dots[j],distance=Math.hypot(a.place.at[0]-b.place.at[0],a.place.at[1]-b.place.at[1]);
+   assert.ok(distance>Math.max(a.size.width,b.size.width)+.7,'small backing marks must stay separate');
+  }
+ }
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-composed',parameters:{...parameters,id:'bad',glyph:{strokes:[{index:99,kind:'hotdog',box:[.3,.1,.2,.7]}]}}}),/笔画替换/);
+});
+test('split title inserts real middle text between two masked editable halves',async()=>{
+ const compiled=compileTechnique({methodId:'title-composed',parameters:{id:'split-title',text:'人生的意义',fontFamily:'BaiLuBangBang',widthMm:100,colors:['#C63B85','#ED7A82','#FFFDF6'],glyph:{split:{middleText:'RENSHENG DE YIYI',gapMm:3,waveMm:1.3}},style:{shadow:{color:'#ED7A82',offsetMm:[.6,.7],blurMm:0}}}}),children=compiled.operations[0].children;
+ assert.equal(children.filter(op=>op.op==='text.add'&&!op.id.includes('-middle-')).length,10);
+ assert.equal(children.filter(op=>op.op==='layer.mask').length,10);
+ const chinese=children.filter(op=>op.op==='text.add'&&!op.id.includes('-middle-'));
+ assert.ok(chinese.every(op=>op.style.fontSizePt>28),'the split Chinese glyphs should be visibly taller than the base lettering');
+ assert.ok(chinese[1].place.at[1]-chinese[0].place.at[1]>4,'upper and lower parts need room for the English line');
+ const middle=children.filter(op=>op.op==='text.add'&&op.id.includes('-middle-'));
+ assert.equal(middle.map(op=>op.content).join(''),'RENSHENGDEYIYI');
+ assert.equal(middle[0].place.at[0],5);
+ assert.ok(middle.at(-1).place.at[0]>middle[0].place.at[0]+40,'英文字行须跨过中文标题的右端');
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+});
+test('title backdrops mix scattered dots and squares with page-wide line and hash patterns',async()=>{
+ const parameters={id:'mixed-marks',text:'手帐日记',fontSizePt:32,widthMm:100,backgrounds:[{kind:'mixed',diameterMm:2.9,gapMm:2.6,colors:['#E5B941','#82B8AC','#EF8E69']},{kind:'lines',count:4,color:'#9BB8AA'},{kind:'hashes',count:3,color:'#E8B18D'}]};
+ const children=compileTechnique({methodId:'title-composed',parameters}).operations[0].children;
+ const marks=children.filter(op=>op.op==='graphic.add');
+ assert.deepEqual(new Set(marks.map(op=>op.geometry.kind)),new Set(['ellipse','rect','path']));
+ assert.ok(marks.filter(op=>op.geometry.kind==='path'&&op.size.width>40).length>=10,'line and hash patterns should span the entire title');
+ const scattered=marks.filter(op=>['ellipse','rect'].includes(op.geometry.kind));
+ assert.ok(new Set(scattered.map(op=>op.size.width.toFixed(1))).size>=4,'small mark sizes should visibly vary');
+ assert.ok(new Set(scattered.map(op=>op.place.at[1].toFixed(1))).size>=4,'small marks should not form a regular baseline');
+ assert.ok(children.every(op=>op.op!=='material.add'));
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-composed',parameters}).operations,[]).changed,true);
+});
+test('composed lettering also works as smaller second and third level headings',async()=>{
+ const contract=describeTechnique('title-composed',{includeFontSuggestions:false});
+ assert.deepEqual(Object.keys(contract.parameters),['id','reference','at','rotationDeg','text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents']);
+ const second=compileTechnique({methodId:'title-composed',parameters:{id:'heading-two',text:'今日片段',fontSizePt:20,widthMm:52,backgrounds:[{kind:'lines',count:3,color:'#B7C7BC',opacity:.45}]}});
+ const third=compileTechnique({methodId:'title-composed',parameters:{id:'heading-three',text:'天气记录',fontSizePt:14,widthMm:42,backgrounds:[{kind:'dots',diameterMm:1.5,gapMm:3,color:'#DDAA78'}]}});
+ assert.ok(second.report.heightMm>third.report.heightMm);
+ assert.ok(second.operations[0].children.some(op=>op.geometry?.kind==='path'));
+ assert.ok(third.operations[0].children.some(op=>op.geometry?.kind==='ellipse'));
+ assert.ok(second.operations[0].children.every(op=>op.op!=='material.add'));
+ assert.ok(third.operations[0].children.every(op=>op.op!=='material.add'));
+ assert.equal(apply(await document([]),second.operations,[]).changed,true);
+ assert.equal(apply(await document([]),third.operations,[]).changed,true);
 });
 test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
  const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};

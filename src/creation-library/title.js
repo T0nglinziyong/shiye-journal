@@ -1,4 +1,5 @@
 import {textLines} from '../editor-tools-model.js';
+import {compileComposedTitle,validateTitleComposition} from './title-composition.js';
 
 const pt=25.4/72;
 const segments=text=>[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)].map(s=>s.segment);
@@ -10,8 +11,12 @@ const extent=(text,fontSize,fontFamily)=>segments(text).reduce((sum,ch)=>{
 const roles={primary:1.35,secondary:.78,normal:1};
 const at=(x,y)=>({reference:'parent',at:[x,y],unit:'mm',anchor:'top-left'});
 
-export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm','tapeOpacity','backdrop','ornament'];
+export const titleFields=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','pattern','count','runs','emphasis','caption','captionFontFamily','gapMm','style','curveHeightMm','tapeOpacity','backdrop','ornament','glyph','letterStyles','backgrounds','accents'];
 export const titleHelp={
+ glyph:'组合标题的字形层 {split?:{middleText,middleFontFamily?,middleColor?,gapMm?,waveMm?},strokes?:[{index,kind:hotdog|triangle,box:[x,y,w,h],color?,tiltDeg?}],numberShadow?:{color?,indices?,diameterMm?,offsetMm?}}。index 按字素从 0 开始；笔画 box 是该字局部 0–1 比例区域。拆字会在上下两段之间写 middleText。字形层可和字效、背景独立组合。',
+ letterStyles:'组合标题的逐字字效 [{index,style}]；style 使用 text.add 的颜色、描边、阴影、渐变等字段。可只给个别字变色，其余字沿用整体 style。',
+ backgrounds:'组合标题的字下层数组：{kind:dots|squares|lines|hashes|mixed|reverse|enclosure,color?,colors?:十六进制色数组,count?,diameterMm?,gapMm?,paddingMm?,opacity?,strokeWidthMm?}。mixed 是分散小圆和方块；lines 是横贯标题的多道线，hashes 是横竖交错的整片井字底纹，count 控制线数。enclosure 是包围线，reverse 是反白色块。',
+ accents:'组合标题的边缘点缀数组：{kind:dots|spark|notes,placement:around|upper-right|corners,color?,sizeMm?,count?}。点缀不使用素材库。',
  runs:'可选词组数组；每项 {text,role:primary|secondary|normal,fontFamily?,breakBefore?,rotationDeg?,offsetMm?,style?,backdrop?}。每个词组可有独立字下底形，例如前两个字空心方框、后两个字大圈；text 拼接必须等于完整标题',
  emphasis:'需底色或圈注的精确词组，必须在 text 中出现；多个同词默认均强调',
  style:'与 text.add 相同的文字 style；可组合 outline/gradient/shadow/fillOpacity/字体等，不包含位置尺寸',
@@ -38,6 +43,7 @@ function validateBackdrop(b){
 }
 
 export function validateTitle(p){
+ if(p.treatment==='compose')validateTitleComposition(p);
  if(p.emphasis!==undefined&&(typeof p.emphasis!=='string'||!p.emphasis.trim()||!p.text.includes(p.emphasis)))throw Error('强调词必须出现在完整标题中');
  if(p.curveHeightMm!==undefined&&(!Number.isFinite(p.curveHeightMm)||Math.abs(p.curveHeightMm)>80))throw Error('弧高须为 -80–80 mm');
  if(p.gapMm!==undefined&&p.gapMm>20)throw Error('词组间距须为 0–20 mm');
@@ -68,6 +74,7 @@ export function validateTitle(p){
 
 export function compileTitle(p,{widthExplicit=false}={}){
  validateTitle(p);
+ if(p.treatment==='compose')return compileComposedTitle(p);
  const colors=p.colors||['#3D6871','#E6B45E','#F1E8D5'],fontSize=p.style?.fontSizePt??p.fontSizePt??18,accent=colors[1]||colors[0],ground=colors[2]||'#F1E8D5';
  let width=p.widthMm||70;
  if(p.treatment==='stack'&&!widthExplicit)width=Math.max(28,Math.min(70,extent(p.text,fontSize,p.fontFamily)/2+10));
@@ -191,7 +198,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
    else {const g=shape('rect',x,1,width/count,3,{fill:null,stroke:accent,strokeWidthMm:.25});g.geometry={kind:'path',viewBox:[0,0,10,10],paths:[{d:p.pattern==='grid'?'M 5 0 L 5 10 M 0 5 L 10 5':'M 0 10 L 10 0'}]};background.push(g);}
   }
  }
- const defaultBackdrop=p.backdrop||({label:{kind:'paper',paddingMm:3},'script-dots':{kind:'dots',densityMm:3.4,diameterMm:7,staggerMm:2.2},'paper-lettering':{kind:'band',paddingMm:4,opacity:.95}}[p.treatment]);
+ const defaultBackdrop=p.backdrop||({label:{kind:'paper',paddingMm:3},'script-dots':{kind:'dots',densityMm:5.2,diameterMm:3.2,staggerMm:2.2},'paper-lettering':{kind:'band',paddingMm:4,opacity:.95}}[p.treatment]);
  let backdropIndex=0;
  for(const t of mainTexts){
   const backdrop=t.backdrop??defaultBackdrop;
@@ -202,12 +209,12 @@ export function compileTitle(p,{widthExplicit=false}={}){
   for(const b of boxes){
    const i=backdropIndex++;
    if(motifBackground){
-    const line=b.line,diameter=backdrop.diameterMm??Math.max(4.5,Math.min(9,fontSize*pt*.82));
+    const line=b.line,requestedDiameter=backdrop.diameterMm??Math.max(2,fontSize*pt*.3),diameter=backdrop.strokeOnly?requestedDiameter:Math.min(requestedDiameter,fontSize*pt*.42);
     const outlined=backdrop.strokeOnly===true;
-    const count=outlined&&backdrop.kind==='squares'?4:Math.max(2,Math.min(14,Math.round(line.width/Math.max(2.8,density))));
+    const step=Math.max(density,diameter*1.28+1.1),count=outlined&&backdrop.kind==='squares'?4:Math.max(1,Math.min(14,Math.floor(line.width/step)));
     for(let j=0;j<count;j++){
      const phase=Math.sin((j+1)*12.43+i*4.9),size=Math.max(2,Math.min(12,diameter*(.78+.25*Math.cos(j*2.8+i))));
-     const cx=outlined&&backdrop.kind==='squares'?line.x+line.width*(j%2===0?.28:j===3?.98:.74):line.x+line.width*(j+.45)/count+phase*Math.min(.65,density*.13);
+     const cx=outlined&&backdrop.kind==='squares'?line.x+line.width*(j%2===0?.28:j===3?.98:.74):line.x+line.width*(j+.5)/count+phase*Math.min(.18,density*.04);
      const cy=outlined&&backdrop.kind==='squares'?line.y+line.height*(j<2?.18:1.03):line.y+line.height*.48+((j%3)-1)*(backdrop.staggerMm??2.2)+Math.sin(j*2.1+i)*.32;
      const x=Math.max(0,Math.min(width-size,cx-size/2)),y=Math.max(0,cy-size/2);
      const square=backdrop.kind==='squares'||(backdrop.kind==='mixed'&&j%3!==0);
