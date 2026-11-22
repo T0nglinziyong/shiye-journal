@@ -8,6 +8,7 @@ export async function exploreCreativeDrafts({model,document,goals,sourceMessage,
   if(basePreview.sceneRevision!==baseSceneRevision||!/^sha256:[a-f0-9]{64}$/.test(basePreview.pngHash)||!/^data:image\/(png|jpeg|webp);base64,/.test(basePreview.imageURL))throw Error('草稿基线画面与 Scene 不一致');
   const candidates=await Promise.all(goals.map(async(goal,index)=>{
     const id=`draft_${round}_${index+1}`;
+    let usage=null;
     try{
       signal?.throwIfAborted();
       const reply=await model({messages:[
@@ -15,6 +16,7 @@ export async function exploreCreativeDrafts({model,document,goals,sourceMessage,
         sourceMessage,
         {role:'user',content:[{type:'text',text:'独立草稿方向：'+goal+'\n当前权威 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n当前纸面画面版本：'+basePreview.pngHash+'\nbaseSceneRevision：'+baseSceneRevision+'\ntransactionId：'+id+'\n只返回 creation_apply 工具调用。'},{type:'image_url',image_url:{url:basePreview.imageURL}}]}
       ],tools:[tool],signal,remainingMs});
+      usage=reply.usage||null;
       signal?.throwIfAborted();
       const calls=reply.message?.tool_calls||[];
       if(calls.length!==1||calls[0].function?.name!=='creation_apply')throw Error('子 Agent 未返回单个编辑事务');
@@ -26,8 +28,8 @@ export async function exploreCreativeDrafts({model,document,goals,sourceMessage,
       validateWebScene(applied.document.page,applied.document.source,assets,{final:false});
       const preview=await renderDraft(applied.document,signal);
       if(preview.sceneRevision!==creationSceneRevision(applied.document)||!/^sha256:[a-f0-9]{64}$/.test(preview.pngHash)||!/^data:image\/(png|jpeg|webp);base64,/.test(preview.imageURL))throw Error('草稿预览与 Scene 不一致');
-      return {id,goal,document:applied.document,preview:{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,imageURL:preview.imageURL},decision:decision||null,usage:reply.usage||null};
-    }catch(error){if(signal?.aborted)throw error;return {id,goal,error:error.message};}
+      return {id,goal,document:applied.document,preview:{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,imageURL:preview.imageURL},decision:decision||null,usage};
+    }catch(error){if(signal?.aborted)throw error;return {id,goal,error:error.message,usage};}
   }));
   return {baseSceneRevision,candidates};
 }

@@ -9,6 +9,7 @@ import {validateCreativeJobPackage} from '../../src/creative-job-package.js';
 import {installedCreationResources,requireResourceVersion} from './resources.mjs';
 import {loadCreativeMaterialImages} from './material-images.mjs';
 import {summarizeCreativeEvaluation} from './quality-evaluation.mjs';
+import {creativeUsageSummary} from './usage.mjs';
 
 export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupRecords,model,notify,daemon,signal,clock=Date.now}){
   const prefix=creativeJobPrefix(job),startedAt=Date.parse(job.created_at),deadlineAt=Date.parse(job.deadline_at),controller=new AbortController();
@@ -70,7 +71,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
       store.upload(prefix+'reports/evaluation.json',Buffer.from(JSON.stringify(evaluation)),'application/json'),
       store.upload(prefix+'reports/trace.json',Buffer.from(JSON.stringify(result.trace||[])),'application/json')
     ]);
-    await update({p_result_path:path,p_progress:{...progress,stage:'completed',totalMs:clock()-startedAt,turns:result.turns}});
+    await update({p_result_path:path,p_progress:{...progress,stage:'completed',totalMs:clock()-startedAt,...creativeUsageSummary(result)}});
     await ping(true);return {id:job.id,resultPath:path,totalMs:clock()-startedAt};
   }catch(error){
     if(controller.signal.reason?.code==='CREATIVE_WORKER_STOPPED')error=controller.signal.reason;

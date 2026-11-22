@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - id: changed
-        name: Detect creation harness only changes
+        name: Detect focused creation changes
         shell: bash
         env:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
@@ -36,7 +36,7 @@ jobs:
             creative_only=true
             while IFS= read -r path; do
               case "$path" in
-                compute-server/harness/*|creation-skills/*|tests/creative-harness*.test.js|tests/creation-skill-illustrations.test.js|tests/journal-writing-topics.test.js) ;;
+                compute-server/harness/*|creation-skills/*|src/background-creation-session.js|src/matching-session.js|tests/creative*.test.js|tests/background-creation-session.test.js|tests/matching-session.test.js|tests/creation-skill-illustrations.test.js|tests/journal-writing-topics.test.js|.github/workflows/verify.yml) ;;
                 *) creative_only=false; break ;;
               esac
             done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
@@ -58,8 +58,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run pretest
-      - name: Creative harness, library and writing regressions
-        run: node --test --test-force-exit --test-concurrency=2 tests/creative*.test.js tests/creation-library.test.js tests/creation-skill-illustrations.test.js tests/journal-writing-topics.test.js
+      - name: Creative harness, completion and writing regressions
+        run: node --test --test-force-exit --test-concurrency=2 tests/creative*.test.js tests/background-creation-session.test.js tests/matching-session.test.js tests/creation-library.test.js tests/creation-skill-illustrations.test.js tests/journal-writing-topics.test.js
 
   unit-and-ui:
     needs: scope

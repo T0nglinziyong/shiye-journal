@@ -32,11 +32,11 @@ test('unchanged draft is updated once; mismatched project or task cannot be appl
   const other=await fixture();other.job.project_id='another';await assert.rejects(applyBackgroundCreativeResult({...other,persist:async()=>{}}),/不属于/);
 });
 test('reopening subscribes to the same job and closing observers never cancels the server',async()=>{
-  const f=await fixture();let hooks,cancels=0,stops=0,owner='account',updates=[];
+  const f=await fixture();f.job.progress={turns:7,inputTokens:1200,outputTokens:360};let hooks,cancels=0,stops=0,owner='account',updates=[];
   const api={pending:async()=>[],cancel:async()=>cancels++};
   const session=createBackgroundCreationSession({getAccount:()=>owner,getAssets:()=>[],getProject:async()=>f.project,persist:async()=>{},createImage:async()=>{},api,watch:(api,id,callbacks)=>{assert.equal(id,f.job.id);hooks=callbacks;return ()=>stops++;},onUpdate:value=>updates.push(value)});
   const pending=session.resume(f.project);await new Promise(setImmediate);hooks.onStatus({...f.job,status:'running'});await hooks.onDocument(f.document,f.job);
-  const completed=await pending;assert.equal(completed.jobID,f.job.id);assert.equal(completed.completedAt,f.job.updated_at);assert.equal(stops,1);assert.equal(cancels,0);assert.equal(updates.at(-1).status,'completed');
+  const completed=await pending;assert.equal(completed.jobID,f.job.id);assert.equal(completed.completedAt,f.job.updated_at);assert.deepEqual(completed.usage,f.job.progress);assert.equal(stops,1);assert.equal(cancels,0);assert.equal(updates.at(-1).status,'completed');
   const waiting=session.resume(f.project);await new Promise(setImmediate);const rejected=assert.rejects(waiting,/账号已切换/);owner='other';session.dispose();await rejected;assert.equal(cancels,0);
 });
 for(const phase of ['prepare','submit'])test('stopping during '+phase+' cancels the same durable task before observing it',async()=>{
