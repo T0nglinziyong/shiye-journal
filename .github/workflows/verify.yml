@@ -28,10 +28,11 @@ jobs:
         name: Detect focused creation changes
         shell: bash
         env:
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
           set -euo pipefail
           creative_only=false
+          if [[ "${{ github.event_name }}" == push ]]; then BASE_SHA=$(git rev-parse "$GITHUB_SHA^"); fi
           if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
             creative_only=true
             while IFS= read -r path; do
