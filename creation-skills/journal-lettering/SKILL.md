@@ -12,11 +12,11 @@ description: 建立手帐标题、正文和局部批注的层级；用于文字�
 
 标题可断行、疏密变化、局部描边或有含义的小符号。用 text.lettering 建可编辑逐字组合，text.add 做段落，graphic.add 做底线、圈注或局部色块。先查精确合同及可用字体，不能凭空假设本机有某款字体，也不能把字体描边当成可自由改笔画的书法。
 
-视频中的字效可直接落在可编辑文字上：`title-shadow` 做同向投影，`title-outline` 做字心真正透明的空心字，`title-offset-outline` 做线条错位，`title-gradient-outline` 做渐变字加细描边。用 `creation_recipe(kind="technique",recipeId=方法 ID,parameters={id,text,at,colors,fontFamily,widthMm,style})` 一次创建；`style` 可继续调整描边宽度、阴影方向与颜色。先按周围素材选一种主效果，预览看底色是否透过字心、线条是否糊住笔画、投影是否与背景分开。若只需改已有标题，使用 `layer.update` 的同一套 `style`，无需重新生成文字。
+当前可执行的字效可直接落在可编辑文字上：`title-shadow` 做轻微同向投影，`title-gap-shadow` 用与纸面同色的细描边做硬边间隔阴影（`colors[2]` 填标题所在纸面色），`title-outline` 做字心真正透明的空心字，`title-offset-outline` 做线条错位，`title-gradient-outline` 做渐变字加细描边。用 `creation_recipe(kind="technique",recipeId=方法 ID,parameters={id,text,at,colors,fontFamily,widthMm,style})` 一次创建；`style` 可继续调整描边宽度、阴影方向与颜色。先按周围素材选一种主效果，预览看底色是否透过字心、线条是否糊住笔画、投影是否与背景分开。若只需改已有标题，使用 `layer.update` 的同一套 `style`，无需重新生成文字。
 
 ## 手写字形
 
-服务器已预装的字体会在任务开始时列出；底层 `text.add` 用 `style.fontFamily`，教程 `creation_recipe` 用 `parameters.fontFamily`。HongLeiZhuoShu 适合拙趣、有张力的短标题；FontQu Smile 适合随性连笔的短句；Like JianJian 适合自然的青春手记。Xiaolai 适合清楚的日常正文，Sophora 适合松散随笔，Otsutome 适合笔刷标题；Ma Shan Zheng 仅用于需要毛笔感的短题，不把它当作所有手帐的默认笔迹。通常只需一种正文笔触和一种标题笔触，不用每段换字库。部分字体缺字由 Xiaolai 补字；看实际预览核对粗细和基线。不要要求手机传送字体，也不要向任意网址下载字体。
+服务器已预装的字体会在任务开始时列出；底层 `text.add` 用 `style.fontFamily`，教程 `creation_recipe` 用 `parameters.fontFamily`。BaiLuBangBang 是用户提供的粗细变化明显的标题字，适合短而醒目的主标题；WoAiWanWeiWei 是用户提供的细笔手写字，适合轻快的副题和小标题。HongLeiZhuoShu 适合拙趣、有张力的短标题；FontQu Smile 适合随性连笔的短句；Like JianJian 适合自然的青春手记。Xiaolai 适合清楚的日常正文，Sophora 适合松散随笔，Otsutome 适合笔刷标题；Ma Shan Zheng 仅用于需要毛笔感的短题，不把它当作所有手帐的默认笔迹。通常只需一种正文笔触和一种标题笔触，不用每段换字库。部分字体缺字由 Xiaolai 补字；看实际预览核对粗细和基线。不要要求手机传送字体，也不要向任意网址下载字体。
 
 调用 `creation_recipe` 时，标题、记录、图注、气泡和素材留白书写都可传 `fontFamily`；`read_skill level=methods` 的参数会列出预装字体及显示名称。标题的 `runs[].fontFamily` 可让主词与副词采用不同字体，标题小注另用 `captionFontFamily`；未指定的小注沿用标题字体。例如标题传 `fontFamily:"HongLeiZhuoShu"`，一个副词传 `fontFamily:"Xiaolai"`，正文记录传 `fontFamily:"Sophora"`。这些都是可编辑文字，换字后要重新预览断行和对齐。
 
@@ -40,7 +40,7 @@ GitHub 仓库中的 `creation-contract/release-v3/design/LETTERING.md` 是底层
 | --- | --- | --- |
 | 宽窄受限或需要一团字成为焦点 | `title-stack`、`title-vertical`、`title-phrases` | 按语义断行；主词最大，副词保持可读；竖排不用于长正文 |
 | 有节奏但仍能一眼读完 | `title-stagger`、`title-curve` | 错落以词组为单位；弧线回应附近素材轮廓，不围着整页兜圈 |
-| 与背景分离或增加字形层次 | `title-outline`、`title-shadow`、`title-offset-outline` | 空心适合简单底色；同侧投影保持统一光向；小字优先实心 |
+| 与背景分离或增加字形层次 | `title-outline`、`title-shadow`、`title-gap-shadow`、`title-offset-outline` | 空心适合简单底色；同侧投影保持统一光向；间隔阴影用无模糊偏移；小字优先实心 |
 | 延续素材配色 | `title-gradient`、`title-gradient-outline`、`title-highlight` | 从已有素材取主色与强调色；高亮只落在关键词 |
 | 让标题成为局部图文组 | `title-label`、`title-tape`、`title-underline`、`title-circle`、`title-caption` | 底卡、半透明数字胶带、下划分隔、圈注或旁注；选择需要的关系 |
 
@@ -62,6 +62,10 @@ GitHub 仓库中的 `creation-contract/release-v3/design/LETTERING.md` 是底层
 
 ## 来源
 
+[水岸芝芝：大标题教程 2.0](https://www.xiaohongshu.com/explore/695695500000000022033ace)，2026-11-22 查看 3 分 28 秒视频的开头、制作阶段与结尾，并逐帧核对约 145–167 秒的深色纸标题：先画四个错位的空心蓝方框，再写第一组浅蓝字；第二组浅蓝字压在一大一小的红圈线上，旁边只有少量色点。另可见同向阴影、空隙明显的彩色影、描边、局部条纹等做法。本轮按字下几何底形、字体选择、描边、阴影、渐变与纹样实现，不把字形变形列为该教程的步骤。
+
+[水岸芝芝：大标题邪修 3.0](https://www.xiaohongshu.com/explore/69be8c03000000001e00dc9f)，2026-10-26 保存五张关键帧；关注同词不同大小与字重、字组基线、局部笔画变化。当前字体候选中，HongLeiZhuoShu 更接近其短标题的断续与粗细变化，Like JianJian 适合较细的手写底稿；实际字形仍需看预览。标准字体转路径只得到填充轮廓，不会自动得到作者下笔顺序或每一笔的可编辑路径。指定笔画的变形需要独立的笔画数据或人工描画。
+
 [倪以七：六种标题写法](https://www.xiaohongshu.com/explore/6ad0880d000000001203c470)，2026-11-20 已阅读正文及全部七张图。提炼的是排版、留白、同侧阴影、局部纹样和纸片承载关系，不复制原例标题。六种写法的能力映射如下：
 
 | 原教程的做法 | 当前可执行部分 | 尚未具备的部分 |
@@ -70,11 +74,11 @@ GitHub 仓库中的 `creation-contract/release-v3/design/LETTERING.md` 是底层
 | 分散字位、把部分笔画改成圆棒 | `title-scattered-round`；用 `runs` 调角度、位置、字体，数字圆点跟随字群 | 指定竖撇笔画变形及笔画内高光 |
 | 分散字位、部分笔画改成三角形 | `title-scattered-triangle`；错落词组加局部三角点缀 | 识别并替换指定笔画 |
 | 数字倾斜、局部笔画涂色、外围线条 | `title-number-route`；数字词组可调角度，外围线条留出字脚 | 只涂某一笔画的一半；不能用全字渐变冒充 |
-| 连写英文与圆点背景 | `title-script-dots`；整词连写，圆点在字后，密度与颜色可调 | 手绘字形与笔触的完全复刻 |
-| 有色纸片承载浅字、局部加粗 | `title-paper-lettering`；纸片随每行文字裁切，深底浅字及低对比纹样可调 | 指定笔画局部加粗与纸张真实纹理生成 |
+| 连写英文与圆点背景 | `title-script-dots`；大颗圆点在字下、字覆盖其上，直径、密度与颜色可调 | 手绘字形与笔触的完全复刻 |
+| 有色纸片承载浅字、局部加粗 | `title-paper-lettering`；整块深色底卡在字下，浅字覆盖其上 | 指定笔画局部加粗与纸张真实纹理生成 |
 
 `text.lettering` 操作整字，`text.add` 保持整词连写，`graphic.add` 可画路径；这三者都不提供自动偏旁拆分。缺少笔画能力时选择已支持的排版关系，不把字体旋转描述为已实现原教程的手写变形。
 
-以上六种工具都是可编辑的文字与矢量底形组。`backdrop` 可用于任一种标题，支持 `paper`、`band`、`brush`、`oval`、`dots`、`none`，并可调 `paddingMm`、底色、透明度、`pattern`、纹样色和间距；底形依据实际字行生成，避免空占整张卡片。`title-cross-shadow` 必须提供真实的小字 `caption`；错落和数字工具必须给出语义明确的 `runs`。字形笔画本身的变形留给单独的字形工具，不能用周围符号冒充。
+以上工具都是可编辑的文字与矢量底形组。**字下背景与字旁点缀是两种不同关系**：`backdrop.kind=dots|squares|mixed` 将尺寸可调的圆形、方形或混合色块先铺在文字笔画下方，允许重叠；再画文字。`densityMm` 调数量，`diameterMm` 调几何尺寸，`staggerMm` 调上下错列，`patternColor` 调底纹色。`title-script-dots` 默认是大颗黄色圆点和深色连写字，参考《六种写法拆解》可见的 Daily 标题；`title-block-lettering` 使用字下填充方块。**《大标题教程 2.0》中另一种关系是空心方框和大圈线**：使用 `title-outline-block-ring`，前一组词的 `runs[].backdrop={kind:'squares',strokeOnly:true,...}` 生成四个错位蓝框，后一组词的 `{kind:'ring',...}` 生成宽松的红圈，再让浅色手写字盖上去。方框和圈线分别跟随相应的词组，不均匀铺满标题，也不画到字群外圈。深色整块底卡配浅字选 `title-paper-lettering`。`paper`、`band`、`brush`、`oval` 继续用于整行承载；`ornament` 才是字旁花、叶、星等可选点缀，不能拿它替代字下底形。`title-cross-shadow` 必须提供真实的小字 `caption`；错落和数字工具必须给出语义明确的 `runs`。字形笔画本身的变形留给单独的字形工具，不能用周围符号冒充。
 
 [闹钟为什么赖床：手帐标题字写法分享](https://www.xiaohongshu.com/explore/693e8a11000000001f00a194)，2026-11-20 阅读全部五图与正文；第三图明确展示窄标题与聚合字群，并提示后者可读性稍差。示意图用于判断整页关系，不提供字体文件。

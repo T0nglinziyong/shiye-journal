@@ -90,6 +90,15 @@ test('long titles retain their full content and unsupported parameters are expli
  const doc=await document([]);assert.equal(apply(doc,compiled.operations,[]).changed,true);
  assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'x',text:'你好',dangerous:1}}),/不支持/);
 });
+test('wide dotted titles stay within the scene command limit and gap shadows remain editable',async()=>{
+ const dotted=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Little by little',at:[72,88],widthMm:120,fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:2}}});
+ assert.ok(dotted.operations[0].children.length<100);
+ assert.equal(apply(await document([]),dotted.operations,[]).changed,true);
+ const gap=compileTechnique({methodId:'title-gap-shadow',parameters:{id:'gap',text:'去看春天',colors:['#244D47','#D39368','#FFFDF6']}}).operations[0].children.find(op=>op.op==='text.add');
+ assert.equal(gap.style.fontFamily,'BaiLuBangBang');
+ assert.deepEqual(gap.style.outline,{color:'#FFFDF6',widthMm:.3,offsetMm:[0,0]});
+ assert.deepEqual(gap.style.shadow,{color:'#D39368',offsetMm:[1.5,1.5],blurMm:0});
+});
 test('tape title follows actual wrapped lines and remains an editable digital group',async()=>{
  const content='今天沿着河岸慢慢走，看见了很久没有留意的颜色';
  const compiled=compileTechnique({methodId:'title-tape',parameters:{id:'tape-title',text:content,widthMm:35,fontFamily:'HongLeiZhuoShu',pattern:'grid',tapeOpacity:.48}});
@@ -129,9 +138,13 @@ test('title backdrops adapt to line width, remain behind text, and accept contro
  assert.ok(b.findIndex(o=>o.op==='text.add')>b.findIndex(o=>o.id==='long-backdrop0'));
  assert.equal(b.find(o=>o.content==='春日去公园走一走').style.color,'#FFF8EB');
  assert.equal(apply(await document([]),long.operations,[]).changed,true);
- const dots=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,patternColor:'#C78962'}}}).operations[0].children;
- assert.ok(dots.filter(o=>o.op==='graphic.add'&&o.geometry.kind==='ellipse').length>8);
- assert.ok(dots.findIndex(o=>o.op==='text.add')>dots.findIndex(o=>o.op==='graphic.add'));
+ const dots=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,diameterMm:7,patternColor:'#E8B943'}}}).operations[0].children;
+ const dotShapes=dots.filter(o=>o.op==='graphic.add'&&o.id.startsWith('dots-backdrop-'));
+ assert.ok(dotShapes.length>8);
+ assert.ok(dotShapes.every(o=>o.geometry.kind==='ellipse'));
+ assert.ok(dots.findIndex(o=>o.op==='text.add')>dots.indexOf(dotShapes.at(-1)));
+ const word=dots.find(o=>o.op==='text.add'&&o.content==='Slow days');
+ assert.ok(dotShapes.some(o=>o.place.at[0]>word.place.at[0]&&o.place.at[0]<word.place.at[0]+word.size.width-10),'large circles overlap the word instead of forming an outer border');
  for(const kind of ['band','brush','oval']){
   const variant=compileTechnique({methodId:'title-label',parameters:{id:'back-'+kind,text:'晴天',backdrop:{kind,color:'#DBB66C',opacity:.7,paddingMm:5}}});
   const shape=variant.operations[0].children.find(o=>o.id==='back-'+kind+'-backdrop0');
@@ -140,6 +153,37 @@ test('title backdrops adapt to line width, remain behind text, and accept contro
   assert.equal(apply(await document([]),variant.operations,[]).changed,true,kind);
  }
  assert.throws(()=>compile('bad','春',{kind:'paper',densityMm:.5}),/纹样间距/);
+});
+test('tutorial backgrounds and ornaments stay editable with both supplied handwriting fonts',async()=>{
+ for(const [font,text,backdrop,ornament] of [
+  ['BaiLuBangBang','喜欢这样的日子',{kind:'brush',paddingMm:7,color:'#E9AF76',pattern:'dots',patternColor:'#F6D9AF'},{kind:'spark',scaleMm:5.5,color:'#315D55'}],
+  ['WoAiWanWeiWei','把风留在纸上',{kind:'paper',paddingMm:7,color:'#42665F',pattern:'stripes',patternColor:'#D9B67C',densityMm:3},{kind:'leaf',scaleMm:6,color:'#D9B67C'}]
+ ]){
+  const id='font-'+font,compiled=compileTechnique({methodId:'title-label',parameters:{id,text,widthMm:115,fontFamily:font,backdrop,ornament,style:font==='WoAiWanWeiWei'?{color:'#FFF8EB'}:{}}});
+  const children=compiled.operations[0].children,main=children.find(op=>op.op==='text.add'&&op.content===text);
+  assert.equal(main.style.fontFamily,font);
+  assert.ok(children.findIndex(op=>op.id===id+'-backdrop0')<children.indexOf(main));
+  assert.ok(children.some(op=>op.id===id+'-ornament0'&&op.geometry.kind==='path'));
+  assert.ok(children.some(op=>op.id===id+'-ornament1'),'small echo remains a separate editable vector');
+  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ }
+ const dotted=compileTechnique({methodId:'title-script-dots',parameters:{id:'organic',text:'ordinary day',fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:3}}}).operations[0].children;
+ assert.ok(dotted.some(op=>op.id==='organic-backdrop-0-0'));
+ assert.ok(!dotted.some(op=>op.id.startsWith('organic-ornament')),'the video circle treatment does not add unrelated side decorations');
+ const squares=compileTechnique({methodId:'title-block-lettering',parameters:{id:'blocks',text:'今天很开心',fontFamily:'BaiLuBangBang'}}).operations[0].children;
+ assert.ok(squares.some(op=>op.id==='blocks-backdrop-0-0'&&op.geometry.kind==='rect'));
+ assert.ok(squares.findIndex(op=>op.id==='blocks-backdrop-0-0')<squares.findIndex(op=>op.op==='text.add'));
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-block-lettering',parameters:{id:'blocks',text:'今天很开心'}}).operations,[]).changed,true);
+ const tutorial=compileTechnique({methodId:'title-outline-block-ring',parameters:{id:'tutorial',text:'喜欢薄荷',fontFamily:'BaiLuBangBang',runs:[{text:'喜欢',backdrop:{kind:'squares',strokeOnly:true,strokeWidthMm:.8,diameterMm:11,patternColor:'#2869A5'}},{text:'薄荷',breakBefore:true,offsetMm:[13,0],backdrop:{kind:'ring',diameterMm:17,patternColor:'#D08371'}}]}});
+ const framed=tutorial.operations[0].children,frames=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-0-')),rings=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-1-ring'));
+ assert.equal(frames.length,4,'the first phrase has four outlined squares');
+ assert.ok(frames.every(op=>op.geometry.kind==='rect'&&op.style.fill===null&&op.style.stroke==='#2869A5'));
+ assert.equal(rings.length,2,'the second phrase has two loose circles');
+ assert.ok(rings.every(op=>op.geometry.kind==='ellipse'&&op.style.fill===null&&op.style.stroke==='#D08371'));
+ assert.ok(framed.indexOf(frames[0])<framed.findIndex(op=>op.op==='text.add'));
+ assert.ok(framed.indexOf(rings[0])<framed.findIndex(op=>op.op==='text.add'));
+ assert.equal(apply(await document([]),tutorial.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'bad',text:'春',ornament:{kind:'flower',scaleMm:12}}}),/点缀尺寸/);
 });
 test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
  const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};

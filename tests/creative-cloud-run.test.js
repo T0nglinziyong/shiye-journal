@@ -7,6 +7,7 @@ import {creationSceneRevision} from '../src/creation-transaction.js';
 import {runCloudCreativeJob} from '../compute-server/harness/cloud-job.mjs';
 import {creativeObjectHash} from '../compute-server/harness/cloud-journal.mjs';
 import {installedCreationResources} from '../compute-server/harness/resources.mjs';
+import fontManifest from '../src/assets/fonts/manifest.json' with {type:'json'};
 
 const call=(name,args)=>({id:name,type:'function',function:{name,arguments:JSON.stringify(args)}});
 const reply=(...calls)=>({message:{role:'assistant',content:null,reasoning_content:'test-only',tool_calls:calls}});
@@ -25,7 +26,7 @@ test('cloud worker commits hash-verified editable output after real rendering an
       }
       assert.equal(name,'shiye_update_creative_job_v1');updates.push(args);return {id,status:args.p_result_path?'completed':'running'};
     },model:async({messages})=>{
-      if(modelCalls===0){assert.match(messages[0].content,/Xiaolai/);assert.match(messages[0].content,/handwriting-2026-11-20-v2/);}
+      if(modelCalls===0){assert.match(messages[0].content,/Xiaolai/);assert.ok(messages[0].content.includes(fontManifest.version));}
       if(++modelCalls===1)return reply(call('read_skill',{name:'journal-composition'}),call('creation_plan',{intent:'测试',steps:[{task:'添加可编辑文字并看图',status:'in_progress'}]}),
         call('creation_apply',{protocolVersion:2,transactionId:'text',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
       const visual=messages.findLast(m=>Array.isArray(m.content)&&m.content[0]?.text?.startsWith('当前真实画面：'));

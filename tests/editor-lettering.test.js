@@ -9,6 +9,7 @@ import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
 import {applyScenePlacement} from '../src/scene-layout.js';
 import {worldBox} from '../src/scene-spatial.js';
 import {renderSceneCanvas} from '../src/scene-renderer.js';
+import {loadOfflineCanvas} from '../src/offline-node-preview.mjs';
 import {createCanvas} from 'canvas';
 const user={policy:USER_SCENE_POLICY};
 const fixture=()=>{const page=project('标题').drafts[0];createEditorLettering(page,'title',{content:'去看看',style:{fontSizePt:22,fontPreset:'serif'},letters:[{index:1,style:{color:'#aa5533'},rotationDeg:8,offsetMm:[1,2]}]});return page;};
@@ -39,4 +40,16 @@ test('invalid title edits, locks and linked child removal are atomic',()=>{
  findSceneNode(d,'title-g1').locked=false;
  createEditorLettering(d,'second',{content:'字'});applyScenePlacement(d,'second',{reference:'node:title-g3',referenceAnchor:'bottom-center',behavior:'linked'});before=structuredClone(d);
  assert.throws(()=>reflowEditorLettering(d,'title',{content:'去'}),/linked/);assert.deepEqual(d,before);
+});
+test('supplied title fonts render as distinct editable text and survive reflow',async()=>{
+ const canvas=await loadOfflineCanvas(),renders=[];
+ for(const family of ['BaiLuBangBang','WoAiWanWeiWei']){
+  const page=project('标题字体').drafts[0];
+  createEditorLettering(page,'heading',{content:'春天去散步',style:{fontFamily:family,fontSizePt:28,color:'#294C45'}});
+  assert.ok(findSceneNode(page,'heading').children.every(node=>node.fontName===family));
+  reflowEditorLettering(page,'heading',{content:'晴天去散步'});
+  assert.equal(letteringEditorState(page,'heading').content,'晴天去散步');
+  renders.push((await renderSceneCanvas(page,{createCanvas:()=>canvas.createCanvas(1,1),waitForFonts:false})).canvas.toBuffer('image/png'));
+ }
+ assert.notDeepEqual(renders[0],renders[1]);
 });

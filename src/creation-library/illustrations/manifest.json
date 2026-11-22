@@ -629,49 +629,65 @@
       "id": "title-cross-shadow",
       "file": "title-cross-shadow.png",
       "kind": "rendered-editable-commands",
-      "sha256": "3bb2be106a102a84f2bd10812acce81a5a15e6fccc0426aeee1534498d2cc8b6",
+      "sha256": "c1daa403d988d87e7f7cd016a31b4f7bde8a1e0ade2e4ad0e42e201b8f5d492d",
       "width": 360,
-      "height": 114
+      "height": 95
     },
     {
       "id": "title-scattered-round",
       "file": "title-scattered-round.png",
       "kind": "rendered-editable-commands",
-      "sha256": "d6945dcefd74e08e505dfef1a40516d8ac233f41418df3816ac978db10e8d372",
+      "sha256": "22ae39d5583c2e6a341e4d7237c1d8e4bb82658e1b864f15d41c1f00a283a829",
       "width": 360,
-      "height": 169
+      "height": 161
     },
     {
       "id": "title-scattered-triangle",
       "file": "title-scattered-triangle.png",
       "kind": "rendered-editable-commands",
-      "sha256": "f78213c097b8aca9cb34ae14933369a8c5070df881a0497fb9a5aa9f25a6f243",
+      "sha256": "9728333e2b05232cce6aca0953ea85326d7b561a593f5323d84a504c8338fa18",
       "width": 360,
-      "height": 163
+      "height": 152
     },
     {
       "id": "title-number-route",
       "file": "title-number-route.png",
       "kind": "rendered-editable-commands",
-      "sha256": "c1798163a2c599bd525b4ff4ad11edba3806893357953fe37a53465f6efc80ae",
+      "sha256": "b769be1f9ededdc4fb2fa151ead436a9e1eebd6f7c8da4478ef46b8a499ff365",
       "width": 360,
-      "height": 97
+      "height": 101
     },
     {
       "id": "title-script-dots",
       "file": "title-script-dots.png",
       "kind": "rendered-editable-commands",
-      "sha256": "d9ae0888890b7cab9d5d1b9f61bc871e699ffa5e26ecf387b1e62ff27b12b158",
+      "sha256": "7554760dbc2aef9fb8a214ab9beef97aac4b4f52f7ac8369c6b73583e5c5f8d3",
       "width": 360,
-      "height": 124
+      "height": 131
+    },
+    {
+      "id": "title-block-lettering",
+      "file": "title-block-lettering.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "89e72afc367a137e3a6c7160be4ceed63d7c1e483fdfc0c8a38d38d005dfb0e5",
+      "width": 360,
+      "height": 133
+    },
+    {
+      "id": "title-outline-block-ring",
+      "file": "title-outline-block-ring.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "cc84d152350b565973a21123e90d0cc673d8e9a4f2afeb2e1cec4e4479361c2e",
+      "width": 318,
+      "height": 300
     },
     {
       "id": "title-paper-lettering",
       "file": "title-paper-lettering.png",
       "kind": "rendered-editable-commands",
-      "sha256": "496de1f203368bc688ccabf20364ab50000cf4b0d6ec43c36a7c83d2ddae843a",
+      "sha256": "49408f434a18e6a18a1def05160e8e73e4c4cf7b68af8c8307256c0077fe2665",
       "width": 360,
-      "height": 171
+      "height": 166
     },
     {
       "id": "title-underline",
@@ -725,9 +741,9 @@
       "id": "title-label",
       "file": "title-label.png",
       "kind": "rendered-editable-commands",
-      "sha256": "627db55376db110e6151674952730f089efacd65f595710d9749740d78b8bc1b",
+      "sha256": "d11db2bdecd5860b76b2d5c4dcbc49b1ed2e1ac254692b3e916e55c57543ca54",
       "width": 360,
-      "height": 125
+      "height": 146
     },
     {
       "id": "title-curve",
@@ -941,17 +957,25 @@
       "id": "title-shadow",
       "file": "title-shadow.png",
       "kind": "rendered-editable-commands",
-      "sha256": "ea684bb5c9e60b89e068c5ad1a6612874f510067a57e92345b23e65c0be04021",
+      "sha256": "87b4c1f8d977b924e849d732685bf1c7f07f3104be9064ae71500dba5e6c7728",
       "width": 360,
-      "height": 132
+      "height": 128
+    },
+    {
+      "id": "title-gap-shadow",
+      "file": "title-gap-shadow.png",
+      "kind": "rendered-editable-commands",
+      "sha256": "10f499550ac8740aaa2f960ee6270c77b374d85817c5356a704fcd6b0e7ea3f1",
+      "width": 360,
+      "height": 139
     },
     {
       "id": "title-offset-outline",
       "file": "title-offset-outline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "fed31baa7c0409036fc3c36a7325ef401ee1f69f8d916717df6e9f8518193d45",
+      "sha256": "67acce13c4ab0c471efe351953610241a0327986274fbc33b2c42decafea2eb2",
       "width": 360,
-      "height": 133
+      "height": 128
     },
     {
       "id": "title-gradient",
@@ -965,9 +989,9 @@
       "id": "title-gradient-outline",
       "file": "title-gradient-outline.png",
       "kind": "rendered-editable-commands",
-      "sha256": "f3fc0e937eaa3822b8bf9a1a11cbce221b53d19859fa9deb432a4c2ce2274477",
+      "sha256": "c50b85a50c850638f3e5b91ca404483f2c403a4b217a9ea4c3352923799d7ea9",
       "width": 360,
-      "height": 128
+      "height": 126
     },
     {
       "id": "title-phrases",
