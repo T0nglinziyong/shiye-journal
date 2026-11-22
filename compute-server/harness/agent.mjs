@@ -187,9 +187,9 @@ export function createCreativeHarness({model,skills,render,renderDraft,viewSpace
         try{apiMessages.push({role:'user',content:[{type:'text',text:'匹配的抽象模板缩略图。只借位置、叠放与疏密关系，按本次素材真实比例改造；不复制示意图内容。'},...(await recipeImages([s.referenceTemplateIDs[0]]))]});}
         catch{/* 文本参考仍可用，缩略图不阻断创作。 */}
       }
-      const deliberateTurn=s.phase==='direction'&&s.turns===0||['layout','craft'].includes(s.phase)&&s.turns===stageEnteredAt;
+      const deliberateTurn=['layout','craft'].includes(s.phase)&&s.turns===stageEnteredAt;
       const routineAdjustment=['layout','craft','review'].includes(s.phase)&&stageRenders>=2&&!blockedStageCheck;
-      const directionReady=s.phase==='direction'&&s.turns>=2;
+      const directionReady=s.phase==='direction';
       const reply=await model({messages:apiMessages,tools:activeTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),reasoningEffort:deliberateTurn?undefined:directionReady||routineAdjustment?'none':'low',recoveringFromTruncation:Boolean(s.usage.at(-1)?.truncated)});
       live(s,config);
       const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages];

@@ -68,10 +68,10 @@ test('stage transition rejects skipping, unresolved issues and empty plans',asyn
 });
 
 test('stage-specific guidance arrives when needed and repeated edits need no separate review',async t=>{
-  let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools})=>{
+  let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools,reasoningEffort})=>{
     turn++;instructions.push(messages[1].content);
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
-    if(turn===1){assert.ok(!names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
+    if(turn===1){assert.equal(reasoningEffort,'none');assert.ok(!names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
       assert.ok(names.includes('read_template'));
       const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
