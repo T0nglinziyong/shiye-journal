@@ -46,9 +46,9 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
     {role:'user',content:'之前的创作摘要：'+(previousSummary||'无')+'\n本次待压缩的完整回合：'+JSON.stringify(history)}
   ]});
   creativeModel.critique=async({imageURL,phase,style,signal,remainingMs})=>{
-    const stage=phase==='layout'?'只检查打底、素材关系、每页视觉分布和给后续文字预留的可读区域；不要要求现在已有正文。':phase==='craft'?'检查标题、正文、图形和装饰与既有素材是否协调。':'检查完整作品的构图、文字可读性、装饰、边界和完成度。';
+    const stage=phase==='layout'?'只检查打底、两页承重区、素材叠放、页边呼吸空间和可写区域；不要要求现在已有正文。':phase==='craft'?'检查计划中的正文是否已经写入、标题与正文是否清楚，以及两页是否有图文连接。':'检查完整作品的构图、正文、页边、左右协调、装饰和完成度。';
     const reply=await invoke({summary:true,quick:true,signal,remainingMs,messages:[
-      {role:'system',content:'你是独立的手帐画质审查员，不参与创作。只根据真实图像判断，不接受作者自评。风格：'+style+'。'+stage+' 特别检查文字是否压住素材原有印字或复杂纹样，是否有突兀的大块空白、各页视觉重心是否失衡、内容是否贴边。叠放遮挡本身是正常手帐技巧，只要重要文字仍可辨认就不算问题。blockingIssues 只列会阻止交付的明确缺陷：正文明显读不清、关键字被遮掉或越界、贴边到有裁切风险，或丰富风格某一页有大片无意空白而失去构图。普通间距、装饰多少、一般失衡及可选改进都放 notes，不作为阻断。不确定时不要猜。最多给出 3 个阻断问题。只输出 JSON：{"blockingIssues":["具体位置和问题"],"notes":["非阻断观察"]}。'},
+      {role:'system',content:'你是独立的手帐画质审查员，不参与创作。只根据真实图像判断，不接受作者自评。风格：'+style+'。'+stage+' 先把整张图缩小看，逐项比较：①左右两页的视觉重量、上下落点和共同色形，检查对象是否跨中缝；②重要文字及大前景素材与外缘是否留有可见纸边；③素材是否组成有交叠的簇，还是各自孤立；④写作区与正文是否真的形成可读路线。双页可不对称，底纸和少量胶带贴边正常；遮挡次要印花、小字正常。blockingIssues 列出会阻止当前阶段通过的明确缺陷：重要内容越界、跨中缝或贴着外缘、左右页一侧挤满另一侧大片未完成空洞、主题不相关的大印刷标题争夺焦点、关键标题/正文读不清；craft 与 review 阶段若整页只有标题而没有任何正文，且留出大片待写空区，也须阻断。布局阶段允许正文尚未写入，但必须有明确可写区。小间距和可选装饰意见放 notes。给出画面位置和一条可执行的改法，不要笼统要求更丰富。最多 3 个阻断问题。只输出 JSON：{"blockingIssues":["具体位置和问题及改法"],"notes":["非阻断观察"]}。'},
       {role:'user',content:[{type:'text',text:'请独立检查这张当前作品的画面。'},{type:'image_url',image_url:{url:imageURL}}]}
     ]});
     try{

@@ -44,15 +44,15 @@ test('reference lookup exposes sourced templates only as layout guidance',async(
   assert.ok(first.slots?.every(slot=>slot.role&&slot.box.length===4));
 });
 
-test('time pacing removes editing tools and enforces a real layout stage check',async t=>{
+test('time pacing suggests handoff while retaining editing tools',async t=>{
   let now=0,turn=0;const f=await fixture(t,async({messages,tools})=>{
     turn++;const p=previewOf(messages);
     if(turn===1)return answer(plan());
     if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout-a',[text('title','夏日手帐',[35,30])]));
     if(turn===3)return answer(edit(p.sceneRevision,'layout-b',[text('note','在路上',[42,75])]));
     if(turn===4){
-      assert.ok(!tools.some(tool=>tool.function.name==='creation_apply'));
-      return answer(edit(p.sceneRevision,'late-edit',[text('late','不应执行',[50,100])]),phase('craft','标题和短句已建立两个区域，装饰书写继续补齐'));
+      assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
+      return answer(phase('craft','标题和短句已建立两个区域，装饰书写继续补齐'));
     }
     throw Error('paced stop');
   },{clock:()=>now,afterRender:count=>{if(count===2)now=151000;}});
@@ -60,15 +60,62 @@ test('time pacing removes editing tools and enforces a real layout stage check',
   await assert.rejects(f.harness.run({id:'paced-layout',state:f.state}),/paced stop/);
   const saved=await f.harness.state('paced-layout');
   assert.equal(saved.phase,'craft');
-  assert.deepEqual(saved.results.map(result=>result.ok),[false,true]);
+  assert.deepEqual(saved.results.map(result=>result.ok),[true]);
   assert.ok(!saved.document.page.layers.some(layer=>layer.id==='late'));
+});
+
+test('review pacing presents finish after five further edits',async t=>{
+  let turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'review-layout',[text('title','记一页',[35,30])]));
+    if(turn===3)return answer(phase('craft','标题构成左上视觉入口，正文区域留在下方'));
+    if(turn===4)return answer(edit(p.sceneRevision,'review-craft',[text('body','下午茶和窗边的风。',[45,75])]));
+    if(turn===5)return answer(phase('review','标题与正文形成可读的图文层级'));
+    if(turn<=10)return answer(edit(p.sceneRevision,'review-edit-'+turn,[text('accent-'+turn,'小记',[35+turn,100+turn*3])]));
+    assert.ok(tools.some(tool=>tool.function.name==='creation_finish'));
+    assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
+    return answer(call('creation_finish',{review:{observations:'标题、正文和多处边注分布在纸面，文字层级清楚',issues:[]}}));
+  });
+  const result=await f.harness.run({id:'paced-finish',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.equal(result.turns,11);
+});
+
+test('a complete page can finish without mandatory phase transitions',async t=>{
+  let turn=0;const f=await fixture(t,async({messages,tools})=>{
+    turn++;const p=previewOf(messages);
+    if(turn===1)return answer(plan());
+    if(turn===2){assert.ok(tools.some(tool=>tool.function.name==='creation_finish'));return answer(edit(creationSceneRevision(f.document),'whole-page',[
+      text('title','周末手记',[35,30]),text('body','午后的小雨落在窗沿，我把散开的纸片重新收好。',[45,85])
+    ]));}
+    return answer(call('creation_finish',{review:{observations:'标题在上方，正文位于下方的可读区域，留出纸边',issues:[],pngHash:p.pngHash,sceneRevision:p.sceneRevision}}));
+  });
+  const result=await f.harness.run({id:'no-required-phases',state:f.state});
+  assert.equal(result.status,'completed');
+  assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout']);
+});
+
+test('an off-page text placement is translated before its transaction receipt is returned',async t=>{
+  let turn=0;const f=await fixture(t,async({messages})=>{
+    turn++;
+    if(turn===1)return answer(plan());
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'snapped-title',[text('title','周末手记',[0,32])]));
+    throw Error('stop after snapped preview');
+  });
+  await assert.rejects(f.harness.run({id:'snapped-title',state:f.state}),/stop after snapped preview/);
+  const saved=await f.harness.state('snapped-title');
+  const receipt=saved.document.v3Transactions['snapped-title'];
+  assert.equal(receipt.sceneRevision,creationSceneRevision(saved.document));
+  assert.ok(saved.results[0]?.ok||saved.qualityFrames.length===1);
+  assert.equal(saved.qualityFrames.length,1);
 });
 
 test('rich layered spreads rank a layered reference above sparse diary cases',async()=>{
   const document=await createCreationDocument({draft:draft({mode:'spread'}),assets:[]});
   document.source.styles=['丰富层叠'];
   const cases=searchLibraryReferences(document,{kind:'cases',limit:3}).results;
-  assert.equal(cases[0].id,'xhs-wishes-dessert');
+  assert.equal(cases[0].id,'user-layered-spread');
   assert.ok(cases.every(item=>item.why.pageMode==='spread'));
 });
 
@@ -101,18 +148,19 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
         {op:'graphic.add',id:'paper-accent',geometry:{kind:'shape',shape:'rect'},place:{reference:'page',at:[50,50],unit:'mm'},size:{width:4,height:4,unit:'mm'},style:{fill:'#465D54'}},title
       ]));
     }
-    if(turn===3){assert.equal(reasoningEffort,'none');assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
+    if(turn===3){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
     if(turn===4)return answer(phase('craft','两处文字形成基础结构，还有空间可加手写点缀'));
     if(turn===5)return answer(edit(p.sceneRevision,'third',[text('body','把潮湿的风留在这一页。',[45,100])]));
-    if(turn===6){assert.equal(reasoningEffort,'none');return answer(phase('review','三段文字层级清楚，纸面有内容和节奏'));}
+    if(turn===6){assert.equal(reasoningEffort,'low');return answer(phase('review','三段文字层级清楚，纸面有内容和节奏'));}
     return answer(call('creation_finish',{review:{observations:'标题、边注和正文分布在三个位置，文字清晰',issues:[]}}));
   });
   const result=await f.harness.run({id:'stage-guidance',state:f.state});
   assert.equal(result.status,'completed');
   assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout','craft','review']);
-  assert.ok(!instructions[0].includes('本阶段表达方法卡'));
-  assert.ok(instructions[1].includes('匹配案例和轻量模板'));
-  assert.ok(instructions[4].includes('本阶段表达方法卡'));
+  assert.ok(!instructions[0].includes('表达方法卡'));
+  assert.ok(instructions[1].includes('可选构图与叠放方法'));
+  assert.ok(instructions[1].includes('表达方法卡'));
+  assert.ok(instructions[4].includes('这些动作可以交错'));
   assert.equal(f.renders(),3);
 });
 
@@ -139,7 +187,7 @@ test('layout remains editable after four previews and common ordering aliases wo
     if(turn===1)return answer(plan());
     if(turn>=2&&turn<=5)return answer(edit(p?.sceneRevision||creationSceneRevision(f.document),'pass-'+turn,[text('note-'+turn,'第 '+turn+' 段文字',[40,20+turn*14])]));
     if(turn===6){assert.ok(names.includes('creation_apply'));return answer(phase('craft','四版构图已建立文字阅读路线，细节交由下一阶段'));}
-    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'order',target:'note-2',after:'note-3'},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'tray',at:[30,30],unit:'mm'}},{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect',options:{radius:0.02}},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC',shadow:{offsetMm:[1,1],blurMm:2,color:'#00000022'}}}]));}
+    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'order',target:'note-2',after:'note-3'},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'tray',at:[30,30],unit:'mm'}},text('body','今天写下一段新的记录。',[65,105]),{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect',options:{radius:0.02}},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC',shadow:{offsetMm:[1,1],blurMm:2,color:'#00000022'}}}]));}
     if(turn===8)return answer(phase('review','纸面文字与暂存对象各在正确空间，层序已调整'));
     return answer(call('creation_finish',{review:{observations:'纸面四段文字可读，暂存标题没有进入纸面',issues:[]}}));
   });

@@ -1,6 +1,6 @@
 const count=rows=>rows.filter(Boolean).length;
 
-export function evaluateCreativeFrame({preview,document,scene,feedback,advisory,previous=null,turn,phase}){
+export function evaluateCreativeFrame({preview,document,scene,feedback,advisory,visualBalance=null,previous=null,turn,phase}){
   const sample=preview.visualSample||null;
   let pixelChange=null;
   if(sample&&previous?.visualSample){
@@ -11,7 +11,7 @@ export function evaluateCreativeFrame({preview,document,scene,feedback,advisory,
   const required=new Set(feedback.required.map(item=>item.alias));
   return {turn,phase,sceneRevision:preview.sceneRevision,pngHash:preview.pngHash,artifact:preview.artifact||null,visualSample:sample,
     comparedTo:previous?.pngHash||null,pixelChange,
-    metrics:{layers:advisory.layers,frameCoverage:advisory.pages.map(page=>({page:page.page,value:page.estimatedFrameCoverage})),requiredPresent:count(feedback.required.map(item=>item.present)),requiredTotal:feedback.required.length,optionalUsed:[...used].filter(alias=>!required.has(alias)).length,optionalTotal:Math.max(0,(document?.source?.materials?.length||0)-required.size),finalValidation:feedback.finalValidation,advisoryCount:advisory.observations.length},
+    metrics:{layers:advisory.layers,frameCoverage:advisory.pages.map(page=>({page:page.page,value:page.estimatedFrameCoverage})),visualBalance:visualBalance?.pages||null,requiredPresent:count(feedback.required.map(item=>item.present)),requiredTotal:feedback.required.length,optionalUsed:[...used].filter(alias=>!required.has(alias)).length,optionalTotal:Math.max(0,(document?.source?.materials?.length||0)-required.size),finalValidation:feedback.finalValidation,advisoryCount:advisory.observations.length},
     modelReview:null,humanReview:null};
 }
 

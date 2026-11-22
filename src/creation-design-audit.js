@@ -2,6 +2,7 @@ import {creationPageRegions} from './creation-page-regions.js';
 // Advisory geometry diagnostics. A frame-covered cell is NOT proof of visible
 // ink or aesthetic completeness (transparent cutouts, paper interiors, masks).
 import {worldBox} from './scene-spatial.js';
+import {creationMarginIssues} from './creation-layout-guard.js';
 export function auditCreationDesign(page,{materials=[],styles=[]}={}){
  const entries=[];
  const walk=nodes=>{for(const n of nodes){if(n.hidden||n.isHidden||n.isParked||n.parked||n.opacity===0)continue;if(n.type==='group')walk(n.children||[]);else entries.push(n);}};walk(page.layers);
@@ -22,6 +23,8 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
  }
  for(const p of pages)for(const k of Object.keys(p.largestUncoveredRectangleMm))p.largestUncoveredRectangleMm[k]=Number(p.largestUncoveredRectangleMm[k].toFixed(2));
  const observations=[];
+ const marginIssues=creationMarginIssues({page,source:{sourceSnapshots:materials}});
+ if(marginIssues.length)observations.push('外缘呼吸边不足：'+marginIssues.slice(0,8).map(issue=>`${issue.id}靠${issue.edge}边${issue.clearanceMm}mm（建议约${issue.desiredMm}mm）`).join('、')+'。只移动重要文字或大前景素材；底纸、胶带、小贴纸可有意贴边。需结合真实 PNG 核查可见轮廓。');
  const regions=creationPageRegions(page),gutter=regions.gutter;
  const gutterIntersections=gutter?boxes.filter(b=>['material','text'].includes(b.type)&&b.y<page.canvas.height&&b.y+b.height>0&&b.x<(gutter.x+gutter.width)*s&&b.x+b.width>gutter.x*s).map(b=>({id:b.id,type:b.type,crossesSeam:b.x<gutter.center*s&&b.x+b.width>gutter.center*s})):[];
  if(gutterIntersections.length)observations.push(`中缝安全带内有素材或文字（${gutterIntersections.map(b=>b.id+(b.crossesSeam?'：跨缝':'：靠缝')).join('、')}）：默认移回左右单页，连同关联文字/图案一起调整。若是透明空边、裁片遮罩或明确有意跨页，须看真实 PNG 确认；不得缩放实体来避让。`);
