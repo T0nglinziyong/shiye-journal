@@ -22,11 +22,12 @@ test('rejects a large writing card moved off the paper and allows an improving m
 });
 
 test('crossing the middle seam is blocked with local leaf coordinates',()=>{
-  const crossing=document([{id:'wide-title',type:'text',content:'跨页标题',x:710,y:300,width:220,height:70,rotation:0}]);
+  const crossing=document([{id:'wide-title',type:'text',content:'跨页标题',x:710,y:300,width:220,height:70,rotation:0},{id:'wide-shape',type:'shape',x:710,y:460,width:180,height:50,rotation:0}]);
   const issue=creationBoundaryIssues(crossing).find(item=>item.edge==='中缝');
   assert.equal(issue.location,'左页');
   assert.ok(issue.bounds.xMax<125);
   assert.throws(()=>assertNoWorseningBoundary(document([]),crossing),/中缝跨页/);
+  assert.ok(creationBoundaryIssues(crossing).some(item=>item.id==='wide-shape'&&item.edge==='中缝'));
 });
 
 test('a clipped material is translated onto its leaf without changing size',()=>{

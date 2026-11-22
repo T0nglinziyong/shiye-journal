@@ -26,7 +26,7 @@ export function creationBoundaryIssues(document){
     for(const node of nodes||[]){
       if(node.hidden||node.isHidden||node.isParked||node.parked||node.opacity===0||node.surface&&node.surface!=='page')continue;
       if(node.type==='group'){visit(node.children);continue;}
-      if(!['material','text','graphic','ink'].includes(node.type))continue;
+      if(!['material','text','shape','ink'].includes(node.type))continue;
       const box=worldBox(page,node.id),angle=box.rotation*Math.PI/180;
       const width=Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h;
       const height=Math.abs(Math.sin(angle))*box.w+Math.abs(Math.cos(angle))*box.h;
