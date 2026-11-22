@@ -7,6 +7,8 @@ test('completed AI creation reports its elapsed time and opens the result',()=>{
   '创作完成，用时2分34秒，点击方案继续编辑');
  assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T01:00:01Z'),
   '创作完成，用时1小时1秒，点击方案继续编辑');
+ assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T00:02:34Z',{turns:18,inputTokens:123456,outputTokens:7890}),
+  '创作完成，用时2分34秒，共18轮，输入123,456 token，输出7,890 token，点击方案继续编辑');
 });
 
 const draft={id:'d',sceneVersion:2,canvas:{width:700,height:1000},layers:[]};

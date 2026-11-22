@@ -10,7 +10,7 @@ import {installedCreationResources} from '../compute-server/harness/resources.mj
 import fontManifest from '../src/assets/fonts/manifest.json' with {type:'json'};
 
 const call=(name,args)=>({id:name,type:'function',function:{name,arguments:JSON.stringify(args)}});
-const reply=(...calls)=>({message:{role:'assistant',content:null,reasoning_content:'test-only',tool_calls:calls}});
+const reply=(...calls)=>({message:{role:'assistant',content:null,reasoning_content:'test-only',tool_calls:calls},usage:{prompt_tokens:120,completion_tokens:30}});
 test('cloud worker commits hash-verified editable output after real rendering and a durable journal',async()=>{
   const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',user='10000000001',prefix=`${user}/creative/${id}/`;
   const document=await createCreationDocument({draft:draft(),assets:[]});
@@ -35,6 +35,8 @@ test('cloud worker commits hash-verified editable output after real rendering an
       return reply(call('creation_review',{pngHash:preview.pngHash,sceneRevision:preview.sceneRevision,approved:true,observations:'测试图像已渲染，非审美验收',issues:[]}),call('creation_finish',{}));
     }});
   assert.ok(entries.length>4);assert.ok(notifications>=2);assert.ok(updates.some(v=>v.p_progress?.stage==='preview'));
+  const completed=updates.findLast(v=>v.p_progress?.stage==='completed').p_progress;
+  assert.deepEqual({turns:completed.turns,inputTokens:completed.inputTokens,outputTokens:completed.outputTokens},{turns:2,inputTokens:240,outputTokens:60});
   const output=JSON.parse(objects.get(result.resultPath));assert.equal(output.page.layers[0].content,'一页新的想法');
   const evaluation=JSON.parse(objects.get(prefix+'reports/evaluation.json'));
   const trace=JSON.parse(objects.get(prefix+'reports/trace.json'));
