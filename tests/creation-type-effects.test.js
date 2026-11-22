@@ -117,6 +117,11 @@ test('design audit is read-only, distinguishes geometry from visual evidence and
  const {run}=await fixture(),d=run([text]);const before=JSON.stringify(d);const report=auditCreationDesign(d.page);assert.equal(report.visualReviewPerformed,false);assert.equal(report.layers.text,1);assert.equal(JSON.stringify(d),before);assert.ok(report.pages[0].uncoveredRectangleFraction>.2);assert.ok(report.observations.some(s=>s.includes('文字块')));
  const bg=run([{op:'graphic.add',id:'bg',geometry:{kind:'rect'},size:{reference:'page',width:1,height:1,unit:'ratio'},place:{reference:'page',at:[.5,.5],unit:'ratio'}}]);assert.equal(auditCreationDesign(bg.page).pages[0].estimatedFrameCoverage,1);assert.match(report.limitations,/不是像素/);
 });
+test('design audit flags long text squeezed into a narrow writing strip',async()=>{
+ const {run}=await fixture();
+ const narrow=run([{...text,id:'narrow-body',content:'这一段正文需要足够宽的可读区域，不能被挤成单字竖列。',size:{width:8,unit:'mm'},style:{fontSizePt:12}}]);
+ assert.ok(auditCreationDesign(narrow.page).observations.some(line=>line.includes('narrow-body')&&line.includes('单字竖列')));
+});
 test('design audit points out a large material frame with no added writing',async()=>{
  const {run}=await fixture(120,150),material={op:'material.add',id:'paper-layer',asset:'m1',place:at()};
  const bare=run([material]),withoutWriting=auditCreationDesign(bare.page,{materials:[{alias:'m1',assetID:'paper',title:'synthetic paper'}]});
