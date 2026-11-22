@@ -80,7 +80,7 @@ export function modelContext(messages,state={}){
   const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
     afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
   const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-6)??turns.at(0)??2);
+  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-4)??turns.at(0)??2);
   while(start>2&&messages[start]?.role==='tool')start--;
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：');
   const tail=messages.slice(start),lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
@@ -92,7 +92,6 @@ export function modelContext(messages,state={}){
   const recentToolNames=new Map(recent.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
   const recentAssistants=recent.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
   const compactedRecent=recent.map((message,i)=>{
-    if(message.role==='assistant'&&'reasoning_content'in message)return (({reasoning_content,...visible})=>visible)(message);
     if(message.role==='tool'&&recentToolNames.get(message.tool_call_id)==='creation_help'&&i<(recentAssistants.at(-2)??-1))return {...message,content:'{"ok":true,"detail":"参数已读取；需要再次查看时调用 creation_help。"}'};
     return message;
   });

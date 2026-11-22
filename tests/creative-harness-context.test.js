@@ -28,7 +28,7 @@ test('model context keeps the global index and recent tool pair while dropping s
   const receipt={role:'tool',tool_call_id:'call',content:'receipt'};
   const previews=Array.from({length:5},(_,i)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+i+'\n最新 Scene：many coordinates'},{type:'image_url',image_url:{url:'preview'+i}}]}));
   const input=[system,source,reasoning,receipt,...previews],before=JSON.stringify(input),out=modelContext(input);
-  assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2].reasoning_content,undefined);assert.deepEqual(out[2].tool_calls,reasoning.tool_calls);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
+  assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2],reasoning);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
   assert.equal(out.filter(m=>Array.isArray(m.content)).length,2);assert.equal(JSON.stringify(input),before);
 });
 
@@ -71,9 +71,16 @@ test('model context stays bounded as checkpoint history grows',()=>{
  for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
  const out=modelContext(messages);
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
- assert.ok(out.length<=20);assert.equal(out.filter(m=>m.role==='assistant').length,6);
- assert.equal(out.filter(m=>m.role==='tool').length,6);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
+ assert.ok(out.length<=20);assert.equal(out.filter(m=>m.role==='assistant').length,4);
+ assert.equal(out.filter(m=>m.role==='tool').length,4);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
  assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
+});
+
+test('recent DeepSeek tool turns keep their complete reasoning content',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
+ for(let i=0;i<7;i++)messages.push({role:'assistant',reasoning_content:'reason-'+i,tool_calls:[{id:'r'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'r'+i,content:'{"ok":true}'});
+ const out=modelContext(messages);
+ assert.deepEqual(out.filter(m=>m.role==='assistant').map(m=>m.reasoning_content),['reason-3','reason-4','reason-5','reason-6']);
 });
 
 test('old parameter help is shortened while its tool pair stays valid',()=>{
