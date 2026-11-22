@@ -56,7 +56,7 @@ export function materialBrief(document){
   const required=new Set(document.source.requiredAssetIDs||[]);
   return document.source.materials.map(m=>{
     const s=document.source.sourceSnapshots.find(s=>s.assetID===m.assetID),a=assetFromSourceSnapshot(s,{frozenRevision:true});
-    return {alias:m.alias,title:s.title,description:String(s.description||'').slice(0,160)||undefined,kind:s.kind,role:s.role,tags:s.tags,widthMM:a.physicalWidthMM,heightMM:a.physicalHeightMM,required:required.has(m.assetID),priority:Object.entries(document.source.materialPriority||{}).find(([,ids])=>Array.isArray(ids)&&ids.includes(m.assetID))?.[0],tapeAxis:s.tapeAxis};
+    return {alias:m.alias,title:s.title,description:String(s.description||'').slice(0,160)||undefined,kind:s.kind,role:s.role,journalRoles:s.journalRoles,tags:s.tags,widthMM:a.physicalWidthMM,heightMM:a.physicalHeightMM,required:required.has(m.assetID),priority:Object.entries(document.source.materialPriority||{}).find(([,ids])=>Array.isArray(ids)&&ids.includes(m.assetID))?.[0],tapeAxis:s.tapeAxis};
   });
 }
 

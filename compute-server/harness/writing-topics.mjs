@@ -56,7 +56,7 @@ export function writingLengthPlan({page,materials=[],textMode='automatic',purpos
   const area=(page?.canvas?.width||700)*(page?.physicalPageHeightMM||210)**2/(page?.canvas?.height||1000);
   const occupied=materials.reduce((sum,material)=>{
     const surface=[material.title,material.description,...(material.tags||[])].filter(Boolean).join(' ');
-    const writable=Number.isFinite(material.writableFraction)?Math.max(0,Math.min(.85,material.writableFraction)):/可写|写字区|空白|留白|浅色底|素色底|无字便签/.test(surface)?.6:0;
+    const writable=Number.isFinite(material.writableFraction)?Math.max(0,Math.min(.85,material.writableFraction)):/可写|写字区|空白|留白|浅色底|素色底|无字便签|writing card|blank (paper|card|note)|memo pad/i.test(surface)?.6:material.journalRoles?.includes('writing')?.45:0;
     return sum+Math.max(0,Number(material.widthMM||material.physicalWidthMM)||0)*Math.max(0,Number(material.heightMM||material.physicalHeightMM)||0)*(1-writable);
   },0);
   const density=occupied/Math.max(area,1);
@@ -77,5 +77,5 @@ export function writingTopicBrief(document,brief={},seed=0){
   const userTheme=String(source.intent||brief.intent||'').trim();
   const fiction=source.contentPolicy!=='documentary';
   const topics=searchWritingTopics({materials,query:userTheme,month:new Date(seed).getUTCMonth()+1,seed,limit:3,allowFiction:fiction});
-  return {userTheme:userTheme||null,selected:topics[0],alternatives:topics.slice(1),length:writingLengthPlan({page:document.page,materials:(source.sourceSnapshots||[]).map(snapshot=>({widthMM:snapshot.descriptor?.widthMM,heightMM:snapshot.descriptor?.heightMM,title:snapshot.title,description:snapshot.description,tags:snapshot.tags})),textMode:source.textMode,purposes:source.purposes||[]}),styles:['细节片段：从具体动作或物件开头，写一个转折','观察清单：两三项有差异的发现，结尾留一个问题','写给某物或某时刻：亲近、自然，不做空泛鼓励',...(fiction?['想象练习：可以虚构场景，写出感官和小意外']:[])],source:'用户提供的 365 主题 PDF；仅供启发，不照抄题目作正文'};
+  return {userTheme:userTheme||null,selected:topics[0],alternatives:topics.slice(1),length:writingLengthPlan({page:document.page,materials:(source.sourceSnapshots||[]).map(snapshot=>({widthMM:snapshot.descriptor?.widthMM,heightMM:snapshot.descriptor?.heightMM,title:snapshot.title,description:snapshot.description,tags:snapshot.tags,journalRoles:snapshot.journalRoles})),textMode:source.textMode,purposes:source.purposes||[]}),styles:['细节片段：从具体动作或物件开头，写一个转折','观察清单：两三项有差异的发现，结尾留一个问题','写给某物或某时刻：亲近、自然，不做空泛鼓励',...(fiction?['想象练习：可以虚构场景，写出感官和小意外']:[])],source:'用户提供的 365 主题 PDF；仅供启发，不照抄题目作正文'};
 }

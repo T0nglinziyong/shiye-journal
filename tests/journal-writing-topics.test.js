@@ -28,6 +28,7 @@ test('body length responds to available area and policy',()=>{
   assert.equal(writingLengthPlan({page}).level,'展开');
   assert.equal(writingLengthPlan({page,materials:[{widthMM:150,heightMM:200}]}).level,'精简');
   assert.equal(writingLengthPlan({page,materials:[{widthMM:150,heightMM:200,title:'浅色留白便签'}]}).level,'展开');
+  assert.equal(writingLengthPlan({page,materials:[{widthMM:150,heightMM:200,title:'blue writing card'}]}).level,'展开');
   assert.equal(writingLengthPlan({page,textMode:'minimal'}).level,'简短');
   assert.equal(writingLengthPlan({page,purposes:['主题封面']}).level,'标题为主');
   assert.equal(writingLengthPlan({page,textMode:'none'}).characters[1],40);
