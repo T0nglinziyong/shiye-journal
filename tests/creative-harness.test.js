@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision} from '../src/creation-transaction.js';
-import {createCreativeHarness,initialHarnessState} from '../compute-server/harness/agent.mjs';
+import {harnessTools,createCreativeHarness,initialHarnessState} from '../compute-server/harness/agent.mjs';
 import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
 import {createDeepSeekCreativeModel} from '../compute-server/harness/deepseek.mjs';
@@ -550,16 +550,30 @@ test('recipe failure is atomic and cannot be accepted as a finished artwork',asy
  await assert.rejects(harness.run({id:'recipe-isolation',state:f.state}),/recipe isolation verified/);assert.equal((await harness.state('recipe-isolation')).document.page.layers.length,0);
 });
 
-test('deferred template lookup explains the limitation without loading its image or executable recipe',async t=>{
-  const f=await fixture(t);let n=0,baseline=0;
-  const imageCount=messages=>messages.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length;
-  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({messages})=>{
-    if(++n===1){baseline=imageCount(messages);return answer(call('read_template',{id:'ac-26'}));}
-    const reply=JSON.parse(messages.findLast(m=>m.role==='tool').content);
-    assert.equal(reply.ok,true);assert.equal(reply.data.available,false);assert.equal(reply.data.tool,undefined);
-    assert.equal(imageCount(messages),baseline);
-    throw Error('verified deferred lookup');
+test('automatic creation excludes template candidates and template tools while keeping manual library search',async t=>{
+  const f=await fixture(t);
+  const toolNames=harnessTools.map(tool=>tool.function.name);
+  assert.ok(!toolNames.includes('match_templates'));
+  assert.ok(!toolNames.includes('read_template'));
+  const recipe=harnessTools.find(tool=>tool.function.name==='creation_recipe');
+  assert.deepEqual(recipe.function.parameters.properties.kind.enum,['technique']);
+  const search=harnessTools.find(tool=>tool.function.name==='search_references');
+  assert.deepEqual(search.function.parameters.properties.kind.enum,['all','techniques','cases']);
+  assert.doesNotMatch(f.state.messages[1].content[0].text,/模板候选|read_template|match_templates/);
+  assert.doesNotMatch(f.state.messages[0].content,/read_template|match_templates|模板位置/);
+  const manual=searchLibraryReferences(f.document,{kind:'templates',limit:2});
+  assert.ok(manual.results.some(row=>row.kind==='template'));
+  let turns=0;
+  const harness=createCreativeHarness({...f,checkpointer:await new JournalCheckpointSaver(f.journal).restore(),model:async({tools,messages})=>{
+    if(++turns===1){
+      assert.ok(!tools.some(tool=>['match_templates','read_template'].includes(tool.function.name)));
+      return answer(call('search_references',{kind:'all',limit:8}));
+    }
+    const reply=JSON.parse(messages.findLast(message=>message.role==='tool').content);
+    assert.ok(reply.ok);
+    assert.ok(reply.data.results.length>0);
+    assert.ok(reply.data.results.every(row=>row.kind!=='template'));
+    throw Error('automatic template exclusion verified');
   }});
-  await assert.rejects(harness.run({id:'deferred-lookup',state:f.state}),/verified deferred lookup/);
-  assert.equal((await harness.state('deferred-lookup')).document.page.layers.length,0);
+  await assert.rejects(harness.run({id:'no-templates',state:f.state}),/automatic template exclusion verified/);
 });

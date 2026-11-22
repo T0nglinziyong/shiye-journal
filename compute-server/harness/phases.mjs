@@ -3,7 +3,7 @@ export const creativePhases=['composition','detailing','review'];
 const common=['creation_phase','creation_plan','creation_help','creation_inspect','creation_preview','creation_review','creation_finish','workspace_view','inspect_materials'];
 const editing=['creation_apply','creation_undo','read_skill','creation_guide'];
 const phaseTools={
-  composition:[...common,...editing,'match_templates','search_references','search_writing_topics','read_template','read_case','creation_recipe','explore_drafts','select_draft','workspace_create','workspace_close'],
+  composition:[...common,...editing,'search_references','search_writing_topics','read_case','creation_recipe','explore_drafts','select_draft','workspace_create','workspace_close'],
   detailing:['creation_phase','creation_help','creation_inspect','creation_preview','creation_review','creation_finish','workspace_view','inspect_materials',...editing,'search_writing_topics','creation_recipe','segment_material','creation_apply_crops','workspace_create','workspace_close'],
   review:[...common]
 };
