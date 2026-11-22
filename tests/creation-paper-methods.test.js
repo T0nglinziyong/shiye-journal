@@ -29,6 +29,7 @@ test('editable colour paper keeps punched holes and torn edges in one vector',as
  assert.equal(geometry.paths[0].fillRule,'evenodd');
  assert.equal((geometry.paths[0].d.match(/ M/g)||[]).length,3,'outer path plus three independent holes');
  assert.deepEqual(paperCardPath(options),geometry,'identical parameters must reproduce the same torn contour');
+ assert.throws(()=>compileTechnique({methodId:'paper-color-card',parameters:{id:'missing-position',colors:['#8195B4'],...options}}),/缺少参数：at/);
  const recipe=compileTechnique({methodId:'paper-color-card',parameters:{id:'colour-paper',at:[74,105],colors:['#8195B4'],...options}});
  assert.equal(recipe.operations[0].op,'group.compose');
  assert.equal(recipe.operations[0].children[0].geometry.paths[0].fillRule,'evenodd');
