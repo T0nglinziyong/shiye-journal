@@ -8,7 +8,7 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
       signal?.throwIfAborted();
       const remaining=remainingMs-(Date.now()-started);
       if(remaining<1000)throw Object.assign(Error('创作时间已用完'),{code:'CREATIVE_DEADLINE'});
-      const effectiveEffort=summary||recoveringFromTruncation||attempt>0?'low':reasoningEffort||effort;
+      const effectiveEffort=recoveringFromTruncation?'none':summary||attempt>0?'low':reasoningEffort||effort;
       const actionMode=quick||effectiveEffort==='none';
       const timeout=AbortSignal.timeout(Math.min(quick?25000:summary?35000:150000,remaining));
       let response;

@@ -72,7 +72,14 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
     turn++;instructions.push(messages[1].content);
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.ok(!names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
-    if(turn===2){assert.ok(names.includes('read_template'));return answer(edit(creationSceneRevision(f.document),'first',[{...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}}]));}
+    if(turn===2){
+      assert.ok(names.includes('read_template'));
+      const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
+      title.style.letterSpacing=.3;
+      return answer(edit(creationSceneRevision(f.document),'first',[
+        {op:'graphic.add',id:'paper',geometry:{kind:'shape',preset:'rect'},place:{at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},title
+      ]));
+    }
     if(turn===3){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
     if(turn===4)return answer(phase('craft','两处文字形成基础结构，还有空间可加手写点缀'));
     if(turn===5)return answer(edit(p.sceneRevision,'third',[text('body','把潮湿的风留在这一页。',[45,100])]));
@@ -145,6 +152,17 @@ test('routine visual adjustments use bounded non-thinking tool calls',async()=>{
  await model({messages:[{role:'user',content:'调整刚才画面'}],tools:[],reasoningEffort:'none',remainingMs:60000});
  assert.equal(request.thinking.type,'disabled');
  assert.equal(request.reasoning_effort,undefined);
+ assert.equal(request.max_tokens,5000);
+});
+
+test('a truncated creative answer recovers with one bounded non-thinking call',async()=>{
+ let request;
+ const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+   request=JSON.parse(options.body);
+   return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:null,tool_calls:[]},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
+ }});
+ await model({messages:[{role:'user',content:'只提交计划'}],tools:[],recoveringFromTruncation:true,remainingMs:60000});
+ assert.equal(request.thinking.type,'disabled');
  assert.equal(request.max_tokens,5000);
 });
 
