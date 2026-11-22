@@ -101,7 +101,7 @@
   white-space:nowrap;text-overflow:ellipsis;overflow:hidden;
 }
 .matching-page .match-previews .match-progress{
-  font-size:11px;line-height:1.4;max-height:64px;margin:4px 0;
+  font-size:11px;line-height:1.4;max-height:none;margin:4px 0;
 }
 @media(max-width:680px){
   .matching-page .match-previews .match-variant-grid{
