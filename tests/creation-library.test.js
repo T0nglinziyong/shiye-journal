@@ -237,6 +237,17 @@ test('title backdrops mix scattered dots and squares with page-wide line and has
  assert.ok(children.every(op=>op.op!=='material.add'));
  assert.equal(apply(await document([]),compileTechnique({methodId:'title-composed',parameters}).operations,[]).changed,true);
 });
+test('composed lettering also works as smaller second and third level headings',async()=>{
+ const second=compileTechnique({methodId:'title-composed',parameters:{id:'heading-two',text:'今日片段',fontSizePt:20,widthMm:52,backgrounds:[{kind:'lines',count:3,color:'#B7C7BC',opacity:.45}]}});
+ const third=compileTechnique({methodId:'title-composed',parameters:{id:'heading-three',text:'天气记录',fontSizePt:14,widthMm:42,backgrounds:[{kind:'dots',diameterMm:1.5,gapMm:3,color:'#DDAA78'}]}});
+ assert.ok(second.report.heightMm>third.report.heightMm);
+ assert.ok(second.operations[0].children.some(op=>op.geometry?.kind==='path'));
+ assert.ok(third.operations[0].children.some(op=>op.geometry?.kind==='ellipse'));
+ assert.ok(second.operations[0].children.every(op=>op.op!=='material.add'));
+ assert.ok(third.operations[0].children.every(op=>op.op!=='material.add'));
+ assert.equal(apply(await document([]),second.operations,[]).changed,true);
+ assert.equal(apply(await document([]),third.operations,[]).changed,true);
+});
 test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
  const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};
  const compiled=compileTechnique({methodId:'title-underline',parameters});
