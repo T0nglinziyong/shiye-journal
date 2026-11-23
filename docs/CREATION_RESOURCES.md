@@ -1,6 +1,6 @@
 # 创作资源的唯一来源
 
-仓库是编辑源，经过验证并发布到 `shiyejournal.vip` 的准确 Git SHA 是发布源。字体注册只维护 `src/assets/fonts/manifest.json`；Skill 只维护 `creation-skills/`；工具与渲染只维护现有 `src/` 和 `compute-server/harness/`。手机不上传这些资源。
+仓库是编辑源，经过验证并发布到 `shiyejournal.vip` 的准确 Git SHA 是发布源。字体注册只维护 `src/assets/fonts/manifest.json`；Skill 只维护 `creative-agent/skills/`；工具与渲染只维护现有 `src/` 和 `creative-agent/runtime/`。手机不上传这些资源。
 
 构建自动生成 `creation-resources.json`，按文件内容计算资源版本。清单覆盖字体原件及许可、Skill 正文和图示指纹、Scene 工具、渲染及 Harness。App 将资源版本放入任务设置；服务器验证本机资源指纹与任务版本相同才执行，并将版本保存进检查点和任务进度。缺字与损坏文件不通过改名或静默换字体掩盖。新任务需要当前发布资源，已运行任务在更新前完成。
 

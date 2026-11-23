@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCanvas,loadImage} from 'canvas';
-import {loadCreativeMaterialImages} from '../compute-server/harness/material-images.mjs';
+import {loadCreativeMaterialImages} from '../creative-agent/runtime/material-images.mjs';
 import {materialSourceSnapshot} from '../src/material-anatomy.js';
 import {creativePresetAssets} from '../src/creative-presets.js';
 

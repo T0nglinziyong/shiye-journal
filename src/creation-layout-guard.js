@@ -55,7 +55,6 @@ export function creationBoundaryIssues(document){
 export function creationMarginIssues(document){
   const {page,source}=document,scale=page.canvas.height/page.physicalPageHeightMM;
   const leafWidth=page.canvas.width/(page.pageMode==='spread'?2:1);
-  const kinds=new Map((source.sourceSnapshots||[]).map(item=>[item.assetID,item.kind]));
   const issues=[];
   const visit=nodes=>{
     for(const node of nodes||[]){
@@ -65,7 +64,7 @@ export function creationMarginIssues(document){
       const box=worldBox(page,node.id),angle=box.rotation*Math.PI/180;
       const width=Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h;
       const height=Math.abs(Math.sin(angle))*box.w+Math.abs(Math.cos(angle))*box.h;
-      if(node.type==='material'&&(kinds.get(node.assetID)==='paper'||width*height<leafWidth*page.canvas.height*.07))continue;
+      if(node.type==='material'&&width*height<leafWidth*page.canvas.height*.07)continue;
       const left=box.cx-width/2,right=box.cx+width/2,top=box.cy-height/2,bottom=box.cy+height/2;
       const leaf=Math.max(0,Math.min(page.pageMode==='spread'?1:0,Math.floor(box.cx/leafWidth)));
       const outerLeft=leaf===0?left:Infinity,outerRight=leaf===(page.pageMode==='spread'?1:0)?page.canvas.width-right:Infinity;

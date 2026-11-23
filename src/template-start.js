@@ -1,5 +1,5 @@
 import {attachSceneV2} from './scene-v2.js';
-import {materialSlots,rankTemplates,scoreTemplate,templateCatalog,templateManualEnabled} from './creation-library/matcher.js';
+import {materialSlots,rankTemplates,scoreTemplate,templateCatalog,templateManualEnabled} from '../creative-agent/library/matcher.js';
 
 const simpleTemplates=templateCatalog.templates.filter(templateManualEnabled);
 const paperOf=draft=>({width:draft.canvas.width/draft.canvas.height*draft.physicalPageHeightMM,
@@ -28,7 +28,7 @@ export async function applyManualTemplate(draft,assets,basket,templateID){
   const selected=basket.map(id=>assets.find(asset=>asset.id===id)).filter(Boolean);
   const paper=paperOf(draft),choice=scoreTemplate(template,selected,paper);
   const [{compileTemplate},{createCreationDocument},{applyCreationTransaction,creationSceneRevision}]=await Promise.all([
-    import('./creation-library/compiler.js'),import('./creation-document.js'),import('./creation-transaction.js')]);
+    import('../creative-agent/library/compiler.js'),import('./creation-document.js'),import('./creation-transaction.js')]);
   const document=await createCreationDocument({draft,assets:selected,
     aliases:Object.fromEntries(selected.map(asset=>[asset.id,asset.id]))});
   const compiled=compileTemplate({templateId:templateID,id:`manual-${draft.id}`,paper,

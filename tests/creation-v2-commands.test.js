@@ -109,6 +109,32 @@ test('split consumes the real parent and allocates its offcut',async()=>{
  attachSceneV2(next.page);assert.equal(next.page.items.some(n=>n.creativePieceID==='parent'),false);assert.equal(next.page.items.filter(n=>!n.isParked).length,2);assert.ok(next.page.items.some(n=>n.isParked));
  const ledger=buildMaterialLedger(next.page,assets);assert.equal(ledger.units[0].sourceAreaMM2,8000);assert.equal(ledger.units[0].remainingAreaMM2,0);assert.equal(ledger.units[0].allocations.filter(n=>!n.parked).length,2);
 });
+test('split can take authorized stock directly with explicit piece placement and the same physical ledger',async()=>{
+ const {doc,run,assets}=await setup();
+ const pieces=[{id:'upper',region:rect([0,0,1,.4]),place:{reference:'page',at:[45,35],unit:'mm'}},
+  {id:'lower',region:rect([0,.5,1,.5]),place:{reference:'page',at:[60,110],unit:'mm'}}];
+ const next=run([{op:'material.split',asset:'m1',pieces}]);
+ const explicit=run([add('stock'),{op:'material.split',target:'stock',pieces}]);
+ for(const piece of pieces)assert.deepEqual(worldBox(next.page,piece.id),worldBox(explicit.page,piece.id));
+ const ledger=buildMaterialLedger(next.page,assets);
+ assert.equal(ledger.units.length,1);
+ assert.equal(ledger.units[0].sourceAreaMM2,8000);
+ assert.equal(ledger.units[0].allocations.filter(n=>!n.parked).length,2);
+ assert.equal(next.page.layers.some(n=>n.creativePieceID?.startsWith('split-stock-')),false);
+ assert.equal(doc.page.layers.length,0,'atomic execution must not mutate the input');
+ assert.throws(()=>run([{op:'material.split',asset:'m1',pieces:[{...pieces[0],id:'again'}]}],next),/使用|占用|库存|剩余|重叠|取用|分配/);
+ assert.throws(()=>run([{op:'material.split',asset:'unauthorized',pieces}]),/素材别名不存在/);
+ assert.throws(()=>run([{op:'material.split',asset:'m1',pieces:[pieces[0],{...pieces[0],id:'overlap'}]}]),/重叠|区域/);
+});
+test('split requires exactly one source type and explicit placements for direct stock',()=>{
+ const piece={id:'a',region:rect([0,0,.5,1])};
+ for(const operation of [
+  {op:'material.split',asset:'m1',target:'paper',pieces:[{...piece,place:at}]},
+  {op:'material.split',pieces:[piece]},
+  {op:'material.split',asset:'m1',pieces:[piece]}
+ ])assert.throws(()=>validateCreationV2Commands(batch([operation])),/commands/);
+ assert.doesNotThrow(()=>validateCreationV2Commands(batch([{op:'material.split',target:'paper',pieces:[piece]}])));
+});
 test('split inside rotated group preserves the local frame and occupancy',async()=>{
  const {run,assets}=await setup();const next=run([{op:'group.compose',id:'paper-group',layoutBox:{width:120,height:120,unit:'mm'},place:{...at,rotationDeg:15},children:[add('parent',local),{op:'graphic.add',id:'mark',geometry:{kind:'ellipse'},size:{width:4,height:4,unit:'mm'},place:{...local,at:[.8,.8]}}]},
   {op:'material.split',target:'parent',pieces:[{id:'left',region:rect([0,0,.4,1])},{id:'right',region:rect([.5,0,.4,1])}]}]);

@@ -1,3 +1,4 @@
+import {validatePaperSurface} from './paper-surface.js';
 import {validateLettering} from './scene-lettering.js';
 import {validateGraphicEffects} from './graphic-effects.js';
 import {validateTextEffects} from './text-effects.js';
@@ -405,6 +406,7 @@ export function validateSceneExtensions(d){
          node.svgPaths.some(path=>typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d)))
          throw Error('矢量路径格式无效');
      }
+     validatePaperSurface(node);
      if(node.type==='shape'&&node.shapeOptions!==undefined)validateShapeOptions(node.kind,node.shapeOptions);
      if(node.type==='material'){
        if(typeof node.assetID!=='string'||!node.assetID)throw Error('缺少真实素材引用');

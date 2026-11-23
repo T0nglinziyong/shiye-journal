@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, test]
     paths:
+      - 'creative-agent/library/**'
       - 'src/**'
       - 'tests/*browser*.mjs'
       - 'tests/fixtures/**'
@@ -15,6 +16,7 @@ on:
   pull_request:
     branches: [main, test]
     paths:
+      - 'creative-agent/library/**'
       - 'src/**'
       - 'tests/*browser*.mjs'
       - 'tests/fixtures/**'

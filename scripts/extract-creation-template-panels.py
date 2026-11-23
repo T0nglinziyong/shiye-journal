@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('sources', type=Path)
 parser.add_argument('output', type=Path)
 args = parser.parse_args()
-catalog = json.loads((Path(__file__).resolve().parents[1] / 'src/creation-library/templates.json').read_text())
+catalog = json.loads((Path(__file__).resolve().parents[1] / 'creative-agent/library/templates.json').read_text())
 args.output.mkdir(parents=True, exist_ok=True)
 for template in catalog['templates']:
     panel = template['sourcePanel']

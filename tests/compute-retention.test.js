@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {COMPUTE_RETENTION_HOURS,computeObjectNames,sweepComputeJobs} from '../compute-server/retention.mjs';
-import {sweepCreativeArtifacts} from '../compute-server/harness/retention.mjs';
+import {sweepCreativeArtifacts} from '../creative-agent/runtime/retention.mjs';
 
 const id='11111111-1111-4111-8111-111111111111',user_id='2111845279800434690';
 const prefix=`${user_id}/compute/${id}/`;

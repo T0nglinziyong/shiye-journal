@@ -34,6 +34,6 @@ test('a later solid colour card warns when it covers a paragraph',()=>{
   {id:'body',type:'text',x:74,y:120,width:85,height:65,content:'这一段正文要留在纸面上，后放的卡纸不应遮住字。',fontSize:4},
   {id:'card',type:'shape',kind:'path',x:103,y:144,width:65,height:53,fill:'#EAB362'}
  ]};
- assert.ok(auditCreationDesign(p).observations.some(note=>note.includes('后放的实心纸层')));
- assert.ok(!auditCreationDesign({...p,layers:[...p.layers].reverse()}).observations.some(note=>note.includes('后放的实心纸层')));
+ assert.ok(auditCreationDesign(p).observations.some(note=>note.includes('后放的素材或实心图形')));
+ assert.ok(!auditCreationDesign({...p,layers:[...p.layers].reverse()}).observations.some(note=>note.includes('后放的素材或实心图形')));
 });

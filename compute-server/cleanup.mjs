@@ -1,5 +1,5 @@
 import {sweepComputeJobs} from './retention.mjs';
-import {sweepCreativeArtifacts} from './harness/retention.mjs';
+import {sweepCreativeArtifacts} from '../creative-agent/runtime/retention.mjs';
 
 const env=process.env;
 const apply=process.argv.slice(2).includes('--apply');

@@ -1,11 +1,15 @@
 // One set of bounded controls is shared by the editor, Scene and GPT commands.
 export const shapeOptionFields=Object.freeze({
+  paperPattern:{label:'纸面印纹',type:'string',enum:['plain','ruled','grid','dots'],labels:['素纸','横线纸','方格纸','点阵纸']},
+  grain:{label:'纸纹强度',type:'number',min:0,max:1},
+  translucency:{label:'透光程度',type:'number',min:0,max:.85},
+  torn:{label:'撕边',type:'boolean'},
   rows:{label:'行数',type:'integer',min:1,max:16},columns:{label:'列数',type:'integer',min:1,max:16},
   showOuterBorder:{label:'显示外边框',type:'boolean'},showInnerLines:{label:'显示内部线',type:'boolean'},
   showInnerBorder:{label:'显示内边框',type:'boolean'},
   showHeader:{label:'显示表头',type:'boolean'},showMarkers:{label:'显示打卡点',type:'boolean'},
   spacing:{label:'间距',type:'number',min:4,max:60},dotSize:{label:'点大小',type:'number',min:.5,max:8},
-  angle:{label:'倾斜角度',type:'number',min:-75,max:75},
+  angle:{label:'倾斜角度（0 横向、90 纵向）',type:'number',min:-90,max:90},
   depth:{label:'凹口／波幅',type:'number',min:.02,max:.35},
   count:{label:'重复数量',type:'integer',min:2,max:32},
   tailPosition:{label:'尾巴位置',type:'number',min:.15,max:.85},
@@ -21,6 +25,7 @@ export const shapeOptionFields=Object.freeze({
   lobes:{label:'每边花边数量',type:'integer',min:2,max:16},lobeDepth:{label:'花边深度',type:'number',min:.01,max:.08}
 });
 const fields={
+  paper:['paperPattern','grain','translucency','torn','rows','columns'],
   grid:['rows','columns','showOuterBorder'],dots:['rows','columns','dotSize','showOuterBorder'],
   stripes:['rows','columns','angle','showOuterBorder'],
   linedNote:['rows','showOuterBorder','showInnerLines'],
@@ -38,12 +43,12 @@ const fields={
   archFrame:['archRise','frameInset','showInnerBorder'],scallopFrame:['lobes','lobeDepth','frameInset','showInnerBorder'],
   filmFrame:['columns','count','frameInset']
 };
-const defaults={rows:5,columns:7,showOuterBorder:true,showInnerLines:true,showInnerBorder:true,
+const defaults={paperPattern:'plain',grain:.65,translucency:0,torn:false,rows:5,columns:7,showOuterBorder:true,showInnerLines:true,showInnerBorder:true,
   showHeader:true,showMarkers:true,spacing:18,dotSize:1.5,angle:45,
   depth:.12,count:8,tailPosition:.25,radius:.04,clipGap:.22,innerLength:.62,
   petals:6,petalDepth:.26,centerRadius:.09,showCenter:true,points:5,innerRatio:.2/.47,
   headLength:.35,shaftWidth:.3,archRise:.45,frameInset:.08,lobes:6,lobeDepth:.03};
-const overrides={grid:{rows:6,columns:8},dots:{rows:6,columns:8},stripes:{rows:6,columns:8},linedNote:{rows:6},weeklyTable:{rows:3},habitTracker:{rows:5},calendarTable:{rows:6},
+const overrides={paper:{rows:12,columns:10},grid:{rows:6,columns:8},dots:{rows:6,columns:8},stripes:{rows:6,columns:8},linedNote:{rows:6},weeklyTable:{rows:3},habitTracker:{rows:5},calendarTable:{rows:6},
   wave:{count:4},zigzag:{count:5},burst:{count:16,depth:.12},scallop:{count:10,depth:.04},
   postage:{count:18,depth:.055},postageFrame:{count:10,depth:.055},
   ticketFrame:{depth:.12,radius:.04},washi:{count:10,depth:.08},filmFrame:{columns:3,count:16,frameInset:.16}};
@@ -59,8 +64,13 @@ const labels={
   ticketFrame:{depth:'票根凹口',radius:'外角圆度'},
   filmFrame:{columns:'照片格数',count:'每边齿孔数',frameInset:'边带宽度比例'}
 };
+const patternKinds=new Set(['grid','dots','stripes']);
+function optionField(kind,key){
+ const field=shapeOptionFields[key];
+ return patternKinds.has(kind)&&['rows','columns'].includes(key)?{...field,max:128}:field;
+}
 export const advancedShapeOptionKinds=Object.freeze(Object.keys(fields));
-export function advancedShapeControls(kind){return (fields[kind]||[]).map(key=>({key,...shapeOptionFields[key],label:labels[kind]?.[key]||shapeOptionFields[key].label}));}
+export function advancedShapeControls(kind){return (fields[kind]||[]).map(key=>({key,...optionField(kind,key),label:labels[kind]?.[key]||shapeOptionFields[key].label}));}
 export function resolvedShapeOptions(kind,provided={}){
   const allowed=fields[kind];if(!allowed){if(provided&&Object.keys(provided).length)throw Error('该图形不支持高级参数');return {};}
   if(!provided||typeof provided!=='object'||Array.isArray(provided))throw Error('图形参数应为对象');
@@ -69,8 +79,10 @@ export function resolvedShapeOptions(kind,provided={}){
     // Former pattern spacing is accepted in saved scenes; repeat counts now
     // determine density so resizing cannot add dots or stripes either.
     if(!allowed.includes(key)&&!(['grid','dots','stripes'].includes(kind)&&key==='spacing'))throw Error('该图形不支持参数：'+key);
-    const field=shapeOptionFields[key];
-    if(field.type==='boolean'){
+    const field=optionField(kind,key);
+    if(field.type==='string'){
+      if(!field.enum.includes(value))throw Error('图形参数选项无效：'+key);
+    }else if(field.type==='boolean'){
       if(typeof value!=='boolean')throw Error('图形参数需为布尔值：'+key);
     }else if(!Number.isFinite(value)||value<field.min||value>field.max||field.type==='integer'&&!Number.isInteger(value))throw Error('图形参数超出范围：'+key);
     result[key]=value;
@@ -108,5 +120,12 @@ export function shapeRepeatCountPatch(shape,key,count){
   return {shapeOptions:next,[dimension]:shape[dimension]*count/oldCount};
 }
 export const shapeOptionsJSONSchema={type:'object',additionalProperties:false,properties:Object.fromEntries(
-  Object.entries(shapeOptionFields).map(([key,field])=>[key,field.type==='boolean'?{type:'boolean',description:field.label}:
-    {type:field.type,minimum:field.min,maximum:field.max,description:field.label}]))};
+  Object.entries(shapeOptionFields).map(([key,field])=>[key,field.type==='string'?{type:'string',enum:field.enum,description:field.label}:field.type==='boolean'?{type:'boolean',description:field.label}:
+    {type:field.type,minimum:field.min,maximum:['rows','columns'].includes(key)?128:field.max,description:field.label+(['rows','columns'].includes(key)?'（grid/dots/stripes 1–128，其他类型 1–16）':'')}]))};
+
+// Public command options are specific to their geometry, not a bag of every
+// preset's fields. The same controls drive editor limits and execution.
+export function shapeOptionsSchemaForKind(kind){
+ return {type:'object',additionalProperties:false,properties:Object.fromEntries(
+  advancedShapeControls(kind).map(({key,type,min,max,label,enum:values})=>[key,type==='string'?{type,enum:values,description:label}:type==='boolean'?{type,description:label}:{type,minimum:min,maximum:max,description:label}]))};
+}

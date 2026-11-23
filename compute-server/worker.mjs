@@ -9,7 +9,7 @@ import {boundedMap} from '../src/bounded-map.js';
 import {SamDaemonClient} from './sam-daemon-client.mjs';
 import {OrientationDaemonClient} from './orientation-daemon-client.mjs';
 import {createJobLanePool} from './job-lane-pool.mjs';
-import {createCreativeWorker} from './harness/worker.mjs';
+import {createCreativeWorker} from '../creative-agent/runtime/worker.mjs';
 
 const env=process.env;
 const required=['SHIYE_CLOUDBASE_ENV_ID','SHIYE_CLOUDBASE_SERVICE_KEY',

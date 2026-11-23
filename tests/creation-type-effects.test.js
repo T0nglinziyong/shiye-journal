@@ -137,7 +137,8 @@ test('design audit points out a large material frame with no added writing',asyn
  assert.equal(withWriting.visualReviewPerformed,false);
  const smallCaption=run([material,{...text,style:{...text.style,fontSizePt:12}}]);
  const printed=auditCreationDesign(smallCaption.page,{materials:[{alias:'m1',assetID:'paper',journalRoles:['headline']}],styles:['丰富层叠']});
- assert.ok(printed.observations.some(line=>line.includes('印刷标题框')));
+ const unlabelled=auditCreationDesign(smallCaption.page,{materials:[{alias:'m1',assetID:'paper'}],styles:['丰富层叠']});
+ assert.deepEqual(printed.observations,unlabelled.observations);
 });
 test('rich composition preview identifies a limited graphic vocabulary without claiming visual failure',async()=>{
  const {run}=await fixture();

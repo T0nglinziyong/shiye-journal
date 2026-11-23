@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {templateCatalog,rankTemplates,templateMarginalScores} from '../src/creation-library/matcher.js';
-import {templateDetails,compileLibraryRecipe} from '../compute-server/harness/library.mjs';
-import {exampleMaterials} from '../src/creation-library/examples.js';
-import {templateFixture,isMaterialSlot} from '../src/creation-library/template-elements.js';
-import {compileTemplate} from '../src/creation-library/compiler.js';
+import {templateCatalog,rankTemplates,templateMarginalScores} from '../creative-agent/library/matcher.js';
+import {templateDetails,compileLibraryRecipe} from '../creative-agent/runtime/library.mjs';
+import {exampleMaterials} from '../creative-agent/library/examples.js';
+import {templateFixture,isMaterialSlot} from '../creative-agent/library/template-elements.js';
+import {compileTemplate} from '../creative-agent/library/compiler.js';
 test('deferred templates cannot reappear in matching or material marginal recommendations',()=>{
  const template=templateCatalog.templates.find(t=>t.id==='ac-26');assert.equal(template.usage.status,'deferred');
  assert.deepEqual(rankTemplates({materials:exampleMaterials,templates:[template]}),[]);

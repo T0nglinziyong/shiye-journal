@@ -14,7 +14,7 @@ export async function creationResources(root=resourceRoot){
    else if(/\.(?:js|jsx|mjs|md|json|ttf|otf|woff2|txt|png)$/.test(path))files.push(path);
   }
  }
- for(const dir of ['creation-skills','compute-server','src'])await walk(dir);
+ for(const dir of ['creative-agent/runtime','creative-agent/skills','creative-agent/library','compute-server','src'])await walk(dir);
  files.push('package-lock.json','scripts/creation-resources.mjs','scripts/build-offline-runtime.mjs');
  const fontManifest=JSON.parse(await readFile(resolve(root,'src/assets/fonts/manifest.json'),'utf8'));
  for(const font of fontManifest.fonts)for(const item of font.files){

@@ -2,6 +2,8 @@
 
 拾页是一个面向真实纸质手帐素材的 PWA。日常功能只维护**现行数据结构、现行 AI 合同和现行任务包格式**，不在读写、导入或创作路径中兼容历史 Swift / CeCe / 旧 ZIP / 旧字段。底层数据格式变更时，用户可主动使用独立的“转换旧数据格式”入口；该工具先扫描并备份，再把已登记且可验证的旧记录转换成当前格式，不改变日常路径的格式要求。
 
+代码从 [项目目录说明](docs/README.md) 查找；后台创作的运行时、Skill 和方法库集中在 [creative-agent](creative-agent/README.md)。
+
 ## 开发与发布分支
 
 正式开发规则见 [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)。长期只维护两个发布分支：
@@ -19,7 +21,7 @@
 - 系列封面：自动按数量选择扇形、最多九件的整齐排列或分散叠放；设置中可指定未单独配置系列的默认排版，也可为某个系列手动指定排版和封面素材。
 - 搭配：可折叠的本页画布与素材架、视觉风格 / 画面疏密 / 文字内容 / 页面用途、单页 / 双页与纸张比例。手动创作按素材尺寸与纸张比例推荐已解析模板，先预览素材落位及空位，再进入可编辑画布。
 - 编辑器：真实尺寸素材、文字、图形、笔迹、纸张、撤销重做、备选栏、图层、PNG / PDF、自动保存。
-- AI 创作：计算服务器运行 DeepSeek Flash 思考模式与 LangGraph 工具循环，按定方向、打底构图、装饰书写、迭代审查四阶段创作。阶段相关的 Skill 方法按需提供，阶段结束核对计划或最新真实画面；每次修改后自动渲染，可直接继续调整。稳定素材编号图、纸面和多个试摆空间、按需细看、原子编辑与撤回及 SAM 裁剪都由服务器管理。有多个合理方向时可并行生成独立草稿。模型只接收新变化的空间图，未变化预览保留指纹与结构状态；手机负责提交、预览与编辑，关闭页面后后台继续。真实尺寸与来源由原子 Scene 事务校验，后续人工修改保留为独立原稿。详见 [后台创作 Harness](docs/CREATIVE_HARNESS.md)。
+- AI 创作：计算服务器运行默认开启思考的 DeepSeek Flash；新任务统一使用 LangGraph 单 Agent 运行时。方向、打底构图、标题正文、装饰点缀、看图迭代是可回退的工作思路，不限制每轮可用工具。Skill 方法按需读取；每次修改后自动渲染，模型依真实画面继续调整。素材标签可提示写作话题，但不排除彩纸、形状或装饰方法，也不决定案例排序和审查结论。稳定素材编号图、纸面和试摆空间、按需细看、原子编辑与撤回及 SAM 裁剪都由服务器管理。手机负责提交、预览与编辑，关闭页面后后台继续。真实尺寸与来源由原子 Scene 事务校验，后续人工修改保留为独立原稿。详见 [后台创作 Harness](docs/CREATIVE_HARNESS.md)。
 - 数据：CloudBase Auth 与 PostgreSQL 保存账号和元数据，CloudBase 云存储保存模板、私有图片及作品文件；浏览器 IndexedDB 缓存已验证的账号资料并可靠暂存待同步修改。连接失败不会切换到另一份资料库。
 
 新账号首次进入时，素材库、系列和作品均为空；App 不再自动写入演示素材或示例作品。旧账号已经保存的记录不会因这一变更被删除。
@@ -55,7 +57,7 @@ node runtime/shiye.cjs review --result pass
 node runtime/shiye.cjs pack
 ```
 
-对外只接受统一 commands 协议 2。30 项当前操作共享 `place/size/style/region/order` 中适用的参数。图形和绘画只用 `graphic.add`，创建和更新共享 geometry/place/size/style/order；点缀是构图作用，不是独立命令。旧 `native.*` 注册表和协议 1 执行适配器已删除；弯曲文字、字形镂空、复杂胶带、轮廓、关系、盖印和复用均直接使用统一参数，不再要求 raw `set/plan`。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
+对外只接受统一 commands 协议 2。35 项当前操作共享 `place/size/style/region/order` 中适用的参数。图形和绘画只用 `graphic.add`，创建和更新共享 geometry/place/size/style/order；点缀是构图作用，不是独立命令。旧 `native.*` 注册表和协议 1 执行适配器已删除；弯曲文字、字形镂空、复杂胶带、轮廓、关系、盖印和复用均直接使用统一参数，不再要求 raw `set/plan`。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
 
 `help`、`describe`、公共参数、示例和 Schema 从实际运行时注册表生成。`begin` 建立新事务，不覆盖已有草稿；`check` 与 `preview --commands work/next.json` 不修改正式 Scene。固定配方只含操作片段，不含过期 revision。字号使用 `style.fontSizePt`，位置使用 `place`；创建与更新共用 `creation-node-update` 和 `scene-text-layout`；持久最小高度和相对行高在 Scene 中保存，先重排，再定位和求解 linked。默认帮助只给摘要，完整 Schema 需要 `--full`。
 
@@ -65,7 +67,7 @@ node runtime/shiye.cjs pack
 
 最新示例用 `node scripts/generate-v3-unified-example.mjs` 在构建后生成，或下载对应提交的 Craft browser CI artifact 中 `creation-package`。历史示例不代表当前协议。完整边界见 [接入状态](docs/creation-integration-status.md)、[能力映射](docs/creation-command-migration.md) 和 [生成物规则](docs/creation-build-artifacts.md)。
 
-导出包不含登录令牌。任务原文、来源和纸张物理规格只读；真实裁片、余料、开窗、穿插沿用 Scene v2 材料校验。精确 visible 轮廓锚点、自定义 region: 布局区域和持续自动排列尚未发布，不能用静默近似代替。
+导出包不含登录令牌。任务原文、来源和纸张物理规格只读；真实裁片、余料、开窗、穿插沿用 Scene v2 材料校验。近似四边形素材可用 `layout.alignEdge` 对齐实际可见纸边；复杂曲线的精确轮廓锚点、自定义 region: 布局区域和持续自动排列尚未发布，不能用静默近似代替。
 
 ## AI 素材工艺
 

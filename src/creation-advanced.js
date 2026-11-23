@@ -23,13 +23,13 @@ export function applyCreationAdvanced(doc,item,assets,context){
   const w=dimension(doc.page,item.size,'width',parent),h=dimension(doc.page,item.size,'height',parent),{minFontSizePt:min,maxFontSizePt:max}=item.fit;
   if(min>max)throw Error('最小字号不能大于最大字号');
   const fits=pt=>{try{
-   const candidate={...target,...changedNodeProperties(doc.page,target,{size:{width:w,unit:'mm'},style:{fontSizePt:pt}},parent)};
-   const metrics=measureSceneText(candidate);return metrics.height<=h*s+1e-7&&metrics.width<=w*s+1e-7;
+   const candidate={...target,...changedNodeProperties(doc.page,target,{size:{width:w,unit:'mm'},style:{...item.style,fontSizePt:pt}},parent)};
+   const metrics=measureSceneText(candidate,context.measureText?text=>context.measureText(candidate,text):undefined);return metrics.height<=h*s+1e-7&&metrics.width<=w*s+1e-7&&(item.fit.maxLines===undefined||metrics.lines.length<=item.fit.maxLines);
   }catch(error){if(/曲线文字超出/.test(error.message))return false;throw error;}};
   if(!fits(min))throw Error('在最小字号下仍放不下全部文字；请扩大区域，不截字');
   let lo=min,hi=max;for(let k=0;k<24;k++){const mid=(lo+hi)/2;if(fits(mid))lo=mid;else hi=mid;}
   const pt=fits(max)?max:Math.max(min,Math.floor(lo*10000)/10000);
-  return finishNode(doc,item.target,{size:{width:w,height:h,unit:'mm'},style:{fontSizePt:pt},place:item.place,order:item.order},assets);
+  return finishNode(doc,item.target,{size:{width:w,height:h,unit:'mm'},style:{...item.style,fontSizePt:pt},place:item.place,order:item.order},assets);
  }
  if(item.op==='material.contour'){
   if(target.type!=='material'||target.tapeStrip)throw Error('轮廓加工需要普通实体素材');
@@ -90,8 +90,11 @@ export function applyCreationAdvanced(doc,item,assets,context){
 }
 function alignNodes(doc,item){
  const ids=item.targets.map(id=>creationNode(doc,id).id);if(new Set(ids).size!==ids.length)throw Error('对齐对象不能重复');
+ if(ids.length===1&&!item.reference)throw Error('单个对象对齐须指定 reference');
+ if(ids.length<2&&item.align==='distribute')throw Error('等距分布须至少两个对象');
  const paths=ids.map(id=>spatialPath(doc.page.layers,id)),parent=paths[0].ancestors.at(-1)?.id||null;
- if(paths.some(path=>(path.ancestors.at(-1)?.id||null)!==parent))throw Error('对齐需要同级节点');
+ if(paths.some(path=>path.ancestors.some(node=>ids.includes(node.id))))throw Error('不能同时对齐组合及其子节点');
+ if(item.reference==='parent'&&paths.some(path=>(path.ancestors.at(-1)?.id||null)!==parent))throw Error('跨组对齐不能使用 parent 作为参照；请指定页面或节点');
  const boxes=ids.map(id=>worldBox(doc.page,id)),axis=item.axis,ref=item.reference?creationReferenceBox(doc.page,item.reference,parent):null;
  if(item.reference?.startsWith('node:')&&ids.includes(item.reference.slice(5)))throw Error('对齐参照不能被同时移动');
  const angle=ref?.rotation||0,a=angle*Math.PI/180,c=Math.cos(a),sn=Math.sin(a);

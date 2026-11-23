@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main, test]
     paths:
+      - 'creative-agent/library/**'
       - 'src/craft-*.js'
       - 'src/material-*.js'
       - 'src/creative*.js'

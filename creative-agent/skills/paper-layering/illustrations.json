@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "subject-layering",
+      "file": "subject-layering.png",
+      "caption": "主体保持完整，背景块从边缘露出，短字条、空心形状和小标记建立次级节奏。不要复制固定坐标或数量。",
+      "author": "小熊日记",
+      "title": "拼贴思路分享｜6.0",
+      "sourceURL": "https://www.xiaohongshu.com/explore/694be9a2000000001f00b3e2",
+      "observation": "正文与全部8张图，2026-11-20",
+      "sha256": "19b423889ac62ce1681d416e78f6e7ed28e4593ada043a96e6413718988b753d",
+      "reviewed": true
+    },
+    {
+      "id": "layered-blue-page",
+      "file": "layered-blue-page.png",
+      "sourceURL": "https://www.xiaohongshu.com/explore/6a89586600000000380026fc",
+      "author": "Iveyyyy",
+      "title": "一期超详细的手帐拼贴思路分享",
+      "observation": "人工观察原图后选定纸页边界；外部道具不作为构图元素；透视校正比例由边长估计，不代表实物毫米尺寸。",
+      "caption": "左页叠纸、圆题签与正文相接；去除桌面饮料、笔和印章等摄影道具。",
+      "quad": [
+        [
+          110,
+          413
+        ],
+        [
+          486,
+          421
+        ],
+        [
+          616,
+          1202
+        ],
+        [
+          182,
+          1282
+        ]
+      ],
+      "sourceSHA256": "86e3420882782cb753921ce0f28ab3767b116732a9763e9849abb63093f9884c",
+      "sourceSize": [
+        1080,
+        1440
+      ],
+      "quadPixels": [
+        [
+          110,
+          413
+        ],
+        [
+          486,
+          421
+        ],
+        [
+          616,
+          1202
+        ],
+        [
+          182,
+          1282
+        ]
+      ],
+      "rectifiedSize": [
+        409,
+        832
+      ],
+      "outputToSourceHomography": [
+        1.0334364259297282,
+        0.05101163917489908,
+        110.0,
+        0.11841782498925388,
+        0.7942217787357855,
+        413.0,
+        0.00023481691873815917,
+        -0.00019520232067891463
+      ],
+      "aspectBasis": "estimated from observed edges",
+      "rotateClockwise": 0,
+      "outputSize": [
+        409,
+        832
+      ],
+      "reviewed": true,
+      "sha256": "0936dc55e3ba5885ccc357f59858b7a4fc8469fb6e7d469f2cc5faac58e13322",
+      "reviewNotes": "已人工核对裁切；只作方法研究，不用于量取实物尺寸。"
+    }
+  ]
+}

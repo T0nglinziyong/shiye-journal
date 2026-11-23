@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {paperPresets} from './paper-sizes.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
-import {isTextSlot,resolveTemplateStyle,templatePalette} from './creation-library/template-elements.js';
+import {isTextSlot,resolveTemplateStyle,templatePalette} from '../creative-agent/library/template-elements.js';
 
 const dialogStack=[];
 const isolatedNodes=new Map();

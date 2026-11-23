@@ -5,12 +5,12 @@ import {loadOfflineCanvas,renderOfflinePNG} from '../src/offline-node-preview.mj
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
-import {templateCatalog} from '../src/creation-library/matcher.js';
-import {techniqueCatalog,compileTechnique} from '../src/creation-library/techniques.js';
-import {compileTemplate} from '../src/creation-library/compiler.js';
-import {templateFixture,resolveTemplateStyle} from '../src/creation-library/template-elements.js';
-import {exampleMaterials,techniqueExample} from '../src/creation-library/examples.js';
-const root=resolve(import.meta.dirname,'../src/creation-library/illustrations');await mkdir(root,{recursive:true});
+import {templateCatalog} from '../creative-agent/library/matcher.js';
+import {techniqueCatalog,compileTechnique} from '../creative-agent/library/techniques.js';
+import {compileTemplate} from '../creative-agent/library/compiler.js';
+import {templateFixture,resolveTemplateStyle} from '../creative-agent/library/template-elements.js';
+import {exampleMaterials,techniqueExample} from '../creative-agent/library/examples.js';
+const root=resolve(import.meta.dirname,'../creative-agent/library/illustrations');await mkdir(root,{recursive:true});
 const previous=JSON.parse(await readFile(resolve(root,'manifest.json'),'utf8').catch(()=>'{}'));
 const canvas=await loadOfflineCanvas(),manifest={version:1,images:[]};
 async function save(id,image,kind){const bytes=image.toBuffer('image/png');await writeFile(resolve(root,id+'.png'),bytes);manifest.images.push({id,file:id+'.png',kind,sha256:createHash('sha256').update(bytes).digest('hex'),width:image.width,height:image.height});}
@@ -69,7 +69,6 @@ for(const method of techniqueCatalog.methods){
  if(!method.illustration)continue;
  const {before,parameters}=techniqueExample(method),compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
  const previewPage=draft({ratio:'a5'});
- if(method.id==='title-outline-block-ring')previewPage.paperColor='#20272B';
  const doc=await createCreationDocument({draft:previewPage,assets:exampleMaterials,aliases:Object.fromEntries(exampleMaterials.map(a=>[a.alias,a.id]))});
  const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'illustration-'+method.id,baseSceneRevision:creationSceneRevision(doc),operations:[...before,...compiled.operations]},exampleMaterials).document;
  const {png}=await renderOfflinePNG(done.page,done.source,images,canvas),im=await canvas.loadImage(png),full=canvas.createCanvas(im.width,im.height),ctx=full.getContext('2d');ctx.drawImage(im,0,0);

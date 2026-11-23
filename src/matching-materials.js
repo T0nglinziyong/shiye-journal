@@ -1,4 +1,4 @@
-import {templateMarginalScores} from './creation-library/matcher.js';
+import {templateMarginalScores} from '../creative-agent/library/matcher.js';
 import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 import {classifyJournalMaterial,relevantJournalFamilies} from './journal-case-study.js';
 const purposeKinds={

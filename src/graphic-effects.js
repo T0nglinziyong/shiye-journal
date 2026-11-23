@@ -21,7 +21,7 @@ function gradientMarkup(node,box){
  const dx=c*span/2/node.width*w,dy=s*span/2/node.height*h;
  return `<defs><linearGradient id="${graphicGradientID(node)}" gradientUnits="userSpaceOnUse" x1="${x+w/2-dx}" y1="${y+h/2-dy}" x2="${x+w/2+dx}" y2="${y+h/2+dy}">${g.stops.map(stop=>`<stop offset="${stop.offset}" stop-color="${stop.color}"/>`).join('')}</linearGradient></defs>`;
 }
-export function withGraphicEffects(svg,node,{strokeBody=false}={}){
+export function withGraphicEffects(svg,node,{strokeBody=false,outlineSVG=null}={}){
  validateGraphicEffects(node);if(!hasGraphicEffects(node))return svg;
  const m=svg.match(/viewBox="([^"]+)"/);if(!m)throw Error('图形缺少矢量边界');
  const box=m[1].split(/\s+/).map(Number),[x,y,w,h]=box,f=graphicPaintFrame(node);
@@ -35,7 +35,8 @@ export function withGraphicEffects(svg,node,{strokeBody=false}={}){
  let outline='';
  if(node.graphicOutline){
   const o=node.graphicOutline;
-  const traced=inner.replace(/<defs>[\s\S]*?<\/defs>/g,'').replace(/<(path|rect|ellipse|circle|line|polyline|polygon)\b([^>]*?)(\/?)>/g,(_all,tag,attrs)=>{
+  const outlineInner=outlineSVG?outlineSVG.replace(/^<svg\b[^>]*>/,'').replace(/<\/svg>$/,''):inner;
+  const traced=outlineInner.replace(/<defs>[\s\S]*?<\/defs>/g,'').replace(/<(path|rect|ellipse|circle|line|polyline|polygon)\b([^>]*?)(\/?)>/g,(_all,tag,attrs)=>{
    const stroke=attrs.match(/\bstroke="([^"]*)"/)?.[1];
    const originalWidth=strokeBody&&stroke&&stroke!=='none'?Number(attrs.match(/\bstroke-width="([^"]*)"/)?.[1]||0):0;
    const baked=physicalSVGElement(tag,attrs,{sx:node.width/w,sy:node.height/h,tx:-x*node.width/w,ty:-y*node.height/h});

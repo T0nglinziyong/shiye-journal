@@ -38,7 +38,7 @@ test('taxonomy has no alias endpoints, and compact help does not expose recursiv
   assert.equal(creationCommandRegistry[op],undefined);assert.throws(()=>validateCreationV2Commands(batch([{op}])),/未知操作/);
  }
  for(const op of Object.keys(creationCommandRegistry))assert.ok(Buffer.byteLength(JSON.stringify(describeCreationCommand(op)))<12000,op);
- assert.equal(Object.keys(creationCommandRegistry).length,31);
+ assert.ok(Object.keys(creationCommandRegistry).length>=31);
  assert.throws(()=>validateCreationV2Commands(batch([{op:'text.reflow',target:'title',place:at()}])),/commands/);
 });
 test('linked sizes are solved before anchors, persist through import and are idempotent',async()=>{

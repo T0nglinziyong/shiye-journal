@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
-import {applyBackgroundCreativeResult,createBackgroundCreationSession} from '../src/background-creation-session.js';
+import {applyBackgroundCreativeResult,createBackgroundCreationSession,creativeJobProgress} from '../src/background-creation-session.js';
 
 async function fixture(){
   const d=draft(),project={id:'project',title:'测试',activeDraftID:d.id,drafts:[d]};
@@ -45,4 +45,23 @@ for(const phase of ['prepare','submit'])test('stopping during '+phase+' cancels 
   const session=createBackgroundCreationSession({getAccount:()=> 'account',getAssets:()=>[],getProject:async()=>f.project,persist:async()=>{},createImage:async()=>{},api,watch:()=>{observed=true;}});
   await assert.rejects(session.generate({project:f.project,draft:f.project.drafts[0],assets:[],ids:[],prompt:'测试',signal:controller.signal}),/停止/);
   assert.equal(cancels,1);assert.equal(observed,false);
+});
+
+test('background creation sends selected materials as candidates rather than forcing every one onto the page',async()=>{
+  const f=await fixture(),asset={id:'selected-paper',title:'星纹纸',kind:'paper',physicalWidthMM:34,physicalHeightMM:48,supply:{quantity:1}};
+  f.project.requiredAssetIDs=[asset.id];f.project.materialPriority={required:[asset.id],preferred:[],available:[]};
+  let sent;const controller=new AbortController();
+  const api={prepare:async({document})=>{sent=document;controller.abort(Error('stopped after inspection'));return {id:f.job.id};},cancel:async()=>{}};
+  const session=createBackgroundCreationSession({getAccount:()=> 'account',getAssets:()=>[asset],getProject:async()=>f.project,persist:async()=>{},api,watch:()=>{throw Error('should not observe');}});
+  await assert.rejects(session.generate({project:f.project,draft:f.project.drafts[0],assets:[asset],ids:[asset.id],prompt:'自主选择素材',signal:controller.signal}),/stopped after inspection/);
+  assert.deepEqual(sent.source.requiredAssetIDs,[]);
+  assert.deepEqual(sent.source.materialPriority.preferred,[asset.id]);
+});
+
+
+test('running progress shows cumulative reported input/output tokens and restores completed turns',()=>{
+ assert.equal(creativeJobProgress({status:'running',progress:{stage:'thinking',turn:4,inputTokens:12345,outputTokens:678}}),'正在构思与编辑 · 第 4 轮 · 累计 13,023 token（输入 12,345 / 输出 678）');
+ assert.match(creativeJobProgress({status:'completed',progress:{turns:5,inputTokens:20,outputTokens:10}}),/第 5 轮.*累计 30 token/);
+ assert.doesNotMatch(creativeJobProgress({status:'running',progress:{turn:1}}),/token/);
+ assert.doesNotMatch(creativeJobProgress({status:'running',progress:{inputTokens:-1,outputTokens:3}}),/token/);
 });

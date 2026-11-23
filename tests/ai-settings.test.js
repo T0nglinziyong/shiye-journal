@@ -32,7 +32,7 @@ test('invalid current settings normalize to bounded defaults',()=>{
   assert.equal(normalizeAISettings({textMode:'rich'}).textMode,'rich');
   assert.equal('sendPresetReferences' in AI_DEFAULTS,false);
   assert.equal(AI_DEFAULTS.autoIncludeRecommendations,false);
-  assert.equal(AI_DEFAULTS.requireAllCandidates,true);
+  assert.equal(AI_DEFAULTS.requireAllCandidates,false);
   assert.equal(normalizeAISettings({requireAllCandidates:false}).requireAllCandidates,false);
   assert.equal('referencePage' in defaults,false);
   assert.equal('imageCount' in normalizeAISettings({imageCount:1}),false);

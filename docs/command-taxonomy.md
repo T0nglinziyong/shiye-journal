@@ -2,20 +2,22 @@
 
 ## 原则与范围
 
-共享字段与类型，不混淆语义。不是把所有操作塞进一个巨大 update，也不为同一行为保留多个名字。当前创作包公开 **30** 个操作；运行时管理工具仍单独计数。已有 Scene 的 shape/ink/text/material/group 不替换、不栅格化；新字段是可选数据。旧命令事务明确拒绝，使用新包须重新导出。
+共享字段与类型，不混淆语义。不是把所有操作塞进一个巨大 update，也不为同一行为保留多个名字。当前创作包公开 **35** 个操作，`creation_help` 按六个意图分类展示；运行时管理工具仍单独计数。已有 Scene 的 shape/ink/text/material/group 不替换、不栅格化；新字段是可选数据。旧命令事务明确拒绝，使用新包须重新导出。
 
 | 分类 | 当前边界 |
 |---|---|
 | 创建 | material.add、text.add、graphic.add；三种核心内容 |
 | 普通修改 | layer.update：content/geometry/style/size/place/order 等已存在节点属性 |
-| 结构 | layer.reparent/delete/duplicate、group.*；不把任意子树或来源字段塞进 update |
+| 结构 | layer.stack/reparent/delete/duplicate、group.*；`layer.stack` 可跨组改变前后关系并保持世界位置，不把任意子树或来源字段塞进 update |
 | 艺术标题 | text.lettering 创建、text.reflow 改正文/字位/字距；会增删子节点，所以不是 update 别名 |
 | 非破坏性显示 | layer.mask：replace/intersect/subtract/clear；包括实体素材，但绝不释放材料 |
 | 真实裁切 | material.cut：region+keep/remove；命名孔洞、多个独立裁片继续使用 window/split |
 | 专业工艺 | tape/edge/contour/weave/glyphKnockout/replace/restore/relate 保留实际来源语义 |
-| 布局/纸张 | layout.arrange/align/detach 与 page.update；material.decision 仍是取舍记录 |
+| 布局/纸张 | layout.arrange/align/matchRotation/alignEdge/nudge/detach 与 page.update；material.decision 仍是取舍记录 |
 
 移除：text.update、layer.place、layer.reorder、material.mask、material.crop/trim/diagonal、layer.repeat、layout.reuse。无兼容别名或旧命令转译器。普通更新始终共用同一 Scene 属性、布局、权限与事务内核。
+
+`creation_inspect` 给出从后到前的图层树、每个对象的世界坐标和同级层序。`layout.matchRotation` 对齐参照对象的画面角度，`layout.nudge` 用毫米和角度微调，`layout.align` 支持跨组或单目标对参照对象的框对齐。`layout.alignEdge` 则使用裁切轮廓或透明图像验证过的近似四边形可见边；无可靠轮廓时要求创作者提供观察到的四角，不能把透明外框当作纸边。两个参照角度命令都用 `offsetDeg` 表示相对参照的额外角度；`layout.nudge.rotationDeg` 表示在当前角度上增加的角度。`group.create` 可以从不同父组选取对象并保持世界位置。所有这些命令仍经过同一事务、锁定、素材来源与尺寸校验。
 
 ## 裁切与显示
 

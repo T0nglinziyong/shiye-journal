@@ -5,7 +5,7 @@ import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 import {loadOfflineCanvas,renderOfflinePNG} from '../src/offline-node-preview.mjs';
-import {compileTechnique} from '../src/creation-library/techniques.js';
+import {compileTechnique} from '../creative-agent/library/techniques.js';
 
 const [configFile,outDir]=process.argv.slice(2);
 if(!configFile||!outDir)throw Error('用法：node scripts/render-creation-techniques-real.mjs <私有配置.json> <输出目录>');

@@ -1099,7 +1099,7 @@ function updateEditorInspector(id,value){
       const option=id.slice('inspector-shape-option-'.length);
       const control=advancedShapeControls(entry.value.kind).find(item=>item.key===option);
       if(!control)return;
-      const next=control.type==='boolean'?value:Number(value);
+      const next=['boolean','string'].includes(control.type)?value:Number(value);
       if(['rows','columns','count'].includes(option))Object.assign(values,shapeRepeatCountPatch(entry.value,option,next));
       else values.shapeOptions={...entry.value.shapeOptions,[option]:next};
       validateShapeOptions(entry.value.kind,values.shapeOptions);changed=true;

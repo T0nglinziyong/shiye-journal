@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileTechnique} from '../src/creation-library/techniques.js';
-import {exampleMaterials} from '../src/creation-library/examples.js';
+import {compileTechnique} from '../creative-agent/library/techniques.js';
+import {exampleMaterials} from '../creative-agent/library/examples.js';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
-const compile=p=>compileTechnique({methodId:'accent-rings',parameters:{id:'marks',widthMm:100,heightMm:100,motifSizeMm:10,clearanceMm:2,...p}});
+const compile=p=>compileTechnique({methodId:'accent-spark',parameters:{id:'marks',variant:'rings',widthMm:100,heightMm:100,motifSizeMm:10,clearanceMm:2,...p}});
 test('accents omit protected, overlapping and out-of-bounds elements deterministically',()=>{
  const args={positions:[[.5,.5],[.51,.5],[.2,.2],[0,0],[.8,.8]],protectedBoxes:[[.15,.15,.1,.1]]};
  const result=compile(args);
@@ -32,6 +32,6 @@ test('invalid accent inputs cannot silently generate decorative noise or consume
 });
 
 test('default edge placement accounts for actual motif extents instead of losing edge leaves',()=>{
- const r=compileTechnique({methodId:'accent-sprig',parameters:{id:'leaves'}});
+ const r=compileTechnique({methodId:'accent-spark',parameters:{id:'leaves',variant:'sprig'}});
  assert.equal(r.operations[0].children.length,2);assert.deepEqual(r.report.skipped,[]);
 });

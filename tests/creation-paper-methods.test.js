@@ -4,12 +4,12 @@ import {createCanvas} from 'canvas';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
-import {compileTechnique,describeTechnique,techniqueCatalog} from '../src/creation-library/techniques.js';
-import {exampleMaterials,techniqueExample} from '../src/creation-library/examples.js';
+import {compileTechnique,describeTechnique,techniqueCatalog} from '../creative-agent/library/techniques.js';
+import {exampleMaterials,techniqueExample} from '../creative-agent/library/examples.js';
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {renderSceneCanvas} from '../src/scene-renderer.js';
 import {materialMaskGeometry} from '../src/material-mask.js';
-import {paperCardPath} from '../src/creation-library/paper-card.js';
+import {paperCardPath} from '../creative-agent/library/paper-card.js';
 
 const make=()=>createCreationDocument({draft:draft({ratio:'a5'}),assets:exampleMaterials,aliases:Object.fromEntries(exampleMaterials.map(a=>[a.alias,a.id]))});
 let transaction=0;
@@ -39,14 +39,14 @@ test('editable colour paper keeps punched holes and torn edges in one vector',as
 });
 
 test('window core is visible, moved with cropped physical dimensions and conserved without a second source',async()=>{
- const e=example('paper-window-reuse'),c=compileTechnique({methodId:'paper-window-reuse',parameters:e.parameters});
+ const detail=describeTechnique('paper-window',{variant:'reuse-core'}),e={before:detail.example.prepare,parameters:detail.tool.arguments.parameters},c=compileTechnique({methodId:'paper-window',parameters:e.parameters});
  const doc=run(await make(),[...e.before,...c.operations]),core=node(doc,c.report.retainedNode),frame=node(doc,c.report.output);
  assert.equal(core.hidden,false);assert.equal(frame.craftWindowIDs.length,1);assert.ok(Math.abs(core.width/frame.width-.6)<1e-6);assert.ok(core.x>frame.x+frame.width/2);
  assert.equal(paperLedger(doc).allocations.length,2);
  const canvas=await render(doc),ctx=canvas.getContext('2d'),pixel=(x,y)=>[...ctx.getImageData(Math.round(x),Math.round(y),1,1).data];
  assert.notDeepEqual(pixel(core.x,core.y),pixel(frame.x,frame.y),'core is colored, while the frame center is a real hole');
- assert.equal(describeTechnique('paper-window-reuse').parameters.corePlace.required,true);
- assert.throws(()=>compileTechnique({methodId:'paper-window-reuse',parameters:{id:'x',target:'p',box:[.2,.2,.6,.6]}}),/corePlace/);
+ assert.equal(describeTechnique('paper-window',{variant:'reuse-core'}).parameters.corePlace.required,true);
+ assert.throws(()=>compileTechnique({methodId:'paper-window',parameters:{id:'x',variant:'reuse-core',target:'p',box:[.2,.2,.6,.6]}}),/corePlace/);
 });
 
 test('named holes survive reverse cutting order and drive identical physical weaving',async()=>{
