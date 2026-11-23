@@ -6,11 +6,11 @@ import {join} from 'node:path';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision} from '../src/creation-transaction.js';
-import {createCreativeHarness,initialHarnessState,canonicalToolRevision} from '../compute-server/harness/agent.mjs';
-import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
-import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
-import {searchLibraryReferences,templateDetails} from '../compute-server/harness/library.mjs';
-import {createDeepSeekCreativeModel} from '../compute-server/harness/deepseek.mjs';
+import {createCreativeHarness,initialHarnessState,canonicalToolRevision} from '../creative-agent/runtime/agent.mjs';
+import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
+import {JournalCheckpointSaver,fileCheckpointJournal} from '../creative-agent/runtime/checkpoints.mjs';
+import {searchLibraryReferences,matchLibraryTemplates,templateDetails} from '../creative-agent/runtime/library.mjs';
+import {createDeepSeekCreativeModel} from '../creative-agent/runtime/deepseek.mjs';
 import {isManagedUnchanged} from '../src/craft-fingerprint.js';
 
 test('the single-writer harness repairs one copied revision digit but rejects stale hashes',()=>{
@@ -52,7 +52,69 @@ test('reference lookup exposes sourced templates only as layout guidance',async(
   assert.ok(first.slots?.every(slot=>slot.role&&slot.box.length===4));
 });
 
-test('time pacing suggests handoff while retaining editing tools',async t=>{
+test('a concise direction plan accepts an exploratory skill name without extra required fields',async t=>{
+  let turn=0;const f=await fixture(t,async()=>{
+    if(++turn===1)return answer(call('creation_plan',{intent:'用蓝灰纸承托两件素材，留出短文区域',methods:[{id:'paper-layering',purpose:'考虑叠层'}],writingZones:[{role:'title',surface:'跨原页与纹样纸的空边',legibility:'两侧均为深字浅底'}]}));
+    throw Error('stop after direction');
+  });
+  await assert.rejects(f.harness.run({id:'concise-plan',state:f.state}),/stop after direction/);
+  const saved=await f.harness.state('concise-plan');
+  assert.equal(saved.phase,'layout');
+  assert.equal(saved.plan.intent,'用蓝灰纸承托两件素材，留出短文区域');
+  assert.equal(saved.plan.methods[0].id,'paper-layering');
+  assert.equal(saved.plan.writingZones[0].surface,'跨原页与纹样纸的空边');
+});
+
+test('LangGraph asks for a shorter corrected call after malformed model JSON',async t=>{
+  let turn=0;const f=await fixture(t,async({messages})=>{
+    if(++turn===1)return answer({id:'broken',type:'function',function:{name:'creation_plan',arguments:'{"intent":"unfinished" trailing'}});
+    if(turn===2){
+      assert.ok(messages.some(message=>message.role==='user'&&String(message.content).includes('工具参数不是完整的 JSON')));
+      assert.ok(!messages.some(message=>message.role==='assistant'&&message.tool_calls?.some(call=>call.id==='broken')));
+      return answer(call('creation_plan',{intent:'在浅色纸面写一页短文'}));
+    }
+    throw Error('stop after corrected call');
+  });
+  await assert.rejects(f.harness.run({id:'malformed-call',state:f.state}),/stop after corrected call/);
+  const saved=await f.harness.state('malformed-call');
+  assert.equal(saved.plan.intent,'在浅色纸面写一页短文');
+  assert.ok(saved.trace.some(event=>event.kind==='malformed_tool_calls'&&event.calls[0].name==='creation_plan'));
+});
+
+test('methods learned from Skills execute together with the same methodId field',async t=>{
+  let turn=0;const f=await fixture(t,async()=>{
+    if(++turn===1)return answer(call('creation_plan',{intent:'用一枚星芒连接标题和正文'}));
+    if(turn===2)return answer(call('creation_recipe',{methodId:'graphic-loop',transactionId:'method-id-star',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'star',at:[72,88],widthMm:12,heightMm:12,colors:['#D5A45B']},with:[{methodId:'graphic-loop',parameters:{id:'star-small',at:[94,102],widthMm:7,heightMm:7,colors:['#8AACC3']}}]}));
+    throw Error('stop after recipe');
+  });
+  await assert.rejects(f.harness.run({id:'method-id-recipe',state:f.state}),/stop after recipe/);
+  const saved=await f.harness.state('method-id-recipe');
+  assert.ok(saved.document.page.layers.some(layer=>layer.id==='star'));
+  assert.ok(saved.document.page.layers.some(layer=>layer.id==='star-small'));
+  assert.ok(saved.trace.some(event=>event.kind==='tool'&&event.name==='creation_recipe'&&event.ok));
+});
+
+test('read_skill returns a directly usable method example with the current Scene revision',async t=>{
+  let turn=0;const f=await fixture(t,async({messages})=>{
+    if(++turn===1)return answer(call('creation_plan',{intent:'用手绘星芒点缀空白'}));
+    if(turn===2)return answer(call('read_skill',{name:'journal-graphics',level:'detail',methodId:'graphic-loop'}));
+    if(turn===3){
+      const result=JSON.parse(messages.findLast(message=>message.role==='tool').content);
+      assert.equal(result.ok,true);
+      const args=result.data.methods[0].tool.arguments;
+      assert.equal(args.methodId,'graphic-loop');
+      assert.equal(args.baseSceneRevision,creationSceneRevision(f.document));
+      assert.match(args.transactionId,/^skill-/);
+      return answer(call('creation_recipe',args));
+    }
+    throw Error('stop after Skill example');
+  });
+  await assert.rejects(f.harness.run({id:'skill-example',state:f.state}),/stop after Skill example/);
+  const saved=await f.harness.state('skill-example');
+  assert.ok(saved.document.page.layers.some(layer=>layer.id==='demo'));
+});
+
+test('elapsed time does not hide search or editing tools',async t=>{
   let now=0,turn=0;const f=await fixture(t,async({messages,tools})=>{
     turn++;const p=previewOf(messages);
     if(turn===1)return answer(plan());
@@ -60,16 +122,36 @@ test('time pacing suggests handoff while retaining editing tools',async t=>{
     if(turn===3)return answer(edit(p.sceneRevision,'layout-b',[text('note','在路上',[42,75])]));
     if(turn===4){
       assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
+      assert.ok(tools.some(tool=>tool.function.name==='search_references'));
+      assert.ok(tools.some(tool=>tool.function.name==='read_skill'));
       return answer(phase('craft','标题和短句已建立两个区域，装饰书写继续补齐'));
     }
     throw Error('paced stop');
-  },{clock:()=>now,afterRender:count=>{if(count===2)now=151000;}});
+  },{clock:()=>now,afterRender:count=>{if(count===2)now=250000;}});
   f.state.startedAt=0;f.state.deadlineAt=570000;
   await assert.rejects(f.harness.run({id:'paced-layout',state:f.state}),/paced stop/);
   const saved=await f.harness.state('paced-layout');
   assert.equal(saved.phase,'craft');
   assert.deepEqual(saved.results.map(result=>result.ok),[true]);
   assert.ok(!saved.document.page.layers.some(layer=>layer.id==='late'));
+});
+
+test('the delivery window leaves editing and skill lookup available',async t=>{
+ let now=0,turn=0;const f=await fixture(t,async({messages,tools})=>{
+  turn++;const p=previewOf(messages);
+  if(turn===1)return answer(plan());
+  if(turn===2)return answer(edit(creationSceneRevision(f.document),'delivery-page',[text('title','一页小记',[35,30])]));
+  if(turn===3){
+   assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
+   assert.ok(tools.some(tool=>tool.function.name==='read_skill'));
+   return answer(edit(p.sceneRevision,'delivery-repair',[text('body','把今天的小事认真记下来。',[45,85])]));
+  }
+  assert.ok(tools.some(tool=>tool.function.name==='creation_finish'));
+  return answer(call('creation_finish',{review:{observations:'标题位于纸面上方，文字清楚',issues:[],pngHash:p.pngHash,sceneRevision:p.sceneRevision}}));
+ },{clock:()=>now,afterRender:()=>{now=320000;}});
+ f.state.startedAt=0;f.state.deadlineAt=570000;
+ const result=await f.harness.run({id:'delivery-window',state:f.state});
+ assert.equal(result.status,'completed');
 });
 
 test('review pacing presents finish after five further edits',async t=>{
@@ -129,6 +211,17 @@ test('rich layered spreads rank a layered reference above sparse diary cases',as
   assert.ok(cases.every(item=>item.why.pageMode==='spread'));
 });
 
+test('wrong source labels do not change the creative case and template shortlist',async()=>{
+  const asset={id:'sample',title:'同一素材',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:55};
+  const original=await createCreationDocument({draft:draft({mode:'spread'}),assets:[asset],aliases:{m1:asset.id}});
+  const misleading=structuredClone(original);
+  Object.assign(misleading.source.sourceSnapshots[0],{kind:'paper',role:'background',tags:['旅行','复古','标题'],journalRoles:['headline']});
+  const cases=document=>searchLibraryReferences(document,{kind:'cases',limit:5}).results.map(({id,score})=>({id,score}));
+  assert.deepEqual(cases(original),cases(misleading));
+  const templates=document=>matchLibraryTemplates(document,{limit:5}).map(({id,score})=>({id,score}));
+  assert.deepEqual(templates(original),templates(misleading));
+});
+
 test('stage transition rejects skipping, unresolved issues and empty plans',async t=>{
   let turn=0;const f=await fixture(t,async()=>{
     turn++;
@@ -148,11 +241,11 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools,reasoningEffort})=>{
     turn++;instructions.push(messages[1].content);
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
-    if(turn===1){assert.equal(reasoningEffort,'none');assert.ok(!names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
+    if(turn===1){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
-      assert.ok(names.includes('read_template'));
+      assert.ok(!names.includes('read_template'),'参考读取工具在查询后展开，不随阶段自动加载');
       const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
-      title.style.letterSpacing=.3;title.style.letterSpacingPt=1.5;title.style.align='center';title.place.angle=2;
+      title.style.letterSpacing=.3;title.style.letterSpacingPt=1.5;title.style.align='center';title.place.angleDeg=2;
       return answer(edit(creationSceneRevision(f.document),'first',[
         {op:'graphic.add',id:'paper',geometry:{kind:'shape',preset:'rect'},place:{at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},
         {op:'graphic.add',id:'paper-accent',geometry:{kind:'shape',shape:'rect'},place:{reference:'page',at:[50,50],unit:'mm'},size:{width:4,height:4,unit:'mm'},style:{fill:'#465D54'}},title
@@ -168,9 +261,9 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   assert.equal(result.status,'completed');
   assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout','craft','review']);
   assert.ok(!instructions[0].includes('表达方法卡'));
-  assert.ok(instructions[1].includes('可选构图与叠放方法'));
+  assert.ok(instructions[1].includes('表达方法卡候选'));
   assert.ok(instructions[1].includes('表达方法卡'));
-  assert.ok(instructions[4].includes('这些动作可以交错'));
+  assert.ok(instructions[4].includes('可交错进行'));
   assert.equal(f.renders(),3);
 });
 
@@ -208,7 +301,7 @@ test('layout remains editable after four previews and common ordering aliases wo
   assert.ok(result.trace.some(item=>item.name==='creation_apply'&&item.turn===7&&item.ok));
 });
 
-test('a timed-out DeepSeek call retries once with a smaller low-effort response budget',async()=>{
+test('a timed-out DeepSeek call retries at low effort without shrinking the thinking token allowance',async()=>{
   const bodies=[];
   const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
     bodies.push(JSON.parse(options.body));
@@ -219,10 +312,35 @@ test('a timed-out DeepSeek call retries once with a smaller low-effort response 
   assert.equal(result.message.content,'继续创作');
   assert.equal(bodies.length,2);
   assert.equal(bodies[1].reasoning_effort,'low');
-  assert.equal(bodies[1].max_tokens,8000);
+  assert.equal(Object.hasOwn(bodies[1],'max_tokens'),false);
 });
 
-test('routine visual adjustments use bounded non-thinking tool calls',async()=>{
+test('a timeout while reading a DeepSeek response body retries at low effort',async()=>{
+  const bodies=[];
+  const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
+    bodies.push(JSON.parse(options.body));
+    if(bodies.length===1)return {status:200,ok:true,json:async()=>{throw Object.assign(Error('body stalled'),{name:'TimeoutError',code:23});}};
+    return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'继续创作'},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
+  }});
+  const result=await model({messages:[{role:'user',content:'测试'}],tools:[],remainingMs:60000});
+  assert.equal(result.message.content,'继续创作');
+  assert.equal(bodies.length,2);
+  assert.equal(bodies[1].reasoning_effort,'low');
+});
+
+test('malformed model response JSON retries instead of ending the creative job',async()=>{
+  let calls=0;
+  const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async()=>{
+    calls++;
+    if(calls===1)return new Response('{"choices":[]} trailing bytes',{status:200});
+    return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'继续创作'},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
+  }});
+  const result=await model({messages:[{role:'user',content:'测试'}],tools:[],remainingMs:60000});
+  assert.equal(result.message.content,'继续创作');
+  assert.equal(calls,2);
+});
+
+test('an explicit non-thinking request remains available for auxiliary calls',async()=>{
  let request;
  const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
    request=JSON.parse(options.body);
@@ -234,15 +352,16 @@ test('routine visual adjustments use bounded non-thinking tool calls',async()=>{
  assert.equal(request.max_tokens,5000);
 });
 
-test('a truncated creative answer recovers with one bounded non-thinking call',async()=>{
+test('a truncated creative answer retains requested thinking and the provider output allowance',async()=>{
  let request;
  const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
    request=JSON.parse(options.body);
    return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:null,tool_calls:[]},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1}}),{status:200});
  }});
  await model({messages:[{role:'user',content:'只提交计划'}],tools:[],recoveringFromTruncation:true,remainingMs:60000});
- assert.equal(request.thinking.type,'disabled');
- assert.equal(request.max_tokens,5000);
+ assert.equal(request.thinking.type,'enabled');
+ assert.equal(request.reasoning_effort,'high');
+ assert.equal(Object.hasOwn(request,'max_tokens'),false);
 });
 
 test('independent visual critique uses a short non-thinking image call',async()=>{
@@ -251,16 +370,25 @@ test('independent visual critique uses a short non-thinking image call',async()=
     request=JSON.parse(options.body);
     return new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'{"blockingIssues":["右页正文被遮挡"],"notes":["配色可再统一"]}'},finish_reason:'stop'}],usage:{prompt_tokens:20,completion_tokens:30}}),{status:200});
   }});
-  const result=await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'single',remainingMs:30000});
+  const result=await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'single',visibleMaterials:[{alias:'asset_card',title:'蓝色卡片'}],visibleTexts:[{id:'closing',text:'捡起来的东西，不必都分类。',centerMm:[50,100]}],remainingMs:30000});
   assert.equal(request.thinking.type,'disabled');
   assert.equal(request.max_tokens,1600);
   assert.ok(request.messages[1].content.some(part=>part.type==='image_url'));
+  assert.match(request.messages[1].content[0].text,/蓝色卡片/);
+  assert.match(request.messages[1].content[0].text,/捡起来的东西，不必都分类。/);
   assert.match(request.messages[0].content,/单页不要假设有中缝/);
   assert.doesNotMatch(request.messages[0].content,/重要内容越界\/跨中缝/);
   assert.deepEqual(result.blockingIssues,['右页正文被遮挡']);
   assert.deepEqual(result.notes,['配色可再统一']);
   await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',pageMode:'spread',remainingMs:30000});
   assert.match(request.messages[0].content,/双页还要比较左右总重量和中缝/);
+  await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'童趣可爱、疏朗留白',textMode:'none',remainingMs:30000});
+  assert.match(request.messages[0].content,/本次画面疏密为疏朗留白/);
+  assert.match(request.messages[0].content,/本次不新增文字/);
+  assert.doesNotMatch(request.messages[0].content,/本次画面疏密为丰富层叠/);
+  await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'清新淡雅、丰富层叠',textMode:'minimal',remainingMs:30000});
+  assert.match(request.messages[0].content,/本次画面疏密为丰富层叠/);
+  assert.doesNotMatch(request.messages[0].content,/本次不新增文字/);
 });
 
 test('a finish near the deadline cannot silently bypass independent review',async t=>{
@@ -282,4 +410,30 @@ test('a finish near the deadline cannot silently bypass independent review',asyn
   assert.equal(saved.status,'running');
   assert.equal(critiques,0);
   assert.match(saved.results[0].detail,/独立画面审查尚未完成/);
+});
+
+test('DeepSeek gives deep reasoning more time while respecting the remaining task deadline',async t=>{
+ const timeouts=[];
+ t.mock.method(AbortSignal,'timeout',ms=>{timeouts.push(ms);return new AbortController().signal;});
+ const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async()=>new Response(JSON.stringify({choices:[{message:{role:'assistant',content:'继续'},finish_reason:'stop'}]}),{status:200})});
+ await model({messages:[],tools:[],remainingMs:300000,reasoningEffort:'high'});
+ await model({messages:[],tools:[],remainingMs:300000,reasoningEffort:'low'});
+ await model({messages:[],tools:[],remainingMs:20000,reasoningEffort:'high'});
+ assert.ok(timeouts[0]<=300000&&timeouts[0]>299000);assert.equal(timeouts[1],150000);assert.ok(timeouts[2]<=20000&&timeouts[2]>19000);
+});
+
+
+test('dedicated paper tool requires a plan, commits editable papers and undoes the batch',async t=>{
+ let turn=0;const args=()=>({transactionId:'paper-tool',baseSceneRevision:creationSceneRevision(f.document),papers:[{id:'fibrous',color:'#E8DFC2',texture:'medium',edge:'torn',place:{reference:'page',at:[50,60],unit:'mm'},size:{width:55,height:65,unit:'mm'},order:{edge:'back'}}]});
+ const f=await fixture(t,async()=>{
+  if(++turn===1)return answer(call('creation_paper',args()));
+  if(turn===2)return answer(plan(),call('creation_paper',args()));
+  if(turn===3){const saved=await f.harness.state('paper-entry');assert.equal(saved.document.page.layers[0].kind,'paper');return answer(call('creation_undo',{}));}
+  throw Error('stop after paper undo');
+ });
+ await assert.rejects(f.harness.run({id:'paper-entry',state:f.state}),/stop after paper undo/);
+ const saved=await f.harness.state('paper-entry');
+ assert.equal(saved.document.page.layers.length,0);
+ const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_paper');
+ assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
 });

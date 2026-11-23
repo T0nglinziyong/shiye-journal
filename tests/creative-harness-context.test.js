@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide} from '../compute-server/harness/context.mjs';
-import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
+import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
+import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 
 test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
  const source={textMode:'none',materials:[{alias:'long-paper',assetID:'a'},{alias:'real-tape',assetID:'b'}],sourceSnapshots:[{assetID:'a',kind:'paper',title:'胶带图案长条纸'},{assetID:'b',kind:'tape',title:'花纹'}]};
@@ -10,10 +10,17 @@ test('initial tape guidance uses frozen source type rather than appearance or ti
  const guide=initialToolGuide({source});assert.deepEqual(guide.tapeAliases,[]);assert.ok(guide.notes.some(n=>n.includes('本次没有胶带')));
 });
 
+test('real Pi parameter mistakes receive exact correction in the LangGraph path',()=>{
+ const stroke=failureGuidance('creation_apply',{operations:[{op:'graphic.add',geometry:{kind:'stroke'},style:{strokeDash:'dot'}}]},{path:'operations/0/style/strokeDash'});
+ assert.match(stroke.hint,/geometry.*unit/);assert.match(stroke.hint,/strokeDash/);
+ const reflow=failureGuidance('creation_apply',{operations:[{op:'text.reflow',size:{width:20}}]},{path:'operations/0/size'});
+ assert.match(reflow.hint,/layer.update/);
+});
+
 test('an outdated task contract fails before any model invocation',async()=>{
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
-  const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
+  const {initialHarnessState}=await import('../creative-agent/runtime/agent.mjs');
   const {taskFingerprint}=await import('../src/task-fingerprint.js');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   document.source.schemaHash='sha256:'+'0'.repeat(64);
@@ -71,8 +78,8 @@ test('model context stays bounded as checkpoint history grows',()=>{
  for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
  const out=modelContext(messages);
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
- assert.ok(out.length<=20);assert.equal(out.filter(m=>m.role==='assistant').length,4);
- assert.equal(out.filter(m=>m.role==='tool').length,4);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
+ assert.ok(out.length<=30);assert.equal(out.filter(m=>m.role==='assistant').length,8);
+ assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
  assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
 });
 
@@ -80,7 +87,7 @@ test('recent DeepSeek tool turns keep their complete reasoning content',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
  for(let i=0;i<7;i++)messages.push({role:'assistant',reasoning_content:'reason-'+i,tool_calls:[{id:'r'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'r'+i,content:'{"ok":true}'});
  const out=modelContext(messages);
- assert.deepEqual(out.filter(m=>m.role==='assistant').map(m=>m.reasoning_content),['reason-3','reason-4','reason-5','reason-6']);
+ assert.deepEqual(out.filter(m=>m.role==='assistant').map(m=>m.reasoning_content),Array.from({length:7},(_,i)=>'reason-'+i));
 });
 
 test('old parameter help is shortened while its tool pair stays valid',()=>{
@@ -105,7 +112,22 @@ test('temporary material detail images leave the model context after they are us
  assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,1);
 });
 
-test('an unchanged preview image is sent once and then retained by hash',async()=>{
+test('one studied tutorial remains available for comparison after planning and history windowing',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'input'},
+  {role:'assistant',tool_calls:[{id:'study',function:{name:'read_skill'}}]},
+  {role:'tool',tool_call_id:'study',content:'{"ok":true}'},
+  {role:'user',content:[{type:'text',text:'教程示意（仅供方法参考）：旧例'},{type:'image_url',image_url:{url:'old-example'}},
+    {type:'text',text:'教程示意（仅供方法参考）：框架与成品'},{type:'image_url',image_url:{url:'paired-example'}}]}];
+ for(let i=0;i<12;i++)messages.push({role:'assistant',content:'调整构思'+i},{role:'user',content:'继续'});
+ const before=JSON.stringify(messages),out=modelContext(messages);
+ const images=out.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url');
+ assert.deepEqual(images.map(p=>p.image_url.url),['paired-example']);
+ assert.equal(JSON.stringify(messages),before);
+ const again=modelContext(out);
+ assert.equal(again.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.image_url?.url==='paired-example').length,1);
+});
+
+test('the latest preview remains visible after read-only help instead of becoming only a hash',async()=>{
  const {createCreationDocument}=await import('../src/creation-document.js');
  const {draft}=await import('../src/domain.js');
  const document=await createCreationDocument({draft:draft(),assets:[]});
@@ -114,19 +136,19 @@ test('an unchanged preview image is sent once and then retained by hash',async()
  assert.equal(modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}}).filter(item=>item===preview).length,1);
  messages.push({role:'assistant',tool_calls:[{id:'help',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'help',content:'{"ok":true}'});
  const next=modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}});
- assert.equal(next.some(item=>item===preview),false);
+ assert.equal(next.some(item=>item===preview),true);
  assert.match(next[2].content,/sha256:abc/);
 });
 
 test('creative compaction carries design decisions and rejected attempts into later turns',async()=>{
  const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'image_url',image_url:{url:'index'}}]}];
- for(let i=0;i<7;i++)messages.push(
+ for(let i=0;i<13;i++)messages.push(
    {role:'assistant',content:i===1?'试过居中排布，但主图太拥挤，改为左侧留白。':null,reasoning_content:'private reasoning',tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:JSON.stringify({transactionId:'t'+i,operations:[{op:'layer.update',target:'photo',place:{surface:'page',at:[i,40]}}]})}}]},
    {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
    {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
  );
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
- assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,5);
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
+ assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,7);
  assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
  assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
  const {createCreationDocument}=await import('../src/creation-document.js');
@@ -134,17 +156,17 @@ test('creative compaction carries design decisions and rejected attempts into la
  const state={compactedUntil:candidate.cutoff,creativeMemory:'居中排布拥挤，改为左侧留白。',document:await createCreationDocument({draft:draft(),assets:[]})};
  const out=modelContext(messages,state);
  assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
- assert.equal(out.filter(m=>m.role==='assistant').length,2);
+ assert.equal(out.filter(m=>m.role==='assistant').length,6);
  assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,2);
 });
 
 test('compaction never starts between two responses to one assistant tool batch',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
- for(let i=0;i<4;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
+ for(let i=0;i<12;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  messages.push({role:'assistant',tool_calls:[{id:'first',function:{name:'creation_phase',arguments:'{}'}},{id:'second',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'first',content:'{"ok":true}'},{role:'tool',tool_call_id:'second',content:'{"ok":true}'});
  const cutoff=messages.length-1;
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,phaseReviews:[{messageIndex:cutoff}]});
- assert.equal(candidate.cutoff,messages.length-3);
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:cutoff}]});
+ assert.ok(candidate.cutoff<messages.length-3);
  const context=modelContext(messages,{compactedUntil:cutoff});
  const calls=new Set(context.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>call.id):[]));
  assert.ok(context.filter(message=>message.role==='tool').every(message=>calls.has(message.tool_call_id)));
@@ -153,11 +175,30 @@ test('compaction never starts between two responses to one assistant tool batch'
 
 test('soft creative loops compact completed turns without a phase transition',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
- for(let i=0;i<9;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,phaseReviews:[]});
+ for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
+ assert.equal(creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:30000}]}),null);
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[]});
  assert.ok(candidate);
- assert.equal(candidate.history.filter(item=>item.role==='assistant').length,5);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,7);
  assert.equal(messages[candidate.cutoff].role,'assistant');
+});
+
+test('an old phase marker does not suppress later cadence compaction',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
+ for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:4}]});
+ assert.ok(candidate);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,7);
+});
+
+test('failed model compaction keeps the design intent and rejected work',()=>{
+ const memory=fallbackCreativeMemory('先前决定让文字落在蓝卡上。',[
+  {role:'assistant',text:'居中尝试太拥挤，改为错位叠放。'},
+  {role:'tool',ok:false,detail:'标题被底纸遮住'}
+ ],{plan:{intent:'旅行手帐',composition:{layout:'错位叠放'}},decisions:['保留蓝卡作为书写区']});
+ assert.match(memory,/旅行手帐|蓝卡/);
+ assert.match(memory,/居中尝试太拥挤/);
+ assert.match(memory,/标题被底纸遮住/);
 });
 
 test('malformed historical tool arguments cannot break compaction',()=>{
@@ -175,21 +216,20 @@ test('malformed historical tool arguments cannot break compaction',()=>{
 test('skill routing uses explicit direction and respects no-text tasks',async()=>{
   const skills=await loadCreationSkills();
   const selected=recommendCreationSkills(skills,{source:{textMode:'none',styles:[]}},{styles:['童趣可爱'],intent:'复古旧物'}).map(s=>s.name);
-  assert.deepEqual(selected,['journal-composition','journal-color','paper-layering','journal-accents','playful-journal']);
-  assert.ok(!selected.includes('vintage-journal'));
-  assert.ok(recommendCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='vintage-journal'));
+  assert.deepEqual(selected,['journal-composition','journal-color','paper-layering','journal-accents','journal-graphics']);
+  assert.ok(recommendCreationSkills(skills,{source:{styles:['复古旧物']}}).some(s=>s.name==='paper-layering'));
 });
 
 test('zero-material skill routing offers lettering and drawn graphics without source techniques',async()=>{
   const skills=await loadCreationSkills();
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
-  const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
+  const {initialHarnessState}=await import('../creative-agent/runtime/agent.mjs');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{styles:['丰富层叠']}});
   assert.deepEqual(state.loadedSkills,[]);
   assert.ok(state.recommendedMethods.some(method=>method.id==='title-phrases'));
-  assert.ok(state.recommendedMethods.some(method=>method.id==='graphic-wave'));
+  assert.ok(state.recommendedMethods.some(method=>method.id==='graphic-route'));
   assert.ok(!state.recommendedMethods.some(method=>method.id==='paper-peek'));
   assert.ok(!initialToolGuide(document).common.descriptions.some(item=>item.name==='material.add'));
   assert.match(state.messages[0].content,/零素材创作/);
@@ -199,10 +239,10 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   const visualState=initialHarnessState({document:visual,skills,brief:{styles:['丰富层叠']}});
   assert.ok(!visualState.recommendedMethods.some(method=>method.skill==='journal-lettering'));
   assert.ok(!recommendCreationSkills(skills,visual).some(skill=>skill.name==='journal-lettering'));
-  assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['paper-color-card','layered-center']);
+  assert.deepEqual(shortlistCreationMethods({...document,source:{...document.source,materials:Array(5).fill({})}},{styles:['丰富层叠']}).slice(0,2).map(m=>m.id),['paper-peek','accent-materials']);
   const noText=initialHarnessState({document:visual,skills,brief:{intent:'只用数字图形创作',styles:['丰富层叠']}});
   assert.equal(noText.expressionRequired,false);
-  assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-flower','color-bands','accent-sprig','accent-stitch']);
+  assert.deepEqual(noText.expressionCards.map(card=>card.id),['graphic-loop','color-echo','accent-spark']);
   assert.ok(!noText.messages[0].content.includes('可直接调用的文字效果选法'));
 });
 
@@ -210,32 +250,36 @@ test('lettering effects are delayed until the craft stage',async()=>{
   const skills=await loadCreationSkills();
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
-  const {initialHarnessState}=await import('../compute-server/harness/agent.mjs');
+  const {initialHarnessState}=await import('../creative-agent/runtime/agent.mjs');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'做一页有手写感的记录',styles:['丰富层叠']}});
-  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-bands','accent-sprig','accent-stitch']);
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-echo','accent-spark']);
   assert.ok(!state.messages[0].content.includes('title-cross-shadow'));
-  const {letteringEffectMenu}=await import('../compute-server/harness/expression.mjs');
-  for(const id of ['title-shadow','title-outline','title-offset-outline','title-gradient-outline','title-tape','title-phrases','title-cross-shadow','title-scattered-round','title-scattered-triangle','title-number-route','title-script-dots','title-paper-lettering'])
-    assert.ok(letteringEffectMenu().some(item=>item.id===id),id);
+  const {letteringEffectMenu}=await import('../creative-agent/runtime/expression.mjs');
+  for(const [id,variant] of [['title-gap-shadow','offset-outline'],['title-gap-shadow','gradient-outline'],['title-tape'],['title-cross-shadow'],['title-scattered-round'],['title-scattered-round','triangle'],['title-number-route'],['title-script-dots'],['title-paper-lettering']])
+    assert.ok(letteringEffectMenu().some(item=>item.id===id&&item.variant===variant),`${id}:${variant||''}`);
   assert.ok(state.messages[0].content.length<30000);
 });
 
-test('material tasks offer an editable paper carrier without forcing it',async()=>{
-  const {expressionCards}=await import('../compute-server/harness/expression.mjs');
-  const cards=expressionCards({source:{materials:[{alias:'m1'}],textMode:'automatic',styles:[]}},{style:'丰富层叠'});
-  assert.ok(cards.some(card=>card.id==='paper-color-card'));
-  assert.match(cards.find(card=>card.id==='paper-color-card').principle,/素色纸/);
-  const withRealPaper=expressionCards({source:{materials:[{alias:'m1'}],sourceSnapshots:[{kind:'paper',role:'support'}],textMode:'automatic',styles:[]}},{style:'丰富层叠'});
-  assert.ok(!withRealPaper.some(card=>card.id==='paper-color-card'));
-  const methods=shortlistCreationMethods({source:{materials:[{alias:'m1'}],sourceSnapshots:[{kind:'paper',role:'support'}],textMode:'automatic',styles:['丰富层叠']}},{styles:['丰富层叠']});
-  assert.ok(!methods.some(method=>method.id==='paper-color-card'));
-  assert.ok(methods.slice(0,4).some(method=>method.id==='record-on-material'));
-  assert.ok(cards.some(card=>card.id==='accent-sprig'));
+test('paper carriers stay discoverable without default promotion for every material task',async()=>{
+  const {expressionCards}=await import('../creative-agent/runtime/expression.mjs');
+  const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
+  for(const kind of ['paper','sticker'])for(const style of ['丰富层叠','疏朗留白','复古收藏']){
+    const document={source:{materials:[{alias:'m1'}],sourceSnapshots:[{kind}],textMode:'automatic',styles:[style]}};
+    const cards=expressionCards(document,{style});
+    const methods=shortlistCreationMethods(document,{style});
+    assert.ok(!cards.some(card=>card.id==='paper-color-card'));
+    assert.ok(!methods.some(method=>method.id==='paper-color-card'));
+    assert.ok(methods.some(method=>method.id==='record-on-material'));
+  }
+  const overview=skills.read('paper-layering');
+  assert.ok(overview.methodCatalog.some(method=>method.id==='paper-color-card'));
+  const detail=skills.read('paper-layering',{level:'detail',methodId:'paper-color-card'});
+  assert.equal(detail.methods[0].id,'paper-color-card');
 });
 
 test('foundation feedback rejects a near invisible page tint and accepts visible paper',async()=>{
-  const {paperFoundationStatus}=await import('../compute-server/harness/context.mjs');
+  const {paperFoundationStatus}=await import('../creative-agent/runtime/context.mjs');
   const document={page:{pageMode:'single',physicalPageHeightMM:210,canvas:{width:705,height:1000},paperColor:'#FCFAF0'},
     source:{styles:['丰富层叠'],materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[{assetID:'a',kind:'paper',role:'focal'}]}};
   const base={id:'base',type:'shape',surface:'page',opacity:1,hidden:false,fill:'#FBF6EC',world:{sizeMm:[148,210],centerMm:[74,105]}};
@@ -246,7 +290,7 @@ test('foundation feedback rejects a near invisible page tint and accepts visible
 });
 
 test('paper foundation applies to ordinary multi-material pages and flags cloned spread boards',async()=>{
-  const {paperFoundationStatus}=await import('../compute-server/harness/context.mjs');
+  const {paperFoundationStatus}=await import('../creative-agent/runtime/context.mjs');
   const document={page:{pageMode:'spread',physicalPageHeightMM:210,canvas:{width:1410,height:1000},paperColor:'#FCFAF0'},
     source:{styles:['丰富层叠'],materials:[{alias:'a',assetID:'a'},{alias:'b',assetID:'b'}],sourceSnapshots:[]}};
   const paper=(id,x,y,width,height,fill='#C4D8E3')=>({id,type:'shape',surface:'page',opacity:1,hidden:false,fill,world:{sizeMm:[width,height],centerMm:[x,y]}});
@@ -267,7 +311,7 @@ test('paper foundation applies to ordinary multi-material pages and flags cloned
 });
 
 test('a source writing card or patterned paper can be the foundation when text or artwork connects to it',async()=>{
-  const {paperFoundationStatus}=await import('../compute-server/harness/context.mjs');
+  const {paperFoundationStatus}=await import('../creative-agent/runtime/context.mjs');
   const document={page:{pageMode:'single',physicalPageHeightMM:210,canvas:{width:705,height:1000},paperColor:'#FCFAF0'},
     source:{styles:['丰富层叠'],materials:[{alias:'journey',assetID:'journey-id'},{alias:'star',assetID:'star-id'}],sourceSnapshots:[{assetID:'journey-id',kind:'paper',role:'support'},{assetID:'star-id',kind:'paper',role:'support'}]}};
   const card={id:'card',type:'material',surface:'page',opacity:1,hidden:false,asset:'journey',world:{sizeMm:[65,90],centerMm:[74,100]}};
@@ -283,13 +327,13 @@ test('a source writing card or patterned paper can be the foundation when text o
 test('repeated local edits get a batch correction hint without forcing acceptance',()=>{
   const message=target=>({role:'assistant',tool_calls:[{function:{name:'creation_apply',arguments:JSON.stringify({operations:[{op:'layer.update',target}]})}}]});
   assert.equal(iterationAdvice([message('a'),message('b')]),'');
-  assert.match(iterationAdvice([message('a'),message('a'),message('a')]),/近期反复修改 a/);
+  assert.match(iterationAdvice([message('a'),message('a'),message('a')]),/连续多次修改同一批对象（a）/);
 });
 
 test('automatic material facts retain physical dimensions and expose missing required sources before finish',async()=>{
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
-  const {materialBrief,automaticSceneFeedback}=await import('../compute-server/harness/context.mjs');
+  const {materialBrief,automaticSceneFeedback}=await import('../creative-agent/runtime/context.mjs');
   const asset={id:'paper',title:'必用纸片',kind:'paper',physicalWidthMM:55.7,physicalHeightMM:69.6};
   const document=await createCreationDocument({draft:draft(),assets:[asset],aliases:{m1:asset.id},requiredAssetIDs:[asset.id]});
   const [fact]=materialBrief(document);assert.equal(fact.widthMM,55.7);assert.equal(fact.heightMM,69.6);assert.equal(fact.required,true);assert.equal(fact.priority,'required');
@@ -297,14 +341,38 @@ test('automatic material facts retain physical dimensions and expose missing req
 });
 
 test('failed parameter validation supplies targeted help without changing the operation',async()=>{
-  const {failureGuidance}=await import('../compute-server/harness/context.mjs');
+  const {failureGuidance}=await import('../creative-agent/runtime/context.mjs');
   const args={operations:[{op:'material.add',style:{shadow:{color:'#00000033'}}}]},before=JSON.stringify(args);
   const guide=failureGuidance('creation_apply',args,{path:'/operations/0/style/shadow/color'});
   assert.equal(guide.operation.descriptions[0].name,'material.add');assert.equal(guide.fieldDefinitions.Color.pattern,'^#[0-9A-Fa-f]{6}$');assert.equal(JSON.stringify(args),before);
   assert.ok(failureGuidance('creation_help',{},{}).available.topics.includes('place'));
+  const star={operations:[{op:'graphic.add',id:'star',geometry:{kind:'star',points:5}}]};
+  assert.match(failureGuidance('creation_apply',star,{path:'/operations/0/geometry/points'}).hint,/options/);
+  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}}).common.find(item=>item.name==='graphic.add');
+  assert.equal(first.example.geometry.kind,'ellipse');
 });
 
 test('invalid stroke styling reports all mismatched fields and valid alternatives together',async()=>{
   const {styleFor}=await import('../src/scene-node-properties.js');
   assert.throws(()=>styleFor('ink',{fill:null,strokeOpacity:.5},{canvas:{height:100},physicalPageHeightMM:100}),error=>/style.fill/.test(error.message)&&/style.strokeOpacity/.test(error.message)&&/可用：.*opacity/.test(error.message));
+});
+
+
+test('opening user scope survives tool discovery and the rolling history window exactly once',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[],prompt:'标题'});
+ const scope={role:'user',content:'当前只做标题：保留正文，验证字形和描边。已预读标题 Skill。'};
+ const messages=[{role:'system',content:'创作'}, {role:'user',content:'材料清单'},scope];
+ for(let i=0;i<12;i++){messages.push({role:'assistant',content:'读取工具 '+i},{role:'tool',content:'参数 '+i});
+  const before=JSON.stringify(messages),out=modelContext(messages);
+  assert.equal(out.filter(m=>m.content===scope.content).length,1);
+  assert.equal(modelContext(messages,{document}).filter(m=>m.content===scope.content).length,1);
+  assert.equal(JSON.stringify(messages),before);
+ }
+});
+
+
+test('rotation-only update failure explains relative nudge without dumping unrelated schemas',()=>{
+ const guidance=failureGuidance('creation_apply',{operations:[{op:'layer.update',target:'paper',place:{rotationDeg:4}}]},{path:'operations/0/place/at'});
+ assert.match(guidance.hint,/layout.nudge/);assert.match(guidance.hint,/增量/);assert.match(guidance.hint,/整批编辑未生效/);
 });

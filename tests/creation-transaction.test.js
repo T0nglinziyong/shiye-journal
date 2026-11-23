@@ -44,11 +44,133 @@ test('inspection distinguishes world millimetres from local fields and exposes a
   {op:'graphic.add',id:'table',geometry:{kind:'weeklyTable',options:{rows:4,columns:3,showOuterBorder:false}},place:{reference:'parent',at:[.5,.4],unit:'ratio'},size:{width:55,height:40,unit:'mm'},style:{fill:null,stroke:'#556655',strokeWidthMm:.5}}]}]),[]).document;
  const view=inspectCreationDocument(made),table=view.layers.find(n=>n.id==='table'),full=inspectCreationDocument(made,{ids:['table'],full:true}).layers[0];
  assert.equal(table.parent,'card');assert.equal(table.shapeOptions.rows,4);assert.equal(table.shapeOptions.columns,3);assert.equal(table.stroke,'#556655');
+ assert.equal(view.layerTree[0].id,'card');assert.equal(view.layerTree[0].children[0].id,'table');
+ assert.match(view.stacking,/back-to-front/);
  const b=worldBox(made.page,'table'),s=made.page.canvas.height/made.page.physicalPageHeightMM;
  assert.ok(table.world.centerMm.every((v,i)=>Math.abs(v-[b.cx/s,b.cy/s][i])<.00001));assert.notEqual(full.x,b.cx);assert.ok(Math.abs(full.world.rotationDeg-30)<1e-9);
  assert.equal(view.sceneRevision,creationSceneRevision(made));assert.equal(creationHelp().operations.some(op=>op.name==='material.weave'),true);
+ const index=creationHelp(),familyCommands=index.families.flatMap(row=>row.commands);
+ assert.equal(new Set(familyCommands).size,familyCommands.length);
+ assert.deepEqual(familyCommands.slice().sort(),index.operations.map(row=>row.name).sort());
  assert.equal(creationHelp({topics:['layer.update'],full:true}).descriptions[0].schema.properties.op.const,'layer.update');
  assert.throws(()=>inspectCreationDocument(made,{ids:['missing']}),/不存在/);
+});
+
+test('large filled dots and painted tape stay editable while a late backing moves behind them',async()=>{
+ const {inspectCreationDocument}=await import('../src/creation-inspection.js');
+ let doc=await createCreationDocument({draft:draft(),assets:[]});
+ doc=applyCreationTransaction(doc,batch(doc,[
+  {op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:{reference:'page',at:[40,45],unit:'mm'},size:{width:18,height:18,unit:'mm'},style:{fill:'#D8A257',stroke:null}},
+  {op:'graphic.add',id:'painted-tape',geometry:{kind:'rect'},place:{reference:'page',at:[47,45],unit:'mm',rotationDeg:-8},size:{width:28,height:5,unit:'mm'},style:{fill:'#86A8BF',stroke:null,opacity:.75}},
+  {op:'graphic.add',id:'backing',geometry:{kind:'rect'},place:{reference:'page',at:[45,45],unit:'mm'},size:{width:65,height:72,unit:'mm'},style:{fill:'#F4EEDC',stroke:null}}
+ ],'colored-layers'),[]).document;
+ assert.deepEqual(inspectCreationDocument(doc).layerTree.map(row=>row.id),['dot','painted-tape','backing']);
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layer.update',target:'backing',order:{edge:'back'}}],'lower-backing'),[]).document;
+ const view=inspectCreationDocument(doc);
+ assert.deepEqual(view.layerTree.map(row=>row.id),['backing','dot','painted-tape']);
+ assert.equal(view.layers.find(row=>row.id==='dot').fill,'#D8A257');
+ assert.equal(view.layers.find(row=>row.id==='painted-tape').world.rotationDeg,-8);
+});
+
+test('matching another object rotation and stacking across groups preserve world geometry',async()=>{
+ const {inspectCreationDocument}=await import('../src/creation-inspection.js');
+ let doc=await createCreationDocument({draft:draft(),assets:[]});
+ doc=applyCreationTransaction(doc,batch(doc,[
+  {op:'group.compose',id:'card',place:{reference:'page',at:[65,75],unit:'mm',rotationDeg:17},layoutBox:{width:75,height:70,unit:'mm'},children:[
+   {op:'graphic.add',id:'reference',geometry:{kind:'rect'},place:{reference:'parent',at:[.5,.5],unit:'ratio',rotationDeg:8},size:{width:30,height:35,unit:'mm'},style:{fill:'#AABBDD'}},
+   {op:'graphic.add',id:'foreground',geometry:{kind:'ellipse'},place:{reference:'parent',at:[.65,.7],unit:'ratio'},size:{width:10,height:10,unit:'mm'},style:{fill:'#CCAA88'}}
+  ]},
+  {op:'graphic.add',id:'note',geometry:{kind:'rect'},place:{reference:'page',at:[45,55],unit:'mm',rotationDeg:-5},size:{width:20,height:24,unit:'mm'},style:{fill:'#FFEEDD'}}
+ ],'setup-rotation-stack'),[]).document;
+ const original=worldBox(doc.page,'note'),angle=worldBox(doc.page,'reference').rotation;
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layout.matchRotation',targets:['note'],reference:'reference',offsetDeg:2}],'match-angle'),[]).document;
+ const rotated=worldBox(doc.page,'note');
+ assert.ok(Math.abs(rotated.rotation-angle-2)<1e-8);
+ assert.ok(Math.abs(rotated.cx-original.cx)<1e-8&&Math.abs(rotated.cy-original.cy)<1e-8);
+ assert.equal(rotated.w,original.w);assert.equal(rotated.h,original.h);
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layer.stack',target:'note',reference:'reference',side:'before'}],'stack-note'),[]).document;
+ const stacked=worldBox(doc.page,'note'),tree=inspectCreationDocument(doc).layerTree;
+ assert.ok(Math.abs(stacked.cx-original.cx)<1e-8&&Math.abs(stacked.cy-original.cy)<1e-8);
+ assert.ok(Math.abs(stacked.rotation-angle-2)<1e-8);
+ assert.deepEqual(tree[0].children.map(row=>row.id),['note','reference','foreground']);
+ assert.throws(()=>applyCreationTransaction(doc,batch(doc,[{op:'layer.stack',target:'card',reference:'note',side:'after'}],'invalid-stack'),[]),/子节点/);
+ const beforeNudge=worldBox(doc.page,'note'),scale=doc.page.canvas.height/doc.page.physicalPageHeightMM;
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layout.nudge',targets:['note'],deltaMm:[3,-2],rotationDeg:-4}],'nudge-note'),[]).document;
+ const nudged=worldBox(doc.page,'note');
+ assert.ok(Math.abs(nudged.cx-beforeNudge.cx-3*scale)<1e-8);
+ assert.ok(Math.abs(nudged.cy-beforeNudge.cy+2*scale)<1e-8);
+ assert.ok(Math.abs(nudged.rotation-beforeNudge.rotation+4)<1e-8);
+});
+
+test('alignment can use a node reference across nested groups',async()=>{
+ const {inspectCreationDocument}=await import('../src/creation-inspection.js');
+ let doc=await createCreationDocument({draft:draft(),assets:[]});
+ doc=applyCreationTransaction(doc,batch(doc,[
+  {op:'group.compose',id:'left',place:{reference:'page',at:[40,60],unit:'mm',rotationDeg:8},layoutBox:{width:50,height:50,unit:'mm'},children:[
+   {op:'graphic.add',id:'left-shape',geometry:{kind:'rect'},place:{reference:'parent',at:[.5,.5],unit:'ratio'},size:{width:15,height:12,unit:'mm'},style:{fill:'#AAAAAA'}}]},
+  {op:'group.compose',id:'right',place:{reference:'page',at:[90,60],unit:'mm',rotationDeg:-6},layoutBox:{width:50,height:50,unit:'mm'},children:[
+   {op:'graphic.add',id:'right-shape',geometry:{kind:'rect'},place:{reference:'parent',at:[.5,.5],unit:'ratio'},size:{width:12,height:11,unit:'mm'},style:{fill:'#BBBBBB'}}]},
+  {op:'graphic.add',id:'anchor',geometry:{kind:'ellipse'},place:{reference:'page',at:[60,100],unit:'mm'},size:{width:9,height:9,unit:'mm'},style:{fill:'#CCCCCC'}}
+ ],'alignment-setup'),[]).document;
+ assert.doesNotThrow(()=>applyCreationTransaction(doc,batch(doc,[{op:'layout.align',targets:['left-shape','right-shape'],reference:'node:anchor',axis:'x',align:'center'}],'cross-group-align'),[]));
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layout.align',targets:['left-shape','right-shape'],reference:'node:anchor',axis:'x',align:'center'}],'cross-group-align'),[]).document;
+ const anchor=worldBox(doc.page,'anchor');
+ assert.ok(Math.abs(worldBox(doc.page,'left-shape').cx-anchor.cx)<1e-8);
+ assert.ok(Math.abs(worldBox(doc.page,'right-shape').cx-anchor.cx)<1e-8);
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layout.align',targets:['left-shape'],reference:'node:anchor',axis:'y',align:'center'}],'single-align'),[]).document;
+ assert.ok(Math.abs(worldBox(doc.page,'left-shape').cy-anchor.cy)<1e-8);
+ const before=[worldBox(doc.page,'left-shape'),worldBox(doc.page,'right-shape')];
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'group.create',id:'combined',targets:['left-shape','right-shape']}],'cross-group'),[]).document;
+ const children=inspectCreationDocument(doc).layerTree.find(row=>row.id==='combined')?.children.map(row=>row.id);
+ assert.deepEqual(children,['left-shape','right-shape']);
+ for(const [i,id] of ['left-shape','right-shape'].entries()){
+  const current=worldBox(doc.page,id);assert.ok(Math.abs(current.cx-before[i].cx)<1e-8);assert.ok(Math.abs(current.cy-before[i].cy)<1e-8);
+ }
+});
+
+test('visible edge alignment follows observed quadrilateral edges instead of layout boxes',async()=>{
+ const {visibleQuad}=await import('../src/creation-edge-alignment.js');
+ let doc=await createCreationDocument({draft:draft(),assets:[]});
+ doc=applyCreationTransaction(doc,batch(doc,[
+  {op:'graphic.add',id:'base',geometry:{kind:'rect'},place:{reference:'page',at:[65,80],unit:'mm',rotationDeg:14},size:{width:40,height:30,unit:'mm'},style:{fill:'#EEDDBB'}},
+  {op:'graphic.add',id:'note',geometry:{kind:'rect'},place:{reference:'page',at:[35,40],unit:'mm',rotationDeg:-12},size:{width:25,height:20,unit:'mm'},style:{fill:'#BBDDEE'}}
+ ],'edge-setup'),[]).document;
+ const targetQuad=[[.06,.12],[.93,.02],[1,.94],[.03,1]],referenceQuad=[[0,.06],[.94,0],[1,.93],[.05,1]],scale=doc.page.canvas.height/doc.page.physicalPageHeightMM;
+ doc=applyCreationTransaction(doc,batch(doc,[{op:'layout.alignEdge',target:'note',reference:'base',targetEdge:'top',referenceEdge:'bottom',targetQuad,referenceQuad,gapMm:2,alongMm:3}],'edge-match'),[]).document;
+ const target=visibleQuad(doc.page,'note',targetQuad).world,reference=visibleQuad(doc.page,'base',referenceQuad).world;
+ const targetEdge=[target[0],target[1]],referenceEdge=[reference[3],reference[2]];
+ const midpoint=pair=>({x:(pair[0].x+pair[1].x)/2,y:(pair[0].y+pair[1].y)/2});
+ const a=midpoint(targetEdge),b=midpoint(referenceEdge),dx=referenceEdge[1].x-referenceEdge[0].x,dy=referenceEdge[1].y-referenceEdge[0].y,length=Math.hypot(dx,dy),ux=dx/length,uy=dy/length;
+ assert.ok(Math.abs((a.x-b.x)*ux+(a.y-b.y)*uy-3*scale)<1e-7);
+ assert.ok(Math.abs(-(a.x-b.x)*uy+(a.y-b.y)*ux-2*scale)<1e-7);
+ const tx=targetEdge[1].x-targetEdge[0].x,ty=targetEdge[1].y-targetEdge[0].y;
+ assert.ok(Math.abs(tx*uy-ty*ux)<1e-7);
+ const angled=applyCreationTransaction(doc,batch(doc,[{op:'layout.alignEdge',target:'note',reference:'base',targetEdge:'top',referenceEdge:'bottom',targetQuad,referenceQuad,offsetDeg:7}],'edge-offset'),[]).document;
+ const angledEdge=visibleQuad(angled.page,'note',targetQuad).world;
+ const angledVector={x:angledEdge[1].x-angledEdge[0].x,y:angledEdge[1].y-angledEdge[0].y};
+ assert.ok(Math.abs(Math.atan2(angledVector.y,angledVector.x)-Math.atan2(dy,dx)-7*Math.PI/180)<1e-7);
+ assert.throws(()=>applyCreationTransaction(doc,batch(doc,[{op:'layout.alignEdge',target:'note',reference:'base',targetEdge:'top',referenceEdge:'bottom',targetQuad:[[0,0],[1,1],[1,0],[0,1]]}],'bad-quad'),[]),/四边形/);
+ const parked=applyCreationTransaction(doc,batch(doc,[{op:'layer.update',target:'note',place:{surface:'tray',reference:'page',at:[35,40],unit:'mm'}}],'park-edge-target'),[]).document;
+ assert.throws(()=>applyCreationTransaction(parked,batch(parked,[{op:'layout.alignEdge',target:'note',reference:'base',targetEdge:'top',referenceEdge:'bottom',targetQuad,referenceQuad}],'cross-space-edge'),[]),/同一工作空间/);
+});
+
+test('edge alignment reads an approved alpha silhouette and refuses an unknown material edge',async()=>{
+ const {visibleQuad}=await import('../src/creation-edge-alignment.js');
+ const {inspectCreationDocument}=await import('../src/creation-inspection.js');
+ const shaped={id:'shaped',title:'纸片',kind:'paper',physicalWidthMM:30,physicalHeightMM:20,supply:{quantity:1},sourceSilhouette:[[[[.08,.1],[.9,.05],[.93,.91],[.06,.96]]]]};
+ const unknown={id:'unknown',title:'透明剪片',kind:'sticker',physicalWidthMM:20,physicalHeightMM:20,supply:{quantity:1}};
+ let doc=await createCreationDocument({draft:draft(),assets:[shaped,unknown],aliases:{m1:'shaped',m2:'unknown'}});
+ doc=applyCreationTransaction(doc,batch(doc,[
+  {op:'material.add',id:'paper',asset:'m1',place:{reference:'page',at:[40,55],unit:'mm'}},
+  {op:'material.add',id:'sticker',asset:'m2',place:{reference:'page',at:[90,55],unit:'mm'}},
+  {op:'graphic.add',id:'base',geometry:{kind:'rect'},place:{reference:'page',at:[65,85],unit:'mm'},size:{width:40,height:30,unit:'mm'},style:{fill:'#EEDDBB'}}
+ ],'silhouette-setup'),[shaped,unknown]).document;
+ assert.equal(visibleQuad(doc.page,'paper',undefined,doc.source).source,'alphaSilhouette');
+ const inspection=inspectCreationDocument(doc,{ids:['paper','sticker']});
+ assert.equal(inspection.layers.find(row=>row.alias==='paper').visibleEdge.source,'alphaSilhouette');
+ assert.equal(inspection.layers.find(row=>row.alias==='sticker').visibleEdge.source,'observedQuadRequired');
+ assert.throws(()=>applyCreationTransaction(doc,batch(doc,[{op:'layout.alignEdge',target:'sticker',reference:'base',targetEdge:'top',referenceEdge:'bottom'}],'unknown-edge'),[shaped,unknown]),/可见四角/);
+ assert.doesNotThrow(()=>applyCreationTransaction(doc,batch(doc,[{op:'layout.alignEdge',target:'paper',reference:'base',targetEdge:'top',referenceEdge:'bottom'}],'alpha-edge'),[shaped,unknown]));
 });
 
 test('physical retention follows nested local masks and checks later frame changes',async()=>{

@@ -1,3 +1,4 @@
+import {validatePaperSurface} from './paper-surface.js';
 import {validateGraphicEffects} from './graphic-effects.js';
 import {replaceGraphicGeometry} from './graphic-geometry.js';
 import {shapeRepeatCountPatch} from './advanced-shape-options.js';
@@ -16,7 +17,7 @@ export function styleFor(type,style,page,node={}){
  if(type==='material')mapping.flipHorizontal='isFlippedHorizontally';
  if(type==='text')Object.assign(mapping,{outline:'textOutline',gradient:'textGradient',fillOpacity:'fillOpacity',color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
  if(['shape','ink'].includes(type))Object.assign(mapping,{outline:'graphicOutline',gradient:'graphicGradient'});
- if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
+ if(type==='shape')Object.assign(mapping,{paperSurface:'paperSurface',fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{stroke:'color',strokeWidthMm:'width',penStyle:'penStyle'});
  const unsupported=Object.keys(style).filter(key=>!Object.hasOwn(mapping,key));
  if(unsupported.length)throw Error(type+' 不支持 '+unsupported.map(key=>'style.'+key).join('、')+'；可用：'+Object.keys(mapping).join('、'));
@@ -24,7 +25,7 @@ export function styleFor(type,style,page,node={}){
  if(type==='text'&&Object.hasOwn(style,'fontPreset')&&!Object.hasOwn(style,'fontFamily'))result.fontName=null;
  for(const [key,value] of Object.entries(style)){
   if(type==='ink'&&(key==='stroke'&&value===null||key==='strokeWidthMm'&&!(value>0)))throw Error('笔迹需要非空 stroke 和正 strokeWidthMm');
-  result[mapping[key]]=key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
+  result[mapping[key]]=key==='paperSurface'?(value===null?null:{intensity:.45,seed:17,...structuredClone(value),unitScale:s}):key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
    key==='lineHeight'?value*(style.fontSizePt===undefined?(node.fontSize||12*25.4/72*s):style.fontSizePt*25.4/72*s):
    ['strokeWidthMm','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'].includes(key)?value*s:
    key==='shadow'?(value===null?null:{offsetX:value.offsetMm[0]*s,offsetY:value.offsetMm[1]*s,blur:value.blurMm*s,color:value.color}):value;
@@ -62,7 +63,7 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
  // its stroke can silently disappear in the real PNG, so reject that draft.
  if(next.type==='shape'&&next.kind==='line'&&next.height+1e-7<(next.lineWidth||0))throw Error('线条高度不能小于笔宽；增大 size.height 或改用 geometry.stroke');
  validateTextEffects(next);
- validateGraphicEffects(next);
+ validateGraphicEffects(next);validatePaperSurface(next);
  const values={};for(const key of new Set([...Object.keys(node),...Object.keys(next)]))if(JSON.stringify(node[key])!==JSON.stringify(next[key]))values[key]=next[key];
  return values;
 }

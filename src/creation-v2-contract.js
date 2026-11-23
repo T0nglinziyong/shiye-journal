@@ -22,6 +22,15 @@ export function selfContainedCreationSchema(schema){
 // Default discovery is deliberately shallow. Recursive Operation definitions
 // are only expanded by --full, never when the agent just asks how to compose.
 function briefField(schema){
+ // Ref/array branches must retain semantic descriptions: an asset alias and a
+ // Scene target share a string shape but identify different things.
+ if(schema.description){const {description,...rest}=schema;return {...briefField(rest),description};}
+ // Per-preset validation belongs in the executable/full schema. Expanding
+ // every preset here would bury the small geometry entry in repeated fields.
+ if(schema.allOf&&schema.properties?.options?.$ref==='#/$defs/ShapeOptions'&&schema.properties?.kind?.enum){
+  const {allOf,...base}=schema;
+  return {...briefField(base),optionsByKind:'describe shapeOptions：只使用所选 kind 列出的参数与范围。'};
+ }
  if(schema.allOf){const {allOf,...base}=schema,ref=allOf.find(part=>part.$ref);return {...(ref?briefField(ref):{}),...briefField(base),constraints:allOf.filter(part=>part!==ref).map(briefField)};}
  if(schema.if)return {if:briefField(schema.if),...(schema.then?{then:briefField(schema.then)}:{}),...(schema.else?{else:briefField(schema.else)}:{})};
  if(schema.not)return {not:briefField(schema.not)};

@@ -14,6 +14,7 @@ export function EditorShapeOptions({node,onChange}){
   <h4>图形内容</h4><p className="muted">{node.kind==='filmFrame'?'增减照片格保留每格宽度；齿孔数量只改变密度。':controls.some(control=>control.key==='rows')?'拉伸时格子数量不变；增减行列时保留每格大小。':controls.some(control=>control.key==='count')?'增减重复数量会相应调整外框。':'调整图形结构时，外框大小不变。'}</p>
   <div className="shape-option-list">{controls.map(control=>{
    const value=options[control.key],id=`inspector-shape-option-${control.key}`;
+   if(control.type==='string')return <label key={control.key} htmlFor={id}>{control.label}<select id={id} value={value} onChange={e=>change(control,e.target.value)}>{control.enum.map((item,index)=><option key={item} value={item}>{control.labels?.[index]||item}</option>)}</select></label>;
    if(control.type==='boolean')return <label className="shape-option-check" key={control.key}>
     <input id={id} type="checkbox" checked={value} onChange={e=>change(control,e.target.checked)}/>{control.label}
    </label>;

@@ -7,8 +7,12 @@ import {importWebScene} from './web-scene-workbench.js';
 const phases={queued:'已提交，等待计算服务器',loading:'正在读取素材',thinking:'正在构思与编辑',preview:'正在检查实际画面',completed:'创作完成',failed:'创作未完成，已保留后台检查点',cancelled:'已停止创作'};
 export function creativeJobProgress(job){
   if(job.error_code==='CREATIVE_RESOURCE_VERSION')return '创作资源正在更新，请更新拾页后重试；原稿已保留';
+  if(job.error_code==='CREATIVE_MODEL_TIMEOUT')return '创作模型连接超时，已保留进度；请重新发起创作';
   const stage=['completed','failed','cancelled','queued'].includes(job.status)?job.status:job.progress?.stage||'loading';
-  return (phases[stage]||'后台创作中')+(job.progress?.turn?' · 第 '+job.progress.turn+' 轮':'');
+  const progress=job.progress||{},turn=progress.turn||progress.turns;
+  const valid=value=>Number.isSafeInteger(value)&&value>=0;
+  const usage=valid(progress.inputTokens)&&valid(progress.outputTokens)?' · 累计 '+(progress.inputTokens+progress.outputTokens).toLocaleString('zh-CN')+' token（输入 '+progress.inputTokens.toLocaleString('zh-CN')+' / 输出 '+progress.outputTokens.toLocaleString('zh-CN')+'）':'';
+  return (phases[stage]||'后台创作中')+(turn?' · 第 '+turn+' 轮':'')+usage;
 }
 
 export async function applyBackgroundCreativeResult({project,document,job,assets,persist}){
@@ -79,7 +83,12 @@ export function createBackgroundCreationSession({getAccount,getAssets,getProject
       const owner=getAccount(),guard=()=>{ensure(owner);signal?.throwIfAborted();};let reference;
       try{
       guard();
-      const parameters=creativeRunParameters({project,draft,assets,ids,prompt,settings:{}}),document=await createCreationDocument(parameters);
+      const parameters=creativeRunParameters({project,draft,assets,ids,prompt,settings:{}});
+      // The matching shelf supplies candidates, not a promise to paste every
+      // selected item. Keep the whole tray available while the model chooses.
+      parameters.requiredAssetIDs=[];
+      parameters.materialPriority={required:[],preferred:[...ids],available:[]};
+      const document=await createCreationDocument(parameters);
       guard();
       reference=await api.prepare({projectID:project.id,document,brief:{intent:prompt,styles:parameters.styles,purposes:parameters.pagePurposes,contentPolicy:parameters.contentPolicy}});
       guard();project.creativeTask={id:reference.id,taskHash:document.source.taskHash,targetDraftID:draft.id,status:'uploading'};

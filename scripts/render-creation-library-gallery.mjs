@@ -1,12 +1,12 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
-import {templateFixture} from '../src/creation-library/template-elements.js';
-import {templateCatalog,materialSlots,templateEnabled} from '../src/creation-library/matcher.js';
-import {techniqueCatalog,describeTechnique} from '../src/creation-library/techniques.js';
+import {templateFixture} from '../creative-agent/library/template-elements.js';
+import {templateCatalog,materialSlots,templateEnabled} from '../creative-agent/library/matcher.js';
+import {techniqueCatalog,describeTechnique} from '../creative-agent/library/techniques.js';
 const output=resolve(process.argv[2]||'test-results/creation-library');await mkdir(output,{recursive:true});
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const topics={'journal-accents':'点缀与细节','journal-lettering':'标题与文字','paper-layering':'叠纸与裁切','photo-story':'照片叙事','journal-graphics':'图形与笔迹','pattern-and-doodle':'花纹与涂鸦','tape-and-vellum':'胶带与透叠','functional-journal':'记录与组织','journal-color':'配色呼应','quiet-photo-journal':'留白构图','layered-journal':'层叠构图','magazine-journal':'杂志构图','playful-journal':'童趣构图','vintage-journal':'复古构图','journal-composition':'组合与动线'};
-const img=async id=>'data:image/png;base64,'+(await readFile(new URL('../src/creation-library/illustrations/'+id+'.png',import.meta.url))).toString('base64');
+const topics={'journal-accents':'点缀与细节','journal-lettering':'标题与文字','paper-layering':'叠纸与裁切','photo-story':'照片叙事','journal-graphics':'图形与笔迹','journal-writing':'正文与记录','journal-color':'配色呼应','journal-composition':'组合与动线'};
+const img=async id=>'data:image/png;base64,'+(await readFile(new URL('../creative-agent/library/illustrations/'+id+'.png',import.meta.url))).toString('base64');
 const cards=[];
 for(const t of templateCatalog.templates){const source=templateCatalog.sources.find(s=>s.id===t.sourceId);cards.push(`<article data-kind="模板" data-text="${escape(t.title+' '+t.styles.join(' '))}"><div class="image"><img loading="lazy" src="${await img(t.id)}" alt="${escape(t.title)}结构示意"></div><span class="eyebrow">${t.id} · ${materialSlots(t).length} 个素材位置</span><h3>${escape(t.title)}</h3>${!templateEnabled(t)?'<p>暂不启用 · '+escape(t.usage.reason)+'</p>':''}<p>${escape(t.styles.join(' · '))}</p><details><summary>元素与来源</summary><p>${escape(t.interpretation)}</p><p><a href="${source.url}">${escape(source.author+' · '+source.title)}</a></p><pre>${escape(JSON.stringify({reconstruction:t.reconstruction||{status:'structure-only'},elements:t.elements,example:templateFixture(t)},null,2))}</pre></details></article>`);}
 for(const m of techniqueCatalog.methods){const detail=describeTechnique(m.id),visual=m.illustration?`<div class="image technique"><img loading="lazy" src="${await img(m.id)}" alt="${escape(m.title)}真实工具输出"></div>`:'';cards.push(`<article data-kind="${topics[m.skill]}" data-text="${escape(m.title+' '+m.when)}">${visual}<span class="eyebrow">${topics[m.skill]}</span><h3>${escape(m.title)}</h3><p>${escape(m.when)}</p><details><summary>方法与检查</summary><p>${escape(detail.lesson.principle)}</p><ol>${detail.lesson.steps.map(s=>`<li>${escape(s)}</li>`).join('')}</ol><p>${escape(detail.lesson.check.join('；'))}</p></details><details><summary>参数与完整示例</summary><pre>${escape(JSON.stringify({parameters:detail.parameters,geometryOptions:detail.geometryOptions,example:detail.example,tool:detail.tool},null,2))}</pre></details></article>`);}

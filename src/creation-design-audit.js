@@ -43,13 +43,13 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
   if(node.type!=='text'||String(node.content||'').replace(/\s/g,'').length<6)continue;
   for(let j=i+1;j<entries.length;j++){
    const cover=entries[j],box=boxes[j];
-   if(cover.type!=='shape'||cover.fill==null||(cover.opacity??1)<.7)continue;
+   if(!((cover.type==='shape'&&cover.fill!=null)||(cover.type==='material'&&!cover.tapeStrip))||(cover.opacity??1)<.85)continue;
    const overlapW=Math.max(0,Math.min(frame.x+frame.width,box.x+box.width)-Math.max(frame.x,box.x));
    const overlapH=Math.max(0,Math.min(frame.y+frame.height,box.y+box.height)-Math.max(frame.y,box.y));
-   if(overlapW>Math.max(7,(node.fontSize||8)*1.5)&&overlapH>Math.max(7,(node.fontSize||8)*1.2))coveredText.push(`${node.id} / ${cover.id}`);
+   if(overlapW>Math.max(7,(node.fontSize||8)*1.5)&&overlapH>Math.max(7,(node.fontSize||8)*1.2))coveredText.push({textId:node.id,coverId:cover.id,text:String(node.content||''),box:{x:frame.x,y:frame.y,width:frame.width,height:frame.height},overlapArea:overlapW*overlapH});
   }
  }
- if(coveredText.length)observations.push(`后放的实心纸层与已有文字明显相交（${coveredText.slice(0,5).join('、')}）：看真实 PNG 是否盖住字；若是，把纸层放到字后、移动段落或缩短该段，不要靠缩小字号躲避。`);
+ if(coveredText.length)observations.push(`后放的素材或实心图形与已有文字外框明显相交（${coveredText.slice(0,5).map(item=>item.textId+' / '+item.coverId).join('、')}）：看真实 PNG 判断是否盖住字；若是，用 layer.stack/order 调层序、移动段落或调整叠放。透明孔洞与有意遮挡可能是误报。`);
  if(!types.ink&&!types.shape)observations.push('没有新增图形或笔迹：检查小素材/印刷字是否已经提供层次；若仍平铺或孤立，进入点缀与连接阶段，不机械凑数量。');
  // Full-bleed page grounds are paper, not hand-drawn decoration. Counting
  // them made a plain two-color spread appear to have abundant graphic paint.
@@ -121,11 +121,10 @@ export function auditCreationDesign(page,{materials=[],styles=[]}={}){
    return width*height;
   }).filter(Boolean);
   const material=materials.find(item=>item.assetID===box.assetID);
-  return {assetAlias:material?.alias||null,title:material?.title||null,journalRoles:material?.journalRoles||[],estimatedPageFrameFraction:Number((box.width*box.height/pageArea).toFixed(3)),annotationFrames:hits.length,estimatedAnnotationFrameFraction:Number((Math.min(1,hits.reduce((sum,area)=>sum+area,0)/(box.width*box.height))).toFixed(3))};
+  return {assetAlias:material?.alias||null,title:material?.title||null,estimatedPageFrameFraction:Number((box.width*box.height/pageArea).toFixed(3)),annotationFrames:hits.length,estimatedAnnotationFrameFraction:Number((Math.min(1,hits.reduce((sum,area)=>sum+area,0)/(box.width*box.height))).toFixed(3))};
  });
  if(materialFrames.some(frame=>!frame.annotationFrames))observations.push('有大素材框没有文字、图形或笔迹相交：看真实 PNG 判断它是有内容的印刷主角，还是只充当未使用的整张底纸；后者应调整露出面积或建立具体图文关系。');
  const lightlyUsed=materialFrames.filter(frame=>frame.estimatedPageFrameFraction>=.25&&frame.estimatedAnnotationFrameFraction<.12);
  if(lightlyUsed.length)observations.push(`大素材占据约四分之一页以上，新增图文只触及少量区域（${lightlyUsed.map(frame=>frame.assetAlias||frame.title||'未命名素材').join('、')}）：缩看真实 PNG，检查印刷字、截图界面或底纸是否盖过亲手写下的内容；若是，合法裁取或改变露出方式，把可写空间交还给内容。框级估算不代表实际可见面积。`);
- if(materialFrames.some(frame=>frame.journalRoles.includes('headline')&&frame.estimatedPageFrameFraction>=.2)&&fontSizes.length&&Math.max(...fontSizes)<18)observations.push('现成印刷标题框占据较大页面面积，新增字级明显较轻：缩看 PNG 比较两者视觉重量；如果印刷字压住全部新增表达，调整露出范围、合法裁片或正文层级。');
- return {kind:'design-advisory',visualReviewPerformed:false,method:'24x32 rotated-frame AABB grid, approximate foreground stroke/fill area and material-frame intersections; ignores actual alpha/masks and text glyph fill',limitations:'不是像素留白率或审美评分；笔触面积忽略真实纹理、透明材料和局部遮挡，图形尺度和类别不是质量或数量评分；背景纸框可能覆盖整页。不得据此声称已看图或强制填满。',regions,gutterIntersections,layers:types,graphicVocabulary,graphicScale,estimatedGraphicPaintFraction,clusterAlignment,typography:{fontSizesPt:[...new Set(fontSizes.map(n=>Number(n.toFixed(2))))].sort((a,b)=>a-b),fontChoices:[...fonts],effects},pages,materialFrames,observations};
+ return {kind:'design-advisory',visualReviewPerformed:false,method:'24x32 rotated-frame AABB grid, approximate foreground stroke/fill area and material-frame intersections; ignores actual alpha/masks and text glyph fill',limitations:'不是像素留白率或审美评分；笔触面积忽略真实纹理、透明材料和局部遮挡，图形尺度和类别不是质量或数量评分；背景纸框可能覆盖整页。不得据此声称已看图或强制填满。',textCoverCandidates:coveredText,textRegions:entries.flatMap((node,index)=>node.type==='text'&&String(node.content||'').trim()? [{textId:node.id,text:String(node.content),box:boxes[index]}]:[]),regions,gutterIntersections,layers:types,graphicVocabulary,graphicScale,estimatedGraphicPaintFraction,clusterAlignment,typography:{fontSizesPt:[...new Set(fontSizes.map(n=>Number(n.toFixed(2))))].sort((a,b)=>a-b),fontChoices:[...fonts],effects},pages,materialFrames,observations};
 }

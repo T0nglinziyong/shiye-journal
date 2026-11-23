@@ -11,6 +11,43 @@ import {createOfflineHandoff} from '../src/offline-creation.js';
 import {creativePresetAssets} from '../src/creative-presets.js';
 import {assetFromSourceSnapshot} from '../src/material-anatomy.js';
 import {toolContracts,validateValue} from '../src/creative-contract.js';
+import {validateCreationV2Commands} from '../src/creation-v2-commands.js';
+
+test('fine paper patterns support dense repeats and vertical stripes without expanding table limits',async()=>{
+  const operation=kind=>({op:'graphic.add',id:'pattern',geometry:{kind,options:{rows:40,columns:44}},
+    place:{reference:'page',at:[50,50],unit:'mm'},size:{width:80,height:100,unit:'mm'},style:{fill:null,stroke:'#112233',strokeWidthMm:.2}});
+  const command=op=>({protocolVersion:2,transactionId:'dense',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[op]});
+  for(const kind of ['grid','dots','stripes']){
+    const op=operation(kind);
+    assert.doesNotThrow(()=>validateCreationV2Commands(command(op)));
+    assert.doesNotThrow(()=>validateShapeOptions(kind,op.geometry.options));
+    assert.equal(advancedShapeControls(kind).find(c=>c.key==='columns').max,128);
+    const svg=shapeSVG({id:kind,kind,width:320,height:400,shapeOptions:{...op.geometry.options,...(kind==='stripes'?{angle:90}:{})},stroke:'#112233',fill:null,lineWidth:.5});
+    assert.ok(svg.length<18000,'dense patterns must remain compact');
+    const loaded=await loadImage(Buffer.from(svg.replace('<svg ','<svg width="320" height="400" ')));
+    assert.equal(loaded.width,320);
+    if(kind==='stripes')assert.equal((svg.match(/ L/g)||[]).length,44);
+    const invalid=operation(kind);invalid.geometry.options.columns=129;
+    assert.throws(()=>validateCreationV2Commands(command(invalid)));
+  }
+  assert.throws(()=>validateCreationV2Commands(command(operation('weeklyTable'))));
+  assert.throws(()=>validateShapeOptions('weeklyTable',{rows:40}));
+  const lined=operation('linedNote');lined.geometry.options={rows:8,spacing:5};
+  assert.throws(()=>validateCreationV2Commands(command(lined)),/spacing/);
+});
+
+test('dots stay round on narrow paper strips instead of inheriting the SVG box distortion',async()=>{
+  for(const [width,height] of [[280,112],[112,280]]){
+    const svg=shapeSVG({id:'round-dots',kind:'dots',width,height,fill:null,stroke:'#112233',lineWidth:0,
+      shapeOptions:{rows:1,columns:1,dotSize:4.5,showOuterBorder:false}});
+    const loaded=await loadImage(Buffer.from(svg.replace('<svg ',`<svg width="${width}" height="${height}" `)));
+    const canvas=createCanvas(width,height),ctx=canvas.getContext('2d');ctx.drawImage(loaded,0,0);
+    const data=ctx.getImageData(0,0,width,height).data;let x0=width,y0=height,x1=0,y1=0;
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(data[(y*width+x)*4+3]>128){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
+    assert.ok(x1-x0>20,'visible dot');
+    assert.ok(Math.abs((x1-x0)-(y1-y0))<=1,`dot must be circular on ${width}×${height}`);
+  }
+});
 
 test('each parametric preset exposes bounded editable controls',()=>{
   assert.deepEqual(advancedShapeControls('grid').map(control=>control.key),
@@ -20,10 +57,10 @@ test('each parametric preset exposes bounded editable controls',()=>{
   assert.deepEqual([...advancedShapeOptionKinds].sort(),[...advancedShapes.map(([kind])=>kind).filter(kind=>kind!=='vector'),'flower','star','arrow'].sort());
   for(const kind of advancedShapeOptionKinds){
     const controls=advancedShapeControls(kind);assert.ok(controls.length>0,kind);
-    const base={kind,id:'control-'+kind,width:150,height:100,fill:null,stroke:'#75918d',lineWidth:2};
+    const base={...(kind==='paper'?{shapeOptions:{paperPattern:'grid',torn:true}}:{}),kind,id:'control-'+kind,width:150,height:100,fill:kind==='paper'?'#F5F1E7':null,stroke:'#75918d',lineWidth:2};
     for(const control of controls){
-      const changed=control.type==='boolean'?false:control.max;
-      assert.notEqual(shapeSVG(base),shapeSVG({...base,shapeOptions:{[control.key]:changed}}),`${kind}.${control.key} must affect the real renderer`);
+      const changed=control.type==='string'?control.enum.at(-1):control.type==='boolean'?false:control.max;
+      assert.notEqual(shapeSVG(base),shapeSVG({...base,shapeOptions:{...base.shapeOptions,[control.key]:changed}}),`${kind}.${control.key} must affect the real renderer`);
     }
   }
   assert.throws(()=>validateShapeOptions('weeklyTable',{columns:0}),/范围/);

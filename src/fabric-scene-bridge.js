@@ -166,9 +166,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     let object;
     if(node.type==='shape'){
       // Fabric keeps SVG pattern paints as unresolved url(#...) strings and
-      // paints them black. Decode only patterned shapes through the browser's
+      // paints them black; paper masks also need SVG image compositing. Decode
+      // patterned and paper-finished shapes through the browser's
       // SVG image renderer, which is also used by the Scene PNG exporter.
-      const patterned=['grid','dots','stripes'].includes(node.kind);
+      const patterned=['paper','grid','dots','stripes'].includes(node.kind)||Boolean(node.paperSurface);
       let options;
       if(patterned){
         const svg=shapeThumbnailSVG(node);

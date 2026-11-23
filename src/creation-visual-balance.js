@@ -49,7 +49,7 @@ export function analyzeCreationVisualBalance(imageURL,pageMode='spread',visualSa
   for(const row of result){
     const [upperLeft,upperRight,lowerLeft,lowerRight]=row.quadrants;
     if(lowerRight<.055&&upperLeft+upperRight>.32&&lowerLeft>.1)
-      notes.push(row.page+'右下角有色内容很少，而上方与左下已有内容；检查阅读路线是否在左下突然停止。可把收尾文字或与主题相连的小装饰移到右下，不必机械填满。');
+      notes.push(row.page+'右下角有色内容很少，而上方与左下已有内容；这是像素分布，不是缺陷。结合用户疏密选择与图文关系判断，阅读路线不必经过右下。');
     const [top,,bottom]=row.horizontalCentersByThird;
     if(top!=null&&bottom!=null&&Math.abs(top-bottom)>.27)
       notes.push(row.page+'上下两端的视觉中心横向错开较多；检查这是有意的对角路线，还是图文簇断开。');

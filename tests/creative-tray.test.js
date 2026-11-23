@@ -7,10 +7,10 @@ import {materialAliases} from '../src/material-alias.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision,applyCreationTransaction} from '../src/creation-transaction.js';
 import {inspectCreationDocument} from '../src/creation-inspection.js';
-import {createHarnessRenderer} from '../compute-server/harness/renderer.mjs';
+import {createHarnessRenderer} from '../creative-agent/runtime/renderer.mjs';
 import {loadOfflineCanvas} from '../src/offline-node-preview.mjs';
-import {initialHarnessState} from '../compute-server/harness/agent.mjs';
-import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
+import {initialHarnessState} from '../creative-agent/runtime/agent.mjs';
+import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 
 async function fixture(){
  const assets=creativePresetAssets.slice(0,2),aliases=materialAliases(assets.map(asset=>asset.id));

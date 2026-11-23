@@ -31,7 +31,7 @@ try{
   const local=JSON.parse(await readFile(join(release,'public/creation-resources.json'),'utf8'));
   const remote=await fetch('https://shiyejournal.vip/creation-resources.json',{cache:'no-store',signal:AbortSignal.timeout(15000)});
   if(!remote.ok||(await remote.json()).version!==local.version)throw Error('App 与计算资源指纹不一致，未切换');
-  await run(process.execPath,['--input-type=module','-e',"await (await import('./compute-server/harness/skills.mjs')).loadCreationSkills(); await (await import('./src/offline-node-preview.mjs')).loadOfflineCanvas();"],release);
+  await run(process.execPath,['--input-type=module','-e',"await (await import('./creative-agent/runtime/skills.mjs')).loadCreationSkills(); await (await import('./src/offline-node-preview.mjs')).loadOfflineCanvas();"],release);
   await run('systemctl',['--user','kill','--kill-whom=main','--signal=SIGUSR1','shiye-compute.service']);drained=true;
   const until=Date.now()+660000;
   for(;;){const s=await status();if(s.draining&&!s.busy)break;if(Date.now()>until)throw Error('计算任务尚未结束，保留当前版本');await delay(2000);}

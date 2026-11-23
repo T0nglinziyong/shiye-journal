@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision,applyCreationTransaction} from '../src/creation-transaction.js';
-import {templateCatalog,rankTemplates,scoreTemplate,templateMarginalScores,maximumAssignment,materialSlots} from '../src/creation-library/matcher.js';
-import {compileTemplate} from '../src/creation-library/compiler.js';
-import {templateFixture,isGraphicElement} from '../src/creation-library/template-elements.js';
-import {techniqueCatalog,compileTechnique,describeTechnique} from '../src/creation-library/techniques.js';
-import {exampleMaterials,techniqueExample} from '../src/creation-library/examples.js';
+import {templateCatalog,rankTemplates,scoreTemplate,templateMarginalScores,maximumAssignment,materialSlots} from '../creative-agent/library/matcher.js';
+import {compileTemplate} from '../creative-agent/library/compiler.js';
+import {templateFixture,isGraphicElement} from '../creative-agent/library/template-elements.js';
+import {techniqueCatalog,compileTechnique,describeTechnique} from '../creative-agent/library/techniques.js';
+import {exampleMaterials,techniqueExample} from '../creative-agent/library/examples.js';
 import {worldBox} from '../src/scene-spatial.js';
 const document=assets=>createCreationDocument({draft:draft({ratio:'a5'}),assets,aliases:Object.fromEntries(assets.map(a=>[a.alias,a.id]))});
 const apply=(doc,operations,assets)=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:'library-test',baseSceneRevision:creationSceneRevision(doc),operations},assets);
@@ -65,15 +65,17 @@ for(const method of techniqueCatalog.methods)test('technique transaction is exec
   assert.ok(y-dy>=-box.h/2-.5&&y+dy<=box.h/2+.5,method.id+'/'+child.id+' group height');
  }
 });
-test('late paper foundation stays behind existing material unless explicitly overlaid',async()=>{
+test('paper layer role is explicit and can be reordered after insertion',async()=>{
  const step=(doc,id,operations)=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:id,baseSceneRevision:creationSceneRevision(doc),operations},exampleMaterials).document;
  const first=step(await document(exampleMaterials),'subject-tx',[{op:'material.add',id:'subject',asset:'m1',place:{reference:'page',at:[72,90],unit:'mm'}}]);
- const underlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-base',widthMm:70,heightMm:92,at:[72,90]}});
+ const underlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-base',widthMm:70,heightMm:92,at:[72,90],layerRole:'underlay'}});
  assert.deepEqual(underlay.operations[0].order,{edge:'back'});
  const result=step(first,'underlay-tx',underlay.operations);
  const ordered=result.page.layers.slice().sort((a,b)=>a.zIndex-b.zIndex);
  assert.equal(ordered[0].id,'paper-base');
  assert.equal(ordered[1].type,'material');
+ const unspecific=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-free',widthMm:30,heightMm:30,at:[72,90]}});
+ assert.equal(unspecific.operations[0].order,undefined);
  const overlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-front',widthMm:30,heightMm:30,at:[72,90],layerRole:'overlay'}});
  assert.deepEqual(overlay.operations[0].order,{edge:'front'});
  const layered=step(result,'overlay-tx',overlay.operations);
@@ -135,9 +137,9 @@ test('tape title follows actual wrapped lines and remains an editable digital gr
  assert.throws(()=>compileTechnique({methodId:'title-tape',parameters:{id:'invalid-tape',text:'短题',tapeOpacity:1}}),/透明度/);
 });
 test('six video lettering methods remain editable and expose their distinct constructions',async()=>{
- const ids=['title-cross-shadow','title-scattered-round','title-scattered-triangle','title-number-route','title-script-dots','title-paper-lettering'];
- for(const id of ids){
-  const {parameters}=techniqueExample(techniqueCatalog.methods.find(m=>m.id===id));
+ const ids=[['title-cross-shadow'],['title-scattered-round'],['title-scattered-round','triangle'],['title-number-route'],['title-script-dots'],['title-paper-lettering']];
+ for(const [id,variant] of ids){
+  const parameters=describeTechnique(id,{variant}).tool.arguments.parameters;
   const compiled=compileTechnique({methodId:id,parameters}),children=compiled.operations[0].children;
   assert.equal(children.filter(o=>o.op==='text.add'&&o.content!==parameters.caption).map(o=>o.content).join(''),parameters.text,id+' editable main text');
   assert.ok(children.some(o=>o.op==='graphic.add'),id+' editable visual construction');
@@ -197,11 +199,11 @@ test('tutorial backgrounds and ornaments stay editable with both supplied handwr
  const dotted=compileTechnique({methodId:'title-script-dots',parameters:{id:'organic',text:'ordinary day',fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:3}}}).operations[0].children;
  assert.ok(dotted.some(op=>op.id==='organic-backdrop-0-0'));
  assert.ok(!dotted.some(op=>op.id.startsWith('organic-ornament')),'the video circle treatment does not add unrelated side decorations');
- const squares=compileTechnique({methodId:'title-block-lettering',parameters:{id:'blocks',text:'今天很开心',fontFamily:'BaiLuBangBang'}}).operations[0].children;
+ const squares=compileTechnique({methodId:'title-label',parameters:{id:'blocks',text:'今天很开心',fontFamily:'BaiLuBangBang',variant:'blocks'}}).operations[0].children;
  assert.ok(squares.some(op=>op.id==='blocks-backdrop-0-0'&&op.geometry.kind==='rect'));
  assert.ok(squares.findIndex(op=>op.id==='blocks-backdrop-0-0')<squares.findIndex(op=>op.op==='text.add'));
- assert.equal(apply(await document([]),compileTechnique({methodId:'title-block-lettering',parameters:{id:'blocks',text:'今天很开心'}}).operations,[]).changed,true);
- const tutorial=compileTechnique({methodId:'title-outline-block-ring',parameters:{id:'tutorial',text:'喜欢薄荷',fontFamily:'BaiLuBangBang',runs:[{text:'喜欢',backdrop:{kind:'squares',strokeOnly:true,strokeWidthMm:.8,diameterMm:11,patternColor:'#2869A5'}},{text:'薄荷',breakBefore:true,offsetMm:[13,0],backdrop:{kind:'ring',diameterMm:17,patternColor:'#D08371'}}]}});
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-label',parameters:{id:'blocks',text:'今天很开心',variant:'blocks'}}).operations,[]).changed,true);
+ const tutorial=compileTechnique({methodId:'title-phrases',parameters:{id:'tutorial',text:'喜欢薄荷',fontFamily:'BaiLuBangBang',variant:'outline-ring',runs:[{text:'喜欢',backdrop:{kind:'squares',strokeOnly:true,strokeWidthMm:.8,diameterMm:11,patternColor:'#2869A5'}},{text:'薄荷',breakBefore:true,offsetMm:[13,0],backdrop:{kind:'ring',diameterMm:17,patternColor:'#D08371'}}]}});
  const framed=tutorial.operations[0].children,frames=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-0-')),rings=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-1-ring'));
  assert.equal(frames.length,4,'the first phrase has four outlined squares');
  assert.ok(frames.every(op=>op.geometry.kind==='rect'&&op.style.fill===null&&op.style.stroke==='#2869A5'));
@@ -272,16 +274,6 @@ test('composed lettering also works as smaller second and third level headings',
  assert.equal(apply(await document([]),second.operations,[]).changed,true);
  assert.equal(apply(await document([]),third.operations,[]).changed,true);
 });
-test('underline follows the final wrapped line and remains valid when the caption repeats the title',async()=>{
- const parameters={id:'under',text:'一二三四五六七八九十',caption:'一二三四五六七八九十',fontSizePt:20,widthMm:35};
- const compiled=compileTechnique({methodId:'title-underline',parameters});
- const children=compiled.operations[0].children,underline=children.find(o=>o.id==='under-underline');
- const text=children.find(o=>o.op==='text.add');
- assert.equal(text.content,parameters.text);
- assert.ok(underline.geometry.points.at(-1).x<15,'underline should use the short last line');
- assert.ok(underline.place.at.every(Number.isFinite));
- assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
-});
 test('postmark lesson renders a circular editable label, with caption outside the ring',()=>{
  const result=compileTechnique({methodId:'vintage-postmark',parameters:{id:'seal',text:'旅途',caption:'小记'}});
  const children=result.operations[0].children,ring=children.find(op=>op.op==='graphic.add'),label=children.find(op=>op.op==='text.add'&&op.content==='旅途'),caption=children.find(op=>op.op==='text.add'&&op.content==='小记');
@@ -290,22 +282,6 @@ test('postmark lesson renders a circular editable label, with caption outside th
  assert.ok(caption.place.at[1]>ring.size.height);
  assert.throws(()=>compileTechnique({methodId:'vintage-postmark',parameters:{id:'seal',text:'这一行长到放不进圆里',widthMm:18}}),/超出圆形范围/);
 });
-test('diagonal layer lesson forms a connected cluster without scaling real materials',()=>{
- const compiled=compileTechnique({methodId:'layered-diagonal',parameters:{id:'layers',aliases:['m1','m2','m3']},materials:exampleMaterials});
- const children=compiled.operations[0].children.filter(op=>op.op==='material.add');
- for(let i=1;i<children.length;i++){
-  const a=exampleMaterials.find(asset=>asset.alias===children[i-1].asset),b=exampleMaterials.find(asset=>asset.alias===children[i].asset);
-  const dx=Math.abs(children[i].place.at[0]-children[i-1].place.at[0]),dy=Math.abs(children[i].place.at[1]-children[i-1].place.at[1]);
-  assert.ok(dx<(a.physicalWidthMM+b.physicalWidthMM)/2);
-  assert.ok(dy<(a.physicalHeightMM+b.physicalHeightMM)/2);
-  assert.equal(children[i].size,undefined);
- }
-});
-test('quiet pair stays spaced apart while layered diagonal is connected',()=>{
- const quiet=compileTechnique({methodId:'quiet-pair',parameters:{id:'quiet',aliases:['m1','m2']},materials:exampleMaterials}).operations[0].children;
- const a=exampleMaterials[0],b=exampleMaterials[1],dx=Math.abs(quiet[1].place.at[0]-quiet[0].place.at[0]);
- assert.ok(dx>=(a.physicalWidthMM+b.physicalWidthMM)/2);
-});
 test('graphic lesson examples show their focal objects and route requires real waypoints',()=>{
  const route=describeTechnique('graphic-route');
  assert.equal(route.parameters.waypoints.required,true);
@@ -313,10 +289,10 @@ test('graphic lesson examples show their focal objects and route requires real w
  assert.equal(route.tool.arguments.parameters.waypoints.length,2);
  assert.throws(()=>compileTechnique({methodId:'graphic-route',parameters:{id:'route'}}),/需要两个以上真实焦点/);
  assert.throws(()=>compileTechnique({methodId:'graphic-route',parameters:{id:'route',waypoints:[[.2,.2],[1.2,.8]]}}),/区域内比例坐标/);
- for(const id of ['graphic-loop','graphic-corner','graphic-rays'])assert.ok(describeTechnique(id).example.prepare.length,id+' missing focal example');
+ for(const [id,variant] of [['graphic-loop'],['graphic-loop','corner'],['graphic-loop','rays']])assert.ok(describeTechnique(id,{variant}).example.prepare.length,`${id}:${variant||''} missing focal example`);
 });
-test('photo-story examples use photographs for every material slot',()=>{
- for(const method of techniqueCatalog.methods.filter(m=>m.skill==='photo-story'&&['materials','film'].includes(m.recipe))){
+test('photo-specific examples use photographs for every material slot',()=>{
+ for(const method of techniqueCatalog.methods.filter(m=>m.id.startsWith('photo-')&&['materials','film'].includes(m.recipe))){
   const aliases=techniqueExample(method).parameters.aliases;
   assert.ok(aliases.length>=2,method.id);
   for(const alias of aliases)assert.equal(exampleMaterials.find(asset=>asset.alias===alias)?.kind,'photo',method.id+'/'+alias);
@@ -340,16 +316,16 @@ test('bubble lesson creates editable text inside the frame and rejects overflow'
  assert.equal(compiled.operations[0].children[1].content,'这里的光');
  assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble'}}),/需要短文字/);
  assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble',text:'这段批注长到不可能放进很小的气泡主体内',widthMm:20,heightMm:12}}),/超出框内可写区域/);
- for(const id of ['graphic-arch','graphic-scallop-frame','graphic-paperclip'])assert.ok(describeTechnique(id).example.prepare.some(op=>op.op==='material.add'),id+' missing context');
+ assert.throws(()=>describeTechnique('graphic-arch'),/未知教程方法/);
 });
 test('timeline connector ends at the first and last event, with no tail for a single event',()=>{
- const operations=compileTechnique({methodId:'record-timeline',parameters:{id:'time',items:['早晨','午后','夜晚']}}).operations[0].children;
+ const operations=compileTechnique({methodId:'record-checklist',parameters:{id:'time',variant:'timeline',items:['早晨','午后','夜晚']}}).operations[0].children;
  const circles=operations.filter(op=>op.op==='graphic.add'&&op.geometry.kind==='ellipse');
  const line=operations.find(op=>op.op==='graphic.add'&&op.geometry.kind==='rect'&&op.size.width===.25);
  assert.equal(circles.length,3);assert.ok(line);
  assert.equal(line.place.at[1]-line.size.height/2,circles[0].place.at[1]);
  assert.equal(line.place.at[1]+line.size.height/2,circles.at(-1).place.at[1]);
- const single=compileTechnique({methodId:'record-timeline',parameters:{id:'one',items:['唯一事件']}}).operations[0].children;
+ const single=compileTechnique({methodId:'record-checklist',parameters:{id:'one',variant:'timeline',items:['唯一事件']}}).operations[0].children;
  assert.ok(!single.some(op=>op.op==='graphic.add'&&op.geometry.kind==='rect'&&op.size.width===.25));
 });
 test('template ranking is deterministic and does not mutate real material dimensions',()=>{
@@ -359,7 +335,7 @@ test('template ranking is deterministic and does not mutate real material dimens
 
 test('an existing editable title group can occupy a template slot without rasterization',async()=>{
  const assets=exampleMaterials.slice(0,2);let doc=await document(assets);
- doc=apply(doc,compileTechnique({methodId:'title-outline',parameters:{id:'heading',text:'好天气'}}).operations,assets).document;
+ doc=apply(doc,compileTechnique({methodId:'title-label',parameters:{id:'heading',text:'好天气'}}).operations,assets).document;
  const template=templateCatalog.templates.find(t=>t.id==='center-1'),slot=materialSlots(template)[0],heading=template.elements.find(e=>e.role==='title');
  const compiled=compileTemplate({templateId:template.id,id:'page-group',paper:{width:148,height:210},materials:assets,bindings:[{slotId:slot.id,alias:'m1'},{slotId:heading.id,node:'heading'}],nodes:[{id:'heading'}]});
  const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'compose-title',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},assets).document;
@@ -372,7 +348,7 @@ test('taxonomy and open semantic tags remain available in frozen matching source
 
 test('a title group replaces a template writing guide and retains editable text and foreground order',async()=>{
  let doc=await document([]);
- doc=apply(doc,compileTechnique({methodId:'title-shadow',parameters:{id:'heading',text:'留住片刻'}}).operations,[]).document;
+ doc=apply(doc,compileTechnique({methodId:'title-gap-shadow',parameters:{id:'heading',text:'留住片刻'}}).operations,[]).document;
  const t=templateCatalog.templates.find(t=>t.id==='cream6-08');
  const compiled=compileTemplate({templateId:t.id,id:'spread',paper:{width:240,height:149},bindings:[{slotId:'headline',node:'heading'}],nodes:[{id:'heading'}],texts:{'middle-writing':'留一点时间，慢慢看。'}});
  const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'place-heading',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},[]).document;
@@ -402,16 +378,16 @@ test('phrase composition preserves the supplied text, meaningful grouping and ph
  assert.throws(()=>compileTechnique({methodId:'title-phrases',parameters:{id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
 });
 test('short Chinese staggered title runs retain enough width to read as words',()=>{
- const compiled=compileTechnique({methodId:'title-stagger',parameters:{id:'staggered',text:'去拾一束星光',runs:[{text:'去拾'},{text:'一束'},{text:'星光'}]}});
+ const compiled=compileTechnique({methodId:'title-stack',parameters:{id:'staggered',variant:'stagger',text:'去拾一束星光',runs:[{text:'去拾'},{text:'一束'},{text:'星光'}]}});
  const words=compiled.operations[0].children.filter(operation=>operation.op==='text.add');
  assert.deepEqual(words.map(word=>word.content),['去拾','一束','星光']);
  assert.ok(words.every(word=>word.size.width>=20));
 });
 test('lettering recipes expose and preserve different bundled fonts',async()=>{
- const detail=describeTechnique('title-caption');
+ const detail=describeTechnique('title-phrases');
  assert.ok(detail.parameters.fontFamily.suggestedFonts.some(font=>font.family==='HongLeiZhuoShu'));
  assert.ok(detail.parameters.captionFontFamily.suggestedFonts.some(font=>font.family==='Xiaolai'));
- const title=compileTechnique({methodId:'title-caption',parameters:{id:'font-title',text:'收集日常',caption:'周末手记',fontFamily:'HongLeiZhuoShu',captionFontFamily:'Xiaolai',runs:[{text:'收集',fontFamily:'FontQu Smile'},{text:'日常',role:'primary'}]}});
+ const title=compileTechnique({methodId:'title-phrases',parameters:{id:'font-title',text:'收集日常',caption:'周末手记',fontFamily:'HongLeiZhuoShu',captionFontFamily:'Xiaolai',runs:[{text:'收集',fontFamily:'FontQu Smile'},{text:'日常',role:'primary'}]}});
  const titleTexts=title.operations[0].children.filter(op=>op.op==='text.add');
  assert.deepEqual(titleTexts.map(op=>op.style.fontFamily),['FontQu Smile','HongLeiZhuoShu','Xiaolai']);
  const applied=apply(await document([]),title.operations,[]);
@@ -419,7 +395,6 @@ test('lettering recipes expose and preserve different bundled fonts',async()=>{
  for(const [id,family] of titleTexts.map(op=>[op.id,op.style.fontFamily]))assert.equal(applied.document.page.layers[0].children.find(node=>node.id===id)?.fontName,family);
  for(const [methodId,parameters,family] of [
   ['record-checklist',{id:'font-record',items:['一段日记'],fontFamily:'Sophora'},'Sophora'],
-  ['photo-caption',{id:'font-caption',aliases:['m1'],caption:'图注',fontFamily:'Like JianJian'},'Like JianJian'],
   ['graphic-bubble',{id:'font-bubble',text:'旁注',fontFamily:'Otsutome'},'Otsutome']
  ]){
   const compiled=compileTechnique({methodId,parameters,materials:exampleMaterials});
@@ -428,31 +403,9 @@ test('lettering recipes expose and preserve different bundled fonts',async()=>{
  const written=compileTechnique({methodId:'record-on-material',parameters:{id:'font-write',target:'note',box:[.1,.1,.8,.6],text:'落笔',fontFamily:'Ma Shan Zheng'}});
  assert.equal(written.operations[0].style.fontFamily,'Ma Shan Zheng');
 });
-test('keyword highlight is local, behind text, and transparent hollow titles do not paint paper color',()=>{
- const marked=compileTechnique({methodId:'title-highlight',parameters:{id:'h',text:'留住今天的小美好',emphasis:'小美好',widthMm:100}}).operations[0].children;
- const bg=marked.find(o=>o.op==='graphic.add'),texts=marked.filter(o=>o.op==='text.add');
- assert.ok(bg.size.width<70);assert.ok(bg.style.fillOpacity<1);assert.equal(marked[0],bg);
- assert.equal(texts.map(o=>o.content).join(''),'留住今天的小美好');assert.equal(texts.at(-1).content,'小美好');
- const hollow=compileTechnique({methodId:'title-outline',parameters:{id:'o',text:'空心'}}).operations[0].children;
- assert.equal(hollow.length,1);assert.equal(hollow[0].style.fillOpacity,0);assert.ok(hollow[0].style.outline);
- assert.throws(()=>compileTechnique({methodId:'title-highlight',parameters:{id:'h',text:'留住日常',emphasis:'旅行'}}),/原|标题/);
-});
-test('wrapped emphasis marks each occupied line without spanning the empty line gap',async()=>{
- const parameters={id:'long-mark',text:'春日去海边散步',emphasis:'春日去海边散步',widthMm:36,fontSizePt:20};
- for(const methodId of ['title-highlight','title-circle']){
-  const compiled=compileTechnique({methodId,parameters}),children=compiled.operations[0].children;
-  const marks=children.filter(o=>o.op==='graphic.add'),written=children.filter(o=>o.op==='text.add');
-  assert.ok(marks.length>=3,methodId);
-  assert.equal(written.map(o=>o.content).join(''),parameters.text);
-  assert.ok(marks.every((mark,i)=>i===0||mark.place.at[1]>marks[i-1].place.at[1]),methodId);
-  assert.ok(marks.every(mark=>mark.size.height<14),methodId);
-  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
- }
-});
 test('long captions and record entries stay inside their reported editable groups',async()=>{
  const cases=[
-  {methodId:'photo-caption',parameters:{id:'caption',aliases:['m1'],caption:'Today we found a little place by the sea. '.repeat(4),fontSizePt:14,gapMm:2}},
-  ...['record-checklist','record-timeline','record-columns'].map(methodId=>({methodId,parameters:{id:methodId,items:['今天收集了很多文字，需要按实际宽度换行。'.repeat(3),'A long note about the photos saved this afternoon. '.repeat(2)],fontSizePt:14,gapMm:2}}))
+  ...[undefined,'timeline','columns'].map(variant=>({methodId:'record-checklist',parameters:{id:'record-'+(variant||'list'),...(variant?{variant}:{}),items:['今天收集了很多文字，需要按实际宽度换行。'.repeat(3),'A long note about the photos saved this afternoon. '.repeat(2)],fontSizePt:14,gapMm:2}}))
  ];
  for(const {methodId,parameters} of cases){
   const compiled=compileTechnique({methodId,parameters,materials:exampleMaterials});
@@ -468,10 +421,10 @@ test('long captions and record entries stay inside their reported editable group
  }
 });
 test('tape recipes show physical attachment and keep rotated strips inside the selectable group',async()=>{
- const method=techniqueCatalog.methods.find(m=>m.id==='tape-corners'),example=techniqueExample(method);
+ const method=techniqueCatalog.methods.find(m=>m.id==='tape-fix'),detail=describeTechnique(method.id,{variant:'corners'}),example={before:detail.example.prepare,parameters:detail.tool.arguments.parameters};
  assert.ok(example.before.some(op=>op.asset==='m3'));
  assert.ok(describeTechnique(method.id).parameters.segments.description.includes('局部摆放'));
- for(const parameters of [{id:'tapes',aliases:['m4']},{...example.parameters,id:'tapes'},{...example.parameters,id:'tapes',rotationDeg:30}]){
+ for(const parameters of [{id:'tapes',variant:'corners',aliases:['m4']},{...example.parameters,id:'tapes'},{...example.parameters,id:'tapes',rotationDeg:30}]){
   const compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
   const done=apply(await document(exampleMaterials),compiled.operations,exampleMaterials).document,group=worldBox(done.page,'tapes');
   const strips=compiled.operations[0].children.filter(op=>op.op==='material.tape');assert.equal(strips.length,2);
@@ -486,27 +439,11 @@ test('tape recipes show physical attachment and keep rotated strips inside the s
    assert.ok(localY-dy>=-group.h/2-.01&&localY+dy<=group.h/2+.01);
   }
  }
- const moved=compileTechnique({methodId:method.id,parameters:{id:'moved',aliases:['m4'],segments:[{at:[5,5]},{at:[60,32]}]},materials:exampleMaterials});
+ const moved=compileTechnique({methodId:method.id,parameters:{id:'moved',variant:'corners',aliases:['m4'],segments:[{at:[5,5]},{at:[60,32]}]},materials:exampleMaterials});
  assert.deepEqual(moved.operations[0].children.map(op=>op.place.rotationDeg),[-35,145]);
- assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],segments:[{at:[5,5]}]},materials:exampleMaterials}),/段数/);
- assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],segments:[{at:[5,5]},{at:[80,5]}]},materials:exampleMaterials}),/位置/);
- assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',aliases:['m4'],lengthMm:1},materials:exampleMaterials}),/至少/);
-});
-test('magazine columns differ from a photo row and keep the main caption under its own image',async()=>{
- const parameters={id:'magazine',aliases:['m1','m2','m5'],caption:'示意图注'};
- const compiled=compileTechnique({methodId:'magazine-offset',parameters,materials:exampleMaterials});
- const children=compiled.operations[0].children,photos=children.filter(op=>op.op==='material.add'),caption=children.find(op=>op.op==='text.add');
- assert.equal(photos.length,3);
- assert.ok(photos[1].place.at[0]>photos[0].place.at[0]);
- assert.equal(photos[1].place.at[0],photos[2].place.at[0]);
- assert.ok(photos[2].place.at[1]>photos[1].place.at[1]);
- assert.equal(caption.place.at[1],exampleMaterials[0].physicalHeightMM+6);
- assert.ok(caption.place.at[0]+caption.size.width<photos[1].place.at[0]-exampleMaterials[1].physicalWidthMM/2);
- const stagger=compileTechnique({methodId:'photo-stagger',parameters:{id:'stagger',aliases:parameters.aliases},materials:exampleMaterials}).operations[0].children.filter(op=>op.op==='material.add');
- assert.ok(stagger[2].place.at[0]>stagger[1].place.at[0]);
- const doc=await document(exampleMaterials),done=apply(doc,compiled.operations,exampleMaterials).document;
- for(let i=0;i<photos.length;i++)assert.ok(Math.abs(worldBox(done.page,photos[i].id).w*done.page.physicalPageHeightMM/done.page.canvas.height-exampleMaterials.find(a=>a.alias===parameters.aliases[i]).physicalWidthMM)<1e-6);
- assert.ok(describeTechnique('magazine-offset').parameters.caption.description.includes('首项'));
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',variant:'corners',aliases:['m4'],segments:[{at:[5,5]}]},materials:exampleMaterials}),/段数/);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',variant:'corners',aliases:['m4'],segments:[{at:[5,5]},{at:[80,5]}]},materials:exampleMaterials}),/位置/);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',variant:'corners',aliases:['m4'],lengthMm:1},materials:exampleMaterials}),/至少/);
 });
 test('three-point color echo has three distinct visible default colors',()=>{
  const children=compileTechnique({methodId:'color-echo',parameters:{id:'echo'}}).operations[0].children;
@@ -514,25 +451,6 @@ test('three-point color echo has three distinct visible default colors',()=>{
  assert.equal(new Set(children.map(op=>op.style.fill)).size,3);
  assert.ok(children.every(op=>op.style.fill!=='#F1E8D5'));
 });
-test('title effects compose in one editable text, while curve and grapheme constraints are explicit',async()=>{
- const gradient={angleDeg:45,stops:[{offset:0,color:'#112233'},{offset:1,color:'#445566'}]};
- const compiled=compileTechnique({methodId:'title-shadow',parameters:{id:'fx',text:'标题',style:{gradient,outline:{color:'#FFFFFF',widthMm:.3}}}});
- const child=compiled.operations[0].children.find(o=>o.op==='text.add');assert.ok(child.style.shadow);assert.deepEqual(child.style.gradient,gradient);
- assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
- const vertical=compileTechnique({methodId:'title-vertical',parameters:{id:'v',text:'e\u0301好'}});assert.equal(vertical.operations[0].children[0].content,'e\u0301\n好');
- assert.throws(()=>compileTechnique({methodId:'title-curve',parameters:{id:'c',text:'过长的标题必须加宽不能截断',widthMm:20}}),/宽度/);
- assert.throws(()=>compileTechnique({methodId:'title-curve',parameters:{id:'c',text:'两行\n标题'}}),/单行/);
-});
-test('geometry remains parametric and irrelevant parameters are rejected instead of ignored',async()=>{
- const flower=compileTechnique({methodId:'graphic-flower',parameters:{id:'flower',options:{petals:9}}});
- const cmd=flower.operations[0].children[0];assert.equal(cmd.geometry.kind,'flower');assert.equal(cmd.geometry.options.petals,9);assert.equal(cmd.geometry.options.showCenter,true);
- const made=apply(await document([]),flower.operations,[]).document;assert.equal(made.page.layers[0].children[0].shapeOptions.petals,9);
- const dots=compileTechnique({methodId:'pattern-dots',parameters:{id:'dots',options:{rows:3,columns:5}}});assert.equal(dots.operations[0].children.length,1);assert.equal(dots.operations[0].children[0].geometry.options.columns,5);
- assert.throws(()=>compileTechnique({methodId:'paper-peek',parameters:{id:'p',target:'a',referenceTarget:'b',at:[1,2]}}),/不支持/);
- assert.throws(()=>compileTechnique({methodId:'graphic-loop',parameters:{id:'p',options:{petals:5}}}),/不支持/);
-});
-
-
 for(const t of templateCatalog.templates.filter(t=>t.reconstruction))test('fully specified template reconstructs every analyzed element in declared stacking order: '+t.id,async()=>{
  const fixture=templateFixture(t);
  const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;
@@ -560,7 +478,7 @@ test('template palette and omissions are explicit, preserve input assets, and ca
 });
 test('an existing title keeps the template stacking position rather than always becoming the top layer',async()=>{
  const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t);let doc=await document(fixture.materials);
- doc=apply(doc,compileTechnique({methodId:'title-outline',parameters:{id:'heading',text:'日常'}}).operations,fixture.materials).document;
+ doc=apply(doc,compileTechnique({methodId:'title-label',parameters:{id:'heading',text:'日常'}}).operations,fixture.materials).document;
  delete fixture.texts.e7;
  const compiled=compileTemplate({...fixture,templateId:t.id,id:'joined',bindings:[...fixture.bindings,{slotId:'e7',node:'heading'}],nodes:[{id:'heading'}]});
  const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'join-template',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},fixture.materials).document;

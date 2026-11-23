@@ -6,10 +6,10 @@ import {join} from 'node:path';
 import {createCreationDocument} from '../src/creation-document.js';
 import {creationSceneRevision} from '../src/creation-transaction.js';
 import {draft} from '../src/domain.js';
-import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
-import {JournalCheckpointSaver,fileCheckpointJournal} from '../compute-server/harness/checkpoints.mjs';
-import {createCreativeHarness,initialHarnessState,harnessTools} from '../compute-server/harness/agent.mjs';
-import {toolsForCreativePhase,phaseGuide} from '../compute-server/harness/phases.mjs';
+import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
+import {JournalCheckpointSaver,fileCheckpointJournal} from '../creative-agent/runtime/checkpoints.mjs';
+import {createCreativeHarness,initialHarnessState,harnessTools} from '../creative-agent/runtime/agent.mjs';
+import {toolsForCreativePhase,phaseGuide} from '../creative-agent/runtime/phases.mjs';
 
 const call=(name,args)=>({id:name+'-'+Math.random(),type:'function',function:{name,arguments:JSON.stringify(args)}});
 const answer=(...calls)=>({message:{role:'assistant',content:null,tool_calls:calls}});
@@ -25,14 +25,14 @@ const previewOf=messages=>{
 
 test('direction starts with a plan while later modes remain flexible',()=>{
   const names=stage=>toolsForCreativePhase(harnessTools,stage).map(item=>item.function.name);
-  assert.ok(!names('direction').includes('creation_apply'));
+  assert.ok(names('direction').includes('creation_apply'));
   assert.ok(names('layout').includes('read_template'));
   assert.ok(names('layout').includes('explore_drafts'));
   assert.ok(names('craft').includes('explore_drafts'));
   assert.ok(names('review').includes('creation_apply'));
   assert.ok(names('review').includes('creation_finish'));
-  assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/可以交错/);
-  assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/充实/);
+  assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/可交错/);
+  assert.match(phaseGuide('layout',{styles:['丰富层叠']}),/内容充实、纸层穿插、图文共同构图、装饰相互呼应/);
 });
 
 test('stage checks advance only after plan and current render; edits continue without per-edit review',async t=>{
@@ -46,7 +46,7 @@ test('stage checks advance only after plan and current render; edits continue wi
   const model=async({messages,tools})=>{
     turn++;
     const names=tools.map(item=>item.function.name),preview=previewOf(messages);
-    if(turn===1){assert.ok(!names.includes('creation_apply'));return answer(call('creation_plan',plan),phase('layout','主题、配色及多焦点阅读路线已经确定'));}
+    if(turn===1){assert.ok(names.includes('creation_apply'));return answer(call('creation_plan',plan),phase('layout','主题、配色及多焦点阅读路线已经确定'));}
     if(turn===2){assert.ok(names.includes('creation_apply'));return answer(call('creation_apply',{protocolVersion:2,transactionId:'layout',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[42,38],unit:'mm'},style:{fontSizePt:22}}]}));}
     if(turn===3){assert.ok(names.includes('creation_apply'),'看图后仍可继续编辑');return answer(phase('craft','标题位于左上，右侧可写，版面已经建立'));}
     if(turn===4){assert.ok(names.includes('creation_apply'));return answer(call('creation_apply',{protocolVersion:2,transactionId:'craft',baseSceneRevision:preview.sceneRevision,operations:[{op:'text.add',id:'body',content:'雨停以后，我把今天的小事记在这里。',size:{width:65,unit:'mm'},place:{reference:'page',at:[55,83],unit:'mm'},style:{fontSizePt:12}}]}));}

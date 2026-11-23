@@ -143,3 +143,19 @@ test('visual vector edit and Command geometry update render the same current Sce
  const render=async p=>(await renderSceneCanvas(p,{createCanvas:()=>createCanvas(1,1),loadShapeImage:async(url,f)=>loadImage(Buffer.from(decodeURIComponent(url.split(',').slice(1).join(',')).replace('<svg ',`<svg width="${f.width}" height="${f.height}" `))),waitForFonts:false})).canvas.toBuffer('image/png');
  assert.deepEqual(await render(manual.page),await render(ai.page));
 });
+
+test('text.fit uses renderer font advances and maxLines, preserving all content and rollback',async()=>{
+ const {run,assets}=await fixture();
+ const {createHarnessRenderer}=await import('../creative-agent/runtime/renderer.mjs');
+ const {measureSceneText}=await import('../src/scene-text-layout.js');
+ const d=run([text({content:'喜欢蓝色',size:{width:46,unit:'mm'},style:{fontSizePt:32,fontFamily:'BaiLuBangBang'}})]);
+ const renderer=await createHarnessRenderer({source:d.source,images:{m1:tinyPNG,m2:tinyPNG},saveArtifact:async()=>null});
+ const operation={op:'text.fit',target:'text',size:{width:46,height:24,unit:'mm'},fit:{minFontSizePt:12,maxFontSizePt:32,maxLines:1}};
+ const result=applyCreationV2Batch(d,batch([operation]),assets,{measureText:renderer.measureText});
+ const n=node(result),metrics=measureSceneText(n,t=>renderer.measureText(n,t));
+ assert.equal(n.content,'喜欢蓝色');assert.equal(metrics.lines.length,1);assert.ok(metrics.width<=n.width);assert.ok(n.fontSize<node(d).fontSize);
+ const restyled=applyCreationV2Batch(d,batch([{...operation,style:{fontFamily:'Xiaolai',color:'#224466',lineHeight:1.3}}]),assets,{measureText:renderer.measureText});
+ const changed=node(restyled);assert.equal(changed.fontName,'Xiaolai');assert.equal(changed.color,'#224466');assert.equal(measureSceneText(changed,t=>renderer.measureText(changed,t)).lines.length,1);
+ const frozen=JSON.stringify(d);assert.throws(()=>applyCreationV2Batch(d,batch([{...operation,fit:{minFontSizePt:32,maxFontSizePt:32,maxLines:1}}]),assets,{measureText:renderer.measureText}),/放不下/);assert.equal(JSON.stringify(d),frozen);
+ assert.throws(()=>validateCreationV2Commands(batch([{...operation,fit:{...operation.fit,maxLines:0}}])),/commands/);
+});

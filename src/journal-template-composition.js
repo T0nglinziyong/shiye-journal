@@ -1,4 +1,4 @@
-import {templateCatalog,templateManualEnabled} from './creation-library/matcher.js';
+import {templateCatalog,templateManualEnabled} from '../creative-agent/library/matcher.js';
 
 const byId=new Map(templateCatalog.templates.map(template=>[template.id,template]));
 export function executableJournalTemplates(){

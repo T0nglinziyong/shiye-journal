@@ -37,12 +37,15 @@ test('composition density choice changes the shared creative direction',()=>{
   const sparse=creativePageBrief({styles:['随材而定','疏朗留白']});
   const layered=creativePageBrief({styles:['随材而定','丰富层叠']});
   const automatic=creativePageBrief({styles:['随材而定','自动安排']});
-  assert.match(sparse,/本次选择疏朗留白/);
-  assert.match(layered,/本次选择丰富层叠/);
-  assert.match(layered,/有不同职责的组合/);
-  assert.match(layered,/不强制主路径、大图形/);
-  assert.match(automatic,/默认疏密随素材而定/);
-  assert.doesNotMatch(sparse,/本次选择丰富层叠/);
+  assert.match(sparse,/本次画面疏密为疏朗留白/);
+  assert.match(layered,/本次画面疏密为丰富层叠/);
+  assert.match(layered,/纸边露出、裁切遮叠、纹样、标题正文与点缀共同形成丰富度/);
+  assert.match(layered,/不规定固定素材数量、工艺数量或统一覆盖率/);
+  assert.match(layered,/孤立卡片、一个稀疏小簇或大片未利用区域不能算达标/);
+  assert.match(layered,/文字量仍遵循用户选择；无文字时用材料与图形承担相应构图/);
+  assert.match(automatic,/画面疏密由用户意图、真实素材与内容决定/);
+  assert.doesNotMatch(sparse,/本次画面疏密为丰富层叠/);
+  assert.doesNotMatch(sparse,/大片未利用区域不能算达标/);
 });
 
 test('spread direction balances both pages and keeps the gutter readable without forbidding intentional bleed',()=>{

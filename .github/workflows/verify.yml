@@ -37,7 +37,7 @@ jobs:
             creative_only=true
             while IFS= read -r path; do
               case "$path" in
-                compute-server/harness/*|creation-skills/*|src/background-creation-session.js|src/matching-session.js|src/matching-view.css|tests/creative*.test.js|tests/background-creation-session.test.js|tests/matching-session.test.js|tests/creation-skill-illustrations.test.js|tests/journal-writing-topics.test.js|.github/workflows/verify.yml) ;;
+                creative-agent/runtime/*|creative-agent/skills/*|src/background-creation-session.js|src/matching-session.js|src/matching-view.css|tests/creative*.test.js|tests/background-creation-session.test.js|tests/matching-session.test.js|tests/creation-skill-illustrations.test.js|tests/journal-writing-topics.test.js|.github/workflows/verify.yml) ;;
                 *) creative_only=false; break ;;
               esac
             done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")

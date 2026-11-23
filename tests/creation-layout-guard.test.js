@@ -41,12 +41,12 @@ test('a clipped material is translated onto its leaf without changing size',()=>
   assert.ok(layer.x<690&&layer.y>100);
 });
 
-test('reports a title pressed against the outer rim while allowing a paper backing to bleed',()=>{
+test('reports a title near the outer rim without trusting a material source label',()=>{
   const title={id:'title',type:'text',content:'周末小记',x:24,y:230,width:120,height:60,rotation:0};
   const backing={id:'backing',type:'material',assetID:'card',x:22,y:390,width:200,height:400,rotation:0};
   const issues=creationMarginIssues(document([title,backing]));
   assert.ok(issues.some(issue=>issue.id==='title'&&issue.edge==='左'));
-  assert.ok(!issues.some(issue=>issue.id==='backing'));
+  assert.ok(issues.some(issue=>issue.id==='backing'));
 });
 
 test('reports clipped writing, cards and small stickers at the outer edge',()=>{

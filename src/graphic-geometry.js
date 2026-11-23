@@ -54,6 +54,7 @@ export function initialGraphicNode(id,geometry,scale,style={}){
  if(geometry.kind==='stroke')return {...common,type:'ink',points:[{x:0,y:0,p:.5}],layoutRotation:0,width:.5*scale,color:'#546E7A',penStyle:'ballpoint'};
  // A fill-only graphic should not acquire an unrequested dark outline. An
  // unstyled or outline-only graphic keeps the existing visible stroke default.
+ if(geometry.kind==='paper')return {...common,type:'shape',kind:'paper',x:0,y:0,rotation:0,width:scale,height:scale,fill:'#F5F1E7',stroke:'#A8B5BB',lineWidth:.12*scale};
  const fillOnly=style.fill!=null&&!Object.hasOwn(style,'stroke');
  return {...common,type:'shape',kind:'rectangle',x:0,y:0,rotation:0,width:scale,height:scale,fill:null,stroke:fillOnly?null:'#546E7A',lineWidth:.5*scale};
 }

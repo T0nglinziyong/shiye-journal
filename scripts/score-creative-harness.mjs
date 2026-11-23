@@ -1,6 +1,6 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
-import {summarizeCreativeEvaluation} from '../compute-server/harness/quality-evaluation.mjs';
+import {summarizeCreativeEvaluation} from '../creative-agent/runtime/quality-evaluation.mjs';
 
 const [runPath,reviewPath]=process.argv.slice(2);
 if(!runPath||!reviewPath)throw Error('用法：node scripts/score-creative-harness.mjs <验收目录> <人工审阅 JSON>');

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {journalWritingTopics,searchWritingTopics,writingLengthPlan,writingTopicBrief} from '../compute-server/harness/writing-topics.mjs';
-import {initialHarnessState,harnessTools} from '../compute-server/harness/agent.mjs';
+import {journalWritingTopics,searchWritingTopics,writingLengthPlan,writingTopicBrief} from '../creative-agent/runtime/writing-topics.mjs';
+import {initialHarnessState,harnessTools} from '../creative-agent/runtime/agent.mjs';
 import {creativePageBrief} from '../src/creative-page-brief.js';
-import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
+import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 import {createCreationDocument} from '../src/creation-document.js';
 import {draft} from '../src/domain.js';
 
@@ -39,16 +39,23 @@ test('body length responds to available area and policy',()=>{
   assert.ok(writingLengthPlan({page:small,materials:[{widthMM:150,heightMM:200}]}).characters[1]<writingLengthPlan({page:small}).characters[1]);
 });
 
+test('explicit rich writing is not reduced by overlapping material inventory',()=>{
+  const page={canvas:{width:1048,height:1000},physicalPageHeightMM:210};
+  const papers=Array.from({length:6},()=>({widthMM:110,heightMM:150}));
+  assert.deepEqual(writingLengthPlan({page,textMode:'rich',materials:papers}).characters,
+    writingLengthPlan({page,textMode:'rich',materials:[]}).characters);
+});
+
 test('live harness receives a short topic shortlist and can fetch more on demand',async()=>{
   const skills=await loadCreationSkills();
   assert.ok(skills.catalog().some(item=>item.name==='journal-writing'));
-  assert.ok(skills.catalog().some(item=>item.name==='journal-text-layout'));
+  assert.ok(skills.catalog().some(item=>item.name==='journal-composition'));
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'为春天写一页'},startedAt:1795266000000});
   assert.match(state.messages[1].content[0].text,/写作选题与篇幅建议/);
   assert.match(state.messages[1].content[0].text,/365 主题 PDF/);
   assert.match(state.messages[0].content,/journal-writing/);
-  assert.match(state.messages[0].content,/正文空间须在布局时考虑/);
+  assert.match(state.messages[0].content,/同时给标题和每段正文留真实可读写面/);
   const plan=harnessTools.find(tool=>tool.function.name==='creation_plan').function.parameters;
   assert.ok(plan.properties.writingZones.items.properties.flowGroup);
   assert.ok(plan.properties.writingZones.items.properties.sequence);

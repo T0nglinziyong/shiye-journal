@@ -3,7 +3,7 @@ import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 import {loadOfflineCanvas,renderOfflinePNG} from '../src/offline-node-preview.mjs';
-import {compileTechnique} from '../src/creation-library/techniques.js';
+import {compileTechnique} from '../creative-agent/library/techniques.js';
 
 const cases=[
  ['拆字夹小字','人生的意义',{fontFamily:'BaiLuBangBang',fontSizePt:34,colors:['#C63B85','#ED7A82','#FFFDF6'],glyph:{split:{middleText:'RENSHENG DE YIYI',middleColor:'#273B34',gapMm:5,waveMm:1.1}},style:{shadow:{color:'#F2A470',offsetMm:[.65,.75],blurMm:0}}}],

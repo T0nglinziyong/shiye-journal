@@ -13,7 +13,7 @@ App 的手写字体选择复用 `fontName`；服务端工具使用 `style.fontFa
 
 ## 部署与任务边界
 
-服务器从自己部署目录的 `src/assets/fonts` 读取字体文件，Skill 从 `creation-skills` 读取，工具随同一版本源码发布。App 按清单从自己的静态资源读取 WOFF2 或 TTF。云端创作任务只含 `format/document/images/brief`，不上传字体、Skill 或工具代码；模型在开始时得到服务器实际可用的字体名、覆盖范围和资源版本。
+服务器从自己部署目录的 `src/assets/fonts` 读取字体文件，Skill 从 `creative-agent/skills` 读取，工具随同一版本源码发布。App 按清单从自己的静态资源读取 WOFF2 或 TTF。云端创作任务只含 `format/document/images/brief`，不上传字体、Skill 或工具代码；模型在开始时得到服务器实际可用的字体名、覆盖范围和资源版本。
 
 手动导出的独立离线 ZIP 仍包含授权字体，以便无服务器环境重现作品。这不属于云端创作提交链路。
 

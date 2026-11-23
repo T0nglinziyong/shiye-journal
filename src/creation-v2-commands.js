@@ -11,6 +11,7 @@ import {creationReferenceBox,resolveCreationPlace,creationRotationFrame} from '.
 import {normalizeGeometry,rectangleGeometry,geometryBounds,geometryArea,geometryIntersection,geometryDifference,transformGeometry} from './craft-topology.js';
 import {geometryToMask,itemSourceGeometry} from './craft-region-ops.js';
 import {materialMaskGeometry} from './material-mask.js';
+import {edgeAlignment} from './creation-edge-alignment.js';
 import {creationRegionGeometry} from './creation-region.js';
 import {attachSceneV2,assertSceneEditable,groupSceneLayers,moveSceneNode} from './scene-v2.js';
 import {applyScenePlacement,assertNoLinkedDependents,detachLinkedDependents,detachSceneLayout,solveSceneLayout} from './scene-layout.js';
@@ -60,6 +61,13 @@ function finishNode(doc,id,change,assets,{created=false}={}){
   doc=patch(doc,id,{zIndex},assets);
  }
  solveSceneLayout(doc.page);return doc;
+}
+function addMaterialNode(doc,item,assets){
+ if(find(doc,item.id))throw Error('图层编号已经存在：'+item.id);
+ const asset=assetFor(doc,assets,item.asset),s=scale(doc.page),position=placeFor(doc,item.place,asset.physicalWidthMM,asset.physicalHeightMM,0,item.parent);
+ doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm',
+   ...(asset.isCreativePreset?{unit:Math.max(-1,...allNodes(doc.page.layers).filter(node=>node.type==='material'&&node.assetID===asset.id).map(node=>node.materialUnitIndex??0))+1}:{})}]},assets);
+ doc=addToParent(doc,item.id,item.parent,assets);return finishNode(doc,item.id,item,assets,{created:true});
 }
 function displayMaskGeometry(node,asset,region,page){
  const s=scale(page),crop=node.cropRect||{x:0,y:0,width:1,height:1};
@@ -178,11 +186,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   for(const id of [item.target,item.strip,...(item.targets||[])].filter(Boolean)){const node=assertSceneEditable(attachSceneV2(doc.page),requireNode(doc,id).id);if(item.op!=='layer.duplicate')assertPolicyOwnership(node,AI_SCENE_POLICY);}
   if(item.op==='text.lettering')doc=addLettering(doc,item,assets,{finishNode});
   else if(item.op==='material.add'){
-   if(find(doc,item.id))throw Error('图层编号已经存在：'+item.id);
-   const asset=assetFor(doc,assets,item.asset),position=placeFor(doc,item.place,asset.physicalWidthMM,asset.physicalHeightMM,0,item.parent);
-   doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm',
-     ...(asset.isCreativePreset?{unit:Math.max(-1,...allNodes(doc.page.layers).filter(node=>node.type==='material'&&node.assetID===asset.id).map(node=>node.materialUnitIndex??0))+1}:{})}]},assets);
-   doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
+   doc=addMaterialNode(doc,item,assets);
   }else if(['text.add','graphic.add'].includes(item.op)){
    const common={id:item.id,agentKey:item.id,x:doc.page.canvas.width/2,y:doc.page.canvas.height/2,rotation:0,zIndex:500,opacity:1,blendMode:'normal'};
    let node;
@@ -202,17 +206,45 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    doc=editScene(doc,[{op:'move',id:requireNode(doc,item.target).id,parent:item.parent?requireNode(doc,item.parent).id:null}],assets);
    doc=patch(doc,item.target,item.parent?{isParked:false,workspaceId:'page'}:{isParked:surface!=='page',workspaceId:surface},assets);
    if(item.order)doc=reorder(doc,item.target,item.order,assets);
+  }else if(item.op==='layer.stack'){
+   const target=requireNode(doc,item.target),reference=requireNode(doc,item.reference);
+   if(target.id===reference.id)throw Error('不能以自身作为层序参照');
+   const referencePath=spatialPath(doc.page.layers,reference.id);
+   if(referencePath.ancestors.some(node=>node.id===target.id))throw Error('不能把组合移到自己的子节点旁边');
+   if(surfaceOf(doc,target.id)!==surfaceOf(doc,reference.id))throw Error('不同工作空间的对象须先移到同一区域再调整层序');
+   const referenceParent=referencePath.ancestors.at(-1)?.id||null;
+   const targetParent=spatialPath(doc.page.layers,target.id).ancestors.at(-1)?.id||null;
+   if(targetParent!==referenceParent){
+    doc=editScene(doc,[{op:'move',id:target.id,parent:referenceParent}],assets);
+    if(referenceParent)doc=patch(doc,target.id,{isParked:false,workspaceId:'page'},assets);
+   }
+   doc=reorder(doc,target.id,{[item.side]:reference.id},assets);
   }else if(item.op==='layer.delete'){
    if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
    doc=editScene(doc,[{op:'delete',id:requireNode(doc,item.target).id}],assets);
   }else if(item.op==='group.create'){
    const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:undefined;
+   if(new Set(targets).size!==targets.length)throw Error('编组对象不能重复');
    const surfaces=targets.map(id=>surfaceOf(doc,id));
    if(surfaces.some(value=>value!==surfaces[0]))throw Error('不同工作空间的对象须先移到同一区域再编组');
+   const paths=targets.map(id=>spatialPath(doc.page.layers,id));
+   if(paths.some(path=>path.ancestors.some(node=>targets.includes(node.id))))throw Error('不能同时编入组合及其子节点');
+   const parents=paths.map(path=>path.ancestors.at(-1)?.id||null);
+   const destination=item.parent?requireNode(doc,item.parent).id:parents.every(id=>id===parents[0])?parents[0]:null;
+   if(destination&&requireNode(doc,destination).type!=='group')throw Error('父级必须是组合');
+   if(destination&&targets.some(id=>id===destination||spatialPath(doc.page.layers,destination).ancestors.some(node=>node.id===id)))throw Error('目标父级不能位于待编组合内部');
+   if(parents.some(id=>id!==destination)){
+    for(const id of targets)if((spatialPath(doc.page.layers,id).ancestors.at(-1)?.id||null)!==destination){
+     doc=editScene(doc,[{op:'move',id,parent:destination}],assets);
+     if(destination)doc=patch(doc,id,{isParked:false,workspaceId:'page'},assets);
+     else if(surfaces[0]!=='page')doc=patch(doc,id,{isParked:true,workspaceId:surfaces[0]},assets);
+    }
+   }
    doc=editScene(doc,[{op:'group',ids:targets,id:item.id,name:item.id,layoutBox:bounds}],assets);
    for(const id of targets){const node=requireNode(doc,id);if(node.isParked||node.workspaceId&&node.workspaceId!=='page')doc=patch(doc,id,{isParked:false,workspaceId:'page'},assets);}
    if(surfaces[0]!=='page')doc=patch(doc,item.id,{isParked:true,workspaceId:surfaces[0]},assets);
-   doc=addToParent(doc,item.id,item.parent,assets);doc=finishNode(doc,item.id,item,assets,{created:true});
+   doc=addToParent(doc,item.id,item.parent,assets);
+   doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(item.op==='group.compose'){
    if(find(doc,item.id))throw Error('组合编号已经存在');
    const group={id:item.id,type:'group',name:item.id,children:[],localTransform:[1,0,0,1,0,0],layoutBox:item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:item.parent&&requireNode(doc,item.parent).layoutBox?{...requireNode(doc,item.parent).layoutBox}:{width:doc.page.canvas.width,height:doc.page.canvas.height},opacity:1,blendMode:'normal',zIndex:500};
@@ -230,6 +262,29 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    doc=editScene(doc,[{op:'ungroup',id:group.id}],assets);
    for(const id of members)doc=patch(doc,id,{isParked:surface!=='page',workspaceId:surface},assets);
   }else if(item.op==='layout.arrange')arrangeCreationNodes(doc.page,item.targets.map(id=>requireNode(doc,id).id),item.rule,item.container);
+  else if(item.op==='layout.matchRotation'){
+   const reference=requireNode(doc,item.reference),targetIds=item.targets.map(id=>requireNode(doc,id).id);
+   if(new Set(targetIds).size!==targetIds.length)throw Error('角度对齐对象不能重复');
+   if(targetIds.includes(reference.id))throw Error('角度参照不能被同时旋转');
+   const paths=targetIds.map(id=>spatialPath(doc.page.layers,id));
+   if(paths.some(path=>path.ancestors.some(node=>targetIds.includes(node.id))))throw Error('不能同时旋转组合及其子节点');
+   if(paths.some(path=>spatialPath(doc.page.layers,reference.id).ancestors.some(node=>node.id===path.node.id)))throw Error('不能用待旋转组合的子节点作角度参照');
+   const rotation=worldBox(doc.page,reference.id).rotation+(item.offsetDeg||0);
+   for(const id of targetIds){const box=worldBox(doc.page,id);detachSceneLayout(doc.page,id,'place');setWorldPosition(doc.page,id,{x:box.cx,y:box.cy,rotation});}
+  }else if(item.op==='layout.alignEdge'){
+   const target=requireNode(doc,item.target),reference=requireNode(doc,item.reference);
+   if(target.id===reference.id)throw Error('不能以自身作为可见边参照');
+   if(surfaceOf(doc,target.id)!==surfaceOf(doc,reference.id))throw Error('可见边对齐要求对象在同一工作空间');
+   if(spatialPath(doc.page.layers,reference.id).ancestors.some(node=>node.id===target.id))throw Error('不能以待移动组合的子节点为边缘参照');
+   const placement=edgeAlignment(doc.page,{...item,target:target.id,reference:reference.id},doc.source,options.edgeQuads);
+   detachSceneLayout(doc.page,target.id,'place');setWorldPosition(doc.page,target.id,placement);
+  }else if(item.op==='layout.nudge'){
+   const targetIds=item.targets.map(id=>requireNode(doc,id).id);
+   if(new Set(targetIds).size!==targetIds.length)throw Error('微调对象不能重复');
+   if(targetIds.some(id=>spatialPath(doc.page.layers,id).ancestors.some(node=>targetIds.includes(node.id))))throw Error('不能同时微调组合及其子节点');
+   const [dx,dy]=(item.deltaMm||[0,0]).map(value=>value*s);
+   for(const id of targetIds){const box=worldBox(doc.page,id);detachSceneLayout(doc.page,id,'place');setWorldPosition(doc.page,id,{x:box.cx+dx,y:box.cy+dy,rotation:box.rotation+(item.rotationDeg||0)});}
+  }
   else if(item.op==='layout.detach')detachSceneLayout(doc.page,requireNode(doc,item.target).id,item.scope||'all');
   else if(item.op==='material.cut'){
    const node=requireNode(doc,item.target);if(node.type!=='material'||node.tapeStrip)throw Error('material.cut 需要普通实体素材');
@@ -256,7 +311,17 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    if(geometryArea(result)<=1e-6||geometryArea(remaining)<=1e-6)throw Error('撕纸轨迹没有将当前素材分开');
    const bounds=geometryBounds(result);if(Math.min(bounds.width,bounds.height)<2-1e-7)throw Error('实体裁片短边不能小于 2 mm');
    doc=physicalCut(doc,{target:item.target,regions:[{id:item.resultId,geometry:result}],keepRemainders:item.keepRemainder!==false},assets,input.transactionId,index);
-  }else if(item.op==='material.split')doc=splitPhysicalPiece(doc,item,assets,input.transactionId,index);
+  }else if(item.op==='material.split'){
+   let split=item;
+   if(item.asset){
+    // One author-facing operation, the same source allocation and cut kernel.
+    // The temporary stock node never survives a successful atomic operation.
+    const target='split-stock-'+craftDigest([input.transactionId,index,item.asset]).slice(7,31);
+    doc=addMaterialNode(doc,{id:target,asset:item.asset,place:{reference:'page',at:[.5,.5],unit:'ratio'}},assets);
+    split={...item,target};
+   }
+   doc=splitPhysicalPiece(doc,split,assets,input.transactionId,index);
+  }
   else if(item.op==='material.tape'){
    const asset=assetFor(doc,assets,item.asset);if(asset.kind!=='tape')throw Error('material.tape 需要胶带素材');
    const pts=item.path?.points||[[-item.lengthMm/2,0],[item.lengthMm/2,0]],t=item.texture||{},c=item.caps||{};

@@ -1,19 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {toolsForCreativePhase,phaseObservation} from '../compute-server/harness/phases.mjs';
-import {evaluateCreativeFrame,attachCreativeReview,summarizeCreativeEvaluation} from '../compute-server/harness/quality-evaluation.mjs';
-import {harnessTools} from '../compute-server/harness/agent.mjs';
+import {toolsForCreativePhase,phaseObservation} from '../creative-agent/runtime/phases.mjs';
+import {evaluateCreativeFrame,attachCreativeReview,summarizeCreativeEvaluation} from '../creative-agent/runtime/quality-evaluation.mjs';
+import {harnessTools} from '../creative-agent/runtime/agent.mjs';
 
 const names=phase=>toolsForCreativePhase(harnessTools,phase).map(tool=>tool.function.name);
 
-test('direction reserves editing until planning; later modes can revise or finish',()=>{
-  assert.ok(!names('direction').includes('creation_apply'));
-  assert.ok(names('layout').includes('explore_drafts'));
-  assert.ok(names('layout').includes('read_template'));
-  assert.ok(names('craft').includes('segment_material'));
-  assert.ok(names('craft').includes('creation_finish'));
-  assert.ok(names('review').includes('creation_apply'));
-  assert.ok(names('review').includes('creation_finish'));
+test('creative phases never remove editing, reference or review tools',()=>{
+  for(const phase of ['direction','layout','craft','review']){
+    assert.ok(names(phase).includes('creation_apply'));
+    assert.ok(names(phase).includes('read_skill'));
+    assert.ok(names(phase).includes('search_references'));
+    assert.ok(names(phase).includes('creation_finish'));
+  }
 });
 
 test('layout and review keep the full scene available for revision',()=>{

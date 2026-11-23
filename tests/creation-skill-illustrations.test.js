@@ -4,8 +4,8 @@ import {mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {loadCreationSkills} from '../compute-server/harness/skills.mjs';
-import {createCreativeHarness,initialHarnessState} from '../compute-server/harness/agent.mjs';
+import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
+import {createCreativeHarness,initialHarnessState} from '../creative-agent/runtime/agent.mjs';
 import {createCreationDocument} from '../src/creation-document.js';
 import {draft} from '../src/domain.js';
 
@@ -29,6 +29,8 @@ test('text-only installations report unavailable illustrations; installed bytes 
   assert.equal(textOnly.read('optional-skill').illustrations[0].available,false);assert.deepEqual(textOnly.imageParts('optional-skill'),[]);
   const full=await loadCreationSkills(f.skills,{illustrationRoot:f.images});
   assert.equal(full.catalog()[0].illustrationCount,1);assert.equal(full.imageParts('optional-skill')[1].image_url.url,'data:image/png;base64,'+png.toString('base64'));
+  assert.deepEqual(full.read('optional-skill').illustrations,[{id:'sample',caption:'构图示意',available:true}]);
+  assert.doesNotMatch(full.imageParts('optional-skill')[0].text,/sha256|sourceURL|observation/);
   assert.doesNotMatch(JSON.stringify(full.catalog())+JSON.stringify(full.read('optional-skill')),/data:image/);
   assert.notEqual(full.read('optional-skill').version,textOnly.read('optional-skill').version);
   assert.throws(()=>full.imageParts('../secret'),/未知/);
@@ -55,7 +57,7 @@ test('unreviewed and non-PNG illustrations never enter model messages',async t=>
   await assert.rejects(loadCreationSkills(f.skills,{illustrationRoot:f.images}),/PNG/);
 });
 
-test('requested skills deliver an attributed image once and remove it from later context',async t=>{
+test('requested skills retain one attributed reference without duplicating it on repeated reads',async t=>{
   const f=await fixture(t),skills=await loadCreationSkills(f.skills,{illustrationRoot:f.images});
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{title:'测试'}});let turns=0;
@@ -63,27 +65,28 @@ test('requested skills deliver an attributed image once and remove it from later
   assert.equal(count(state.messages),0);
   const harness=createCreativeHarness({skills,model:async({messages})=>{
     turns++;
-    assert.equal(count(messages),turns===2?1:0);
+    assert.equal(count(messages),turns>=2?1:0);
     if(turns===2)assert.match(JSON.stringify(messages),/教程示意（仅供方法参考/);
-    if(turns===3){assert.equal(JSON.parse(messages.at(-1).content).data.alreadyLoaded,true);throw Error('image delivery verified');}
+    if(turns===3){const receipt=messages.findLast(message=>message.role==='tool');assert.equal(JSON.parse(receipt.content).data.alreadyLoaded,true);throw Error('image delivery verified');}
     return {message:{role:'assistant',content:null,tool_calls:[{id:'read-'+turns,type:'function',function:{name:'read_skill',arguments:JSON.stringify({name:'optional-skill'})}}]}};
   }});
   await assert.rejects(harness.run({id:'images',state}),/image delivery verified/);assert.equal(turns,3);
 });
 
-test('basic method details remain readable without loading a method image',async()=>{
+test('method details load only their matching image',async()=>{
   const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
   const detail=skills.read('paper-layering',{level:'detail',methodId:'paper-window'});
   assert.equal(detail.methods[0].id,'paper-window');
   assert.deepEqual(await skills.methodImageParts('paper-layering',{level:'detail',methodId:'paper-window'}),[]);
-  assert.equal((await skills.methodImageParts('photo-story',{level:'detail',methodId:'photo-grid'})).length,2);
+  assert.equal((await skills.methodImageParts('photo-story',{level:'detail',methodId:'photo-film'})).length,2);
 });
 test('paged lettering methods offer the shared font catalog only once',async()=>{
   const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
   const page=skills.read('journal-lettering',{level:'methods',page:0});
   assert.equal(page.methods.length,8);
   assert.ok(page.suggestedFonts.some(font=>font.family==='FontQu Smile'));
-  assert.ok(page.methods.every(method=>!method.parameters.fontFamily.suggestedFonts));
-  const detail=skills.read('journal-lettering',{level:'detail',methodId:'title-caption'});
+  assert.ok(page.methods.every(method=>method.readWith.level==='detail'&&!('tool' in method)));
+  assert.deepEqual(await skills.methodImageParts('journal-lettering',{level:'methods',page:0}),[]);
+  const detail=skills.read('journal-lettering',{level:'detail',methodId:'title-phrases'});
   assert.ok(detail.methods[0].parameters.captionFontFamily.suggestedFonts.some(font=>font.family==='Xiaolai'));
 });

@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "quiet-cluster-page",
+      "file": "quiet-cluster-page.png",
+      "sourceURL": "https://www.xiaohongshu.com/explore/69134694000000000503aed1",
+      "author": "当时我直接一个横扫",
+      "title": "教程｜1人在意的拼贴思路分享来了",
+      "observation": "人工观察原图后选定纸页边界；外部道具不作为构图元素；透视校正比例由边长估计，不代表实物毫米尺寸。",
+      "caption": "少量局部拼贴簇与短段文字共同组织阅读；仅为疏朗方向的参考。",
+      "quad": [
+        [
+          438,
+          59
+        ],
+        [
+          651,
+          47
+        ],
+        [
+          657,
+          445
+        ],
+        [
+          437,
+          445
+        ]
+      ],
+      "sourceSHA256": "db6fe7a7d31088096949520f79f549bc86995e032a214c88855b34723801e195",
+      "sourceSize": [
+        1080,
+        1440
+      ],
+      "quadPixels": [
+        [
+          438,
+          59
+        ],
+        [
+          651,
+          47
+        ],
+        [
+          657,
+          445
+        ],
+        [
+          437,
+          445
+        ]
+      ],
+      "rectifiedSize": [
+        217,
+        392
+      ],
+      "outputToSourceHomography": [
+        0.8911145589699652,
+        -0.03710511043156413,
+        438.0,
+        -0.06182988676099389,
+        0.9495072183738731,
+        59.0,
+        -0.0001389435657550425,
+        -7.90711442183086e-05
+      ],
+      "aspectBasis": "estimated from observed edges",
+      "rotateClockwise": 0,
+      "outputSize": [
+        217,
+        392
+      ],
+      "reviewed": true,
+      "sha256": "7a343b724f67baa71209aeb49e3d62fae4f0338a917d5d4bcf34d35e5f9083e9",
+      "reviewNotes": "已人工核对裁切；只作方法研究，不用于量取实物尺寸。"
+    },
+    {
+      "id": "framework-finished-pair",
+      "file": "framework-finished-pair.png",
+      "author": "小小彩虹成长记",
+      "title": "万能“S”形手帐排版分享",
+      "sourceURL": "https://www.xiaohongshu.com/explore/698f233c000000001a027a90",
+      "caption": "左为框架、右为对应成品：竖向承托纸在上下错位；胶带跨接纸边；正文进入原纸与纸层的连续写面；熊图与底纸叠压；大字、箭头、星纹分别强调内容与接续阅读。S形只是此例关系，不要求本次复刻路线、坐标、字句或颜色。",
+      "observation": "两张原图分别按人工观察的纸页四角透视校正，去除灰背景与桌面后并置。图中浅蓝块不等于实际必须用浅蓝纸，成品纸色、轮廓和文字角色有变化。比例用于方法展示，不代表毫米校准。",
+      "sources": [
+        {
+          "sourceFile": "585c22a18400f336",
+          "sourceSHA256": "3da985d6b2fd30b7e7d3f86baad38aa4dd9bcdc3c0db55bb64061c2e2fe33f3c",
+          "sourceSize": [
+            1080,
+            1440
+          ],
+          "quad": [
+            [
+              80,
+              225
+            ],
+            [
+              853,
+              100
+            ],
+            [
+              1033,
+              1210
+            ],
+            [
+              258,
+              1334
+            ]
+          ],
+          "quadPixels": [
+            [
+              80,
+              225
+            ],
+            [
+              853,
+              100
+            ],
+            [
+              1033,
+              1210
+            ],
+            [
+              258,
+              1334
+            ]
+          ],
+          "rectifiedSize": [
+            620,
+            900
+          ],
+          "outputToSourceHomography": [
+            1.245179475848941,
+            0.19711516744658594,
+            80.0,
+            -0.20179985723512017,
+            1.2287961672539667,
+            225.0,
+            -1.8695400931370882e-06,
+            -2.568257097642869e-06
+          ],
+          "aspectBasis": "specified",
+          "rotateClockwise": 0,
+          "label": "底层框架"
+        },
+        {
+          "sourceFile": "12bc5c0ab1878dde",
+          "sourceSHA256": "6ad6bcad4f1ebf078393ec5aac06a7995a4fa774761431ea8bd612b2b42082bb",
+          "sourceSize": [
+            1080,
+            1440
+          ],
+          "quad": [
+            [
+              82,
+              169
+            ],
+            [
+              849,
+              51
+            ],
+            [
+              1025,
+              1162
+            ],
+            [
+              244,
+              1281
+            ]
+          ],
+          "quadPixels": [
+            [
+              82,
+              169
+            ],
+            [
+              849,
+              51
+            ],
+            [
+              1025,
+              1162
+            ],
+            [
+              244,
+              1281
+            ]
+          ],
+          "rectifiedSize": [
+            620,
+            900
+          ],
+          "outputToSourceHomography": [
+            1.2357330207601835,
+            0.17520097927970676,
+            82.0,
+            -0.19040450222949767,
+            1.2103606967740161,
+            169.0,
+            -1.6063055752234714e-06,
+            -1.966811770611981e-05
+          ],
+          "aspectBasis": "specified",
+          "rotateClockwise": 0,
+          "label": "对应成品"
+        }
+      ],
+      "outputSize": [
+        1280,
+        975
+      ],
+      "sha256": "3f6116bc38a4365f6c06c01a4043330733b8baac57133b9ffd95fe5c85dd7c20",
+      "reviewed": true,
+      "reviewNotes": "已查看透视校正后的两页并置图，确认去除桌面且保留纸面内容。"
+    }
+  ]
+}
