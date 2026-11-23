@@ -1,3 +1,4 @@
+import {creativeElapsed,creativeTokenText,creativeCompleteProgress} from './creative-progress.js';
 import {createCreationDocument} from './creation-document.js';
 import {creativeRunParameters} from './ai-creation-session.js';
 import {createCloudCreativeJobs,watchCloudCreativeJob} from './cloud-creative-jobs.js';
@@ -10,9 +11,10 @@ export function creativeJobProgress(job){
   if(job.error_code==='CREATIVE_MODEL_TIMEOUT')return '创作模型连接超时，已保留进度；请重新发起创作';
   const stage=['completed','failed','cancelled','queued'].includes(job.status)?job.status:job.progress?.stage||'loading';
   const progress=job.progress||{},turn=progress.turn||progress.turns;
-  const valid=value=>Number.isSafeInteger(value)&&value>=0;
-  const usage=valid(progress.inputTokens)&&valid(progress.outputTokens)?' · 累计 '+(progress.inputTokens+progress.outputTokens).toLocaleString('zh-CN')+' token（输入 '+progress.inputTokens.toLocaleString('zh-CN')+' / 输出 '+progress.outputTokens.toLocaleString('zh-CN')+'）':'';
-  return (phases[stage]||'后台创作中')+(turn?' · 第 '+turn+' 轮':'')+usage;
+  if(stage==='completed')return creativeCompleteProgress(progress);
+  const usage=creativeTokenText(progress);
+  const activity=stage==='thinking'?({direction:'正在确定创作方向',layout:'正在布局打底',writing:'正在安排标题正文',craft:'正在完善标题、正文与装饰',review:'正在检查与修正'}[progress.phase]||phases[stage]):phases[stage];
+  return `${turn?'第'+turn+'轮，':''}${activity||'后台创作中'}，累计用时${creativeElapsed(progress.elapsedMs)}${usage?'，'+usage:''}`;
 }
 
 export async function applyBackgroundCreativeResult({project,document,job,assets,persist}){
@@ -71,7 +73,7 @@ export function createBackgroundCreationSession({getAccount,getAssets,getProject
           const project=await getProject(projectID);ensure(owner);
           if(!project)throw Error('原作品已删除；后台结果仍保留，未恢复已删除作品');
           const result=await applyBackgroundCreativeResult({project,document,job,assets:getAssets(),persist:async p=>{ensure(owner);await persist(p);}});
-          emit({job,status:'completed',document,previewURL,project:result.project,message:result.candidate?'已另存 AI 候选，原稿修改已保留':'创作完成，草稿已保存'});end(null,{...result,jobID:id,completedAt:job.updated_at,usage:job.progress});
+          emit({job,status:'completed',document,previewURL,project:result.project,message:creativeJobProgress(job)+(result.candidate?'已另存 AI 候选，原稿修改已保留。':'')});end(null,{...result,jobID:id,completedAt:job.updated_at,usage:job.progress});
         }catch(error){emit({status:'result-unapplied',message:error.message});end(error);}
       },
       onError:error=>{try{emit({status:'disconnected',message:'连接暂不可用，后台继续创作；恢复连接后补同步'});}catch(accountError){end(accountError);}}

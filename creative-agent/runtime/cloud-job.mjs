@@ -64,7 +64,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
       }}):undefined;
     const common={...renderer,skills,model,segmentMaterial,clock,
       capabilities:{glyphOutline:localGlyphOutline,edgeQuads:deriveMaterialEdgeQuads(input.document.source,images)},onProgress:async event=>{
-        progress={...progress,...event};await update({p_progress:progress});await ping();
+        progress={...progress,...event,elapsedMs:clock()-startedAt};await update({p_progress:progress});await ping();
       }};
     const journal=cloudCheckpointJournal({job,store,rpc,list:listCheckpoints});
     const entries=job.checkpoint_seq?await journal.read():[];
@@ -98,7 +98,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
       store.upload(prefix+'reports/evaluation.json',Buffer.from(JSON.stringify(evaluation)),'application/json'),
       store.upload(prefix+'reports/trace.json',Buffer.from(JSON.stringify(result.trace||[])),'application/json')
     ]);
-    await update({p_result_path:path,p_progress:{...progress,stage:'completed',totalMs:clock()-startedAt,...creativeUsageSummary(result)}});
+    await update({p_result_path:path,p_progress:{...progress,stage:'completed',elapsedMs:clock()-startedAt,totalMs:clock()-startedAt,...creativeUsageSummary(result)}});
     await ping(true);return {id:job.id,resultPath:path,totalMs:clock()-startedAt};
   }catch(error){
     if(controller.signal.reason?.code==='CREATIVE_WORKER_STOPPED')error=controller.signal.reason;

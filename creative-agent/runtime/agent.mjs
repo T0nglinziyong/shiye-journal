@@ -191,7 +191,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
     .addNode('model',async({run:s},config)=>{
       live(s,config);
       if(s.turns>=55||s.noProgress>=5)throw error('CREATIVE_STALLED','创作未能继续推进，成功步骤已保留');
-      await onProgress({stage:'thinking',turn:s.turns+1,elapsedMs:clock()-s.startedAt,...creativeUsageSummary(s)});
+      await onProgress({stage:'thinking',phase:s.phase,turn:s.turns+1,elapsedMs:clock()-s.startedAt,...creativeUsageSummary(s)});
       let contextState=s;
       const candidate=typeof model.compact==='function'&&s.deadlineAt-clock()>45000?creativeCompactionCandidate(s.messages,s):null;
       if(candidate){

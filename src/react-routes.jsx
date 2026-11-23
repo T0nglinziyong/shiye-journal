@@ -1003,22 +1003,37 @@ function MatchingVariantCover({variant,session,source}){
     </div>}
   </div>;
 }
-function MatchingSessionPanel({session,state,source,onAction}){
+export function MatchingSessionPanel({session,state,source,onAction}){
   const [,refresh]=useState(0);
   useEffect(()=>session.subscribe(()=>refresh(version=>version+1)),[session]);
   const variants=session.variants();
+  const running=variants.some(v=>v.status==='running');
+  useEffect(()=>{if(!running)return;const timer=setInterval(()=>refresh(v=>v+1),1000);return ()=>clearInterval(timer);},[running]);
   const action=(name,id)=>()=>onAction(name,id);
+  const preview=variants.find(v=>v.id===state.creativePreviewVariantID);
+  useEffect(()=>{
+    if(!preview)return;
+    const back=document.querySelector('.creative-live-view header button');back?.focus();
+    const key=event=>{if(event.key==='Escape'){event.preventDefault();session.closePreview();}else if(event.key==='Tab'){event.preventDefault();back?.focus();}};
+    document.addEventListener('keydown',key);
+    return ()=>{document.removeEventListener('keydown',key);document.querySelector(`[data-act="match-open-result"][data-id="${CSS.escape(preview.id)}"]`)?.focus();};
+  },[preview?.id,session]);
   return <section className="panel match-previews" data-match-scroll="previews">
+    {preview?createPortal(<div className="creative-live-view" role="dialog" aria-modal="true" aria-label="创作画面">
+      <header><button className="btn" onClick={()=>session.closePreview()}>返回搭配</button><span>{session.progress(preview)}</span></header>
+      <main>{session.previewURL?.(preview)?<img src={session.previewURL(preview)} alt="正在创作的实际画面"/>:<p>正在准备第一张画面…</p>}</main>
+      <footer aria-label="只读工具栏"><button disabled>选择</button><button disabled>素材</button><button disabled>文字</button><button disabled>图形</button><span>预览模式，请返回后打开完成方案继续编辑</span></footer>
+    </div>,document.body):null}
     <h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p>
     <div className="match-variant-grid" data-match-scroll="variants">{variants.length?
       variants.map(variant=><article key={variant.id} className="match-variant"
         data-variant={variant.id} data-variant-status={variant.status}>
         <button className="match-result" data-act="match-open-result" data-id={variant.id}
-          data-react-action="true" disabled={variant.status==='running'}
+          data-react-action="true"
           onClick={action('match-open-result',variant.id)}>
           <MatchingVariantCover variant={variant} session={session} source={source} assets={state.assets}/>
           <strong>{variant.title}</strong>
-        </button><pre className="match-progress" aria-live="polite">{variant.progress}</pre>
+        </button><pre className="match-progress" aria-live="polite">{session.progress(variant)}</pre>
         {variant.linkedProjectID&&!state.projects.some(project=>project.id===variant.linkedProjectID)?
           <button className="btn" data-react-action="true" onClick={action('match-restore',variant.id)}>恢复已删除作品</button>:null}
         {variant.project?.isSnapshot&&variant.project.imageCreation&&variant.status!=='running'?<button className="btn" data-react-action="true" onClick={action('match-rebuild',variant.project.id)}>从这张图重建可编辑候选</button>:null}
@@ -1033,12 +1048,13 @@ function MatchingSessionPanel({session,state,source,onAction}){
 }
 export function MatchingPage({state,source,kindName,session,onAction,onMatchingChange}){
   const [,refresh]=useState(0);
-  const [shelfTab,setShelfTab]=useState('recommend');
-  const [shelfQuery,setShelfQuery]=useState('');
-  const [shelfLimit,setShelfLimit]=useState(80);
-  const [shelfSeries,setShelfSeries]=useState('all');
-  const [shelfKind,setShelfKind]=useState('all');
-  const [activeMaterial,setActiveMaterial]=useState(null);
+  const [shelfTab,setShelfTab]=useState(state.matchView?.shelfTab??'recommend');
+  const [shelfQuery,setShelfQuery]=useState(state.matchView?.shelfQuery??'');
+  const [shelfLimit,setShelfLimit]=useState(state.matchView?.shelfLimit??80);
+  const [shelfSeries,setShelfSeries]=useState(state.matchView?.shelfSeries??'all');
+  const [shelfKind,setShelfKind]=useState(state.matchView?.shelfKind??'all');
+  const [activeMaterial,setActiveMaterial]=useState(state.matchView?.activeMaterial??null);
+  useEffect(()=>{state.matchView={shelfTab,shelfQuery,shelfLimit,shelfSeries,shelfKind,activeMaterial};},[shelfTab,shelfQuery,shelfLimit,shelfSeries,shelfKind,activeMaterial]);
   const stageRef=useRef(null),dragRef=useRef(null);
   useEffect(()=>{
     const update=()=>refresh(version=>version+1);

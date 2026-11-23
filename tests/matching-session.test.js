@@ -4,11 +4,11 @@ import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchi
 
 test('completed AI creation reports its elapsed time and opens the result',()=>{
  assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T00:02:34Z'),
-  '创作完成，用时2分34秒，点击方案继续编辑');
+  '创作完成，累计，用时2分34秒。点击方案继续编辑。');
  assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T01:00:01Z'),
-  '创作完成，用时1小时1秒，点击方案继续编辑');
+  '创作完成，累计，用时60分1秒。点击方案继续编辑。');
  assert.equal(creativeCompletionText('2026-11-21T00:00:00Z','2026-11-21T00:02:34Z',{turns:18,inputTokens:123456,outputTokens:7890}),
-  '创作完成，用时2分34秒，共18轮，输入123,456 token，输出7,890 token，点击方案继续编辑');
+  '创作完成，累计，18轮，用时2分34秒，token输入123,456，复用0，输出7,890。点击方案继续编辑。');
 });
 
 const draft={id:'d',sceneVersion:2,canvas:{width:700,height:1000},layers:[]};
@@ -125,7 +125,7 @@ test('variant drafts reuse drafts but never convert published editable work to d
  const v={project:{id:'source',drafts:[draft],activeDraftID:'d',isDraft:true}};
  assert.equal(variantDraftProject(v,{id:'keep',isDraft:true},'new').id,'keep');
  const copied=variantDraftProject(v,{id:'published',isDraft:false},'new');
- assert.equal(copied.isDraft,true);assert.equal(copied.id,'new');
+ assert.equal(copied.isDraft,false);assert.equal(copied.id,'published');
 });
 test('failed cloud import never produces a local matching variant',async()=>{
  const device=memoryDevice(),db=memoryProjects(),c=context({},device,db),session=createMatchingSession(c);
@@ -188,4 +188,17 @@ test('opening a completed background variant selects its result while preserving
  await device.put('test-user',matchingSnapshot({},[{id:'v',status:'completed',cloudJobID:'job',project:p,linkedProjectID:p.id}]));
  const c=context({projects:[p]},device),session=createMatchingSession(c);await session.restore();await session.open('v');
  assert.equal(c.state.activeDraft,'result');assert.equal(c.state.activeProject.drafts.length,2);
+});
+
+test('completed matching work reopens the same published project and returns to matching',async()=>{
+ const device=memoryDevice(),db=memoryProjects(),published={...structuredClone(work),isDraft:false};
+ await device.put('test-user',matchingSnapshot({},[{id:'v',status:'completed',linkedProjectID:'p',project:{...structuredClone(work),isDraft:true}}]));
+ const c=context({projects:[published]},device,db),session=createMatchingSession(c);await session.restore();await session.open('v');
+ assert.equal(c.state.activeProject,published);assert.equal(c.state.offlineEditingReturnID,'p');assert.equal(c.state.projects.length,1);assert.equal(db.writes.length,0);
+});
+test('running preview opens without saving or exposing a mutable project',async()=>{
+ const device=memoryDevice(),db=memoryProjects();
+ await device.put('test-user',matchingSnapshot({},[{id:'v',status:'running',project:{...structuredClone(work),creativeTask:{id:'job'}}}]));
+ const c=context({},device,db),session=createMatchingSession(c);await session.restore();await session.open('v');
+ assert.equal(c.state.creativePreviewVariantID,'v');assert.equal(c.state.activeProject,undefined);assert.equal(db.writes.length,0);session.closePreview();assert.equal(c.state.creativePreviewVariantID,null);
 });

@@ -33,7 +33,7 @@ export function createMatchingCoverCache(context){
     const jobKey=key+'\0'+signature;if(jobs.has(jobKey))return jobs.get(jobKey);
     const task=(async()=>{
       const scale=Math.max(.18,Math.min(.7,480/Math.max(draft.canvas.width,draft.canvas.height)));
-      const canvas=await context.rasterize(draft,scale);
+      const canvas=await context.rasterize(draft,scale,{preview:true});
       const url=canvas.toDataURL('image/jpeg',.88);
       raster.set(key,signature,url,url.length*2);return url;
     })().catch(()=>null).finally(()=>jobs.delete(jobKey));

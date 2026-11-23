@@ -1,10 +1,11 @@
+import {fabricShapeRaster} from './fabric-shape-raster.js';
 import {hasGraphicEffects,graphicPaintFrame,inkEffectSVG} from './graphic-effects.js';
 import {prepareJournalFont} from './journal-fonts.js';
 import {scaleTextEffects} from './text-effects.js';
 import {applyScenePatchBatch} from './scene-edit-kernel.js';
 import {USER_SCENE_POLICY,requireScenePolicy,confirmSceneCapability} from './scene-edit-policy.js';
 import {findSceneNode} from './scene-v2.js';
-import {shapeSVG,shapeThumbnailSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
+import {shapeSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {geometryIntersection} from './craft-topology.js';
 import {validateVectorMask} from './scene-v2.js';
@@ -172,8 +173,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const patterned=['paper','grid','dots','stripes'].includes(node.kind)||Boolean(node.paperSurface);
       let options;
       if(patterned){
-        const svg=shapeThumbnailSVG(node);
-        object=await fabric.FabricImage.fromURL('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));
+        object=new fabric.FabricImage(await fabricShapeRaster(node,fabric));
         options={width:object.width,height:object.height,
           viewBoxWidth:object.width,viewBoxHeight:object.height};
       }else{
