@@ -32,7 +32,7 @@ async function arrange(f){
 
 test('optional tools are discoverable, persistent across phases and restricted to host capabilities',async()=>{
   const available=availableHarnessTools();
-  assert.equal(selectHarnessTools(available).length,12);
+  assert.equal(selectHarnessTools(available).length,13);
   assert.ok(!available.some(tool=>tool.function.name==='creation_guide'));
   assert.ok(!JSON.stringify(harnessToolCatalog(available)).includes('segment_material'));
   const f=await fixture();
@@ -56,7 +56,7 @@ for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCr
   const harness=create({skills,model:async({tools})=>{
     const names=tools.map(tool=>tool.function.name);
     if(++turns===1){
-      assert.equal(names.length,12);assert.ok(names.includes('creation_paper'));assert.ok(!names.includes('read_template'));
+      assert.equal(names.length,13);assert.ok(names.includes('creation_paper'));assert.ok(!names.includes('read_template'));
       return {message:{role:'assistant',content:null,tool_calls:[{id:'discover',type:'function',function:{name:'creation_help',arguments:'{"topics":["read_template"]}'}}]}};
     }
     assert.ok(names.includes('read_template'));assert.ok(!names.includes('workspace_create'));

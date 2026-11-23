@@ -1,3 +1,4 @@
+import {titleTool} from './title-tool.mjs';
 import {paperTool} from './paper-tool.mjs';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
 import {creativePhases} from './phases.mjs';
@@ -11,6 +12,7 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
   ...tool,function:{...tool.function,parameters:{...tool.function.parameters,properties:{...tool.function.parameters.properties,decision:decisionField}}}
 }:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询操作/公共参数合同或工具。topics 为空返回目录；topics:[工具名] 读取准确参数并在下一轮展开该工具。工具一经展开持续可用，不受阶段限制。'}}:tool),
   paperTool,
+  titleTool,
   custom('segment_material','在真实素材上给出 0–1 比例 xyxy 框，调用 SAM 查看候选裁片。只提议，不修改作品；先看彩色轮廓，再用 creation_apply_crops 裁切。',object({alias:{type:'string'},box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['alias','box'])),
   custom('creation_apply_crops','把已查看的分割提议批量应用到对应来源的已放置素材。与普通编辑一样原子校验、保留真实来源。',object({transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:sceneRevision,cuts:{type:'array',minItems:1,maxItems:12,items:object({proposalId:string,target:string,mode:{enum:['keep','remove']},resultId:string,keepRemainder:{type:'boolean'}},['proposalId','target','mode'])},decision:decisionField},['transactionId','baseSceneRevision','cuts'])),
   custom('read_skill','分层读取教程：overview 是专题判断与目录；methods 每次给最多 8 个简要用法；detail 给方法参数和示意图，detail 必须带 methodId，可直接跳到 detail；variant 只在 detail 使用。重复读取会恢复准确参数与当前版本示例。',object({name:{type:'string',pattern:'^[a-z0-9-]{1,64}$'},level:{enum:['overview','methods','detail']},methodId:{type:'string',maxLength:80},variant:{type:'string',maxLength:40},page:{type:'integer',minimum:0,maximum:20}},['name'])),
@@ -35,7 +37,7 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
 
 // Discovery changes the model's reading surface, never its permissions or the
 // executable contract. A learned tool stays visible across phases/checkpoints.
-const core=new Set(['creation_plan','creation_help','creation_inspect','creation_apply','creation_paper','read_skill','creation_recipe','search_references','inspect_materials','creation_preview','creation_undo','creation_finish']);
+const core=new Set(['creation_plan','creation_help','creation_inspect','creation_apply','creation_paper','creation_title','read_skill','creation_recipe','search_references','inspect_materials','creation_preview','creation_undo','creation_finish']);
 const groups=[
   {purpose:'参考案例、模板与写作选题',names:['read_case','read_template','search_writing_topics']},
   {purpose:'重看素材总图、管理独立试摆空间',names:['workspace_view','workspace_create','workspace_close']},

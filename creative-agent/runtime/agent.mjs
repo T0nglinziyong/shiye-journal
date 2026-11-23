@@ -1,4 +1,5 @@
 import {creativeUsageSummary} from './usage.mjs';
+import {compileTitleOperations} from './title-tool.mjs';
 import {compilePaperOperations} from './paper-tool.mjs';
 import {visualDensityBrief} from '../../src/creative-style-brief.js';
 import {craftDigest,layerFingerprint,isManagedUnchanged} from '../../src/craft-fingerprint.js';
@@ -117,7 +118,7 @@ function latestPageImage(messages){
 }
 const system=`你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。阶段记录可选，不是四阶段关卡。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
 
-Skill 是按需查询的工作方法，不是装饰配额。先看全局素材图和当前 Scene，当前任务需要具体判断时主动 read_skill：定配色读 journal-color；第一次形成构图前读 journal-composition；创建数字纸用 creation_paper 选择纸色、纹理、边缘和层序，普通色块仍用 graphic.add；纸层和露边难处理时读 paper-layering；标题或 H2/H3 需要字群组合时读 journal-lettering；正文主题、分段或写面不明时读 journal-writing；对象接缝或视觉节奏缺细节时读 journal-accents / journal-graphics；照片叙事读 photo-story。按当前问题选择相关专题，方法可以综合运用，不必读全套；overview 取原则，methods 取少量候选，detail 取准确参数和示意图。构图由当前画面决定，用基础摆放、分组和图层命令试摆，不为三角形或 S 形等固定公式调用配方。独立查询可同轮合批；需要依据教程结果的编辑在读取后的下一轮执行。单个普通图形、字效、移动和层序直接用基础工具。不要把配方数当成画质指标。
+Skill 是按需查询的工作方法，不是装饰配额。先看全局素材图和当前 Scene，当前任务需要具体判断时主动 read_skill：定配色读 journal-color；第一次形成构图前读 journal-composition；创建数字纸用 creation_paper 选择纸色、纹理、边缘和层序，普通色块仍用 graphic.add；纸层和露边难处理时读 paper-layering；标题用常驻 creation_title 直接组合字群排列、描边/空心/渐变和字后底形；这些是可选增强，复杂拆字或笔画技巧再读 journal-lettering；正文主题、分段或写面不明时读 journal-writing；对象接缝或视觉节奏缺细节时读 journal-accents / journal-graphics；照片叙事读 photo-story。按当前问题选择相关专题，方法可以综合运用，不必读全套；overview 取原则，methods 取少量候选，detail 取准确参数和示意图。构图由当前画面决定，用基础摆放、分组和图层命令试摆，不为三角形或 S 形等固定公式调用配方。独立查询可同轮合批；需要依据教程结果的编辑在读取后的下一轮执行。单个普通图形、正文样式、移动和层序直接用基础工具。不要把配方数当成画质指标。
 
 方向：依据素材实际图像、纸张、用户要求确定主题、色彩与可写内容。标签仅辅助辨认和选写作话题，不能限制素材用途。可有一位、多位或没有单一主角；实体素材可留在暂存区，不必凑齐。印字卡、照片、纹样纸、可写素材、数字纸形或原纸都可承托图文。虚构叙事可作灵感，但不冒称用户亲历；纪实模式只写确认事实。
 
@@ -464,13 +465,14 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
             if(!proposals.some(p=>p.id===result.proposal.id))proposals.push(result.proposal);
             images.push({type:'text',text:'真实分割提议（绿色区域）：'+result.proposal.id},{type:'image_url',image_url:{url:result.imageURL}});
             data={proposalId:result.proposal.id,alias:args.alias,artifact:result.artifact,milliseconds:result.proposal.milliseconds};progress=true;
-          }else if(name==='creation_apply'||name==='creation_apply_crops'||name==='creation_paper'){
+          }else if(name==='creation_apply'||name==='creation_apply_crops'||name==='creation_paper'||name==='creation_title'){
             if(!plan)throw Error('先记录创作方向');
             const checkSpaces=operations=>{for(const operation of operations||[]){const surface=operation.place?.surface;if(surface&&!spaces.some(space=>space.id===surface))throw Error('工作空间不存在：'+surface);checkSpaces(operation.children);}};
             if(name==='creation_apply')checkSpaces(args.operations);
             if(name==='creation_paper')checkSpaces(args.papers);
+            if(name==='creation_title')checkSpaces(args.titles);
             if(name==='creation_apply_crops'&&args.cuts.some(c=>!s.proposals?.some(p=>p.id===c.proposalId)))throw Error('请先查看上一轮真实分割预览，再应用裁片');
-            const transaction=name==='creation_apply'?(({decision,...rest})=>({...rest,baseSceneRevision:canonicalToolRevision(rest.baseSceneRevision,revision(document))}))(args):{protocolVersion:2,transactionId:args.transactionId,baseSceneRevision:canonicalToolRevision(args.baseSceneRevision,revision(document)),operations:name==='creation_paper'?compilePaperOperations(args):compileSegmentationCuts({document,proposals,cuts:args.cuts})};
+            const transaction=name==='creation_apply'?(({decision,...rest})=>({...rest,baseSceneRevision:canonicalToolRevision(rest.baseSceneRevision,revision(document))}))(args):{protocolVersion:2,transactionId:args.transactionId,baseSceneRevision:canonicalToolRevision(args.baseSceneRevision,revision(document)),operations:name==='creation_title'?compileTitleOperations(args):name==='creation_paper'?compilePaperOperations(args):compileSegmentationCuts({document,proposals,cuts:args.cuts})};
             const before=document,applied=applyCreationTransaction(document,transaction,assets,capabilities);
             constrainApplied(before,applied,args.transactionId);
             document=applied.document;data=applied.result;

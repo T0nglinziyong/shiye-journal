@@ -22,6 +22,10 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 
 需要组合时先读 `read_skill({name:"journal-lettering",level:"detail",methodId:"title-composed"})`，明确选择 `glyph`、`style`、`backgrounds` 中适用的层，再调用配方；不要只改示例的字体与文字。已有合适标题应保留，改善主标题不意味着给所有副题套同样字效。
 
+## 常驻标题工具
+
+新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve；`runs` 明确词组主次、旋转和偏移；`style` 可组合描边、空心、渐变；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `place`、`order`、`widthMm` 和字号。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
+
 ## 基础操作与组合技巧
 
 普通阴影、描边、空心、渐变、高亮直接用 `text.add` / `layer.update` 的 style；单个圈、方块或短线用 `graphic.add`。不为这类单步操作加载方法详情。若需要间隔阴影、错位描边、三层字群、纸片承字、字后圈方、跨字横带或数字半圆影，若尚未确定方法，读 `methods` 比较少量候选；已经选中方法可直接读 `detail`，按返回的准确参数调用 `creation_recipe`。方法是可编辑字与图形组，不是平面贴图。

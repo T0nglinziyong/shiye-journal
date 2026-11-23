@@ -437,3 +437,18 @@ test('dedicated paper tool requires a plan, commits editable papers and undoes t
  const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_paper');
  assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
 });
+
+test('dedicated title tool requires a plan, commits editable title groups and undoes the batch',async t=>{
+ let turn=0;const args=()=>({transactionId:'title-tool',baseSceneRevision:creationSceneRevision(f.document),titles:[{id:'heading',text:'慢慢生活',layout:'plain',fontSizePt:20,color:'#354A55',widthMm:70,style:{outline:{color:'#FFFFFF',widthMm:.3}},backdrop:{kind:'dots'},place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'}}]});
+ const f=await fixture(t,async()=>{
+  if(++turn===1)return answer(call('creation_title',args()));
+  if(turn===2)return answer(plan(),call('creation_title',args()));
+  if(turn===3){const saved=await f.harness.state('title-entry');assert.equal(saved.document.page.layers[0].type,'group');return answer(call('creation_undo',{}));}
+  throw Error('stop after title undo');
+ });
+ await assert.rejects(f.harness.run({id:'title-entry',state:f.state}),/stop after title undo/);
+ const saved=await f.harness.state('title-entry');
+ assert.equal(saved.document.page.layers.length,0);
+ const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_title');
+ assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
+});

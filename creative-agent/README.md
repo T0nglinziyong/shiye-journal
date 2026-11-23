@@ -13,7 +13,7 @@
 
 创作流程与部署合同见 [`docs/CREATIVE_HARNESS.md`](../docs/CREATIVE_HARNESS.md)；方法用法见 [`docs/CREATION_LIBRARY.md`](../docs/CREATION_LIBRARY.md)。历史研究和已废弃的专题没有进入运行时 Skill 目录。
 
-工具入口与任务执行分开维护：`runtime/tools.mjs` 定义模型工具与按需发现策略，`src/creation-command-spec.js` 是实际编辑操作的唯一参数来源，`runtime/agent.mjs` 负责事务与预览生命周期。Skill 解释判断方法，参数和可执行示例由注册表返回。首轮展示 12 个常用工具（含专用纸张入口 creation_paper）；其他工具经 `creation_help` 或检索结果展开，阶段切换不影响已展开工具。
+工具入口与任务执行分开维护：`runtime/tools.mjs` 定义模型工具与按需发现策略，`src/creation-command-spec.js` 是实际编辑操作的唯一参数来源，`runtime/agent.mjs` 负责事务与预览生命周期。Skill 解释判断方法，参数和可执行示例由注册表返回。首轮展示 13 个常用工具（含专用纸张 creation_paper 和标题 creation_title 入口）；其他工具经 `creation_help` 或检索结果展开，阶段切换不影响已展开工具。
 
 用户“确定方向”给出创作目标，Skill 中的方法可以组合、交错和修订，不另改用户选择。教程图片与临时素材查看区别处理：上下文保留最近学习的一张教程图和当前作品，供后续编辑对照；素材局部图仍按需重看。图例为方法参考，不能当作本次库存。
 
