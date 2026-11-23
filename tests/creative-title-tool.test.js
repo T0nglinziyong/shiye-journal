@@ -6,7 +6,7 @@ import {validateValue} from '../src/creative-contract.js';
 import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
-const title={id:'title',text:'慢慢生活',place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'},widthMm:90,fontSizePt:22,color:'#354A55',layout:'stagger',runs:[{text:'慢慢',role:'primary',rotationDeg:-4},{text:'生活',role:'secondary',offsetMm:[0,2]}],style:{outline:{color:'#F5EDDA',widthMm:.35}},backdrop:{kind:'mixed',patternColor:'#B78B65'}};
+const title={id:'title',text:'慢慢生活',place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'},widthMm:90,fontSizePt:22,color:'#354A55',layout:'stagger',effect:'none',runs:[{text:'慢慢',role:'primary',rotationDeg:-4},{text:'生活',role:'secondary',offsetMm:[0,2]}],style:{outline:{color:'#F5EDDA',widthMm:.35}},backdrop:{kind:'mixed',patternColor:'#B78B65'}};
 test('title is always visible with typed combinable effects and rejects invalid parameters',()=>{
  assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_title'));
  const args={transactionId:'title',baseSceneRevision:'sha256:'+'a'.repeat(64),titles:[title]};validateValue(args,titleTool.function.parameters);
@@ -45,5 +45,19 @@ test('curved title backing covers the curved glyph envelope in both directions',
   const curvedBand=group.children.find(c=>c.op==='graphic.add');
   assert.ok(curvedBand.place.at[1]>band.place.at[1]);
   assert.ok(curvedBand.size.height>=band.size.height+5.9);
+ }
+});
+
+test('explicit effect methods compile editable native styles without a recipe lookup',()=>{
+ const {runs,style,backdrop,...base}=title;
+ for(const effect of ['outline','hollow','offset-outline','gradient-outline','shadow','none']){
+  const op=compileTitleOperations({titles:[{...base,layout:'plain',effect,accentColor:'#D8B678'}]})[0];
+  const text=op.children.find(c=>c.op==='text.add');
+  if(effect==='none')assert.ok(!text.style.outline&&!text.style.shadow);
+  if(effect==='outline')assert.equal(text.style.outline.color,'#D8B678');
+  if(effect==='hollow')assert.equal(text.style.fillOpacity,0);
+  if(effect==='offset-outline')assert.deepEqual(text.style.outline.offsetMm,[.6,.7]);
+  if(effect==='gradient-outline')assert.equal(text.style.gradient.stops[0].color,'#D8B678');
+  if(effect==='shadow')assert.equal(text.style.shadow.color,'#D8B678');
  }
 });

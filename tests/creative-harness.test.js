@@ -439,7 +439,7 @@ test('dedicated paper tool requires a plan, commits editable papers and undoes t
 });
 
 test('dedicated title tool requires a plan, commits editable title groups and undoes the batch',async t=>{
- let turn=0;const args=()=>({transactionId:'title-tool',baseSceneRevision:creationSceneRevision(f.document),titles:[{id:'heading',text:'慢慢生活',layout:'plain',fontSizePt:20,color:'#354A55',widthMm:70,style:{outline:{color:'#FFFFFF',widthMm:.3}},backdrop:{kind:'dots'},place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'}}]});
+ let turn=0;const args=()=>({transactionId:'title-tool',baseSceneRevision:creationSceneRevision(f.document),titles:[{id:'heading',text:'慢慢生活',layout:'plain',effect:'outline',fontSizePt:20,color:'#354A55',widthMm:70,style:{outline:{color:'#FFFFFF',widthMm:.3}},backdrop:{kind:'dots'},place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'}}]});
  const f=await fixture(t,async()=>{
   if(++turn===1)return answer(call('creation_title',args()));
   if(turn===2)return answer(plan(),call('creation_title',args()));
