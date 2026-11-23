@@ -108,7 +108,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
   const lines=layout.lines.length,h=lines*rowHeight+Math.abs(s.curveHeightMm||0)+2;
   const op={op:'text.add',id:p.id+'-text'+(++next),content,place:at(x,y),size:{width:w,unit:'mm'},style:s};
   const lastLine=[...layout.lines].reverse().find(line=>line.text.trim())?.text||'';
-  const inkLines=layout.lines.filter(line=>line.text.trim()).map(line=>({x,y:y+line.y,width:Math.min(w,extent(line.text,size,s.fontFamily)),height:size*pt*1.1}));
+  const inkLines=layout.lines.filter(line=>line.text.trim()).map(line=>({x,y:y+line.y+(s.curveHeightMm?size*pt*.3:0),width:Math.min(w,extent(line.text,size,s.fontFamily)),height:size*pt*1.1+Math.abs(s.curveHeightMm||0)}));
   texts.push({op,x,y,w,h,inkHeight:(lines-1)*rowHeight+size*pt*1.1,lastLineWidth:Math.min(w,extent(lastLine,size,s.fontFamily)),lineCount:lines,inkLines});return texts.at(-1);
  };
  let runs=p.runs;

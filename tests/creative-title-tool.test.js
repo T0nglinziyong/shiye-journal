@@ -35,3 +35,15 @@ test('plain titles need no decoration and curve combines with outlines and backd
  assert.equal(curved.children.find(c=>c.op==='text.add').style.curveHeightMm,3);
  assert.ok(curved.children.some(c=>c.op==='graphic.add'));
 });
+
+test('curved title backing covers the curved glyph envelope in both directions',()=>{
+ const {runs,...base}=title;
+ const plain=compileTitleOperations({titles:[{...base,layout:'plain',backdrop:{kind:'band',paddingMm:2}}]})[0];
+ const band=plain.children.find(c=>c.op==='graphic.add');
+ for(const curveHeightMm of [-6,6]){
+  const group=compileTitleOperations({titles:[{...base,layout:'curve',curveHeightMm,backdrop:{kind:'band',paddingMm:2}}]})[0];
+  const curvedBand=group.children.find(c=>c.op==='graphic.add');
+  assert.ok(curvedBand.place.at[1]>band.place.at[1]);
+  assert.ok(curvedBand.size.height>=band.size.height+5.9);
+ }
+});
