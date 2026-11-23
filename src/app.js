@@ -1212,6 +1212,8 @@ async function flushSave(){
   try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'save'});syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
 }
 function saveSpecificProject(p){if(!p)return false;delete p.isTemplate;
+  const projectIndex=state.projects.findIndex(item=>item.id===p.id);
+  if(projectIndex>=0&&state.projects[projectIndex]!==p)state.projects[projectIndex]=p;
   pinProjectMaterialImages(p,asset);
   const fingerprint=projectSemanticFingerprint(p);
   if(projectSaveFingerprints.get(p.id)===fingerprint)return false;
@@ -1361,7 +1363,8 @@ async function runAppAction(action,id,value){try{
     }
     await flushSave();
     if(publish)saveAISnapshotInBackground(p);
-    if(state.offlineEditingReturnID===p.id){
+    const returnToMatching=state.offlineEditingReturnID===p.id;
+    if(returnToMatching){
       await matchingSession.reflectProject(p);
       state.offlineEditingReturnID=null;
     }
@@ -1369,7 +1372,7 @@ async function runAppAction(action,id,value){try{
     parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
     resetCatalogPage('works');
     state.activeProject=null;state.activeDraft=null;
-    route('works',{replaceHistory:true});
+    route(returnToMatching?'matching':'works',{replaceHistory:true});
     break;
   }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':if(state.editingPaperCorners)await previewCorrection();else{state.paperAdjustmentOriginalCorners=state.paperCorners?structuredClone(state.paperCorners):null;state.editingPaperCorners=true;render();}break;case 'confirm-import':{
@@ -3730,7 +3733,7 @@ async function rasterize(d,scale,{preview=false}={}){
  const sources=editorEntry(d).filter(e=>e.kind==='material').map(e=>e.value);
  const ids=[...new Set(sources.filter(node=>!node.sourceStaticPath&&!(!node.sourceBlobId&&asset(node.assetID)?.staticPath))
    .map(node=>node.sourceBlobId||asset(node.assetID)?.blobId).filter(Boolean))],release=privateImages.retain(ids);
- try{await Promise.all(ids.map(id=>privateImages.load(id,preview?false:true)));const result=await renderSceneCanvas(d,{scale,loadMaterialImage:async(id,node)=>{const a=asset(id),staticPath=node?.sourceStaticPath||(!node?.sourceBlobId&&a?.staticPath);if(staticPath)return decodeSceneImage(staticPath);const blobId=node?.sourceBlobId||a?.blobId;if(!blobId)throw Error('作品引用的素材图片不存在：'+id);return decodeSceneImage(preview?imagePlaceholder(blobId):(urls.get(blobId)||image(blobId)));}});return result.canvas;}finally{release();}
+ try{await Promise.all(ids.map(id=>privateImages.load(id,preview?false:true)));const result=await renderSceneCanvas(d,{scale,backgroundYield:yieldToForeground,loadMaterialImage:async(id,node)=>{const a=asset(id),staticPath=node?.sourceStaticPath||(!node?.sourceBlobId&&a?.staticPath);if(staticPath)return decodeSceneImage(staticPath);const blobId=node?.sourceBlobId||a?.blobId;if(!blobId)throw Error('作品引用的素材图片不存在：'+id);return decodeSceneImage(preview?imagePlaceholder(blobId):(urls.get(blobId)||image(blobId)));}});return result.canvas;}finally{release();}
 }
 async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);recordRuntimeIssue('handled',e,'import',{phase:'import'});toast(explainUserError(e,'照片处理'));}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])];fileInput.value='';await receiveImportPhotos(files);};

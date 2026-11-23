@@ -19,7 +19,7 @@ async function until(check){for(let i=0;i<80;i++){if(check())return;await new Pr
 
 test('matching cover raster is reused on progress updates and invalidated by mutable content',async()=>{
  let calls=0;const state={accountId:'a',assets:[{id:'m',blobId:'image',title:'paper'}]};
- const cache=createMatchingCoverCache({state,rasterize:async()=>({toDataURL:()=>`data:image/jpeg;base64,${++calls}`})});
+ const cache=createMatchingCoverCache({state,rasterize:async(_draft,_scale,options)=>{assert.deepEqual(options,{preview:true},'matching covers must not download full originals');return {toDataURL:()=>`data:image/jpeg;base64,${++calls}`};}});
  const d=createDraft();d.id='d';d.items.push({id:'material',assetID:'m',x:100,y:120,width:30,height:30,zIndex:1});d.textBlocks.push({id:'text',content:'old',x:40,y:60,width:120,height:50,color:'#333333',fontSize:20});
  const p={id:'p',title:'work',activeDraftID:'d',drafts:[d]};
  try{

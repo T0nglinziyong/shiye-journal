@@ -1,3 +1,5 @@
+import {creativeJobProgress} from './background-creation-session.js';
+import {creativeCompleteProgress} from './creative-progress.js';
 import {generationProfile,creationMethod} from './creation-methods.js';
 import {projectForReconstruction} from './image-workflow.js';
 import {normalizeMatchingDirection} from './matching-directions.js';
@@ -12,12 +14,7 @@ const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore
 export function creativeCompletionText(startedAt,completedAt=new Date().toISOString(),usage=null){
  const start=Date.parse(startedAt),finish=Date.parse(completedAt);
  const seconds=Number.isFinite(start)&&Number.isFinite(finish)?Math.max(1,Math.round((finish-start)/1000)):1;
- const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),rest=seconds%60;
- const elapsed=(hours?hours+'小时':'')+(minutes?minutes+'分':'')+rest+'秒';
- const rounds=Number.isSafeInteger(usage?.turns)&&usage.turns>=0?`，共${usage.turns}轮`:'';
- const input=Number.isSafeInteger(usage?.inputTokens)&&usage.inputTokens>=0?`，输入${usage.inputTokens.toLocaleString('zh-CN')} token`:'';
- const output=Number.isSafeInteger(usage?.outputTokens)&&usage.outputTokens>=0?`，输出${usage.outputTokens.toLocaleString('zh-CN')} token`:'';
- return `创作完成，用时${elapsed}${rounds}${input}${output}，点击方案继续编辑`;
+ return creativeCompleteProgress(usage,usage?.totalMs??usage?.elapsedMs??seconds*1000);
 }
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
@@ -30,7 +27,7 @@ export function restoreMatchingSession(record,state){
   .map(v=>v.status==='running'&&!v.project?.creativeTask?.id?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
 }
 export function variantDraftProject(variant,existing,newID){
- if(existing?.isDraft)return existing;
+ if(existing)return existing;
  const p=prepareProjectScene(structuredClone(variant.project));p.id=newID;p.isDraft=true;p.createdAt=p.updatedAt=new Date().toISOString();return p;
 }
 export function variantResultProject(variant,project=variant.project){
@@ -56,6 +53,7 @@ export function createMatchingSession(c){
  const progressFor=(v,owner)=>event=>{
    if(account()!==owner)return;
    v.progress=event.message;
+   if(event.job){v.progressJob={status:event.job.status,progress:event.job.progress,error_code:event.job.error_code};v.progressReceivedAt=Date.now();}
    const first=event.jobID&&v.cloudJobID!==event.jobID;
    if(event.jobID){v.cloudJobID=event.jobID;v.linkedProjectID=v.project.id;}
    update();return first?save():undefined;
@@ -73,7 +71,7 @@ export function createMatchingSession(c){
   variants:()=>variants,
   coverURL:variant=>covers.rasterize(variantResultProject(variant)),
   previewURL:variant=>c.backgroundCreation?.previewURL(variant.project.id)||null,
-  async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;
+  async restore(){c.state.matchView={};c.state.creativePreviewVariantID=null;covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;
     for(const v of variants){
       const saved=c.state.projects.find(p=>p.id===(v.linkedProjectID||v.project.id));
       if(saved?.creativeTask&&(!v.cloudJobID||v.cloudJobID===saved.creativeTask.id)){
@@ -83,6 +81,8 @@ export function createMatchingSession(c){
       if(v.status==='running'&&v.project?.creativeTask?.id&&c.backgroundCreation)resumeVariant(v);
     }
   },
+  progress(v){if(v.status!=='running'||!v.progressJob)return v.progress;const job=v.progressJob;return creativeJobProgress({...job,progress:{...job.progress,elapsedMs:(job.progress?.elapsedMs||0)+Math.max(0,Date.now()-(v.progressReceivedAt||Date.now()))}});},
+  closePreview(){c.state.creativePreviewVariantID=null;update();},
   cacheStats:covers.stats,
   persist:save,
   async importProject(p,{alreadyStored=false}={}){
@@ -122,9 +122,9 @@ export function createMatchingSession(c){
   },
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));const v=variants.find(v=>v.status==='running'&&v.project?.creativeTask?.id);if(v&&c.backgroundCreation)void c.backgroundCreation.cancel(v.project.creativeTask.id).catch(error=>c.toast(error.message));},
   async reset(clearContext=()=>{}){const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
-  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());if(!existing?.isDraft)await c.db.stageProject(p);v.linkedProjectID=p.id;
+  async open(id){const v=variants.find(x=>x.id===id);if(!v||opening)return;if(v.status==='running'){c.state.creativePreviewVariantID=v.id;update();return;}opening=true;try{await queue;await c.flushSave();let existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(existing?.projectDocumentPath){existing=await c.db.completeProject(existing);c.state.projects=c.state.projects.map(p=>p.id===existing.id?existing:p);}if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());if(!existing)await c.db.stageProject(p);v.linkedProjectID=p.id;
     await device.put(account(),matchingSnapshot(c.state,variants));
-    if(!existing?.isDraft)c.state.projects.push(p);p.activeDraftID=variantResultProject(v,p).activeDraftID;c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
+    if(!existing)c.state.projects.push(p);p.activeDraftID=variantResultProject(v,p).activeDraftID;c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.id;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async rebuild(id){
    const snapshot=c.state.projects.find(p=>p.id===id)||variants.find(v=>v.id===id)?.project;
    if(!snapshot?.imageCreation)throw Error('此画面缺少原始素材任务，不能自动重建');

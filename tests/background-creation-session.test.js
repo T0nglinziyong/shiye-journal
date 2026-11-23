@@ -60,8 +60,8 @@ test('background creation sends selected materials as candidates rather than for
 
 
 test('running progress shows cumulative reported input/output tokens and restores completed turns',()=>{
- assert.equal(creativeJobProgress({status:'running',progress:{stage:'thinking',turn:4,inputTokens:12345,outputTokens:678}}),'正在构思与编辑 · 第 4 轮 · 累计 13,023 token（输入 12,345 / 输出 678）');
- assert.match(creativeJobProgress({status:'completed',progress:{turns:5,inputTokens:20,outputTokens:10}}),/第 5 轮.*累计 30 token/);
+ assert.equal(creativeJobProgress({status:'running',progress:{stage:'thinking',turn:4,inputTokens:12345,outputTokens:678}}),'第4轮，正在构思与编辑，累计用时0分0秒，token输入12,345，复用0，输出678');
+ assert.match(creativeJobProgress({status:'completed',progress:{turns:5,inputTokens:20,outputTokens:10}}),/创作完成，累计，5轮.*token输入20，复用0，输出10/);
  assert.doesNotMatch(creativeJobProgress({status:'running',progress:{turn:1}}),/token/);
  assert.doesNotMatch(creativeJobProgress({status:'running',progress:{inputTokens:-1,outputTokens:3}}),/token/);
 });
