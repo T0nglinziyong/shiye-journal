@@ -62,6 +62,8 @@ test('initial agent prompt stays compact and explains when to read Skills',async
   const state=initialHarnessState({document,skills,brief:{style:'清新'}});
   const prompt=state.messages[0].content;
   assert.ok(prompt.includes('第一次形成构图前读 journal-composition'));
-  assert.ok(prompt.includes('标题或 H2/H3'));
+  assert.ok(prompt.includes('creation_title'));
+  assert.ok(prompt.includes('可选增强'));
+  assert.ok(prompt.includes('复杂拆字或笔画技巧再读 journal-lettering'));
   assert.ok(prompt.length<12000);
 });
