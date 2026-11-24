@@ -1,3 +1,4 @@
+import {loadStyleReferences,attachStyleReferences} from '../creative-agent/runtime/style-references.mjs';
 import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -42,6 +43,7 @@ await mkdir(output,{recursive:true,mode:0o700});
 const task=JSON.parse(await readFile(join(input,'TASK.json'),'utf8'));
 if(task.format!=='shiye-gpt-creation-package'||task.version!==3||task.protocolVersion!==2)throw Error('只接受当前 v3 / 协议 2 任务包');
 if(!paperDimensions(task.page?.ratio))throw Error('任务包纸张尺寸无效：须使用支持的纸张规格或整数毫米 custom:宽x高，禁止默认退回 A4 后调用付费模型');
+const styleReferences=study?{parts:[],records:[]}:await loadStyleReferences({styles:[style,...(task.styles||[])]});
 const studyReferences=study?await loadStudyReferences(input):{parts:[],records:[]};
 if(studyMode==='blind'&&studyReferences.records.length)throw Error('无参考测试禁止参考图');
 if(studyMode==='cross-reference'&&(!studyReferences.records.length||studyReferences.records.some(r=>r.stage!=='style')))throw Error('跨案例测试只接受其他案例的风格图');
@@ -76,7 +78,7 @@ if(seedPath){
  document=await reissueStudySeed(JSON.parse(bytes),document,assets);
  studySeed={reissuedTask:true,file:resolve(seedPath),sha256:'sha256:'+createHash('sha256').update(bytes).digest('hex')};
 }
-await writeFile(join(output,'input-audit.json'),JSON.stringify({studyMode,intent:document.source.intent,references:studyReferences.records,seed:studySeed,blankStart:!seedPath,caseNotes:Boolean(notesPath),promptHash:createHash('sha256').update(document.source.intent).digest('hex')},null,2),{flag:'wx'});
+await writeFile(join(output,'input-audit.json'),JSON.stringify({studyMode,intent:document.source.intent,references:[...styleReferences.records,...studyReferences.records],seed:studySeed,blankStart:!seedPath,caseNotes:Boolean(notesPath),promptHash:createHash('sha256').update(document.source.intent).digest('hex')},null,2),{flag:'wx'});
 const stageNotes=notesPath?await readFile(resolve(notesPath),'utf8'):'';
 const renderer=await createHarnessRenderer({source:document.source,images,saveArtifact:async({png,pngHash,document,report})=>{
   const name='preview-'+pngHash.slice(7,23)+'.png';
@@ -86,6 +88,7 @@ const renderer=await createHarnessRenderer({source:document.source,images,saveAr
 }});
 if(!resume){
   initial=initialHarnessState({document,skills,brief:{style,page:task.page,intent:document.source.intent,contentPolicy:document.source.contentPolicy,processing:task.processing,priority:task.sourceContext.materialPriority},tray:await renderer.index(document),startedAt:started,deadlineAt:started+(Number(process.env.SHIYE_ACCEPTANCE_DEADLINE_MS)||570000)});
+  attachStyleReferences(initial,styleReferences);
   await writeFile(join(output,'input.json'),JSON.stringify(initial),{mode:0o600,flag:'wx'});
 }
 if(study){
@@ -137,7 +140,7 @@ try{
   const result=await harness.run({id:'acceptance',state:resume?undefined:initial,signal:studySignal});
   if(study)throw Object.assign(Error('阶段研究已停止'),{code:'LAYOUT_STUDY_STOP',reason:'harness-returned'});
   const evaluation=summarizeCreativeEvaluation(result.qualityFrames||[]);
-  const report={status:result.status,totalMs:Date.now()-initial.startedAt,turns:result.turns,thinkingPolicy,loadedSkills:result.loadedSkills,skillResources,taskConstraints:{styles:document.source.styles,textMode:document.source.textMode,textPresentation:document.source.textPresentation,contentPolicy:document.source.contentPolicy},models:[...new Set((result.trace||[]).filter(e=>e.kind==='model'&&e.model).map(e=>e.model))],review:result.review,independentReviews:result.independentReviews||[],preview:result.preview,usage:result.usage,auxiliaryUsage:result.auxiliaryUsage||[],compactions:result.compactions||[],evaluation:evaluation.comparison,traceEvents:result.trace?.length||0,style,materialCount:task.materials.length,source:'existing-private-v3-package',liveApp:false,execution:{stage:stageName,seed:Boolean(seedPath),caseNotes:Boolean(notesPath),extraInstructions:Boolean(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS),preloadedSkills:Boolean(study),autonomousAuditCount,automaticCritique:typeof model.critique==='function',automaticCompaction:typeof model.compact==='function'}};
+  const report={status:result.status,totalMs:Date.now()-initial.startedAt,turns:result.turns,thinkingPolicy,loadedSkills:result.loadedSkills,skillResources,taskConstraints:{styles:document.source.styles,textMode:document.source.textMode,textPresentation:document.source.textPresentation,contentPolicy:document.source.contentPolicy},models:[...new Set((result.trace||[]).filter(e=>e.kind==='model'&&e.model).map(e=>e.model))],review:result.review,independentReviews:result.independentReviews||[],preview:result.preview,usage:result.usage,auxiliaryUsage:result.auxiliaryUsage||[],compactions:result.compactions||[],evaluation:evaluation.comparison,traceEvents:result.trace?.length||0,style,materialCount:task.materials.length,source:'existing-private-v3-package',liveApp:false,execution:{stage:stageName,seed:Boolean(seedPath),caseNotes:Boolean(notesPath),extraInstructions:Boolean(process.env.SHIYE_ACCEPTANCE_INSTRUCTIONS),preloadedSkills:Boolean(study),styleReferenceCount:styleReferences.records.length,autonomousAuditCount,automaticCritique:typeof model.critique==='function',automaticCompaction:typeof model.compact==='function'}};
   await writeFile(join(output,'project.shiyeproject.json'),JSON.stringify(result.document),{mode:0o600});
   await writeFile(join(output,'evaluation.json'),JSON.stringify(evaluation,null,2),{mode:0o600});
   await writeFile(join(output,'trace.json'),JSON.stringify(result.trace||[],null,2),{mode:0o600});

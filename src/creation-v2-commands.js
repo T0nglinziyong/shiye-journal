@@ -217,8 +217,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
    doc=editScene(doc,[{op:'lettering-reflow',id:requireNode(doc,item.target).id,change:item}],assets);
   }else if(item.op==='layer.update'){
    if(item.place&&(item.place.at||item.place.referenceAnchor)&&!item.place.surface&&item.place.reference?.startsWith('page'))item.place={...item.place,surface:'page'};
-   let node=requireNode(doc,item.target);
-   if(node.type==='text'&&['effect','accentColor','layout','curveHeightMm','backdrop','runs','gapMm'].some(key=>Object.hasOwn(item,key))){doc=promoteTextObject(doc,node,assets,input,options);node=requireNode(doc,item.target);}
+   const node=requireNode(doc,item.target);
    if(node.creationObject)doc=updateSemanticObject(doc,item,assets,input,options);
    else {
     if(node.type==='material'&&item.edge){
@@ -447,24 +446,6 @@ function applyPaperEdge(doc,id,edge,assets){
  const contour=buildCraftEdge(operation,w,h);
  const geometry=transformGeometry(normalizeGeometry([[contour.points]]),p=>[p[0]*w,p[1]*h]);
  return patch(doc,id,{vectorMask:paperMask(geometryIntersection(base,geometry),w,h)},assets);
-}
-
-// Ordinary text can acquire the same techniques as composed text later.
-// Reuse the semantic compiler, keeping object identity, placement and stacking.
-function promoteTextObject(doc,node,assets,input,options){
- const original=structuredClone(doc),s=scale(doc.page),box=worldBox(doc.page,node.id);
- assertNoLinkedDependents(doc.page,node.id);
- const style={fontSizePt:node.fontSize/s*72/25.4,color:node.color||'#354C60',...(node.fontName?{fontFamily:node.fontName}:{fontPreset:node.style||'hand'}),fontWeight:node.bold?'bold':'normal',textAlign:node.alignment||'left',opacity:node.opacity??1};
- for(const key of ['italic','underline','strikethrough','fillOpacity','blendMode'])if(node[key]!==undefined)style[key]=node[key];
- for(const [key,field] of Object.entries({letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing'}))if(node[field]!==undefined)style[key]=node[field]/s;
- if(node.fixedLineHeight)style.lineHeight=node.fixedLineHeight/node.fontSize;
- if(node.textOutline)style.outline={color:node.textOutline.color,widthMm:node.textOutline.width/s,offsetMm:[node.textOutline.offsetX/s,node.textOutline.offsetY/s]};
- if(node.textGradient)style.gradient=structuredClone(node.textGradient);
- if(node.shadow)style.shadow={color:node.shadow.color,offsetMm:[node.shadow.offsetX/s,node.shadow.offsetY/s],blurMm:node.shadow.blur/s};
- doc=editScene(doc,[{op:'delete',id:node.id}],assets);
- doc=applyCreationV2Batch(doc,{...input,operations:[{op:'title.add',id:node.id,content:node.content,size:{width:node.width/s,unit:'mm'},style,place:{reference:'page',at:[box.cx/s,box.cy/s],unit:'mm',rotationDeg:box.rotation,rotationSpace:'page'}}]},assets,options);
- preserveReplacementStack(original,node.id,doc,[node.id]);
- return doc;
 }
 
 function updateSemanticObject(doc,item,assets,input,options){
