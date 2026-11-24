@@ -49,7 +49,9 @@ assert.ok(window.document.querySelector('.swift-editor-toolbar'),'Fabric is the 
 assert.ok(window.document.body.classList.contains('editing'));
 assert.equal(window.document.querySelector('.swift-editor-head [data-act="editor-done"]')?.textContent,'完成',window.happyDOM.virtualConsolePrinter.readAsString());
 window.document.querySelector('.swift-editor-head [data-act="back-works"]').click();
-await waitFor(()=>window.document.querySelector('#view').dataset.renderedRoute==='works');
+try{await waitFor(()=>window.document.querySelector('#view').dataset.renderedRoute==='works');}
+catch(error){console.error('Blank exit diagnostic',window.document.querySelector('#view')?.dataset.renderedRoute,window.document.querySelector('#toast')?.textContent,window.happyDOM.virtualConsolePrinter.readAsString());throw error;}
+assert.equal(window.document.querySelectorAll('[data-act="open-project"]').length,0,'an empty page leaves no draft');
 window.document.querySelector('#top-settings').click();
 window.document.querySelector('[data-val="数据与诊断"]').click();
 await waitFor(()=>!!window.document.querySelector('#storage-location'));
@@ -77,7 +79,10 @@ await waitFor(()=>window.document.querySelector('#view').dataset.renderedRoute!=
 assert.equal(JSON.parse(window.localStorage.getItem('shiye-ai-settings-v2')).temperature,1.2);
 assert.equal(JSON.parse(window.localStorage.getItem('shiye-ai-settings-v2')).finalVisualReview,true,'saving AI settings must not disable final image review');
 window.document.querySelector('[data-route="works"]').click();
-window.document.querySelector('[data-act="open-project"]').click();
+window.document.querySelector('#work-create').click();
+await waitFor(()=>!!window.document.querySelector('#blank-create-confirm'));
+window.document.querySelector('#blank-create-confirm').click();
+await waitFor(()=>window.document.body.classList.contains('editing'));
 await waitFor(()=>window.document.querySelector('.swift-editor-head [aria-label="历史记录"]'));
 window.document.querySelector('.swift-editor-head [aria-label="历史记录"]').click();
 await waitFor(()=>!!window.document.querySelector('[data-editor-ai]'));

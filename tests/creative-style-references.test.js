@@ -15,7 +15,7 @@ test('private style references are hash checked, direction scoped and attached o
   const manifest={version:1,styles:['丰富层叠'],references:[row]};
   await writeFile(join(root,'manifest.json'),JSON.stringify(manifest));
   const refs=await loadStyleReferences({root,styles:['丰富层叠']});
-  assert.equal(refs.records.length,1);assert.match(refs.parts[1].image_url.url,/^data:image\/png;base64,/);
+  assert.equal(refs.records.length,1);assert.match(refs.parts[1].image_url.url,/^data:image\/jpeg;base64,/);
   assert.deepEqual(await loadStyleReferences({root,styles:['疏朗']}),{parts:[],records:[]});
   const state={messages:[{role:'system',content:'rules'},{role:'user',content:'task'}]};
   attachStyleReferences(state,refs);assert.equal(state.messages.length,3);assert.equal(state.messages[1].content,'task');

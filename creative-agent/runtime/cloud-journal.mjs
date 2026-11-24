@@ -23,7 +23,7 @@ export function cloudCheckpointJournal({job,store,rpc,list}){
     },
     async append(entry){
       const bytes=gzipSync(Buffer.from(JSON.stringify(entry))),hash=creativeObjectHash(bytes),path=prefix+'checkpoints/'+hash.slice(7)+'.json.gz';
-      if(bytes.length>10*1024*1024||sequence>=512)throw Error('创作检查点超过限制');
+      if(bytes.length>10*1024*1024||sequence>=512)throw Object.assign(Error('创作检查点超过限制'),{code:'CREATIVE_CHECKPOINT_SIZE'});
       await store.upload(path,bytes,'application/gzip');
       const result=await rpc('shiye_append_creative_checkpoint_v1',{p_id:job.id,p_lease:job.lease_token,p_seq:sequence+1,p_path:path,p_hash:hash});
       if(result?.seq!==sequence+1)throw Error('创作检查点未确认');

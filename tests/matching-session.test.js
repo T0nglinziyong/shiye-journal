@@ -66,6 +66,16 @@ test('matching basket persists only in local IndexedDB adapter, not cloud',async
  assert.deepEqual(db.writes,[],'no cloud project or meta mutation for basket/filter changes');
  assert.equal(device.writes.length,1,'identical UI snapshots must be de-duplicated');
 });
+test('failed blank matching result cannot create a draft and clears its stale link',async()=>{
+ const device=memoryDevice(),db=memoryProjects();
+ const blank={...structuredClone(work),isDraft:true};
+ await device.put('test-user',matchingSnapshot({},[{id:'failed',status:'failed',project:blank,linkedProjectID:'p',progress:'创作未完成'}]));
+ const c=context({projects:[blank]},device,db),removed=[];c.toast=()=>{};
+ c.discardBlankProject=async id=>{removed.push(id);c.state.projects=[];return true;};
+ const session=createMatchingSession(c);await session.restore();
+ assert.deepEqual(removed,['p']);assert.equal(session.variants()[0].linkedProjectID,null);
+ await session.open('failed');assert.deepEqual(db.writes,[]);
+});
 test('device sessions are isolated by account, same browser',async()=>{
  const device=memoryDevice(),shared=memoryProjects();
  const a=context({accountId:'account-A',basket:[]},device,shared),b=context({accountId:'account-B',basket:[]},device,shared);

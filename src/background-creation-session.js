@@ -5,10 +5,11 @@ import {createCloudCreativeJobs,watchCloudCreativeJob} from './cloud-creative-jo
 import {commitAIDraft} from './ai-run-target.js';
 import {importWebScene} from './web-scene-workbench.js';
 
-const phases={queued:'已提交，等待计算服务器',loading:'正在读取素材',thinking:'正在构思与编辑',preview:'正在检查实际画面',completed:'创作完成',failed:'创作未完成，已保留后台检查点',cancelled:'已停止创作'};
+const phases={queued:'已提交，等待计算服务器',loading:'正在读取素材',thinking:'正在构思与编辑',preview:'正在检查实际画面',completed:'创作完成',failed:'创作未完成，已保留任务记录',cancelled:'已停止创作'};
 export function creativeJobProgress(job){
   if(job.error_code==='CREATIVE_RESOURCE_VERSION')return '创作资源正在更新，请更新拾页后重试；原稿已保留';
   if(job.error_code==='CREATIVE_MODEL_TIMEOUT')return '创作模型连接超时，已保留进度；请重新发起创作';
+  if(job.error_code==='CREATIVE_CHECKPOINT_SIZE')return '创作检查点超出容量，请更新拾页后重新创作';
   const stage=['completed','failed','cancelled','queued'].includes(job.status)?job.status:job.progress?.stage||'loading';
   const progress=job.progress||{},turn=progress.turn||progress.turns;
   if(stage==='completed')return creativeCompleteProgress(progress);
