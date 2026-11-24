@@ -28,7 +28,7 @@ test('an outdated task contract fails before any model invocation',async()=>{
   assert.throws(()=>initialHarnessState({document,skills:{catalog(){throw Error('must not load');}},brief:{}}),/合同已变化/);
 });
 
-test('model context keeps the global index and recent tool pair while dropping superseded previews',()=>{
+test('model context keeps the global index and recent tool pair without rewriting superseded previews inside an epoch',()=>{
   const system={role:'system',content:'system'};
   const source={role:'user',content:[{type:'image_url',image_url:{url:'source'}}]};
   const reasoning={role:'assistant',reasoning_content:'required provider reasoning',tool_calls:[{id:'call'}]};
@@ -36,7 +36,7 @@ test('model context keeps the global index and recent tool pair while dropping s
   const previews=Array.from({length:5},(_,i)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+i+'\n最新 Scene：many coordinates'},{type:'image_url',image_url:{url:'preview'+i}}]}));
   const input=[system,source,reasoning,receipt,...previews],before=JSON.stringify(input),out=modelContext(input);
   assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2],reasoning);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
-  assert.equal(out.filter(m=>Array.isArray(m.content)).length,2);assert.equal(JSON.stringify(input),before);
+  assert.equal(out.filter(m=>Array.isArray(m.content)).length,6);assert.equal(JSON.stringify(input),before);
 });
 
 test('adding the first stage prompt cannot alter checkpoint messages or move the source index',()=>{
@@ -48,15 +48,14 @@ test('adding the first stage prompt cannot alter checkpoint messages or move the
  assert.deepEqual(request.map(message=>message.role),['system','system','user']);
 });
 
-test('after a real preview the model can request the saved source board instead of paying for it every turn',()=>{
+test('a preview does not mutate the source message and invalidate its cache prefix',()=>{
  const source={role:'user',content:[{type:'text',text:'素材清单'},{type:'text',text:'全局素材编号图；始终可对照此图。'},{type:'image_url',image_url:{url:'source-board'}}]};
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：first'},{type:'image_url',image_url:{url:'page'}}]};
  const messages=[{role:'system',content:'rules'},source,{role:'assistant',content:'试摆完成'},preview];
  const before=modelContext(messages,{qualityFrames:[]});
  const after=modelContext(messages,{qualityFrames:[{pngHash:'first'}]});
  assert.equal(before[1].content.filter(part=>part.type==='image_url').length,1);
- assert.equal(after[1].content.filter(part=>part.type==='image_url').length,0);
- assert.match(after[1].content[1].text,/workspace_view/);
+ assert.deepEqual(after[1],before[1]);
  assert.equal(after.at(-1),preview);
  assert.equal(source.content[2].image_url.url,'source-board');
 });
@@ -67,20 +66,20 @@ test('state summary does not repeat the Scene already present in the latest prev
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"sceneRevision":"current"}\n最新 Scene：{"layers":[{"id":"visible"}]}'},{type:'image_url',image_url:{url:'preview'}}]};
  const out=modelContext([{role:'system',content:'rules'},{role:'user',content:'input'},{role:'assistant',content:'edit'},preview],{document,phase:'composition'});
- const summary=JSON.parse(out[2].content.replace('当前创作状态（由检查点生成，早期对话已压缩）：',''));
+ const summary=JSON.parse(out.at(-1).content.replace('当前创作状态（由检查点生成，早期对话已压缩）：',''));
  assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
- assert.equal(out.at(-1),preview);
+ assert.equal(out.at(-2),preview);
 });
 
 test('model context stays bounded as checkpoint history grows',()=>{
  const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'text',text:'素材索引'},{type:'image_url',image_url:{url:'index'}}]};
  const messages=[system,index];
  for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
- const out=modelContext(messages);
+ const out=modelContext(messages,{compactedUntil:2+72*3});
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
  assert.ok(out.length<=30);assert.equal(out.filter(m=>m.role==='assistant').length,8);
- assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
- assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
+ assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,8);
+ assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,9);
 });
 
 test('recent DeepSeek tool turns keep their complete reasoning content',()=>{
@@ -90,17 +89,17 @@ test('recent DeepSeek tool turns keep their complete reasoning content',()=>{
  assert.deepEqual(out.filter(m=>m.role==='assistant').map(m=>m.reasoning_content),Array.from({length:7},(_,i)=>'reason-'+i));
 });
 
-test('old parameter help is shortened while its tool pair stays valid',()=>{
+test('parameter help remains unchanged until a compaction boundary',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
  for(let i=0;i<3;i++)messages.push({role:'assistant',tool_calls:[{id:'h'+i,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'h'+i,content:'{"ok":true,"data":"'+('long schema '.repeat(100))+'"}'});
  const out=modelContext(messages);
- assert.ok(out.find(m=>m.tool_call_id==='h0').content.length<150);
+ assert.equal(out.find(m=>m.tool_call_id==='h0'),messages[3]);
  assert.ok(out.find(m=>m.tool_call_id==='h2').content.length>1000);
  const calls=new Set(out.flatMap(m=>m.role==='assistant'?(m.tool_calls||[]).map(call=>call.id):[]));
  assert.ok(out.filter(m=>m.role==='tool').every(m=>calls.has(m.tool_call_id)));
 });
 
-test('temporary material detail images leave the model context after they are used',()=>{
+test('material detail images remain stable until compaction',()=>{
  const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'image_url',image_url:{url:'index'}}]};
  const inspect={role:'assistant',tool_calls:[{id:'inspect',function:{name:'inspect_materials'}}]};
  const result={role:'tool',tool_call_id:'inspect',content:'{"ok":true}'};
@@ -108,8 +107,8 @@ test('temporary material detail images leave the model context after they are us
  const before=modelContext([system,index,inspect,result,details]);
  assert.equal(before.filter(message=>message===details).length,1);
  const after=modelContext([system,index,inspect,result,details,{role:'assistant',content:'已看过局部细节'}, {role:'user',content:'下一步'}]);
- assert.equal(after.some(message=>message===details),false);
- assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,1);
+ assert.equal(after.some(message=>message===details),true);
+ assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,3);
 });
 
 test('one studied tutorial remains available for comparison after planning and history windowing',()=>{
@@ -119,7 +118,7 @@ test('one studied tutorial remains available for comparison after planning and h
   {role:'user',content:[{type:'text',text:'教程示意（仅供方法参考）：旧例'},{type:'image_url',image_url:{url:'old-example'}},
     {type:'text',text:'教程示意（仅供方法参考）：框架与成品'},{type:'image_url',image_url:{url:'paired-example'}}]}];
  for(let i=0;i<12;i++)messages.push({role:'assistant',content:'调整构思'+i},{role:'user',content:'继续'});
- const before=JSON.stringify(messages),out=modelContext(messages);
+ const before=JSON.stringify(messages),out=modelContext(messages,{compactedUntil:15});
  const images=out.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url');
  assert.deepEqual(images.map(p=>p.image_url.url),['paired-example']);
  assert.equal(JSON.stringify(messages),before);
@@ -137,7 +136,7 @@ test('the latest preview remains visible after read-only help instead of becomin
  messages.push({role:'assistant',tool_calls:[{id:'help',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'help',content:'{"ok":true}'});
  const next=modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}});
  assert.equal(next.some(item=>item===preview),true);
- assert.match(next[2].content,/sha256:abc/);
+ assert.match(next.at(-1).content,/sha256:abc/);
 });
 
 test('creative compaction carries design decisions and rejected attempts into later turns',async()=>{
@@ -157,7 +156,7 @@ test('creative compaction carries design decisions and rejected attempts into la
  const out=modelContext(messages,state);
  assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
  assert.equal(out.filter(m=>m.role==='assistant').length,6);
- assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,2);
+ assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,7);
 });
 
 test('compaction never starts between two responses to one assistant tool batch',()=>{
@@ -375,4 +374,18 @@ test('opening user scope survives tool discovery and the rolling history window 
 test('rotation-only update failure explains relative nudge without dumping unrelated schemas',()=>{
  const guidance=failureGuidance('creation_apply',{operations:[{op:'layer.update',target:'paper',place:{rotationDeg:4}}]},{path:'operations/0/place/at'});
  assert.match(guidance.hint,/layout.nudge/);assert.match(guidance.hint,/增量/);assert.match(guidance.hint,/整批编辑未生效/);
+});
+
+
+test('ordinary turns reuse the complete prior history prefix despite changing Scene summaries',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const messages=[{role:'system',content:'fixed rules'},{role:'user',content:'fixed task'}];
+ for(let turn=0;turn<10;turn++){
+  messages.push({role:'assistant',reasoning_content:'reason '+turn,tool_calls:[{id:'c'+turn,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'c'+turn,content:JSON.stringify({ok:true,data:'schema '.repeat(100)})});
+  const before=JSON.stringify(messages),request=modelContext(messages,{document,compactedUntil:2,decisions:[{turn}]});
+  assert.deepEqual(request.slice(0,messages.length),messages);
+  assert.match(request.at(-1).content,/当前创作状态/);
+  assert.equal(JSON.stringify(messages),before);
+ }
 });

@@ -132,36 +132,16 @@ export function modelContext(messages,state={}){
   // The stage prompt is inserted into the outgoing request. Never let that
   // insertion mutate the checkpoint's source messages.
   if(messages.length<=2)return [...messages];
-  const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
-  const afterFirstPreview=Boolean(state.qualityFrames?.length);
-  const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
-    afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
+  // Keep the request prefix byte-for-byte stable within a compaction epoch.
+  // Do not rewrite old receipts or remove images on each ordinary turn.
+  const index=messages[1];
   const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  // Opening user constraints (including study scope and preloaded skills)
-  // remain authoritative after the first tool call, not expendable history.
   const opening=messages.slice(2,turns[0]??messages.length).filter(m=>m.role==='user'&&typeof m.content==='string');
-  // Keep a substantial recent span verbatim. The separate Scene checkpoint
-  // carries exact geometry; this tail carries the author's still-live intent.
-  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-8)??turns.at(0)??2);
+  let start=Math.max(2,Number.isInteger(state.compactedUntil)?state.compactedUntil:2);
   while(start>2&&messages[start]?.role==='tool')start--;
   const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='text'&&part.text?.includes('当前真实画面：'));
-  const tail=messages.slice(start),latestObservation=messages.slice(2).findLast(isPreview);
-  if(latestObservation&&!tail.includes(latestObservation))tail.unshift(latestObservation);
-  const lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
-  const recent=tail.filter((message,i)=>{
-    if(isPreview(message))return i===lastPreview;
-    if(message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))return i>lastAssistant;
-    return true;
-  });
-  const recentToolNames=new Map(recent.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const recentAssistants=recent.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  const compactedRecent=recent.map((message,i)=>{
-    if(message.role==='tool'&&recentToolNames.get(message.tool_call_id)==='creation_help'&&i<(recentAssistants.at(-2)??-1))return {...message,content:'{"ok":true,"detail":"参数已读取；需要再次查看时调用 creation_help。"}'};
-    if(message.role==='tool'&&['creation_apply','creation_recipe','creation_paper','creation_title'].includes(recentToolNames.get(message.tool_call_id))&&i<(recentAssistants.at(-2)??-1)){
-      try{const receipt=JSON.parse(message.content);if(receipt.ok)return {...message,content:'{"ok":true,"detail":"较早的编辑已生效；对象和最新版本见当前 Scene。"}'};}catch{/* Keep the original response. */}
-    }
-    return message;
-  });
+  const compactedRecent=messages.slice(start);
+  const lastPreview=compactedRecent.findLastIndex(isPreview);
   // A tray-only render may carry no page image. Keep exactly the page image
   // matching the current visual signature, even after several read-only turns.
   const signature=state.visualState?.page?.signature;
@@ -189,7 +169,9 @@ export function modelContext(messages,state={}){
     compactedRecent.push({role:'user',content:tutorialParts});
   }
   const pinnedOpening=opening.filter(m=>!compactedRecent.includes(m));
-  if(!state.document)return [messages[0],index,...pinnedOpening,...compactedRecent];
+  const memoryMessage=state.creativeMemory?{role:'user',content:'已压缩的早期创作记忆：'+state.creativeMemory}:null;
+  const prefix=[messages[0],index,...pinnedOpening,...(memoryMessage?[memoryMessage]:[])];
+  if(!state.document)return [...prefix,...compactedRecent];
   const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
   const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
     try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
@@ -204,7 +186,7 @@ export function modelContext(messages,state={}){
   const memoryStart=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
   const memory=start>memoryStart?fallbackCreativeMemory(state.creativeMemory,creativeCompactionTranscript(messages.slice(memoryStart,start)),state):state.creativeMemory;
   const summary={creativeMemory:memory||null,memoryNote:'creativeMemory 只总结较早回合；若与最新 Scene 或下方原始回合冲突，以最新信息为准',phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-6),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:(state.recommendedMethods||[]).map(({id,skill,title})=>({id,skill,title})),skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).slice(-6).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
-  return [messages[0],index,...pinnedOpening,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...compactedRecent];
+  return [...prefix,...compactedRecent,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)}];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
@@ -260,6 +242,7 @@ export function iterationAdvice(messages){
 }
 
 export function failureGuidance(name,args,error){
+  if(name==='creation_title'&&/已经存在/.test(error.message||''))return {hint:'creation_title 只创建新标题；修改已有标题请 creation_inspect 查看组内子文字 id，再用 creation_apply 的 layer.update 修改 content、size、place 或 style；移动整组用标题组 id。失败调用没有生效，不要重复创建同 id。'};
   if(name==='creation_help')return {available:creationHelp()};
   if(name==='creation_finish'&&/存在未解决的问题/.test(error.message||''))return {hint:'review.issues 只列必须修好才能交付的画面缺陷。若这些只是可选的优化意见，移入 observations 并在当前画面无严重问题时以 issues:[] 再次提交；若确有缺陷，先合批修改并看新预览。'};
   if(name==='creation_finish'&&/独立画面审查发现/.test(error.message||''))return {hint:'这是对刚才画面的独立审查。针对列出的遮挡、裁字或越界做一次有针对性的合批修复；下一张自动预览若已解决，应重新调用 creation_finish 获取当前画面的新审查。不要一直追着旧画面的提示微调。可用 creation_inspect 查看图层树和实际坐标，用 layer.stack、layout.nudge 或 layout.alignEdge 修正。'};

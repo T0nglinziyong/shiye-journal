@@ -124,8 +124,8 @@ test('context windowing preserves unsummarized decisions and recognizes the actu
   assert.match(observation.content[0].text,/当前纸面实物素材：/);
   messages.push(observation);
   const context=modelContext(messages,{...f.state,messages,compactedUntil:2,creativeMemory:''});
-  const summary=JSON.parse(context[2].content.slice(context[2].content.indexOf('：')+1));
-  assert.match(summary.creativeMemory,/放弃居中布局/);
+  const summary=JSON.parse(context.at(-1).content.slice(context.at(-1).content.indexOf('：')+1));
+  assert.ok(context.some(m=>typeof m.content==='string'&&m.content.includes('放弃居中布局')));
   assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
   assert.equal(context.filter(message=>message===observation).length,1);
 });

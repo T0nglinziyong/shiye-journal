@@ -67,3 +67,10 @@ test('initial agent prompt stays compact and explains when to read Skills',async
   assert.ok(prompt.includes('复杂拆字或笔画技巧再读 journal-lettering'));
   assert.ok(prompt.length<12000);
 });
+
+
+test('unread paper guidance does not hide lettering, writing and accents in the same turn',()=>{
+ const cue=nextSkillCue({plan:{intent:'丰富层叠'},loadedSkills:[{name:'journal-composition'}],materialCount:8,visibleMaterials:5,visibleText:4});
+ for(const name of ['paper-layering','journal-lettering','journal-writing','journal-accents'])assert.ok(cue.includes(name));
+ assert.match(cue,/同轮/);
+});

@@ -69,8 +69,8 @@ test('LangGraph asks for a shorter corrected call after malformed model JSON',as
   let turn=0;const f=await fixture(t,async({messages})=>{
     if(++turn===1)return answer({id:'broken',type:'function',function:{name:'creation_plan',arguments:'{"intent":"unfinished" trailing'}});
     if(turn===2){
-      assert.ok(messages.some(message=>message.role==='user'&&String(message.content).includes('工具参数不是完整的 JSON')));
-      assert.ok(!messages.some(message=>message.role==='assistant'&&message.tool_calls?.some(call=>call.id==='broken')));
+      assert.ok(messages.some(message=>message.role==='tool'&&String(message.content).includes('工具参数不是完整的 JSON')));
+      assert.ok(messages.some(message=>message.role==='assistant'&&message.tool_calls?.some(call=>call.id==='broken')));
       return answer(call('creation_plan',{intent:'在浅色纸面写一页短文'}));
     }
     throw Error('stop after corrected call');
@@ -78,7 +78,7 @@ test('LangGraph asks for a shorter corrected call after malformed model JSON',as
   await assert.rejects(f.harness.run({id:'malformed-call',state:f.state}),/stop after corrected call/);
   const saved=await f.harness.state('malformed-call');
   assert.equal(saved.plan.intent,'在浅色纸面写一页短文');
-  assert.ok(saved.trace.some(event=>event.kind==='malformed_tool_calls'&&event.calls[0].name==='creation_plan'));
+  assert.ok(saved.trace.some(event=>event.kind==='tool'&&event.name==='creation_plan'&&!event.ok));
 });
 
 test('methods learned from Skills execute together with the same methodId field',async t=>{
@@ -239,7 +239,8 @@ test('stage transition rejects skipping, unresolved issues and empty plans',asyn
 
 test('stage-specific guidance arrives when needed and repeated edits need no separate review',async t=>{
   let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools,reasoningEffort})=>{
-    turn++;instructions.push(messages[1].content);
+    turn++;instructions.push(messages.at(-1).content);
+    assert.equal(messages.filter(m=>m.role==='system').length,1,'only the fixed system prompt precedes history');
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
@@ -451,4 +452,49 @@ test('dedicated title tool requires a plan, commits editable title groups and un
  assert.equal(saved.document.page.layers.length,0);
  const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_title');
  assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
+});
+
+
+test('mixed tool batches isolate failures, read multiple skills and insert backing after text',async t=>{
+ let turn=0;const f=await fixture(t,async()=>{
+  if(++turn===1)return answer(plan());
+  if(turn===2){const revision=creationSceneRevision(f.document);return answer(
+   {id:'malformed',type:'function',function:{name:'creation_apply',arguments:'{broken'}},
+   call('read_skill',{name:'paper-layering',level:'overview'}),
+   edit(revision,'body-first',[text('body','今天在窗边读完了一本书，记下午后的光。',[50,65])]),
+   edit(revision,'bad-atomic',[text('rolled-back','不应留下',[40,40]),{op:'layer.delete',target:'missing'}]),
+   call('read_skill',{name:'journal-accents',level:'overview'}),
+   call('creation_paper',{transactionId:'backing-later',baseSceneRevision:revision,papers:[{id:'backing',place:{reference:'page',at:[50,65],unit:'mm'},size:{width:65,height:45,unit:'mm'},order:{before:'body'},color:'#E8DFC2',texture:'subtle',edge:'torn'}]}),
+   edit('sha256:'+'0'.repeat(64),'stale-rejected',[text('stale','过期',[40,40])])
+  );}
+  throw Error('stop mixed');
+ });
+ // Use an actually stale revision for the final call, while all other valid
+ // edits intentionally share the scene revision observed at the turn start.
+ const runModel=f.harness;
+ await assert.rejects(runModel.run({id:'mixed-batch',state:f.state}),/stop mixed/);
+ const saved=await f.harness.state('mixed-batch');
+ assert.ok(saved.loadedSkills.some(x=>x.name==='paper-layering'));
+ assert.ok(saved.loadedSkills.some(x=>x.name==='journal-accents'));
+ const layers=saved.document.page.layers;
+ assert.ok(layers.some(x=>x.id==='body'));
+ assert.ok(layers.some(x=>x.id==='backing'));
+ assert.ok(!layers.some(x=>x.id==='rolled-back'));
+ assert.ok(layers.find(x=>x.id==='backing').zIndex<layers.find(x=>x.id==='body').zIndex);
+ assert.ok(!layers.some(x=>x.id==='stale'));
+ assert.equal(saved.results.filter(x=>!x.ok).length,3);
+ assert.equal(f.renders(),1);
+});
+
+
+test('review request timeout does not pretend the whole creative task is near its deadline',async()=>{
+ let sent;
+ const model=createDeepSeekCreativeModel({key:'test-key',fetcher:async(url,options)=>{
+  sent=JSON.parse(options.body);return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({blockingIssues:[],notes:[]})}}]}),{status:200});
+ }});
+ await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',remainingMs:25000,taskRemainingMs:240000});
+ assert.doesNotMatch(sent.messages[0].content,/交付时间将至/);
+ assert.match(sent.messages[0].content,/局部衬底/);
+ await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',remainingMs:25000,taskRemainingMs:45000});
+ assert.match(sent.messages[0].content,/交付时间将至/);
 });
