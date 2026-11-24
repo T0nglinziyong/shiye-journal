@@ -1,3 +1,4 @@
+import {updateCreativeProgress} from './progress.mjs';
 import {creativeUsageSummary} from './usage.mjs';
 import {compileTitleOperations} from './title-tool.mjs';
 import {compilePaperOperations} from './paper-tool.mjs';
@@ -116,7 +117,7 @@ function latestPageImage(messages){
   }
   return null;
 }
-const system=`你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。阶段记录可选，不是四阶段关卡。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
+const system=`你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。阶段记录可选，不是四阶段关卡。creation_plan 只记录可修改的设计意图，不替代用户约束；creation_progress 记录当前关注、具体视觉问题和分项检查。出现问题或检查结论变化时按 id 更新，可与编辑、多个 Skill 同轮调用，不要每轮重抄计划。程序确认执行事实，你依据真实画面判断效果：执行成功不等于问题已解决，修改后的结果下一轮看图再验证。完成前明确检查 composition（构图纸层与疏密）、lettering（标题正文主次与可读性）、accents（点缀是否可见并起连接/强调/配色作用）、spread（仅双页的协调与重点），用 creation_progress.checks 记录具体依据；无文字任务不检查 lettering。素材自带纹样可以承担点缀，不强迫加星圈或标题描边。发现问题则处理，没有问题则结束，不为填表制造修改。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
 
 Skill 是按需查询的工作方法，不是装饰配额。先看全局素材图和当前 Scene，当前任务需要具体判断时主动 read_skill：定配色读 journal-color；第一次形成构图前读 journal-composition；创建数字纸用 creation_paper 选择纸色、纹理、边缘和层序，普通色块仍用 graphic.add；纸层和露边难处理时读 paper-layering；标题用常驻 creation_title 直接组合字群排列、描边/空心/渐变和字后底形；这些是可选增强，复杂拆字或笔画技巧再读 journal-lettering；正文主题、分段或写面不明时读 journal-writing；对象接缝或视觉节奏缺细节时读 journal-accents / journal-graphics；照片叙事读 photo-story。按当前问题选择相关专题，方法可以综合运用，不必读全套；overview 取原则，methods 取少量候选，detail 取准确参数和示意图。构图由当前画面决定，用基础摆放、分组和图层命令试摆，不为三角形或 S 形等固定公式调用配方。独立查询可同轮合批；需要依据教程结果的编辑在读取后的下一轮执行。单个普通图形、正文样式、移动和层序直接用基础工具。不要把配方数当成画质指标。
 
@@ -258,6 +259,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
     })
     .addNode('tools',async({run:s},config)=>{
       live(s,config);let document=structuredClone(s.document),plan=s.plan,review=s.review,reviewPending=s.reviewPending??Boolean(s.preview&&!s.review),status=s.status,needsRender=false;
+      let creativeProgress=structuredClone(s.creativeProgress||{focus:'尚未记录当前关注点',issues:[],checks:{}});
       let decisions=[...(s.decisions||[])],drafts=[...(s.drafts||[])],auxiliaryUsage=[...(s.auxiliaryUsage||[])],visualState=structuredClone(s.visualState||{}),phase=s.phase||'direction',phaseReviews=[...(s.phaseReviews||[])],independentReviews=[...(s.independentReviews||[])],qualityFrames=[...(s.qualityFrames||[])],trace=[...(s.trace||[])];
       const spaces=[...(s.spaces||[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])];
       const loadedSkills=[...s.loadedSkills],skillReferences=[...(s.skillReferences||[])],observedTools=[...(s.observedTools||[])],proposals=[...(s.proposals||[])],messages=[...s.messages],results=[],images=[],assets=document.source.sourceSnapshots.map(v=>assetFromSourceSnapshot(v,{frozenRevision:true}));
@@ -372,6 +374,10 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
               record('phase',args,{from:'direction',to:'layout',reason:'结构化方向计划已通过检查',assessment:stageReview});
               data={saved:true,phase:'layout',stageReview};
             }
+          }
+          else if(name==='creation_progress'){
+            creativeProgress=updateCreativeProgress(creativeProgress,args,{sceneRevision:revision(document),preview:s.preview,needsRender,turn:s.turns});
+            data={saved:true};progress=true;
           }
           else if(name==='creation_phase'){
             const from=phase,fromIndex=creativePhases.indexOf(from),toIndex=creativePhases.indexOf(args.phase);
@@ -522,7 +528,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       }
       live(s,config);
       if(images.length)messages.push({role:'user',content:images});
-      return {run:{...s,document,spaces,plan,phase,phaseReviews,independentReviews,review,reviewPending,status,discoveredTools,loadedSkills,skillReferences,observedTools,proposals,recipeReceipts,undoStack,decisions,drafts,auxiliaryUsage,visualState,qualityFrames,trace,messages,results,needsRender,noProgress:progress?0:s.noProgress+(s.calls.length?1:0)}};
+      return {run:{...s,document,spaces,plan,creativeProgress,phase,phaseReviews,independentReviews,review,reviewPending,status,discoveredTools,loadedSkills,skillReferences,observedTools,proposals,recipeReceipts,undoStack,decisions,drafts,auxiliaryUsage,visualState,qualityFrames,trace,messages,results,needsRender,noProgress:progress?0:s.noProgress+(s.calls.length?1:0)}};
     })
     .addNode('render',async({run:s},config)=>{
       live(s,config);await onProgress({stage:'preview',turn:s.turns,elapsedMs:clock()-s.startedAt,...creativeUsageSummary(s)});

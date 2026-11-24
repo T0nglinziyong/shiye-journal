@@ -415,7 +415,7 @@ test('full snapshot is refreshed after compaction without accumulating old snaps
  const state={document,compactedUntil:4},first=modelContext(messages,state);
  const next=modelContext([...messages,...first.filter(isCreativeSnapshot)],state);
  assert.equal(next.filter(isCreativeSnapshot).length,1);
- assert.deepEqual(JSON.parse(next.at(-1).content.split('：')[1]).scene,JSON.parse(first.at(-1).content.split('：')[1]).scene);
+ assert.deepEqual(JSON.parse(next.at(-1).content.slice('当前创作状态（由检查点生成）：'.length)).scene,JSON.parse(first.at(-1).content.slice('当前创作状态（由检查点生成）：'.length)).scene);
 });
 
 test('tray-only changes retain the latest matching page image and remove obsolete workspace snapshots',async()=>{

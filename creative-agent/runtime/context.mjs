@@ -1,3 +1,4 @@
+import {creativeProgressSnapshot} from './progress.mjs';
 import {creationHelp,inspectCreationDocument} from '../../src/creation-inspection.js';
 import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
@@ -179,7 +180,9 @@ export function modelContext(messages,state={}){
   const images=[...workspaceParts.values()].flat();
   const snapshotImages=images.length?images:(latestPreview?.content.filter(p=>p.type==='image_url')||[]);
   const visual=state.preview||latestPreview?{role:'user',content:[{type:'text',text:'当前真实画面：'+JSON.stringify(state.preview||{})},...snapshotImages]}:null;
-  const summary={phase:state.phase||'direction',scene:inspectCreationDocument(state.document),preview:state.preview||null,
+  const scene=inspectCreationDocument(state.document);
+  const summary={phase:state.phase||'direction',scene,preview:state.preview||null,
+    taskState:creativeProgressSnapshot(state,scene.sceneRevision),
     plan:state.plan||null,loadedSkills:(state.loadedSkills||[]).map(({name})=>name),reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
     observation:state.observationFeedback||null,notes:state.observationNotes||null,
     taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},
@@ -243,6 +246,9 @@ export function iterationAdvice(messages){
 }
 
 export function failureGuidance(name,args,error){
+  const parameterError=String(error.path||'')+' '+String(error.message||'');
+  if(/protocolVersion/.test(parameterError))return {hint:'当前工具合同的 protocolVersion 必须是数字 2，不是字符串或其他版本。该调用未生效；按 Schema 修正后重试。'};
+  if(/baseSceneRevision/.test(parameterError))return {hint:'baseSceneRevision 必须逐字复制本条失败回执的 sceneRevision（sha256: 加 64 位十六进制字符），不可写占位符、截短或使用 PNG 哈希。该调用未生效；不要仅为获取同一版本再调用 inspect。'};
   if(name==='creation_title'&&/已经存在/.test(error.message||''))return {hint:'creation_title 只创建新标题；修改已有标题请 creation_inspect 查看组内子文字 id，再用 creation_apply 的 layer.update 修改 content、size、place 或 style；移动整组用标题组 id。失败调用没有生效，不要重复创建同 id。'};
   if(name==='creation_help')return {available:creationHelp()};
   if(name==='creation_finish'&&/存在未解决的问题/.test(error.message||''))return {hint:'review.issues 只列必须修好才能交付的画面缺陷。若这些只是可选的优化意见，移入 observations 并在当前画面无严重问题时以 issues:[] 再次提交；若确有缺陷，先合批修改并看新预览。'};

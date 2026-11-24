@@ -517,3 +517,27 @@ test('ordinary requests preserve stable history and refresh only the snapshot ta
  const result=await f.harness.run({id:'prefix-persistence',state:f.state});
  assert.equal(result.status,'completed');assert.equal(result.firstLayoutTurn,2);
 });
+
+test('progress verification failure does not stop edits or Skill loading and latest state reaches next round',async t=>{
+ let turn=0;const f=await fixture(t,async({messages})=>{
+  if(++turn===1)return answer(call('creation_plan',{intent:'浅色纸面上写标题'}));
+  if(turn===2)return answer(
+   call('creation_progress',{focus:'标题与点缀',issues:[{id:'title',problem:'标题尚未建立',status:'open',evidence:'当前画面没有标题'}]}),
+   edit(creationSceneRevision(f.document),'progress-title',[text('title','周末日记',[45,35])]),
+   call('creation_progress',{issues:[{id:'title',problem:'标题尚未建立',status:'verified',evidence:'刚执行了添加文字'}]}),
+   call('read_skill',{name:'journal-accents',level:'overview'})
+  );
+  if(turn===3){
+   const summary=JSON.parse(messages.findLast(m=>typeof m.content==='string'&&m.content.startsWith('当前创作状态')).content.split('：').slice(1).join('：'));
+   assert.equal(summary.taskState.issues[0].status,'open');
+   assert.ok(summary.taskState.recentExecution.some(r=>r.tool==='creation_progress'&&!r.ok));
+   assert.ok(summary.taskState.recentExecution.some(r=>r.tool==='read_skill'&&r.ok));
+   return answer(call('creation_progress',{issues:[{id:'title',problem:'标题尚未建立',status:'verified',evidence:'最新画面上方已有周末日记标题'}],checks:[{dimension:'lettering',status:'satisfied',evidence:'上方标题清晰可读'}]}));
+  }
+  throw Error('stop after verified progress');
+ });
+ await assert.rejects(f.harness.run({id:'progress-verification',state:f.state}),/stop after verified progress/);
+ const saved=await f.harness.state('progress-verification');
+ assert.equal(saved.creativeProgress.issues[0].status,'verified');
+ assert.equal(saved.creativeProgress.checks.lettering.sceneRevision,creationSceneRevision(saved.document));
+});
