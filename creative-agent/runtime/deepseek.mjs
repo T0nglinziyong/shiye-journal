@@ -4,12 +4,12 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
   if(!key?.trim())throw Error('服务器未配置创作模型密钥');
   if(!['low','high','max'].includes(effort))throw Error('无效的创作思考强度');
   const invoke=async({messages,tools,signal,remainingMs,reasoningEffort,recoveringFromTruncation=false,summary=false,quick=false})=>{
-    const started=Date.now();
+    const started=Date.now();let timedOut=false;
     for(let attempt=0;attempt<(summary?1:3);attempt++){
       signal?.throwIfAborted();
       const remaining=remainingMs-(Date.now()-started);
       if(remaining<1000)throw Object.assign(Error('创作时间已用完'),{code:'CREATIVE_DEADLINE'});
-      const effectiveEffort=summary||attempt>0?'low':reasoningEffort||effort;
+      const effectiveEffort=timedOut?'none':summary||attempt>0?'low':reasoningEffort||effort;
       const actionMode=quick||summary||effectiveEffort==='none';
       // Deep reasoning and complete tool arguments can exceed 14k tokens. Use
       // the provider thinking default instead of reducing the cap after a
@@ -17,15 +17,15 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
       // Deep reasoning and complete body copy can exceed 150 seconds. Allow a
       // longer first response instead of repeatedly discarding billed work;
       // the task deadline still bounds every attempt.
-      const timeout=AbortSignal.timeout(Math.min(quick?25000:summary?30000:effectiveEffort==='high'||effectiveEffort==='max'?300000:150000,remaining));
+      const timeout=AbortSignal.timeout(Math.min(quick?25000:summary?30000:effectiveEffort==='high'||effectiveEffort==='max'?300000:90000,remaining));
       let response;
       try{
         response=await fetcher(endpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,timeout]):timeout,
           headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
-          body:JSON.stringify({model,messages,...(summary?{}:{tools,tool_choice:'auto'}),thinking:{type:actionMode?'disabled':'enabled'},...(actionMode?{}:{reasoning_effort:effectiveEffort}),stream:false,...(quick?{max_tokens:1600}:summary?{max_tokens:3000}:actionMode?{max_tokens:5000}:{})})});
+          body:JSON.stringify({model,messages,...(summary?{}:{tools,tool_choice:'auto'}),thinking:{type:actionMode?'disabled':'enabled'},...(actionMode?{}:{reasoning_effort:effectiveEffort}),stream:false,...(quick?{max_tokens:1600}:summary?{max_tokens:3000}:actionMode?{max_tokens:16000}:{})})});
       }catch(cause){
         if(signal?.aborted)throw cause;
-        if((timeout.aborted||cause?.name==='TimeoutError'||cause?.code===23)&&attempt<2&&remainingMs-(Date.now()-started)>30000)continue;
+        if((timeout.aborted||cause?.name==='TimeoutError'||cause?.code===23)&&attempt<2&&remainingMs-(Date.now()-started)>30000){timedOut=true;continue;}
         throw timeout.aborted?Object.assign(Error('创作模型响应超时'),{code:'CREATIVE_MODEL_TIMEOUT',cause}):cause;
       }
       if([429,502,503,504].includes(response.status)&&attempt<2){
@@ -50,7 +50,7 @@ export function createDeepSeekCreativeModel({key,fetcher=fetch,model='deepseek-f
           if(attempt<2&&remainingMs-(Date.now()-started)>30000)continue;
           throw Object.assign(Error('创作模型响应格式错误'),{code:'CREATIVE_MODEL_RESPONSE',cause});
         }
-        if((timeout.aborted||cause?.name==='TimeoutError'||cause?.code===23)&&attempt<2&&remainingMs-(Date.now()-started)>30000)continue;
+        if((timeout.aborted||cause?.name==='TimeoutError'||cause?.code===23)&&attempt<2&&remainingMs-(Date.now()-started)>30000){timedOut=true;continue;}
         throw timeout.aborted?Object.assign(Error('创作模型响应超时'),{code:'CREATIVE_MODEL_TIMEOUT',cause}):cause;
       }
       const choice=body.choices?.[0];

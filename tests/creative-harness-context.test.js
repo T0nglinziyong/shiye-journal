@@ -371,10 +371,7 @@ test('opening user scope survives tool discovery and the rolling history window 
 });
 
 
-test('rotation-only update failure explains relative nudge without dumping unrelated schemas',()=>{
- const guidance=failureGuidance('creation_apply',{operations:[{op:'layer.update',target:'paper',place:{rotationDeg:4}}]},{path:'operations/0/place/at'});
- assert.match(guidance.hint,/layout.nudge/);assert.match(guidance.hint,/增量/);assert.match(guidance.hint,/整批编辑未生效/);
-});
+
 
 
 test('ordinary turns reuse the complete prior history prefix despite changing Scene summaries',async()=>{

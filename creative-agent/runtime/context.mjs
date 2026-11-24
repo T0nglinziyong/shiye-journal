@@ -1,4 +1,4 @@
-import {phaseGuide,creativePhaseLabels} from './phases.mjs';
+import {creativePhaseLabels} from './phases.mjs';
 import {creationHelp,inspectCreationDocument} from '../../src/creation-inspection.js';
 import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
@@ -47,7 +47,7 @@ export function initialToolGuide(document){
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   const commandIndex=creationHelp();
   return {topics:commandIndex.topics,conventions:commandIndex.conventions,families:commandIndex.families,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组调前后用 layer.stack；组合用 group.create、layer.reparent、group.ungroup。','几何调整统一用 layout：nudge 按毫米/角度增量微调，matchRotation 跟另一素材对齐角度，alignEdge 贴齐指定可见边，align 按边界对齐或分布；这几项都保留实体尺寸。matchRotation、alignEdge 的相对角度都叫 offsetDeg；nudge.rotationDeg 是当前角度的增量。批量操作用 targets，单对象操作用 target。','数字纸用 creation_paper 批量创建，直接选 color、texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条才用 kind:"stroke" 与 geometry.points=[{x,y,pressure}]，它不支持 strokeDash；点线或虚线用 path/基础图形。','标题用 creation_title：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。普通 text.add 文字改内容、位置、尺寸、样式都用 layer.update；text.reflow 只给 text.lettering 的逐字标题组重排。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
+    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组调前后用 layer.stack；组合用 group.create、layer.reparent、group.ungroup。','几何调整统一用 layout：nudge 按毫米/角度增量微调，matchRotation 跟另一素材对齐角度，alignEdge 贴齐指定可见边，align 按边界对齐或分布；这几项都保留实体尺寸。matchRotation、alignEdge 的相对角度都叫 offsetDeg；nudge.rotationDeg 是当前角度的增量。批量操作用 targets，单对象操作用 target。','数字纸用 creation_paper 批量创建，统一用 style.fill 选纸色、style.stroke 选印纹色，再选 texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条才用 kind:"stroke" 与 geometry.points=[{x,y,pressure}]，它不支持 strokeDash；点线或虚线用 path/基础图形。','标题与正文统一用 content，尺寸用 size.width/unit，字体字号字色用 style.fontFamily/fontSizePt/color，runs 也用 content/style。标题用 creation_title：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。layer.update 只传变化字段，其他值保留：place:{rotationDeg:5} 只改角度，size:{width:40} 只改图形宽度，style:{outline:{widthMm:.6}} 只改已有描边粗细；无需复用开关。对象按字段合并，数组整体替换，允许 null 的效果用 null 清除。普通 text.add 文字改内容、位置、尺寸、样式都用 layer.update；text.reflow 只给 text.lettering 的逐字标题组重排。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
 }
 
 export function compactInitialToolGuide(document){
@@ -181,8 +181,10 @@ export function modelContext(messages,state={}){
   const snapshotImages=images.length?images:(latestPreview?.content.filter(p=>p.type==='image_url')||[]);
   const visual=state.preview||latestPreview?{role:'user',content:[{type:'text',text:'当前真实画面：'+JSON.stringify(state.preview||{})},...snapshotImages]}:null;
   const scene=inspectCreationDocument(state.document);
+  const elapsedSeconds=Number.isFinite(state.contextNow)&&Number.isFinite(state.startedAt)?Math.max(0,Math.floor((state.contextNow-state.startedAt)/1000)):null;
   const summary={phase:state.phase||'direction',scene,preview:state.preview||null,
-    workflow:{stage:creativePhaseLabels[state.phase||'direction'],focus:phaseGuide(state.phase||'direction',{styles:state.document.source.styles,textMode:state.document.source.textMode,pageMode:state.document.page.pageMode})},
+    ...(elapsedSeconds===null?{}:{pacing:{elapsedSeconds,targetRemainingSeconds:Math.max(0,360-elapsedSeconds),focus:elapsedSeconds>=300?'接近六分钟目标：集中修正可读性、遮挡与缺失的纸边连接，查看新图后交付；不追加可选微调，未解决缺陷仍如实保留。':'合批推进，预留最后约一分钟检查；当前画面与完整图层足以判断时直接编辑，无需反复查看同一资料。'}}),
+    workflow:{stage:state.phaseDeclared?creativePhaseLabels[state.phase]:'由模型自行判断',focus:'根据最新画面决定本轮工作；固定说明中的五类方法可交错使用，阶段记录不代表验收或限制。'},
     plan:state.plan||null,loadedSkills:(state.loadedSkills||[]).map(({name})=>name),reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
     observation:state.observationFeedback||null,notes:state.observationNotes||null,
     taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},
@@ -247,8 +249,8 @@ export function iterationAdvice(messages){
 
 export function failureGuidance(name,args,error){
   const parameterError=String(error.path||'')+' '+String(error.message||'');
-  if(/protocolVersion/.test(parameterError))return {hint:'当前工具合同的 protocolVersion 必须是数字 2，不是字符串或其他版本。该调用未生效；按 Schema 修正后重试。'};
-  if(/baseSceneRevision/.test(parameterError))return {hint:'baseSceneRevision 必须逐字复制本条失败回执的 sceneRevision（sha256: 加 64 位十六进制字符），不可写占位符、截短或使用 PNG 哈希。该调用未生效；不要仅为获取同一版本再调用 inspect。'};
+  if(/protocolVersion/.test(parameterError))return {hint:'protocolVersion 可省略，由运行时固定填写数字 2；若显式填写只能是数字 2。该调用未生效；按 Schema 修正后重试。'};
+  if(/baseSceneRevision/.test(parameterError))return {hint:'baseSceneRevision 可填 current，绑定你本轮看到的 Scene；也可逐字复制本条失败回执的 sceneRevision（sha256: 加 64 位十六进制字符），不可截短或使用 PNG 哈希。该调用未生效；不要仅为获取同一版本再调用 inspect。'};
   if(name==='creation_title'&&/已经存在/.test(error.message||''))return {hint:'creation_title 只创建新标题；修改已有标题请 creation_inspect 查看组内子文字 id，再用 creation_apply 的 layer.update 修改 content、size、place 或 style；移动整组用标题组 id。失败调用没有生效，不要重复创建同 id。'};
   if(name==='creation_help')return {available:creationHelp()};
   if(name==='creation_finish'&&/存在未解决的问题/.test(error.message||''))return {hint:'review.issues 只列必须修好才能交付的画面缺陷。若这些只是可选的优化意见，移入 observations 并在当前画面无严重问题时以 issues:[] 再次提交；若确有缺陷，先合批修改并看新预览。'};
@@ -256,7 +258,6 @@ export function failureGuidance(name,args,error){
   if(name!=='creation_apply')return undefined;
   const match=(error.path||error.message||'').match(/operations(?:\/|\[)(\d+)/),op=args?.operations?.[Number(match?.[1])]?.op;
   const operation=args?.operations?.[Number(match?.[1])];
-  if(op==='layer.update'&&operation?.place?.rotationDeg!==undefined&&!operation.place.at&&!operation.place.referenceAnchor)return {hint:'只改角度可用 layout.nudge，rotationDeg 表示相对当前角度的增量；若用 layer.update.place 设置绝对朝向，需同时提供 reference、at、unit，at 是对象中心在该参考框中的位置。整批编辑未生效，修正后重试。'};
   if(op==='text.reflow')return {hint:'text.reflow 只用于 text.lettering 逐字标题组，且不接受 size 或 place。普通文字修改内容、位置、尺寸、样式请用 layer.update。整批编辑未生效，修正后重试。'};
   if(op==='graphic.add'&&operation?.geometry?.kind==='stroke')return {hint:'笔迹格式为 geometry:{kind:"stroke",unit:"mm",points:[{x:0,y:0,pressure:0.5},{x:12,y:1,pressure:0.5}]}。points 是对象数组，unit 放在 geometry 内；笔迹不支持 style.strokeDash，虚线请用 path 或基础图形。整批编辑未生效，修正后重试。'};
   if(op==='graphic.add'&&/geometry\/points/.test(error.path||error.message||'')&&args?.operations?.[Number(match?.[1])]?.geometry?.kind==='star')

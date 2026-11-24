@@ -24,7 +24,7 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 
 ## 常驻标题工具
 
-新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve；`runs` 明确词组主次、旋转和偏移；`effect` 直接选 outline / hollow / offset-outline / gradient-outline / shadow / none，`accentColor` 选择效果配色，`style` 可进一步微调；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `place`、`order`、`widthMm` 和字号。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
+新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve；`runs` 明确词组主次、旋转和偏移；`effect` 直接选 outline / hollow / offset-outline / gradient-outline / shadow / none，`accentColor` 选择效果配色，`style` 可进一步微调；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `content`、`place`、`order`、`size:{width,unit:"mm"}` 与 `style:{fontFamily,fontSizePt,color}`；runs 也用 content/style。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
 
 ## 基础操作与组合技巧
 

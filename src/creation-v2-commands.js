@@ -1,3 +1,4 @@
+import {expandCreationUpdate} from './creation-update-patch.js';
 import {tearRegionGeometry} from './creation-tear.js';
 import {assertPolicyOwnership} from './scene-edit-policy.js';
 import {initialGraphicNode} from './graphic-geometry.js';
@@ -199,7 +200,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   }else if(item.op==='text.reflow'){
    doc=editScene(doc,[{op:'lettering-reflow',id:requireNode(doc,item.target).id,change:item}],assets);
   }else if(item.op==='layer.update'){
-   doc=finishNode(doc,item.target,item,assets);
+   doc=finishNode(doc,item.target,expandCreationUpdate(doc.page,requireNode(doc,item.target).id,item),assets);
   }else if(item.op==='layer.reparent'){
    if(item.parent!==null&&requireNode(doc,item.parent).type!=='group')throw Error('父级必须是组合');
    const surface=surfaceOf(doc,item.target);

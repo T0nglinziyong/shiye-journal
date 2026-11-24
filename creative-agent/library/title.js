@@ -115,7 +115,7 @@ export function compileTitle(p,{widthExplicit=false}={}){
  if(!runs&&p.emphasis){const pieces=p.text.split(p.emphasis);runs=[];pieces.forEach((part,i)=>{if(part)runs.push({text:part});if(i<pieces.length-1)runs.push({text:p.emphasis,role:'primary'});});}
  if(runs&&p.treatment==='vertical')throw Error('竖排使用完整文字，不接受词组布局');
  if(runs){
-  const longest=Math.max(...runs.map(run=>extent(run.text,fontSize*roles[run.role||'normal'],run.fontFamily||style.fontFamily)*1.32+4));
+  const longest=Math.max(...runs.map(run=>extent(run.text,run.style?.fontSizePt??fontSize*roles[run.role||'normal'],run.style?.fontFamily||run.fontFamily||style.fontFamily)*1.32+4));
   if(longest>width-10){
    if(widthExplicit&&['stagger','phrases'].includes(p.treatment)&&width-10<longest*.7)throw Error('标题词组宽度不足；增大 widthMm 或减小 fontSizePt，不能把词组拆成单字换行');
    if(!widthExplicit)width=longest+10;

@@ -44,7 +44,7 @@ test('current schema examples and shallow help teach shared geometry, not specia
  const help=describeCreationCommand('graphic.add');assert.ok(JSON.stringify(help).length<6000);assert.equal(help.schema,undefined);
  assert.deepEqual(help.examples.map(example=>example.id),['paper-route','caption-highlight','button-ring']);
  const full=describeCreationCommand('graphic.add',{full:true}).schema;assert.equal(full.properties.geometry.$ref,'#/$defs/GraphicGeometry');
- const update=describeCreationCommand('layer.update',{full:true}).schema;assert.equal(update.properties.geometry.$ref,full.properties.geometry.$ref);
+ const update=describeCreationCommand('layer.update',{full:true}).schema;assert.equal(update.$defs.GraphicGeometryUpdate.anyOf[0].$ref,full.properties.geometry.$ref);assert.doesNotThrow(()=>validateCreationV2Commands(tx([{op:'layer.update',target:'existing',geometry:{options:{points:6}}}])));
  for(const entry of Object.values(creationCommandRegistry))for(const example of entry.examples)assert.doesNotThrow(()=>validateCreationV2Commands(tx([example])),entry.name);
 });
 test('every existing preset remains available in the same create entry with no physical inventory',async()=>{

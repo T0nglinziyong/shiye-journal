@@ -181,3 +181,29 @@ test('compact command help exposes exact typed style keys without forcing full S
  assert.ok(JSON.stringify(text).length<6500);assert.equal(text.schema,undefined);
  const group=describeCreationCommand('group.compose');assert.equal(group.parameters.children.items,'Command');
 });
+
+test('sparse updates keep position, the other size axis, nested effects and unrelated fields',async()=>{
+ const {run}=await setup();
+ const initial=run([{op:'graphic.add',id:'patchable',geometry:{kind:'star',options:{points:5}},place:{reference:'page',at:[40,55],unit:'mm',rotationDeg:8},size:{width:30,height:20,unit:'mm'},style:{fill:'#445566',outline:{color:'#ffffff',widthMm:.3,offsetMm:[1,2]}}}]);
+ const before=worldBox(initial.page,'patchable');
+ const result=run([{op:'layer.update',target:'patchable',place:{rotationDeg:17},size:{width:42},style:{outline:{widthMm:.8}},geometry:{options:{points:6}}}],initial);
+ const after=worldBox(result.page,'patchable'),node=result.page.layers.find(n=>n.id==='patchable'),s=result.page.canvas.height/result.page.physicalPageHeightMM;
+ assert.ok(Math.abs(after.cx-before.cx)<1e-7&&Math.abs(after.cy-before.cy)<1e-7);
+ assert.equal(after.rotation,17);assert.ok(Math.abs(after.w/s-42)<1e-7);assert.ok(Math.abs(after.h-before.h)<1e-7);
+ assert.equal(node.fill,'#445566');assert.equal(node.graphicOutline.color,'#ffffff');assert.equal(node.graphicOutline.width,.8*s);assert.equal(node.graphicOutline.offsetX,s);assert.equal(node.shapeOptions.points,6);
+ const clear=run([{op:'layer.update',target:'patchable',style:{outline:null}}],result);assert.equal(clear.page.layers.find(n=>n.id==='patchable').graphicOutline,null);
+ assert.throws(()=>run([{op:'layer.update',target:'patchable',style:{outline:{widthMm:1}}}],clear),/不完整或无效/);
+ assert.equal(initial.page.layers.find(n=>n.id==='patchable').rotation,8,'source remains immutable');
+});
+
+test('sparse rotation preserves linked anchors and rotated parent coordinates',async()=>{
+ const {run}=await setup();
+ const initial=run([{op:'group.compose',id:'group',layoutBox:{width:80,height:80,unit:'mm'},place:{reference:'page',at:[70,80],unit:'mm',rotationDeg:25},children:[{op:'graphic.add',id:'child',geometry:{kind:'rect'},place:{reference:'parent',at:[.3,.4],unit:'ratio',behavior:'linked',rotationSpace:'parent',rotationDeg:3},size:{width:20,height:10,unit:'mm'}}]}]);
+ const before=worldBox(initial.page,'child');
+ const result=run([{op:'layer.update',target:'child',place:{rotationDeg:7}}],initial),after=worldBox(result.page,'child');
+ assert.ok(Math.abs(after.cx-before.cx)<1e-7&&Math.abs(after.cy-before.cy)<1e-7);assert.ok(Math.abs(after.rotation-32)<1e-7);
+ const link=result.page.layers.find(n=>n.id==='group').children.find(n=>n.id==='child').layoutConstraint.place;
+ assert.equal(link.reference,'parent');assert.deepEqual(link.at,[.3,.4]);assert.equal(link.behavior,'linked');
+ const moved=run([{op:'layer.update',target:'group',place:{at:[90,80]}}],result);
+ assert.ok(worldBox(moved.page,'child').cx>after.cx,'linked child still follows parent');
+});
