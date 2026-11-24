@@ -7,7 +7,7 @@ import {harnessTools} from '../creative-agent/runtime/agent.mjs';
 const names=phase=>toolsForCreativePhase(harnessTools,phase).map(tool=>tool.function.name);
 
 test('creative phases never remove editing, reference or review tools',()=>{
-  for(const phase of ['direction','layout','craft','review']){
+  for(const phase of ['direction','layout','craft','accents','review']){
     assert.ok(names(phase).includes('creation_apply'));
     assert.ok(names(phase).includes('read_skill'));
     assert.ok(names(phase).includes('search_references'));

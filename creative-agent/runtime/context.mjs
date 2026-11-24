@@ -1,4 +1,4 @@
-import {creativeProgressSnapshot} from './progress.mjs';
+import {phaseGuide,creativePhaseLabels} from './phases.mjs';
 import {creationHelp,inspectCreationDocument} from '../../src/creation-inspection.js';
 import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
@@ -182,7 +182,7 @@ export function modelContext(messages,state={}){
   const visual=state.preview||latestPreview?{role:'user',content:[{type:'text',text:'当前真实画面：'+JSON.stringify(state.preview||{})},...snapshotImages]}:null;
   const scene=inspectCreationDocument(state.document);
   const summary={phase:state.phase||'direction',scene,preview:state.preview||null,
-    taskState:creativeProgressSnapshot(state,scene.sceneRevision),
+    workflow:{stage:creativePhaseLabels[state.phase||'direction'],focus:phaseGuide(state.phase||'direction',{styles:state.document.source.styles,textMode:state.document.source.textMode,pageMode:state.document.page.pageMode})},
     plan:state.plan||null,loadedSkills:(state.loadedSkills||[]).map(({name})=>name),reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
     observation:state.observationFeedback||null,notes:state.observationNotes||null,
     taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},

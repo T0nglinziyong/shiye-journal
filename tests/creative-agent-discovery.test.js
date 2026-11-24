@@ -32,7 +32,7 @@ async function arrange(f){
 
 test('optional tools are discoverable, persistent across phases and restricted to host capabilities',async()=>{
   const available=availableHarnessTools();
-  assert.equal(selectHarnessTools(available).length,14);
+  assert.equal(selectHarnessTools(available).length,13);
   assert.ok(!available.some(tool=>tool.function.name==='creation_guide'));
   assert.ok(!JSON.stringify(harnessToolCatalog(available)).includes('segment_material'));
   const f=await fixture();
@@ -40,7 +40,7 @@ test('optional tools are discoverable, persistent across phases and restricted t
   assert.equal(result.ok,true);
   assert.deepEqual(result.data.tools.map(tool=>tool.function.name).sort(),['read_template','workspace_create']);
   const restored=JSON.parse(JSON.stringify(f.state));
-  for(const phase of ['direction','layout','craft','review']){
+  for(const phase of ['direction','layout','craft','accents','review']){
     const names=selectHarnessTools(available,{...restored,phase}).map(tool=>tool.function.name);
     assert.ok(names.includes('read_template'));assert.ok(names.includes('workspace_create'));
     assert.ok(!names.includes('segment_material'));
@@ -56,7 +56,7 @@ for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCr
   const harness=create({skills,model:async({tools})=>{
     const names=tools.map(tool=>tool.function.name);
     if(++turns===1){
-      assert.equal(names.length,14);assert.ok(names.includes('creation_progress'));assert.ok(names.includes('creation_paper'));assert.ok(!names.includes('read_template'));
+      assert.equal(names.length,13);assert.ok(names.includes('creation_paper'));assert.ok(!names.includes('read_template'));
       return {message:{role:'assistant',content:null,tool_calls:[{id:'discover',type:'function',function:{name:'creation_help',arguments:'{"topics":["read_template"]}'}}]}};
     }
     assert.ok(names.includes('read_template'));assert.ok(!names.includes('workspace_create'));

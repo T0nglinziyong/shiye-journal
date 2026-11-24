@@ -13,7 +13,7 @@ export function creativeJobProgress(job){
   const progress=job.progress||{},turn=progress.turn||progress.turns;
   if(stage==='completed')return creativeCompleteProgress(progress);
   const usage=creativeTokenText(progress);
-  const activity=stage==='thinking'?({direction:'正在确定创作方向',layout:'正在布局打底',writing:'正在安排标题正文',craft:'正在完善标题、正文与装饰',review:'正在检查与修正'}[progress.phase]||phases[stage]):phases[stage];
+  const activity=stage==='thinking'?({direction:'正在构思与计划',layout:'正在布局打底',writing:'正在安排标题正文',craft:'正在安排标题与内容',accents:'正在完善装饰与点缀',review:'正在检查与修正'}[progress.phase]||phases[stage]):phases[stage];
   return `${turn?'第'+turn+'轮，':''}${activity||'后台创作中'}，累计用时${creativeElapsed(progress.elapsedMs)}${usage?'，'+usage:''}`;
 }
 
