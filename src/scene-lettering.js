@@ -16,7 +16,8 @@ export const letteringCharacters=content=>{
 };
 const variantsOf=(variants,length)=>{
  const result=new Map();for(const v of variants||[]){
-  if(!Number.isInteger(v.index)||v.index<0||v.index>=length||result.has(v.index))throw Error('letters.index 越界或重复');
+  if(!Number.isInteger(v.index)||v.index<0||v.index>=length)throw Error(`letters.index=${v.index} 越界：content 共 ${length} 个字素，合法序号为 0–${length-1}；只需列出要单独变化的字位`);
+  if(result.has(v.index))throw Error(`letters.index=${v.index} 重复：同一字位只填写一次`);
   if(v.rotationDeg!==undefined&&(!Number.isFinite(v.rotationDeg)||Math.abs(v.rotationDeg)>100000))throw Error('字位旋转需为有效角度');
   if(v.offsetMm!==undefined&&(!Array.isArray(v.offsetMm)||v.offsetMm.length!==2||v.offsetMm.some(n=>!Number.isFinite(n)||Math.abs(n)>100000)))throw Error('字位偏移需为有限的毫米坐标');
   result.set(v.index,v);

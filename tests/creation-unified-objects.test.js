@@ -104,3 +104,24 @@ test('semantic objects survive reopening; unsupported changes and locked childre
  const child=node('t').children.find(n=>n.type==='text');await apply([{op:'layer.update',target:child.id,locked:true}]);revision=session.revision;
  await apply([{op:'layer.update',target:'t',content:'不能覆盖'}],false);assert.equal(session.revision,revision);
 });
+
+test('nested title and paper outputs preserve workspace and independent placement',async()=>{
+ const {apply,node,session}=await fixture();
+ await apply([{op:'group.compose',id:'g',layoutBox:{width:100,height:120,unit:'mm'},place:position,children:[
+  {op:'paper.add',id:'p',size:{width:70,height:90,unit:'mm'},style:{fill:'#CADCE5'}},
+  {op:'title.add',id:'t',content:'日常',size:{width:50,unit:'mm'},style:{color:'#344455',fontSizePt:24},effect:'outline'}
+ ]}]);
+ assert.ok(node('g').children.some(n=>n.id==='t'));assert.ok(node('g').children.some(n=>n.id==='p'));
+ await apply([{op:'layer.update',target:'t',style:{color:'#AA4433'}},{op:'layer.split',target:'p',split:{through:[.5,.5],unit:'ratio',rotationDeg:0},pieces:[{id:'a'},{id:'b',place:{surface:'tray',reference:'page',at:[30,40],unit:'mm'}}]}]);
+ assert.ok(node('g').children.some(n=>n.id==='a'));assert.ok(!node('g').children.some(n=>n.id==='b'));assert.equal(node('b').isParked,true);
+ const before=worldBox(session.draft,node('a').id);
+ await apply([{op:'group.ungroup',target:'g',pieces:[{id:'t',place:{surface:'tray',reference:'page',at:[30,70],unit:'mm'}}]}]);
+ assert.deepEqual(worldBox(session.draft,node('a').id),before);assert.equal(node('t').isParked,true);
+});
+
+test('lettering error identifies the actual valid indices and rolls back its batch',async()=>{
+ const {apply,session,node}=await fixture();const revision=session.revision;
+ const result=await apply([{op:'paper.add',id:'p',size:{width:60,height:80,unit:'mm'},style:{fill:'#CCDDEE'}},{op:'text.lettering',id:'t',content:'把冬天抱进手里',letters:[{index:7,rotationDeg:5}]}],false);
+ assert.match(JSON.stringify(result),/共 7 个字素/);assert.match(JSON.stringify(result),/0–6/);
+ assert.equal(session.revision,revision);assert.equal(node('p'),undefined);
+});

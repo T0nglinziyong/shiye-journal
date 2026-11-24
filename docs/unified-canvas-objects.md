@@ -40,3 +40,11 @@
 `tests/creation-unified-objects.test.js` 验证默认待放、稀疏修改、标题效果与位置保留、解组独立摆放、实物分片面积守恒、原子回滚、数字纸连续纹理数据、旋转裁切、可见轮廓锚点与 linked 跟随。
 
 `node scripts/verify-unified-canvas.mjs /tmp/shiye-unified-canvas` 生成真实渲染的工具验收图及 Scene。它验证执行能力，不是 DeepSeek 自主创作效果测试。
+
+## 2026-11-24 真实调用验收
+
+使用已授权的八件自有素材，经真实 DeepSeek（deepseek-flash）自主选择参数和工具完成一次功能示范。任务额外要求斜撕纸张、独立摆放、局部修改和解组；这是操作验收，不是与旧版本同提示词的画质对照。用时 309.7 秒、12 轮，完成交付。前两轮各发生一次请求超时后重试；不能把全部耗时归因于工具说明长度。
+
+模型成功使用 paper.add → layer.split → layer.update.texture、group.ungroup 和独立子对象摆放。发生三次失败尝试：逐字标题 7 字却给出 index=7、place 同时提供 at 与 referenceAnchor、纸片超出单页可容纳尺寸。前两项拒绝事务，尺寸错误也未交付无效作品。逐字标题诊断现明确返回实际字素数和合法下标；新增回归验证整批回滚。
+
+仍未通过接口简洁性验收：当前 39 个画布操作不等于 39 个独立 function tool；普通运行另暴露 21 个 function tool。标题存在 title.add、text.lettering 和专用包装入口等相近选择。模型选择 text.lettering 后，为统一改色又逐个修改七个字，未验证 title.add 的自主选用。下一步应合并重复的模型侧入口，保留底层能力并统一对象操作；不能以更名分组冒充数量减少，也不能宣称本次已完成该重构。现阶段未上线。
