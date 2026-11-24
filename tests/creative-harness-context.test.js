@@ -146,7 +146,7 @@ test('creative compaction carries design decisions and rejected attempts into la
    {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
    {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
  );
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
  assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,11);
  assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
  assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
@@ -164,7 +164,7 @@ test('compaction never starts between two responses to one assistant tool batch'
  for(let i=0;i<12;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  messages.push({role:'assistant',tool_calls:[{id:'first',function:{name:'creation_phase',arguments:'{}'}},{id:'second',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'first',content:'{"ok":true}'},{role:'tool',tool_call_id:'second',content:'{"ok":true}'});
  const cutoff=messages.length-1;
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:cutoff}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[{messageIndex:cutoff}]});
  assert.ok(candidate.cutoff<messages.length-3);
  const context=modelContext(messages,{compactedUntil:cutoff});
  const calls=new Set(context.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>call.id):[]));
@@ -176,7 +176,7 @@ test('soft creative loops compact completed turns without a phase transition',()
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  assert.equal(creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:30000}]}),null);
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[]});
  assert.ok(candidate);
  assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
  assert.equal(messages[candidate.cutoff].role,'assistant');
@@ -185,7 +185,7 @@ test('soft creative loops compact completed turns without a phase transition',()
 test('an old phase marker does not suppress later cadence compaction',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:4}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[{messageIndex:4}]});
  assert.ok(candidate);
  assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
 });
@@ -397,7 +397,7 @@ test('budget compaction triggers after four cycles by text or images without tou
   {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
   {role:'user',content:Array.from({length:images},()=>({type:'image_url',image_url:{url:'test'}}))}
  ]).flat()];
- for(const messages of [make('x'.repeat(21000),0),make('short',3)]){
+ for(const messages of [make('x'.repeat(31000),0),make('short',3)]){
   const candidate=creativeCompactionCandidate(messages,{usage:[{prompt_tokens:20000}]});
   assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,2);
   const state={compactedUntil:candidate.cutoff,creativeMemory:'decisions'};
@@ -405,4 +405,18 @@ test('budget compaction triggers after four cycles by text or images without tou
   assert.equal(recent.length,2);assert.equal(recent[0].reasoning_content,messages[candidate.cutoff].reasoning_content);
   assert.equal(creativeCompactionCandidate(messages,{...state,usage:[{prompt_tokens:90000}]}),null,'do not compact again until two more complete cycles exist');
  }
+});
+
+
+test('budget rebuild coincides with first-layout handoff and preserves its whole tool cycle',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
+ for(let i=0;i<3;i++)messages.push({role:'assistant',reasoning_content:'reasoning-'+i,tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:'{}'}}]},
+  {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},{role:'user',content:'render '+i});
+ const state={firstLayoutTurn:3,turns:3,usage:[{prompt_tokens:61000}]};
+ const candidate=creativeCompactionCandidate(messages,state);
+ assert.equal(candidate.history.filter(m=>m.role==='assistant').length,2);
+ const retained=modelContext(messages,{...state,compactedUntil:candidate.cutoff});
+ assert.equal(retained.filter(m=>m.role==='assistant').length,1);
+ assert.equal(retained.find(m=>m.role==='assistant').reasoning_content,'reasoning-2');
+ assert.equal(creativeCompactionCandidate(messages,{...state,turns:4}),null,'ordinary rounds retain at least two cycles');
 });

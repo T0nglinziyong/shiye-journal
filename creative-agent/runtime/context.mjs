@@ -202,12 +202,14 @@ export function creativeCompactionCandidate(messages,state={}){
     if(typeof m.content==='string')chars+=m.content.length;
     else for(const p of m.content||[]){if(p.type==='text')chars+=(p.text||'').length;else if(p.type==='image_url')images++;}
   }
-  if((state.usage?.at(-1)?.prompt_tokens||0)<38000&&chars<80000&&images<10)return null;
+  if((state.usage?.at(-1)?.prompt_tokens||0)<60000&&chars<120000&&images<12)return null;
   const assistants=messages.flatMap((message,index)=>message.role==='assistant'&&index>=from?[index]:[]);
-  // Keep the last two cycles verbatim, including all reasoning and receipts.
-  // At least two older cycles must be removed to avoid rebuilding every turn.
-  if(assistants.length<4)return null;
-  const cutoff=assistants.at(-2);
+  // Align a needed rebuild with the one high -> low handoff, avoiding two
+  // adjacent cache misses. The just-rendered layout cycle remains intact.
+  const handoff=(state.reasoningPolicy??'adaptive')==='adaptive'&&state.firstLayoutTurn===state.turns&&state.turns>0;
+  const keep=handoff?1:2,minimumOlder=handoff?1:2;
+  if(assistants.length<keep+minimumOlder)return null;
+  const cutoff=assistants.at(-keep);
   const older=messages.slice(from,cutoff);
   return {cutoff,history:creativeCompactionTranscript(older)};
 }
