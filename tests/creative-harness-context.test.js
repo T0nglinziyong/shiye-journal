@@ -233,7 +233,7 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   assert.ok(!initialToolGuide(document).common.descriptions.some(item=>item.name==='material.add'));
   assert.match(state.messages[0].content,/零素材创作/);
   assert.ok(!state.messages[0].content.includes('基础 Skill、匹配风格和常用参数已自动提供'));
-  assert.ok(state.messages[0].content.length<30000);
+  assert.ok(state.messages[0].content.length<100000);
   const visual=await createCreationDocument({draft:draft(),assets:[],contentPolicy:'visual'});
   const visualState=initialHarnessState({document:visual,skills,brief:{styles:['丰富层叠']}});
   assert.ok(!visualState.recommendedMethods.some(method=>method.skill==='journal-lettering'));
@@ -257,7 +257,7 @@ test('lettering effects are delayed until the craft stage',async()=>{
   const {letteringEffectMenu}=await import('../creative-agent/runtime/expression.mjs');
   for(const [id,variant] of [['title-art','gap-shadow-offset-outline'],['title-art','gap-shadow-gradient-outline'],['title-art','tape'],['title-art','cross-shadow'],['title-art','scattered-round'],['title-art','scattered-round-triangle'],['title-art','number-route'],['title-art','script-dots'],['title-art','paper-lettering']])
     assert.ok(letteringEffectMenu().some(item=>item.id===id&&item.variant===variant),`${id}:${variant||''}`);
-  assert.ok(state.messages[0].content.length<30000);
+  assert.ok(state.messages[0].content.length<100000);
 });
 
 test('paper carriers stay discoverable without default promotion for every material task',async()=>{
@@ -347,8 +347,8 @@ test('failed parameter validation supplies targeted help without changing the op
   assert.ok(failureGuidance('creation_help',{},{}).available.topics.includes('place'));
   const star={operations:[{op:'graphic.add',id:'star',geometry:{kind:'star',points:5}}]};
   assert.match(failureGuidance('creation_apply',star,{path:'/operations/0/geometry/points'}).hint,/options/);
-  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}}).common.find(item=>item.name==='graphic.add');
-  assert.equal(first.example.geometry.kind,'ellipse');
+  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}}).operations.find(item=>item.name==='graphic.add');
+  assert.equal(first.example.op,'graphic.add');
 });
 
 test('invalid stroke styling reports all mismatched fields and valid alternatives together',async()=>{
@@ -429,12 +429,14 @@ test('tray-only changes retain the latest matching page image and remove obsolet
 test('first turn provides cutting and tearing examples without a help round',()=>{
  const guide=compactInitialToolGuide({source:{materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[],textMode:'rich'}});
  for(const name of ['material.cut','material.tear']){
-  const command=guide.common.find(item=>item.name===name);
+  const command=guide.operations.find(item=>item.name===name);
   assert.ok(command?.example);
   assert.equal(command.example.op,name);
-  for(const field of command.required)assert.ok(field in command.example,field);
+  for(const field of command.parameters.required)assert.ok(field in command.example,field);
  }
- assert.ok(guide.common.some(item=>item.name==='region'));
+ assert.ok(guide.definitions.Region);
+ assert.ok(guide.operations.some(item=>item.name==='layer.split'));
+ assert.ok(guide.operations.some(item=>item.name==='group.ungroup'));
 });
 
 

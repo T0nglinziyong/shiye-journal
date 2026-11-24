@@ -53,7 +53,7 @@ test('paper and title omission of order follows ordinary creation paint order',a
  const {applyCreationTransaction,creationSceneRevision}=await import('../src/creation-transaction.js');
  const {compilePaperOperations}=await import('../creative-agent/runtime/paper-tool.mjs');
  const base=await createCreationDocument({draft:draft(),assets:[]});
- const paper={id:'paper',place:{reference:'page',at:[30,30],unit:'mm'},size:{width:50,height:50,unit:'mm'},style:{fill:'#ffffff'},texture:'medium',edge:'torn'};
+ const paper={id:'paper',place:{reference:'page',at:[30,30],unit:'mm'},size:{width:50,height:50,unit:'mm'},style:{fill:'#ffffff'},texture:'medium',edge:{style:'torn',seed:42}};
  const title={id:'heading',content:'测试',place:paper.place,size:{width:60,unit:'mm'},style:{fontSizePt:18,color:'#112233'}};
  validateValue({transactionId:'p',baseSceneRevision:'current',papers:[paper]},contract('creation_paper'));
  validateValue({transactionId:'t',baseSceneRevision:'current',titles:[title]},contract('creation_title'));

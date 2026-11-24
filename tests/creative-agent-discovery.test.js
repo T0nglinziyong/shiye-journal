@@ -32,7 +32,7 @@ async function arrange(f){
 
 test('optional tools are discoverable, persistent across phases and restricted to host capabilities',async()=>{
   const available=availableHarnessTools();
-  assert.equal(selectHarnessTools(available).length,13);
+  assert.deepEqual(selectHarnessTools(available),available);
   assert.ok(!available.some(tool=>tool.function.name==='creation_guide'));
   assert.ok(!JSON.stringify(harnessToolCatalog(available)).includes('segment_material'));
   const f=await fixture();
@@ -50,16 +50,16 @@ test('optional tools are discoverable, persistent across phases and restricted t
   assert.equal((await f.call('creation_help',{topics:['segment_material']})).ok,false);
 });
 
-for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCreativeHarness]])test(`${name} sends only discovered tools to the model`,async()=>{
+for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCreativeHarness]])test(`${name} sends all supported tools from the first model turn`,async()=>{
   const document=await createCreationDocument({draft:draft(),assets:[]}),skills=await loadCreationSkills(undefined,{illustrationRoot:null});
   let turns=0;
   const harness=create({skills,model:async({tools})=>{
     const names=tools.map(tool=>tool.function.name);
     if(++turns===1){
-      assert.equal(names.length,13);assert.ok(names.includes('creation_paper'));assert.ok(!names.includes('read_template'));
+      assert.equal(names.length,availableHarnessTools().length);assert.ok(names.includes('creation_paper'));assert.ok(names.includes('read_template'));
       return {message:{role:'assistant',content:null,tool_calls:[{id:'discover',type:'function',function:{name:'creation_help',arguments:'{"topics":["read_template"]}'}}]}};
     }
-    assert.ok(names.includes('read_template'));assert.ok(!names.includes('workspace_create'));
+    assert.ok(names.includes('read_template'));assert.ok(names.includes('workspace_create'));
     throw Error('discovery request verified');
   }});
   await assert.rejects(harness.run({id:'discovery-'+name,state:initialHarnessState({document,skills,brief:{}})}),/discovery request verified/);

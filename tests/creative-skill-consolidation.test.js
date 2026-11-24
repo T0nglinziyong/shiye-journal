@@ -64,10 +64,11 @@ test('all creative knowledge is available before any skill call and survives sna
   const state=initialHarnessState({document,skills,brief:{style:'清新'}});
   const prompt=state.messages[0].content;
   assert.ok(prompt.includes('不必先逐个 read_skill overview'));
-  assert.ok(prompt.includes('creation_title'));
+  assert.ok(prompt.includes('title.add'));
   assert.ok(prompt.includes('可选增强'));
   assert.ok(prompt.includes('复杂拆字或笔画技巧再读 journal-lettering'));
-  assert.ok(prompt.length<12000);
+  assert.ok(prompt.length<100000);
+  for(const method of ['title.add','paper.add','layer.update','layer.split','group.ungroup'])assert.ok(prompt.includes(method));
   assert.equal(state.loadedSkills.length,0);
   assert.equal(state.messages[1].content[0].text,creativeKnowledge);
   for(const topic of ['一起安排纸、图和字','从素材簇建立纸层','选择关系','正文的真实排版检查','数字也可以成为构图对象','实心圆与星形','按素材选择结构'])assert.ok(creativeKnowledge.includes(topic));

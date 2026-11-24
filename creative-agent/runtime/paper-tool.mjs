@@ -8,16 +8,10 @@ export const paperTool={type:'function',function:{name:'creation_paper',descript
  transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:{type:'string',pattern:'^sha256:[a-f0-9]{64}$'},decision:{type:'string',minLength:1,maxLength:400},
  papers:{type:'array',minItems:1,maxItems:32,items:object({
   id:inline(definitions.Id),place:inline(definitions.Place),size:{...inline(definitions.Size),required:['width','height','unit']},order:inline(definitions.Order),
-  style:object({fill:color,stroke:color,strokeWidthMm:{type:'number',minimum:0,maximum:3}},['fill']),texture:{enum:['subtle','medium','rough'],description:'纸内纤维和噪声的强度：轻、中、强；不是阴影。'},edge:{enum:['straight','torn']},
+  style:object({fill:color,stroke:color,strokeWidthMm:{type:'number',minimum:0,maximum:3}},['fill']),texture:{enum:['subtle','medium','rough'],description:'纸内纤维和噪声的强度：轻、中、强；不是阴影。'},edge:inline(definitions.Edge),
   pattern:{enum:['plain','ruled','grid','dots'],description:'默认 plain 素纸；其他为横线、方格、点阵。'},
   translucency:{type:'number',minimum:0,maximum:.85,description:'0 不透光，数值越大越能看到下层；默认 0。'},
   rows:{type:'integer',minimum:1,maximum:16},columns:{type:'integer',minimum:1,maximum:16}
- },['id','place','size','style','texture','edge'])}
+ },['id','size','style'])}
 },['transactionId','baseSceneRevision','papers'])}};
-export function compilePaperOperations({papers}){
- return papers.map(({id,place,size,order,style,texture,edge,pattern='plain',translucency=0,rows=8,columns=8})=>({
-  op:'graphic.add',id,place,size,order,
-  geometry:{kind:'paper',options:{paperPattern:pattern,grain:{subtle:.3,medium:.65,rough:.9}[texture],torn:edge==='torn',translucency,rows,columns}},
-  style:{fill:style.fill,stroke:pattern==='plain'?null:style.stroke||'#A79F94',strokeWidthMm:style.strokeWidthMm??.15,strokeOpacity:.45,shadow:null}
- }));
-}
+export function compilePaperOperations({papers}){return papers.map(paper=>({op:'paper.add',...paper}));}

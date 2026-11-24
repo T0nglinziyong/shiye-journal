@@ -245,7 +245,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
-      assert.ok(!names.includes('read_template'),'参考读取工具在查询后展开，不随阶段自动加载');
+      assert.ok(names.includes('read_template'),'参考读取工具从首轮可用，不依赖查询或阶段');
       const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
       title.style.letterSpacing=.3;title.style.letterSpacingPt=1.5;title.style.align='center';title.place.angleDeg=2;
       return answer(edit(creationSceneRevision(f.document),'first',[
@@ -429,7 +429,7 @@ test('DeepSeek gives deep reasoning more time while respecting the remaining tas
 
 
 test('dedicated paper tool requires a plan, commits editable papers and undoes the batch',async t=>{
- let turn=0;const args=()=>({transactionId:'paper-tool',baseSceneRevision:creationSceneRevision(f.document),papers:[{id:'fibrous',style:{fill:'#E8DFC2'},texture:'medium',edge:'torn',place:{reference:'page',at:[50,60],unit:'mm'},size:{width:55,height:65,unit:'mm'},order:{edge:'back'}}]});
+ let turn=0;const args=()=>({transactionId:'paper-tool',baseSceneRevision:creationSceneRevision(f.document),papers:[{id:'fibrous',style:{fill:'#E8DFC2'},texture:'medium',edge:{style:'torn',seed:42},place:{reference:'page',at:[50,60],unit:'mm'},size:{width:55,height:65,unit:'mm'},order:{edge:'back'}}]});
  const f=await fixture(t,async()=>{
   if(++turn===1)return answer(call('creation_paper',args()));
   if(turn===2)return answer(plan(),call('creation_paper',args()));
@@ -468,7 +468,7 @@ for(const shortVersion of [false,true])test(`mixed tool batches isolate failures
    call('creation_apply',{transactionId:'body-first',baseSceneRevision:revision,operations:[text('body','今天在窗边读完了一本书，记下午后的光。',[50,65])]}),
    edit(revision,'bad-atomic',[text('rolled-back','不应留下',[40,40]),{op:'layer.delete',target:'missing'}]),
    call('read_skill',{name:'journal-accents',level:'overview'}),
-   call('creation_paper',{transactionId:'backing-later',baseSceneRevision:revision,papers:[{id:'backing',place:{reference:'page',at:[50,65],unit:'mm'},size:{width:65,height:45,unit:'mm'},order:{before:'body'},style:{fill:'#E8DFC2'},texture:'subtle',edge:'torn'}]}),
+   call('creation_paper',{transactionId:'backing-later',baseSceneRevision:revision,papers:[{id:'backing',place:{reference:'page',at:[50,65],unit:'mm'},size:{width:65,height:45,unit:'mm'},order:{before:'body'},style:{fill:'#E8DFC2'},texture:'subtle',edge:{style:'torn',seed:42}}]}),
    edit('sha256:'+'0'.repeat(64),'stale-rejected',[text('stale','过期',[40,40])])
   );}
   throw Error('stop mixed');

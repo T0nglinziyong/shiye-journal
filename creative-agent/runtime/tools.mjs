@@ -31,7 +31,7 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
       geometry:{type:'object',description:'圆用 {kind:"ellipse"}，五角星用 {kind:"star",options:{points:5}}。尺寸在 size，填色在 style.fill。',properties:{kind:{type:'string'},options:{type:'object',properties:{points:{type:'integer',description:'仅 star 的角数；例如 5。'}},additionalProperties:true},points:{type:'array',description:'仅手绘 stroke 的轨迹点 [{x,y,pressure}]，同时填写 geometry.unit:"mm"；星角数放 options.points。'}},additionalProperties:true}
     }}}
   }}}
-}:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询操作/公共参数合同或工具。topics 为空返回目录；topics:[工具名] 读取准确参数并在下一轮展开该工具。工具一经展开持续可用，不受阶段限制。'}}:tool),
+}:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询已前置的操作/公共参数合同，供诊断重查；所有工具从第一轮可用，不需要先查询才能调用。'}}:tool),
   paperTool,
   titleTool,
   custom('segment_material','在真实素材上给出 0–1 比例 xyxy 框，调用 SAM 查看候选裁片。只提议，不修改作品；先看彩色轮廓，再用 creation_apply_crops 裁切。',object({alias:{type:'string'},box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['alias','box'])),
@@ -58,7 +58,6 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
 
 // Discovery changes the model's reading surface, never its permissions or the
 // executable contract. A learned tool stays visible across phases/checkpoints.
-const core=new Set(['creation_plan','creation_help','creation_inspect','creation_apply','creation_paper','creation_title','read_skill','creation_recipe','search_references','inspect_materials','creation_preview','creation_undo','creation_finish']);
 const groups=[
   {purpose:'参考案例、模板与写作选题',names:['read_case','read_template','search_writing_topics']},
   {purpose:'重看素材总图、管理独立试摆空间',names:['workspace_view','workspace_create','workspace_close']},
@@ -71,10 +70,7 @@ export function availableHarnessTools({segmentMaterial}={}){
     (segmentMaterial||!['segment_material','creation_apply_crops'].includes(tool.function.name)));
 }
 
-export function selectHarnessTools(available,state={}){
-  const learned=new Set(state.discoveredTools||[]);
-  return available.filter(tool=>core.has(tool.function.name)||learned.has(tool.function.name));
-}
+export function selectHarnessTools(available){return available;}
 
 export function harnessToolCatalog(available=harnessTools){
   const names=new Set(available.map(tool=>tool.function.name));
@@ -85,13 +81,13 @@ export function harnessToolCatalog(available=harnessTools){
 export function discoverHarnessTools(available,previous=[],requested=[],data){
   const allowed=new Set(available.map(tool=>tool.function.name));
   const learned=new Set(previous.filter(name=>allowed.has(name)));
-  for(const name of requested)if(allowed.has(name)&&!core.has(name))learned.add(name);
+  for(const name of requested)if(allowed.has(name))learned.add(name);
   // Reference results carry exact readWith routes. Expose those tools on the
   // next turn without requiring a separate discovery call for each result.
   const visit=value=>{
     if(!value||typeof value!=='object')return;
     const name=value.readWith?.tool;
-    if(allowed.has(name)&&!core.has(name))learned.add(name);
+    if(allowed.has(name))learned.add(name);
     for(const child of Object.values(value))if(child&&typeof child==='object')visit(child);
   };
   visit(data);

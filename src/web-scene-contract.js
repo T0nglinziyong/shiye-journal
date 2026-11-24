@@ -6,7 +6,7 @@ const str={type:'string',maxLength:500000},id={type:'string',minLength:1,maxLeng
 const bool={type:'boolean'},obj={type:['object','null']},list={type:'array',maxItems:20000};
 const fields=(names,schema)=>Object.fromEntries(names.split(' ').map(k=>[k,schema]));
 const shadow={type:'object',additionalProperties:false,required:['offsetX','offsetY','blur','color'],properties:{offsetX:n(),offsetY:n(),blur:n(0,10000),color:str}};
-const common={id,type:{type:'string'},...fields('x y width height rotation zIndex',n()),...fields('opacity',n(0,1)),blendMode:{enum:['normal','multiply']},vectorMask:obj,shadow:{anyOf:[shadow,{type:'null'}]},
+const common={creationObject:{type:'object',additionalProperties:false,required:['kind','parameters'],properties:{kind:{enum:['paper','title']},parameters:{type:'object'},cutMask:obj}},id,type:{type:'string'},...fields('x y width height rotation zIndex',n()),...fields('opacity',n(0,1)),blendMode:{enum:['normal','multiply']},vectorMask:obj,shadow:{anyOf:[shadow,{type:'null'}]},
  ...fields('hidden isHidden isParked parked locked isLocked visible',bool),workspaceId:{type:'string',pattern:'^[a-z][a-z0-9_-]{0,31}$'},...fields('key agentKey creativePieceID creativeGroupID creativeRole name role',{type:['string','null'],maxLength:500000}),aiManaged:obj,userOverrideFlags:list,lastTransform:obj,layoutConstraint:{type:'object',anyOf:[{required:['place']},{required:['size']}],properties:{place:{type:'object'},size:{type:'object'},sizeAspectRatio:n(.000001,1000000)},additionalProperties:false}};
 const geometry=['x','y','width','height'];
 const node=(type,properties,required=[])=>({type:'object',properties:{...common,type:{const:type},...properties},required:['id','type',...required],additionalProperties:false});
