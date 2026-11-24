@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
+import {modelContext,isCreativeSnapshot,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
 import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 
 test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
@@ -28,7 +28,7 @@ test('an outdated task contract fails before any model invocation',async()=>{
   assert.throws(()=>initialHarnessState({document,skills:{catalog(){throw Error('must not load');}},brief:{}}),/合同已变化/);
 });
 
-test('model context keeps the global index and recent tool pair while dropping superseded previews',()=>{
+test('model context keeps the global index and tool pair but only the latest preview',()=>{
   const system={role:'system',content:'system'};
   const source={role:'user',content:[{type:'image_url',image_url:{url:'source'}}]};
   const reasoning={role:'assistant',reasoning_content:'required provider reasoning',tool_calls:[{id:'call'}]};
@@ -48,35 +48,34 @@ test('adding the first stage prompt cannot alter checkpoint messages or move the
  assert.deepEqual(request.map(message=>message.role),['system','system','user']);
 });
 
-test('after a real preview the model can request the saved source board instead of paying for it every turn',()=>{
+test('a preview does not mutate the source message and invalidate its cache prefix',()=>{
  const source={role:'user',content:[{type:'text',text:'素材清单'},{type:'text',text:'全局素材编号图；始终可对照此图。'},{type:'image_url',image_url:{url:'source-board'}}]};
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：first'},{type:'image_url',image_url:{url:'page'}}]};
  const messages=[{role:'system',content:'rules'},source,{role:'assistant',content:'试摆完成'},preview];
  const before=modelContext(messages,{qualityFrames:[]});
  const after=modelContext(messages,{qualityFrames:[{pngHash:'first'}]});
  assert.equal(before[1].content.filter(part=>part.type==='image_url').length,1);
- assert.equal(after[1].content.filter(part=>part.type==='image_url').length,0);
- assert.match(after[1].content[1].text,/workspace_view/);
+ assert.deepEqual(after[1],before[1]);
  assert.equal(after.at(-1),preview);
  assert.equal(source.content[2].image_url.url,'source-board');
 });
 
-test('state summary does not repeat the Scene already present in the latest preview',async()=>{
+test('current snapshot supplies the complete Scene rather than a revision or delta',async()=>{
  const {createCreationDocument}=await import('../src/creation-document.js');
  const {draft}=await import('../src/domain.js');
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"sceneRevision":"current"}\n最新 Scene：{"layers":[{"id":"visible"}]}'},{type:'image_url',image_url:{url:'preview'}}]};
  const out=modelContext([{role:'system',content:'rules'},{role:'user',content:'input'},{role:'assistant',content:'edit'},preview],{document,phase:'composition'});
- const summary=JSON.parse(out[2].content.replace('当前创作状态（由检查点生成，早期对话已压缩）：',''));
- assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
- assert.equal(out.at(-1),preview);
+ const summary=JSON.parse(out.at(-1).content.replace('当前创作状态（由检查点生成）：',''));
+ assert.ok(Array.isArray(summary.scene.layers));assert.ok(Array.isArray(summary.scene.layerTree));
+ assert.equal(out.filter(m=>isCreativeSnapshot(m)).length,2);
 });
 
 test('model context stays bounded as checkpoint history grows',()=>{
  const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'text',text:'素材索引'},{type:'image_url',image_url:{url:'index'}}]};
  const messages=[system,index];
  for(let i=0;i<80;i++)messages.push({role:'assistant',tool_calls:[{id:'call-'+i,function:{name:'creation_apply'}}]},{role:'tool',tool_call_id:'call-'+i,content:'{"ok":true}'},{role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview-'+i}}]});
- const out=modelContext(messages);
+ const out=modelContext(messages,{compactedUntil:2+72*3});
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
  assert.ok(out.length<=30);assert.equal(out.filter(m=>m.role==='assistant').length,8);
  assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
@@ -90,17 +89,17 @@ test('recent DeepSeek tool turns keep their complete reasoning content',()=>{
  assert.deepEqual(out.filter(m=>m.role==='assistant').map(m=>m.reasoning_content),Array.from({length:7},(_,i)=>'reason-'+i));
 });
 
-test('old parameter help is shortened while its tool pair stays valid',()=>{
+test('parameter help remains unchanged until a compaction boundary',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
  for(let i=0;i<3;i++)messages.push({role:'assistant',tool_calls:[{id:'h'+i,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'h'+i,content:'{"ok":true,"data":"'+('long schema '.repeat(100))+'"}'});
  const out=modelContext(messages);
- assert.ok(out.find(m=>m.tool_call_id==='h0').content.length<150);
+ assert.equal(out.find(m=>m.tool_call_id==='h0'),messages[3]);
  assert.ok(out.find(m=>m.tool_call_id==='h2').content.length>1000);
  const calls=new Set(out.flatMap(m=>m.role==='assistant'?(m.tool_calls||[]).map(call=>call.id):[]));
  assert.ok(out.filter(m=>m.role==='tool').every(m=>calls.has(m.tool_call_id)));
 });
 
-test('temporary material detail images leave the model context after they are used',()=>{
+test('material detail images remain stable until compaction',()=>{
  const system={role:'system',content:'instructions'},index={role:'user',content:[{type:'image_url',image_url:{url:'index'}}]};
  const inspect={role:'assistant',tool_calls:[{id:'inspect',function:{name:'inspect_materials'}}]};
  const result={role:'tool',tool_call_id:'inspect',content:'{"ok":true}'};
@@ -108,8 +107,8 @@ test('temporary material detail images leave the model context after they are us
  const before=modelContext([system,index,inspect,result,details]);
  assert.equal(before.filter(message=>message===details).length,1);
  const after=modelContext([system,index,inspect,result,details,{role:'assistant',content:'已看过局部细节'}, {role:'user',content:'下一步'}]);
- assert.equal(after.some(message=>message===details),false);
- assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,1);
+ assert.equal(after.some(message=>message===details),true);
+ assert.equal(after.filter(message=>message.role==='user').flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='image_url').length,3);
 });
 
 test('one studied tutorial remains available for comparison after planning and history windowing',()=>{
@@ -119,7 +118,7 @@ test('one studied tutorial remains available for comparison after planning and h
   {role:'user',content:[{type:'text',text:'教程示意（仅供方法参考）：旧例'},{type:'image_url',image_url:{url:'old-example'}},
     {type:'text',text:'教程示意（仅供方法参考）：框架与成品'},{type:'image_url',image_url:{url:'paired-example'}}]}];
  for(let i=0;i<12;i++)messages.push({role:'assistant',content:'调整构思'+i},{role:'user',content:'继续'});
- const before=JSON.stringify(messages),out=modelContext(messages);
+ const before=JSON.stringify(messages),out=modelContext(messages,{compactedUntil:15});
  const images=out.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url');
  assert.deepEqual(images.map(p=>p.image_url.url),['paired-example']);
  assert.equal(JSON.stringify(messages),before);
@@ -133,11 +132,11 @@ test('the latest preview remains visible after read-only help instead of becomin
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"pngHash":"sha256:abc"}'},{type:'image_url',image_url:{url:'data:image/png;base64,dGVzdA=='}}]};
  const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'text',text:'index'}]},{role:'assistant',tool_calls:[]},preview];
- assert.equal(modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}}).filter(item=>item===preview).length,1);
+ assert.equal(modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}}).flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.image_url?.url==='data:image/png;base64,dGVzdA==').length,1);
  messages.push({role:'assistant',tool_calls:[{id:'help',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'help',content:'{"ok":true}'});
  const next=modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}});
- assert.equal(next.some(item=>item===preview),true);
- assert.match(next[2].content,/sha256:abc/);
+ assert.equal(next.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.image_url?.url==='data:image/png;base64,dGVzdA==').length,1);
+ assert.match(next.at(-1).content,/sha256:abc/);
 });
 
 test('creative compaction carries design decisions and rejected attempts into later turns',async()=>{
@@ -147,8 +146,8 @@ test('creative compaction carries design decisions and rejected attempts into la
    {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
    {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
  );
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
- assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,7);
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
+ assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,11);
  assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
  assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
  const {createCreationDocument}=await import('../src/creation-document.js');
@@ -156,7 +155,7 @@ test('creative compaction carries design decisions and rejected attempts into la
  const state={compactedUntil:candidate.cutoff,creativeMemory:'居中排布拥挤，改为左侧留白。',document:await createCreationDocument({draft:draft(),assets:[]})};
  const out=modelContext(messages,state);
  assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
- assert.equal(out.filter(m=>m.role==='assistant').length,6);
+ assert.equal(out.filter(m=>m.role==='assistant').length,2);
  assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,2);
 });
 
@@ -165,7 +164,7 @@ test('compaction never starts between two responses to one assistant tool batch'
  for(let i=0;i<12;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  messages.push({role:'assistant',tool_calls:[{id:'first',function:{name:'creation_phase',arguments:'{}'}},{id:'second',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'first',content:'{"ok":true}'},{role:'tool',tool_call_id:'second',content:'{"ok":true}'});
  const cutoff=messages.length-1;
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:cutoff}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[{messageIndex:cutoff}]});
  assert.ok(candidate.cutoff<messages.length-3);
  const context=modelContext(messages,{compactedUntil:cutoff});
  const calls=new Set(context.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>call.id):[]));
@@ -177,18 +176,18 @@ test('soft creative loops compact completed turns without a phase transition',()
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  assert.equal(creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:30000}]}),null);
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[]});
  assert.ok(candidate);
- assert.equal(candidate.history.filter(item=>item.role==='assistant').length,7);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
  assert.equal(messages[candidate.cutoff].role,'assistant');
 });
 
 test('an old phase marker does not suppress later cadence compaction',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:4}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[{messageIndex:4}]});
  assert.ok(candidate);
- assert.equal(candidate.history.filter(item=>item.role==='assistant').length,7);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
 });
 
 test('failed model compaction keeps the design intent and rejected work',()=>{
@@ -228,7 +227,7 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{styles:['丰富层叠']}});
   assert.deepEqual(state.loadedSkills,[]);
-  assert.ok(state.recommendedMethods.some(method=>method.id==='title-phrases'));
+  assert.ok([...state.recommendedMethods,...state.expressionCards].some(method=>method.id==='title-art'));
   assert.ok(state.recommendedMethods.some(method=>method.id==='graphic-route'));
   assert.ok(!state.recommendedMethods.some(method=>method.id==='paper-peek'));
   assert.ok(!initialToolGuide(document).common.descriptions.some(item=>item.name==='material.add'));
@@ -253,10 +252,10 @@ test('lettering effects are delayed until the craft stage',async()=>{
   const {initialHarnessState}=await import('../creative-agent/runtime/agent.mjs');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'做一页有手写感的记录',styles:['丰富层叠']}});
-  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-echo','accent-spark']);
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-art','title-art','color-echo','accent-spark']);
   assert.ok(!state.messages[0].content.includes('title-cross-shadow'));
   const {letteringEffectMenu}=await import('../creative-agent/runtime/expression.mjs');
-  for(const [id,variant] of [['title-gap-shadow','offset-outline'],['title-gap-shadow','gradient-outline'],['title-tape'],['title-cross-shadow'],['title-scattered-round'],['title-scattered-round','triangle'],['title-number-route'],['title-script-dots'],['title-paper-lettering']])
+  for(const [id,variant] of [['title-art','gap-shadow-offset-outline'],['title-art','gap-shadow-gradient-outline'],['title-art','tape'],['title-art','cross-shadow'],['title-art','scattered-round'],['title-art','scattered-round-triangle'],['title-art','number-route'],['title-art','script-dots'],['title-art','paper-lettering']])
     assert.ok(letteringEffectMenu().some(item=>item.id===id&&item.variant===variant),`${id}:${variant||''}`);
   assert.ok(state.messages[0].content.length<30000);
 });
@@ -372,7 +371,89 @@ test('opening user scope survives tool discovery and the rolling history window 
 });
 
 
-test('rotation-only update failure explains relative nudge without dumping unrelated schemas',()=>{
- const guidance=failureGuidance('creation_apply',{operations:[{op:'layer.update',target:'paper',place:{rotationDeg:4}}]},{path:'operations/0/place/at'});
- assert.match(guidance.hint,/layout.nudge/);assert.match(guidance.hint,/增量/);assert.match(guidance.hint,/整批编辑未生效/);
+
+
+
+test('ordinary turns reuse the complete prior history prefix despite changing Scene summaries',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const messages=[{role:'system',content:'fixed rules'},{role:'user',content:'fixed task'}];
+ for(let turn=0;turn<10;turn++){
+  messages.push({role:'assistant',reasoning_content:'reason '+turn,tool_calls:[{id:'c'+turn,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'c'+turn,content:JSON.stringify({ok:true,data:'schema '.repeat(100)})});
+  const before=JSON.stringify(messages),request=modelContext(messages,{document,compactedUntil:2,decisions:[{turn}]});
+  assert.deepEqual(request.slice(0,messages.length),messages);
+  assert.match(request.at(-1).content,/当前创作状态/);
+  assert.equal(JSON.stringify(messages),before);
+ }
+});
+
+
+test('ordinary long histories and image counts do not trigger compaction',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},...Array.from({length:10},(_,i)=>[
+  {role:'assistant',reasoning_content:'x'.repeat(31000),tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:'{}'}}]},
+  {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
+  {role:'user',content:Array.from({length:3},()=>({type:'image_url',image_url:{url:'image'}}))}
+ ]).flat()];
+ assert.equal(creativeCompactionCandidate(messages,{usage:[{prompt_tokens:120000,completion_tokens:30000}],firstLayoutTurn:10,turns:10}),null);
+ const candidate=creativeCompactionCandidate(messages,{usage:[{prompt_tokens:570000,completion_tokens:40000}]});
+ assert.ok(candidate);
+ const retained=modelContext(messages,{compactedUntil:candidate.cutoff});
+ assert.equal(retained.filter(m=>m.role==='assistant').length,2);
+ assert.equal(retained.find(m=>m.role==='assistant').reasoning_content,'x'.repeat(31000));
+ assert.equal(creativeCompactionCandidate(messages,{compactedUntil:candidate.cutoff,usage:[{prompt_tokens:610000}]}),null);
+});
+
+test('full snapshot is refreshed after compaction without accumulating old snapshots',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},
+  {role:'assistant',content:'older'},{role:'user',content:'older decision'},
+  {role:'assistant',content:'recent'},{role:'user',content:'recent decision'}];
+ const state={document,compactedUntil:4},first=modelContext(messages,state);
+ const next=modelContext([...messages,...first.filter(isCreativeSnapshot)],state);
+ assert.equal(next.filter(isCreativeSnapshot).length,1);
+ assert.deepEqual(JSON.parse(next.at(-1).content.slice('当前创作状态（由检查点生成）：'.length)).scene,JSON.parse(first.at(-1).content.slice('当前创作状态（由检查点生成）：'.length)).scene);
+});
+
+test('tray-only changes retain the latest matching page image and remove obsolete workspace snapshots',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const frame=(id,version)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+version},{type:'text',text:'工作空间 '+id+'；画面版本：'+version},{type:'image_url',image_url:{url:version}}]});
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},{role:'assistant',content:'edit'},frame('page','old'),frame('page','current'),frame('tray','tray-new'),{role:'assistant',content:'help'},{role:'tool',tool_call_id:'help',content:'help result'}];
+ const before=JSON.stringify(messages),out=modelContext(messages,{document,visualState:{page:{signature:'current'},tray:{signature:'tray-new'}},preview:{sceneRevision:'current'}});
+ assert.deepEqual(out.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').map(p=>p.image_url.url),['current','tray-new']);
+ assert.equal(JSON.stringify(messages),before);assert.equal(out.at(-3).role,'tool');
+});
+
+
+test('first turn provides cutting and tearing examples without a help round',()=>{
+ const guide=compactInitialToolGuide({source:{materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[],textMode:'rich'}});
+ for(const name of ['material.cut','material.tear']){
+  const command=guide.common.find(item=>item.name===name);
+  assert.ok(command?.example);
+  assert.equal(command.example.op,name);
+  for(const field of command.required)assert.ok(field in command.example,field);
+ }
+ assert.ok(guide.common.some(item=>item.name==='region'));
+});
+
+
+test('failed tool routing and pen style get bounded actionable guidance',()=>{
+ const routed=failureGuidance('creation_apply',{operations:[{op:'creation_paper'}]},{message:'$/operations/0/op unknown'});
+ assert.match(routed.hint,/独立工具/);
+ const ink=failureGuidance('creation_apply',{operations:[{op:'graphic.add'}]},{path:'/operations/0/style/penStyle'});
+ assert.match(ink.hint,/pen、ballpoint、brush、marker/);
+});
+
+test('title group update error returns actual editable children without an extra inspect call',async()=>{
+ const {draft}=await import('../src/domain.js');
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const {applyCreationTransaction,creationSceneRevision}=await import('../src/creation-transaction.js');
+ const {compileTitleOperations}=await import('../creative-agent/runtime/title-tool.mjs');
+ const base=await createCreationDocument({draft:draft(),assets:[]});
+ const operations=compileTitleOperations({titles:[{id:'title',content:'测试',place:{reference:'page',at:[30,30],unit:'mm'},size:{width:60,unit:'mm'},style:{fontSizePt:18,color:'#112233'}}]});
+ const {document}=applyCreationTransaction(base,{protocolVersion:2,transactionId:'title',baseSceneRevision:creationSceneRevision(base),operations},[]);
+ const guidance=failureGuidance('creation_apply',{operations:[{op:'layer.update',target:'title',style:{fontSizePt:20}}]},{message:'operations[0] layer.update: group 不支持 style.fontSizePt'},document);
+ assert.equal(guidance.textChildren.length,1);assert.equal(guidance.textChildren[0].content,'测试');
+ assert.notEqual(guidance.textChildren[0].id,'title');assert.match(guidance.hint,/本批次未执行/);
 });

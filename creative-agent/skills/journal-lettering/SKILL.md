@@ -10,43 +10,46 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 
 ## 先决定文字角色
 
-主标题是第一眼焦点，小标题引导分区，副题和批注回应具体对象；正文保持稳定可读。标题形状、方向与色彩应接住附近素材或纸边。短字可做组合手写字、交错词组或纸片承字；不同长度换版后检查断行、左右对齐和真实字号。中英组合注意中文与英文的视觉宽度、上下位置；必要时压窄英文或拉高中文字组，但不冒充自动改变汉字笔画。
+可以没有全页大标题，由 H2/H3、问题编号或小字群分别引导内容；不能把“没有H1”当成未完成。有大标题时可在上、下、侧边或纸簇之间落点，由整页关系决定，不默认独占顶部。主标题可以成为第一眼焦点，小标题引导分区，副题和批注回应具体对象；正文保持稳定可读。标题形状、方向与色彩应接住附近素材或纸边。短字可做组合手写字、交错词组或纸片承字；不同长度换版后检查断行、左右对齐和真实字号。中英组合注意中文与英文的视觉宽度、上下位置；必要时压窄英文或拉高中文字组，但不冒充自动改变汉字笔画。
 
 标题不一定比人物或照片更抢眼，但要有明确的字形、字后图形或轮廓关系。换字体、放大字号属于基础排字；在此基础上可选描边、字后图形或字形处理来提升表现，但这些技巧不是所有标题的强制要求。先选适合内容的主技巧，再用辅助技巧支撑；不要求每个标题同时堆满所有效果。用户已经认可当前标题时，优先保留它与整页的关系，不为展示更多技巧而重做。技法是选项，是否协调、可读、有主次才是判断依据；简单的字群与底形组合也可以成立。
 
+## 数字也可以成为构图对象
+
+数字、日期或问题序号可以做成醒目的大字群，穿插纸边、连接两段或平衡人物的重量，不只在 heading 下方排一行小号数字。此类拼贴中优先考虑有视觉分量的数字；清楚的大小对比比细小编号更能组织画面。数字可以在标题旁、正文侧或纸簇转折处，允许局部遮住轮廓但保留识别。不要把每个编号都做成大标题，也不为装饰编造用户事实或额外添加无意义数字。用 creation_title 或 text.add 保持可编辑，按字群实际面积安排，而非强制某一字号。
+
 ## 先设计标题，再选工具
 
-- **字形与字群**：短标题可以拆字夹入小字、改变局部竖撇笔画、逐字错落、旋转或弧形排布。`title-composed` 的 `glyph.split` 做上下拆字，`glyph.strokes` 按指定字位与局部 box 遮去原区域再补圆头或三角笔画；它不会自动识别汉字笔画。只有在预览能准确定位笔画时才用 strokes，避免遮掉相邻部件。逐字位置与角度用 `text.lettering`，弧形用 `style.curveHeightMm`；错落排布不等于笔画变形。
-- **字后点缀**：让圆点、方块、短横纹、井字纹或色带从字群后露出，跟随标题宽度、字间空隙和外轮廓。`title-composed.backgrounds` 可组合这些底形；词组各有背景用 `title-phrases` 或 `title-paper-lettering`。只在旁边摆一颗星，不等于字后设计。
-- **描边与字心**：`style.outline` 可直接给文字加轮廓；错位轮廓用 `title-gap-shadow` 的 `offset-outline`。按周围纸色选择深字浅边、浅字深边或空心字，保留字腔；跨越不同底色时检查每一个字。纸张少阴影不妨碍标题使用清楚、克制的轮廓。
+- **字形与字群**：短标题可以拆字夹入小字、改变局部竖撇笔画、逐字错落、旋转或弧形排布。`title-art` 的 composed 变体 的 `glyph.split` 做上下拆字，`glyph.strokes` 按指定字位与局部 box 遮去原区域再补圆头或三角笔画；它不会自动识别汉字笔画。只有在预览能准确定位笔画时才用 strokes，避免遮掉相邻部件。逐字位置与角度用 `text.lettering`，弧形用 `style.curveHeightMm`；错落排布不等于笔画变形。
+- **字后点缀**：让圆点、方块、短横纹、井字纹或色带从字群后露出，跟随标题宽度、字间空隙和外轮廓。`backgrounds` 可组合这些底形；词组各有背景用 title-art 的 phrases 或 paper-lettering 变体。只在旁边摆一颗星，不等于字后设计。
+- **描边与字心**：`style.outline` 可直接给文字加轮廓；错位轮廓用 `creation_title.effect=offset-outline`。按周围纸色选择深字浅边、浅字深边或空心字，保留字腔；跨越不同底色时检查每一个字。纸张少阴影不妨碍标题使用清楚、克制的轮廓。
 
-需要组合时先读 `read_skill({name:"journal-lettering",level:"detail",methodId:"title-composed"})`，明确选择 `glyph`、`style`、`backgrounds` 中适用的层，再调用配方；不要只改示例的字体与文字。已有合适标题应保留，改善主标题不意味着给所有副题套同样字效。
+需要组合时先读 `read_skill({name:"journal-lettering",level:"detail",methodId:"title-art",variant:"composed"})`，明确选择 `glyph`、`style`、`backgrounds` 中适用的层，再调用配方；不要只改示例的字体与文字。已有合适标题应保留，改善主标题不意味着给所有副题套同样字效。
 
 ## 常驻标题工具
 
-新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve；`runs` 明确词组主次、旋转和偏移；`effect` 直接选 outline / hollow / offset-outline / gradient-outline / shadow / none，`accentColor` 选择效果配色，`style` 可进一步微调；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `place`、`order`、`widthMm` 和字号。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
+新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve，省略为 plain；`runs` 明确词组主次、旋转和偏移；`effect` 直接选 outline / hollow / offset-outline / gradient-outline / shadow / none，省略为 none，`accentColor` 选择效果配色，`style` 保留常用字体、字号、字色、字距、行距和描边设置；runs.style 仅覆盖字体、字号、字色、粗体或斜体，其余效果继承整体。渐变、阴影的细调在创建后通过 layer.update 完成；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `content`、`place`、`order`、`size:{width,unit:"mm"}` 与 `style:{fontFamily,fontSizePt,color}`；runs 也用 content/style。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
 
-## 基础操作与组合技巧
+## 基础操作与高级组合
 
-普通阴影、描边、空心、渐变、高亮直接用 `text.add` / `layer.update` 的 style；单个圈、方块或短线用 `graphic.add`。不为这类单步操作加载方法详情。若需要间隔阴影、错位描边、三层字群、纸片承字、字后圈方、跨字横带或数字半圆影，若尚未确定方法，读 `methods` 比较少量候选；已经选中方法可直接读 `detail`，按返回的准确参数调用 `creation_recipe`。方法是可编辑字与图形组，不是平面贴图。
+常用字群、描边、空心、渐变、错位轮廓和字后底形直接用 `creation_title`；已有文字改用 `layer.update`，单个圈、方块或短线用 `graphic.add`。不必为单步操作查询高级配方。
 
-方法 ID 表示一类组合技巧，变化形式写在 `parameters.variant`，不要把变体名当 `methodId`。省略 `variant` 使用默认效果。根据当前画面直接选：
+高级组合统一使用 `creation_recipe` 的 `methodId:"title-art"`，具体写法通过 `parameters.variant` 选择。先读 `read_skill({name:"journal-lettering",level:"detail",methodId:"title-art",variant:"composed"})` 获取所选变体的准确参数及完整示例；可以与同轮其他编辑和 Skill 读取一起进行。省略变体为 composed。
 
-| 方法 | `variant` | 使用时机 |
-| --- | --- | --- |
-| `title-stack` | `vertical` / `stagger` / `curve` / `headline` | 侧边竖轴 / 少量关键词错落 / 呼应圆弧主体 / 窄栏大题成为构图块 |
-| `title-gap-shadow` | `offset-outline` / `gradient-outline` | 线性错位轮廓 / 彩色字在邻近底色上需要清楚分离 |
-| `title-scattered-round` | `triangle` | 字群需要锐角节奏，替换默认圆点 |
-| `title-label` | `blocks` | 短标题的字下分散方块，不做整条底卡 |
-| `title-phrases` | `outline-ring` / `circle` | 两段词分别用空心框和圈线承托 / 只圈一句话中的关键词 |
+| variant | 用途 |
+| --- | --- |
+| composed | 拆字、替换局部笔画、组合多层字后背景 |
+| cross-shadow | 大字中穿过小字，保留统一阴影 |
+| scattered-round / scattered-round-triangle | 词组错落与圆形或三角底形 |
+| number-route | 数字成为焦点，结合外围线条 |
+| paper-lettering | 承字底形跟随不同长度的字行 |
+| phrases / phrases-outline-ring / phrases-circle | 主次词组及分别承托的圈框 |
 
-例如需要错落标题时读取 `read_skill({name:"journal-lettering",level:"detail",methodId:"title-stack",variant:"stagger"})`，再修改返回的完整调用示例；示例包含本次事务编号与 Scene 版本，后续编辑后需使用最新版本。纸片承字、横带穿字、数字外围线和多层字形背景分别用 `title-paper-lettering`、`title-cross-shadow`、`title-number-route`、`title-composed`。`read_skill level=detail` 给出该方法的完整参数；需要某变体的准备步骤或完整调用示例时可同时传入 `variant`。
-
-字后背景须与字群建立比例：圈和方块彼此分离、尺寸与位置有变化，线条和井字可作为整组的底纹。字旁点缀是另一层关系，位置可落在词组边缘和素材接缝；不要只在页面四角撒小点。组合后看实际预览，确认字心、背景、间隔阴影和纸色有对比，正文没有被效果压住。
+其他预设同属 title-art 的变体，在方法详情中查询，不必记住所有名称。普通效果优先常驻标题工具。字后背景须与字群建立比例：圈方彼此分离，尺寸与位置有变化，线条和井字可形成底纹；字旁点缀则联系纸边和素材接缝。比较实际预览，不能把调用过配方当作标题已完成。
 
 ## 字体
 
-使用任务中实际列出的已安装字体。BaiLuBangBang、HongLeiZhuoShu、Otsutome 适合短标题；WoAiWanWeiWei、FontQu Smile 可作轻快副题；Xiaolai、Sophora 适合可读正文。`text.add.style.fontFamily` 或配方 `parameters.fontFamily` 指定字体；缺字、字重和基线须看渲染图。可先用一种标题笔触与一种正文笔触试排，再按内容角色组合；字体数量不是合格线。
+使用任务中实际列出的已安装字体。BaiLuBangBang、HongLeiZhuoShu、Otsutome 适合短标题；WoAiWanWeiWei、FontQu Smile 可作轻快副题；Xiaolai、Sophora 适合可读正文。`text.add.style.fontFamily` 或配方 `parameters.style.fontFamily` 指定字体；缺字、字重和基线须看渲染图。可先用一种标题笔触与一种正文笔触试排，再按内容角色组合；字体数量不是合格线。
 
 研究来源、六种写法与 2.0 视频的逐项映射、工具限制保留在 `creative-agent/research/journal-lettering-full.md`。方法的实际参数以 `read_skill level=detail` 返回值为准。
 

@@ -7,13 +7,13 @@ import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 import {inspectCreationDocument} from '../src/creation-inspection.js';
-const paper={id:'paper1',color:'#F1E5C9',texture:'rough',edge:'torn',pattern:'ruled',translucency:.3,place:{reference:'page',at:[50,50],unit:'mm'},size:{width:60,height:70,unit:'mm'},order:{edge:'back'}};
-test('paper is initially available, requires explicit layering and rejects unknown texture',()=>{
+const paper={id:'paper1',style:{fill:'#F1E5C9'},texture:'rough',edge:'torn',pattern:'ruled',translucency:.3,place:{reference:'page',at:[50,50],unit:'mm'},size:{width:60,height:70,unit:'mm'},order:{edge:'back'}};
+test('paper is initially available, defaults layering and rejects unknown texture',()=>{
  assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_paper'));
  const args={transactionId:'paper',baseSceneRevision:'sha256:'+'a'.repeat(64),papers:[paper]};
  validateValue(args,paperTool.function.parameters);
  assert.throws(()=>validateValue({...args,papers:[{...paper,texture:'glossy'}]},paperTool.function.parameters));
- const {order,...missing}=paper;assert.throws(()=>validateValue({...args,papers:[missing]},paperTool.function.parameters));
+ const {order,...missing}=paper;assert.doesNotThrow(()=>validateValue({...args,papers:[missing]},paperTool.function.parameters));
 });
 test('paper uses editable graphics, preserves source and honors atomic retry/rollback',async()=>{
  const base=await createCreationDocument({draft:draft(),assets:[]});

@@ -29,16 +29,16 @@ const text=(id,content,at)=>({op:'text.add',id,content,size:{width:55,unit:'mm'}
 const previewOf=messages=>{
   const entry=messages.findLast(message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：'));
   if(entry)return JSON.parse(entry.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
-  const summary=messages.find(message=>message.role==='user'&&typeof message.content==='string'&&message.content.startsWith('当前创作状态'));
+  const summary=messages.findLast(message=>message.role==='user'&&typeof message.content==='string'&&message.content.startsWith('当前创作状态'));
   return summary&&JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
 };
-async function fixture(t,model,{clock,afterRender}={}){
+async function fixture(t,model,{clock,afterRender,reasoningPolicy}={}){
   const dir=await mkdtemp(join(tmpdir(),'shiye-new-harness-'));t.after(()=>rm(dir,{recursive:true,force:true}));
   const document=await createCreationDocument({draft:draft(),assets:[]}),skills=await loadCreationSkills();
   const state=initialHarnessState({document,skills,brief:{style:'丰富层叠',intent:'写一页周末记录'}});
   const checkpointer=await new JournalCheckpointSaver(fileCheckpointJournal(join(dir,'checkpoint.jsonl'))).restore();
   let renders=0;
-  const harness=createCreativeHarness({skills,checkpointer,clock,render:async doc=>{const result={pngHash:'sha256:'+String(++renders).padStart(64,'a'),sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='};afterRender?.(renders);return result;},model});
+  const harness=createCreativeHarness({skills,checkpointer,clock,reasoningPolicy,render:async doc=>{const result={pngHash:'sha256:'+String(++renders).padStart(64,'a'),sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='};afterRender?.(renders);return result;},model});
   return {harness,state,document,renders:()=>renders};
 }
 
@@ -59,7 +59,7 @@ test('a concise direction plan accepts an exploratory skill name without extra r
   });
   await assert.rejects(f.harness.run({id:'concise-plan',state:f.state}),/stop after direction/);
   const saved=await f.harness.state('concise-plan');
-  assert.equal(saved.phase,'layout');
+  assert.equal(saved.phase,'direction');
   assert.equal(saved.plan.intent,'用蓝灰纸承托两件素材，留出短文区域');
   assert.equal(saved.plan.methods[0].id,'paper-layering');
   assert.equal(saved.plan.writingZones[0].surface,'跨原页与纹样纸的空边');
@@ -69,8 +69,9 @@ test('LangGraph asks for a shorter corrected call after malformed model JSON',as
   let turn=0;const f=await fixture(t,async({messages})=>{
     if(++turn===1)return answer({id:'broken',type:'function',function:{name:'creation_plan',arguments:'{"intent":"unfinished" trailing'}});
     if(turn===2){
-      assert.ok(messages.some(message=>message.role==='user'&&String(message.content).includes('工具参数不是完整的 JSON')));
-      assert.ok(!messages.some(message=>message.role==='assistant'&&message.tool_calls?.some(call=>call.id==='broken')));
+      assert.ok(messages.some(message=>message.role==='tool'&&String(message.content).includes('工具参数不是完整的 JSON')));
+      assert.ok(messages.some(message=>message.role==='tool'&&String(message.content).includes('数组用 ]、对象用 }')));
+      assert.ok(messages.some(message=>message.role==='assistant'&&message.tool_calls?.some(call=>call.id==='broken')));
       return answer(call('creation_plan',{intent:'在浅色纸面写一页短文'}));
     }
     throw Error('stop after corrected call');
@@ -78,13 +79,13 @@ test('LangGraph asks for a shorter corrected call after malformed model JSON',as
   await assert.rejects(f.harness.run({id:'malformed-call',state:f.state}),/stop after corrected call/);
   const saved=await f.harness.state('malformed-call');
   assert.equal(saved.plan.intent,'在浅色纸面写一页短文');
-  assert.ok(saved.trace.some(event=>event.kind==='malformed_tool_calls'&&event.calls[0].name==='creation_plan'));
+  assert.ok(saved.trace.some(event=>event.kind==='tool'&&event.name==='creation_plan'&&!event.ok));
 });
 
 test('methods learned from Skills execute together with the same methodId field',async t=>{
   let turn=0;const f=await fixture(t,async()=>{
     if(++turn===1)return answer(call('creation_plan',{intent:'用一枚星芒连接标题和正文'}));
-    if(turn===2)return answer(call('creation_recipe',{methodId:'graphic-loop',transactionId:'method-id-star',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'star',at:[72,88],widthMm:12,heightMm:12,colors:['#D5A45B']},with:[{methodId:'graphic-loop',parameters:{id:'star-small',at:[94,102],widthMm:7,heightMm:7,colors:['#8AACC3']}}]}));
+    if(turn===2)return answer(call('creation_recipe',{methodId:'graphic-loop',transactionId:'method-id-star',baseSceneRevision:creationSceneRevision(f.document),parameters:{id:'star',place:{at:[72,88],unit:'mm',reference:'page'},size:{width:12,height:12,unit:'mm'},colors:['#D5A45B']},with:[{methodId:'graphic-loop',parameters:{id:'star-small',place:{at:[94,102],unit:'mm',reference:'page'},size:{width:7,height:7,unit:'mm'},colors:['#8AACC3']}}]}));
     throw Error('stop after recipe');
   });
   await assert.rejects(f.harness.run({id:'method-id-recipe',state:f.state}),/stop after recipe/);
@@ -183,7 +184,7 @@ test('a complete page can finish without mandatory phase transitions',async t=>{
   });
   const result=await f.harness.run({id:'no-required-phases',state:f.state});
   assert.equal(result.status,'completed');
-  assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout']);
+  assert.deepEqual(result.phaseReviews.map(item=>item.to),[]);
 });
 
 test('an off-page text placement is translated before its transaction receipt is returned',async t=>{
@@ -222,7 +223,7 @@ test('wrong source labels do not change the creative case and template shortlist
   assert.deepEqual(templates(original),templates(misleading));
 });
 
-test('stage transition rejects skipping, unresolved issues and empty plans',async t=>{
+test('model stage declarations do not require previous stages to pass',async t=>{
   let turn=0;const f=await fixture(t,async()=>{
     turn++;
     if(turn===1)return answer(phase('layout','没有实际计划也想进入布局'));
@@ -232,14 +233,15 @@ test('stage transition rejects skipping, unresolved issues and empty plans',asyn
   });
   await assert.rejects(f.harness.run({id:'invalid-stage',state:f.state}),/intentional stop/);
   const saved=await f.harness.state('invalid-stage');
-  assert.equal(saved.phase,'layout');
-  assert.deepEqual(saved.results.map(item=>item.ok),[false]);
+  assert.equal(saved.phase,'craft');
+  assert.deepEqual(saved.results.map(item=>item.ok),[true]);
   assert.equal(saved.plan.intent,'记录具体日常');
 });
 
 test('stage-specific guidance arrives when needed and repeated edits need no separate review',async t=>{
   let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools,reasoningEffort})=>{
-    turn++;instructions.push(messages[1].content);
+    turn++;instructions.push(messages.filter(m=>m.role==='user'&&typeof m.content==='string'&&!m.content.startsWith('当前创作状态')).map(m=>m.content).join('\n'));
+    assert.equal(messages.filter(m=>m.role==='system').length,1,'only the fixed system prompt precedes history');
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
@@ -259,11 +261,12 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   });
   const result=await f.harness.run({id:'stage-guidance',state:f.state});
   assert.equal(result.status,'completed');
-  assert.deepEqual(result.phaseReviews.map(item=>item.to),['layout','craft','review']);
+  assert.ok(result.trace.some(item=>item.kind==='model'&&item.phase==='craft'));
+  assert.ok(result.trace.some(item=>item.kind==='model'&&item.phase==='review'));
   assert.ok(!instructions[0].includes('表达方法卡'));
   assert.ok(instructions[1].includes('表达方法卡候选'));
   assert.ok(instructions[1].includes('表达方法卡'));
-  assert.ok(instructions[4].includes('可交错进行'));
+  assert.ok(instructions.every(text=>!text.includes('当前关注：')),'stage cues belong only to the replaceable snapshot tail');
   assert.equal(f.renders(),3);
 });
 
@@ -296,12 +299,14 @@ test('layout remains editable after four previews and common ordering aliases wo
   });
   const result=await f.harness.run({id:'layout-handoff',state:f.state});
   assert.equal(result.status,'completed');
-  assert.equal(result.qualityFrames.filter(frame=>frame.phase==='layout').length,4);
-  assert.equal(result.qualityFrames.filter(frame=>frame.phase==='craft').length,1);
+  assert.equal(result.qualityFrames.length,5);
+  assert.ok(result.qualityFrames.some(frame=>frame.phase==='craft'));
+  assert.ok(!result.qualityFrames.some(frame=>frame.phase==='accents'));
+  assert.equal(result.phase,'review');
   assert.ok(result.trace.some(item=>item.name==='creation_apply'&&item.turn===7&&item.ok));
 });
 
-test('a timed-out DeepSeek call retries at low effort without shrinking the thinking token allowance',async()=>{
+test('a timed-out DeepSeek call retries without repeating long reasoning after a timeout',async()=>{
   const bodies=[];
   const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
     bodies.push(JSON.parse(options.body));
@@ -311,11 +316,11 @@ test('a timed-out DeepSeek call retries at low effort without shrinking the thin
   const result=await model({messages:[{role:'user',content:'测试'}],tools:[],remainingMs:60000});
   assert.equal(result.message.content,'继续创作');
   assert.equal(bodies.length,2);
-  assert.equal(bodies[1].reasoning_effort,'low');
-  assert.equal(Object.hasOwn(bodies[1],'max_tokens'),false);
+  assert.equal(bodies[1].thinking.type,'disabled');
+  assert.equal(bodies[1].max_tokens,16000);
 });
 
-test('a timeout while reading a DeepSeek response body retries at low effort',async()=>{
+test('a timeout while reading a DeepSeek response body retries without reasoning',async()=>{
   const bodies=[];
   const model=createDeepSeekCreativeModel({key:'test-only',fetcher:async(_url,options)=>{
     bodies.push(JSON.parse(options.body));
@@ -325,7 +330,7 @@ test('a timeout while reading a DeepSeek response body retries at low effort',as
   const result=await model({messages:[{role:'user',content:'测试'}],tools:[],remainingMs:60000});
   assert.equal(result.message.content,'继续创作');
   assert.equal(bodies.length,2);
-  assert.equal(bodies[1].reasoning_effort,'low');
+  assert.equal(bodies[1].thinking.type,'disabled');
 });
 
 test('malformed model response JSON retries instead of ending the creative job',async()=>{
@@ -349,7 +354,7 @@ test('an explicit non-thinking request remains available for auxiliary calls',as
  await model({messages:[{role:'user',content:'调整刚才画面'}],tools:[],reasoningEffort:'none',remainingMs:60000});
  assert.equal(request.thinking.type,'disabled');
  assert.equal(request.reasoning_effort,undefined);
- assert.equal(request.max_tokens,5000);
+ assert.equal(request.max_tokens,16000);
 });
 
 test('a truncated creative answer retains requested thinking and the provider output allowance',async()=>{
@@ -419,12 +424,12 @@ test('DeepSeek gives deep reasoning more time while respecting the remaining tas
  await model({messages:[],tools:[],remainingMs:300000,reasoningEffort:'high'});
  await model({messages:[],tools:[],remainingMs:300000,reasoningEffort:'low'});
  await model({messages:[],tools:[],remainingMs:20000,reasoningEffort:'high'});
- assert.ok(timeouts[0]<=300000&&timeouts[0]>299000);assert.equal(timeouts[1],150000);assert.ok(timeouts[2]<=20000&&timeouts[2]>19000);
+ assert.ok(timeouts[0]<=300000&&timeouts[0]>299000);assert.equal(timeouts[1],90000);assert.ok(timeouts[2]<=20000&&timeouts[2]>19000);
 });
 
 
 test('dedicated paper tool requires a plan, commits editable papers and undoes the batch',async t=>{
- let turn=0;const args=()=>({transactionId:'paper-tool',baseSceneRevision:creationSceneRevision(f.document),papers:[{id:'fibrous',color:'#E8DFC2',texture:'medium',edge:'torn',place:{reference:'page',at:[50,60],unit:'mm'},size:{width:55,height:65,unit:'mm'},order:{edge:'back'}}]});
+ let turn=0;const args=()=>({transactionId:'paper-tool',baseSceneRevision:creationSceneRevision(f.document),papers:[{id:'fibrous',style:{fill:'#E8DFC2'},texture:'medium',edge:'torn',place:{reference:'page',at:[50,60],unit:'mm'},size:{width:55,height:65,unit:'mm'},order:{edge:'back'}}]});
  const f=await fixture(t,async()=>{
   if(++turn===1)return answer(call('creation_paper',args()));
   if(turn===2)return answer(plan(),call('creation_paper',args()));
@@ -439,7 +444,7 @@ test('dedicated paper tool requires a plan, commits editable papers and undoes t
 });
 
 test('dedicated title tool requires a plan, commits editable title groups and undoes the batch',async t=>{
- let turn=0;const args=()=>({transactionId:'title-tool',baseSceneRevision:creationSceneRevision(f.document),titles:[{id:'heading',text:'慢慢生活',layout:'plain',effect:'outline',fontSizePt:20,color:'#354A55',widthMm:70,style:{outline:{color:'#FFFFFF',widthMm:.3}},backdrop:{kind:'dots'},place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'}}]});
+ let turn=0;const args=()=>({transactionId:'title-tool',baseSceneRevision:creationSceneRevision(f.document),titles:[{id:'heading',content:'慢慢生活',layout:'plain',effect:'outline',size:{width:70,unit:'mm'},style:{fontSizePt:20,color:'#354A55',outline:{color:'#FFFFFF',widthMm:.3}},backdrop:{kind:'dots'},place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'}}]});
  const f=await fixture(t,async()=>{
   if(++turn===1)return answer(call('creation_title',args()));
   if(turn===2)return answer(plan(),call('creation_title',args()));
@@ -451,4 +456,67 @@ test('dedicated title tool requires a plan, commits editable title groups and un
  assert.equal(saved.document.page.layers.length,0);
  const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_title');
  assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
+});
+
+
+for(const shortVersion of [false,true])test(`mixed tool batches isolate failures and preserve layering (${shortVersion?'current':'hash'})`,async t=>{
+ let turn=0;const f=await fixture(t,async()=>{
+  if(++turn===1)return answer(plan());
+  if(turn===2){const revision=shortVersion?'current':creationSceneRevision(f.document);return answer(
+   {id:'malformed',type:'function',function:{name:'creation_apply',arguments:'{broken'}},
+   call('read_skill',{name:'paper-layering',level:'overview'}),
+   call('creation_apply',{transactionId:'body-first',baseSceneRevision:revision,operations:[text('body','今天在窗边读完了一本书，记下午后的光。',[50,65])]}),
+   edit(revision,'bad-atomic',[text('rolled-back','不应留下',[40,40]),{op:'layer.delete',target:'missing'}]),
+   call('read_skill',{name:'journal-accents',level:'overview'}),
+   call('creation_paper',{transactionId:'backing-later',baseSceneRevision:revision,papers:[{id:'backing',place:{reference:'page',at:[50,65],unit:'mm'},size:{width:65,height:45,unit:'mm'},order:{before:'body'},style:{fill:'#E8DFC2'},texture:'subtle',edge:'torn'}]}),
+   edit('sha256:'+'0'.repeat(64),'stale-rejected',[text('stale','过期',[40,40])])
+  );}
+  throw Error('stop mixed');
+ });
+ // Use an actually stale revision for the final call, while all other valid
+ // edits intentionally share the scene revision observed at the turn start.
+ const runModel=f.harness;
+ await assert.rejects(runModel.run({id:'mixed-batch',state:f.state}),/stop mixed/);
+ const saved=await f.harness.state('mixed-batch');
+ assert.ok(saved.loadedSkills.some(x=>x.name==='paper-layering'));
+ assert.ok(saved.loadedSkills.some(x=>x.name==='journal-accents'));
+ const layers=saved.document.page.layers;
+ assert.ok(layers.some(x=>x.id==='body'));
+ assert.ok(layers.some(x=>x.id==='backing'));
+ assert.ok(!layers.some(x=>x.id==='rolled-back'));
+ assert.ok(layers.find(x=>x.id==='backing').zIndex<layers.find(x=>x.id==='body').zIndex);
+ assert.ok(!layers.some(x=>x.id==='stale'));
+ assert.equal(saved.results.filter(x=>!x.ok).length,3);
+ assert.equal(f.renders(),1);
+});
+
+
+test('review request timeout does not pretend the whole creative task is near its deadline',async()=>{
+ let sent;
+ const model=createDeepSeekCreativeModel({key:'test-key',fetcher:async(url,options)=>{
+  sent=JSON.parse(options.body);return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({blockingIssues:[],notes:[]})}}]}),{status:200});
+ }});
+ await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',remainingMs:25000,taskRemainingMs:240000});
+ assert.doesNotMatch(sent.messages[0].content,/交付时间将至/);
+ assert.match(sent.messages[0].content,/局部衬底/);
+ await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',remainingMs:25000,taskRemainingMs:45000});
+ assert.match(sent.messages[0].content,/交付时间将至/);
+});
+
+
+test('ordinary requests preserve stable history and refresh only the snapshot tail',async t=>{
+ let turn=0,prior;const f=await fixture(t,async({messages,reasoningEffort})=>{
+  const snapshot=m=>m.role==='user'&&(typeof m.content==='string'?m.content.startsWith('当前创作状态'):Array.isArray(m.content)&&m.content.some(p=>p.text?.includes('当前真实画面：')));
+  if(prior)assert.deepEqual(messages.slice(0,prior.length),prior,'all history before the old snapshot must remain unchanged');
+  const tail=messages.findIndex(snapshot);prior=structuredClone(tail<0?messages:messages.slice(0,tail));turn++;
+  if(turn>1){const current=messages.findLast(m=>typeof m.content==='string'&&m.content.startsWith('当前创作状态'));assert.ok(JSON.parse(current.content.slice(current.content.indexOf('：')+1)).scene.layers);}
+  assert.equal(messages.filter(m=>typeof m.content==='string'&&m.content.startsWith('当前创作状态')).length,turn===1?0:1);
+  if(turn<=2)assert.equal(reasoningEffort,'low');else assert.equal(reasoningEffort,'low');
+  if(turn===1)return answer(plan());
+  if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout-prefix',[text('title','周末',[40,40]),text('body','午后的小雨落在窗沿，我把散开的纸片重新收好。',[45,85])]));
+  if(turn===3)return answer(call('creation_help',{topics:['layer.update']}));
+  return answer(call('creation_finish',{review:{observations:'文字完整可读，已检查画面',issues:[],pngHash:previewOf(messages).pngHash,sceneRevision:previewOf(messages).sceneRevision}}));
+ });
+ const result=await f.harness.run({id:'prefix-persistence',state:f.state});
+ assert.equal(result.status,'completed');assert.equal(result.firstLayoutTurn,2);
 });

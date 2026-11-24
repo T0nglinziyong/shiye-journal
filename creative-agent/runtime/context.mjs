@@ -1,3 +1,4 @@
+import {creativePhaseLabels} from './phases.mjs';
 import {creationHelp,inspectCreationDocument} from '../../src/creation-inspection.js';
 import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
@@ -25,15 +26,15 @@ export function shortlistCreationMethods(document,brief={}){
   const materialCount=document.source.materials.length;
   const text=style+' '+String(brief.intent||'');
   if(!materialCount){
-    const ids=document.source.textMode==='none'?['graphic-loop','graphic-route']:/丰富|层叠|拼贴/.test(text)?['title-stack','title-phrases','title-paper-lettering','graphic-route']:
-      ['title-phrases','title-tape','title-paper-lettering','graphic-loop'];
+    const ids=document.source.textMode==='none'?['graphic-loop','graphic-route']:/丰富|层叠|拼贴/.test(text)?['title-art','graphic-route']:
+      ['title-art','graphic-loop'];
     const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
-    return ids.map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
+    return [...new Set(ids)].map(id=>methods.get(id)).filter(Boolean).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
   }
-  const ids=/丰富|层叠|拼贴/.test(text)?['paper-peek','accent-materials','graphic-route','accent-spark','title-tape']:
-    /极简|留白|清新|淡雅/.test(text)?['paper-peek','graphic-loop','title-phrases','title-tape']:
+  const ids=/丰富|层叠|拼贴/.test(text)?['paper-peek','accent-materials','graphic-route','accent-spark','title-art']:
+    /极简|留白|清新|淡雅/.test(text)?['paper-peek','graphic-loop','title-art']:
     /杂志|照片|旅行/.test(text)?['photo-film','paper-peek','graphic-route']:
-    ['paper-peek','accent-materials','title-label'];
+    ['paper-peek','accent-materials','title-art'];
   const methods=new Map(techniqueCatalog.methods.map(method=>[method.id,method]));
   const candidates=[...ids];
   if(document.source.textMode!=='none')candidates.splice(Math.min(2,candidates.length),0,'record-on-material');
@@ -41,12 +42,12 @@ export function shortlistCreationMethods(document,brief={}){
 }
 
 export function initialToolGuide(document){
-  const topics=[...(document.source.materials.length?['material.add']:[]),'layer.update','graphic.add','place','size','order'];
+  const topics=[...(document.source.materials.length?['material.add','material.cut','material.tear','region']:[]),'layer.update','graphic.add','place','size','order'];
   if(document.source.textMode!=='none')topics.push('text.add');
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   const commandIndex=creationHelp();
   return {topics:commandIndex.topics,conventions:commandIndex.conventions,families:commandIndex.families,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组调前后用 layer.stack；组合用 group.create、layer.reparent、group.ungroup。','几何调整统一用 layout：nudge 按毫米/角度增量微调，matchRotation 跟另一素材对齐角度，alignEdge 贴齐指定可见边，align 按边界对齐或分布；这几项都保留实体尺寸。matchRotation、alignEdge 的相对角度都叫 offsetDeg；nudge.rotationDeg 是当前角度的增量。批量操作用 targets，单对象操作用 target。','数字纸用 creation_paper 批量创建，直接选 color、texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条才用 kind:"stroke" 与 geometry.points=[{x,y,pressure}]，它不支持 strokeDash；点线或虚线用 path/基础图形。','标题用 creation_title：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。普通 text.add 文字改内容、位置、尺寸、样式都用 layer.update；text.reflow 只给 text.lettering 的逐字标题组重排。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
+    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组调前后用 layer.stack；组合用 group.create、layer.reparent、group.ungroup。','几何调整统一用 layout：nudge 按毫米/角度增量微调，matchRotation 跟另一素材对齐角度，alignEdge 贴齐指定可见边，align 按边界对齐或分布；这几项都保留实体尺寸。matchRotation、alignEdge 的相对角度都叫 offsetDeg；nudge.rotationDeg 是当前角度的增量。批量操作用 targets，单对象操作用 target。','数字纸用 creation_paper 批量创建，统一用 style.fill 选纸色、style.stroke 选印纹色，再选 texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条用 geometry:{kind:"stroke",unit:"mm",points:[{x,y,pressure}]}，geometry.unit 必填；笔迹样式用 stroke/strokeWidthMm，不传 fill 或 strokeDash；点线或虚线用 path/基础图形。','标题与正文统一用 content，尺寸用 size.width/unit，字体字号字色用 style.fontFamily/fontSizePt/color，runs 也用 content/style。标题用 creation_title：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。layer.update 只传变化字段，其他值保留：place:{rotationDeg:5} 只改角度，size:{width:40} 只改图形宽度，style:{outline:{widthMm:.6}} 只改已有描边粗细；无需复用开关。对象按字段合并，数组整体替换，允许 null 的效果用 null 清除。普通 text.add 文字改内容、位置、尺寸、样式都用 layer.update；标题是组合，整组只移动/旋转，改字号或宽度须使用 Scene 中的子文字 id；text.reflow 只给 text.lettering 的逐字标题组重排。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
 }
 
 export function compactInitialToolGuide(document){
@@ -125,100 +126,87 @@ export function paperFoundationStatus(document,inspection=inspectCreationDocumen
     return connected?[]:[pageName(index)];
   }):[];
   return {required:true,missingPages:found.flatMap((value,index)=>value?[]:[pageName(index)]),unconnectedPages,flatBoards,
-    hint:'承托层可以是已有的纹样纸、可写卡、纸片或数字纸形；先试摆真实素材，只有缺少合适写面或色彩关系时再加数字纸。'};
+    hint:'承托层可以是已有的纹样纸、可写卡、纸片或数字纸形；先试摆真实素材与背景上的字群，再为图文共同承托、配色和露边增加数字纸；纸不必写字，文字不必另垫纸。'};
+}
+
+// Automatic snapshots are ephemeral request tails. The checkpoint retains
+// their original images for audit/review, but model history keeps decisions,
+// reasoning and tool receipts rather than obsolete copies of the workspace.
+export function isCreativeSnapshot(message){
+  if(message.role!=='user')return false;
+  if(typeof message.content==='string')return /^(当前创作状态|压缩后的完整图层基线)/.test(message.content);
+  return Array.isArray(message.content)&&message.content.some(p=>p.type==='text'&&p.text?.includes('当前真实画面：'));
 }
 
 export function modelContext(messages,state={}){
-  // The stage prompt is inserted into the outgoing request. Never let that
-  // insertion mutate the checkpoint's source messages.
   if(messages.length<=2)return [...messages];
-  const first=messages[1],parts=Array.isArray(first?.content)?first.content:null;
-  const afterFirstPreview=Boolean(state.qualityFrames?.length);
-  const index=parts?{...first,content:parts.filter((part,i)=>part.type!=='image_url'||(!afterFirstPreview&&i===parts.findIndex(p=>p.type==='image_url'))).map(part=>
-    afterFirstPreview&&part.type==='text'&&part.text?.startsWith('全局素材编号图')?{...part,text:'全局素材编号与尺寸仍在任务清单；需要重看原始总图时调用 workspace_view({id:"source"})。'}:part)}:first;
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  // Opening user constraints (including study scope and preloaded skills)
-  // remain authoritative after the first tool call, not expendable history.
-  const opening=messages.slice(2,turns[0]??messages.length).filter(m=>m.role==='user'&&typeof m.content==='string');
-  // Keep a substantial recent span verbatim. The separate Scene checkpoint
-  // carries exact geometry; this tail carries the author's still-live intent.
-  let start=Math.max(Number.isInteger(state.compactedUntil)?state.compactedUntil:2,turns.at(-8)??turns.at(0)??2);
+  let start=Math.max(2,Number.isInteger(state.compactedUntil)?state.compactedUntil:2);
   while(start>2&&messages[start]?.role==='tool')start--;
-  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='text'&&part.text?.includes('当前真实画面：'));
-  const tail=messages.slice(start),latestObservation=messages.slice(2).findLast(isPreview);
-  if(latestObservation&&!tail.includes(latestObservation))tail.unshift(latestObservation);
-  const lastPreview=tail.findLastIndex(isPreview),lastAssistant=tail.findLastIndex(message=>message.role==='assistant');
-  const recent=tail.filter((message,i)=>{
-    if(isPreview(message))return i===lastPreview;
-    if(message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))return i>lastAssistant;
-    return true;
-  });
-  const recentToolNames=new Map(recent.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const recentAssistants=recent.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  const compactedRecent=recent.map((message,i)=>{
-    if(message.role==='tool'&&recentToolNames.get(message.tool_call_id)==='creation_help'&&i<(recentAssistants.at(-2)??-1))return {...message,content:'{"ok":true,"detail":"参数已读取；需要再次查看时调用 creation_help。"}'};
-    if(message.role==='tool'&&['creation_apply','creation_recipe','creation_paper','creation_title'].includes(recentToolNames.get(message.tool_call_id))&&i<(recentAssistants.at(-2)??-1)){
-      try{const receipt=JSON.parse(message.content);if(receipt.ok)return {...message,content:'{"ok":true,"detail":"较早的编辑已生效；对象和最新版本见当前 Scene。"}'};}catch{/* Keep the original response. */}
-    }
-    return message;
-  });
-  // A tray-only render may carry no page image. Keep exactly the page image
-  // matching the current visual signature, even after several read-only turns.
-  const signature=state.visualState?.page?.signature;
-  const pageParts=message=>{
-    if(!signature||!Array.isArray(message.content))return null;
-    const i=message.content.findIndex(part=>part.type==='text'&&part.text?.startsWith('工作空间 page；')&&part.text.includes('画面版本：'+signature));
-    return i>=0&&message.content[i+1]?.type==='image_url'?message.content.slice(i,i+2):null;
-  };
-  if(signature&&!compactedRecent.some(pageParts)){
-    const prior=messages.findLast(message=>pageParts(message));
-    if(prior)compactedRecent.push({role:'user',content:pageParts(prior)});
-  }
-  // A tutorial is a comparison reference, not a one-turn material inspection.
-  // Keep one most recently studied example beside the current artwork, even
-  // when its read_skill call has left the rolling history window.
-  let tutorialParts;
-  for(const message of messages){
+  const latestPreview=messages.findLast(m=>Array.isArray(m.content)&&isCreativeSnapshot(m));
+  const workspaceParts=new Map();
+  for(const message of messages.slice(2)){
     if(message.role!=='user'||!Array.isArray(message.content))continue;
     for(let i=0;i<message.content.length-1;i++){
-      const part=message.content[i];
-      if(part.type==='text'&&part.text?.startsWith('教程示意（')&&message.content[i+1].type==='image_url')tutorialParts=message.content.slice(i,i+2);
+      const p=message.content[i],id=p.type==='text'&&/^工作空间 ([^；]+)；/.exec(p.text||'')?.[1];
+      if(!id||id==='source'||message.content[i+1]?.type!=='image_url')continue;
+      const signature=state.visualState?.[id]?.signature;
+      if(signature&&!p.text.includes('画面版本：'+signature))continue;
+      if(state.spaces&&!state.spaces.some(space=>space.id===id))continue;
+      workspaceParts.set(id,message.content.slice(i,i+2));
     }
   }
-  if(tutorialParts&&!compactedRecent.some(message=>Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'&&part.image_url?.url===tutorialParts[1].image_url?.url))){
-    compactedRecent.push({role:'user',content:tutorialParts});
+  const stable=message=>{
+    if(isCreativeSnapshot(message))return null;
+    if(message.role!=='user'||!Array.isArray(message.content))return message;
+    const parts=[];
+    for(let i=0;i<message.content.length;i++){
+      const p=message.content[i];
+      if(p.type==='text'&&/^工作空间 (?!source；)[^；]+；/.test(p.text||'')&&message.content[i+1]?.type==='image_url'){i++;continue;}
+      parts.push(p);
+    }
+    return parts.length===message.content.length?message:parts.length?{...message,content:parts}:null;
+  };
+  const recent=messages.slice(start).map(stable).filter(Boolean);
+  const firstAssistant=messages.findIndex(m=>m.role==='assistant');
+  const opening=messages.slice(2,firstAssistant<0?messages.length:firstAssistant).filter(m=>m.role==='user'&&typeof m.content==='string'&&!isCreativeSnapshot(m)&&!recent.includes(m));
+  const prefix=[...messages.slice(0,2),...opening,...(state.creativeMemory?[{role:'user',content:'已压缩的早期创作记忆：'+state.creativeMemory}]:[])];
+  // Retain one studied example across the rare history compaction boundary.
+  let tutorial;
+  for(const m of messages)if(m.role==='user'&&Array.isArray(m.content))for(let i=0;i<m.content.length-1;i++){
+    if(m.content[i].type==='text'&&m.content[i].text?.startsWith('教程示意（')&&m.content[i+1].type==='image_url')tutorial=m.content.slice(i,i+2);
   }
-  const pinnedOpening=opening.filter(m=>!compactedRecent.includes(m));
-  if(!state.document)return [messages[0],index,...pinnedOpening,...compactedRecent];
-  const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
-    try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
-  }).slice(-2);
-  const inspected=inspectCreationDocument(state.document);
-  // The newest automatic observation already carries the same Scene. Keep only
-  // its revision in the state summary so a long page is not billed twice.
-  const previewVisible=lastPreview>=0;
-  const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
-  // Windowing must not silently erase decisions before the token threshold
-  // triggers model compaction. Summarize only the uncovered interval locally.
-  const memoryStart=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const memory=start>memoryStart?fallbackCreativeMemory(state.creativeMemory,creativeCompactionTranscript(messages.slice(memoryStart,start)),state):state.creativeMemory;
-  const summary={creativeMemory:memory||null,memoryNote:'creativeMemory 只总结较早回合；若与最新 Scene 或下方原始回合冲突，以最新信息为准',phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-6),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:(state.recommendedMethods||[]).map(({id,skill,title})=>({id,skill,title})),skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).slice(-6).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
-  return [messages[0],index,...pinnedOpening,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)},...compactedRecent];
+  if(tutorial&&!recent.some(m=>Array.isArray(m.content)&&m.content.some(p=>p.image_url?.url===tutorial[1].image_url?.url)))recent.push({role:'user',content:tutorial});
+  if(!state.document)return [...prefix,...recent,...(latestPreview?[latestPreview]:[])];
+  const images=[...workspaceParts.values()].flat();
+  const snapshotImages=images.length?images:(latestPreview?.content.filter(p=>p.type==='image_url')||[]);
+  const visual=state.preview||latestPreview?{role:'user',content:[{type:'text',text:'当前真实画面：'+JSON.stringify(state.preview||{})},...snapshotImages]}:null;
+  const scene=inspectCreationDocument(state.document);
+  const elapsedSeconds=Number.isFinite(state.contextNow)&&Number.isFinite(state.startedAt)?Math.max(0,Math.floor((state.contextNow-state.startedAt)/1000)):null;
+  const summary={phase:state.phase||'direction',scene,preview:state.preview||null,
+    ...(elapsedSeconds===null?{}:{pacing:{elapsedSeconds,targetRemainingSeconds:Math.max(0,360-elapsedSeconds),focus:elapsedSeconds>=300?'接近六分钟目标：集中修正可读性、遮挡与缺失的纸边连接，查看新图后交付；不追加可选微调，未解决缺陷仍如实保留。':'合批推进，预留最后约一分钟检查；当前画面与完整图层足以判断时直接编辑，无需反复查看同一资料。'}}),
+    workflow:{stage:state.phaseDeclared?creativePhaseLabels[state.phase]:'由模型自行判断',focus:'根据最新画面决定本轮工作；固定说明中的五类方法可交错使用，阶段记录不代表验收或限制。'},
+    plan:state.plan||null,loadedSkills:(state.loadedSkills||[]).map(({name})=>name),reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
+    observation:state.observationFeedback||null,notes:state.observationNotes||null,
+    taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},
+    inspection:'这是当前完整图层清单和层序，不是增量；旧画面快照已移除。所有位置以此版本为准；完整原生字段可按需 creation_inspect(full=true)。'};
+  return [...prefix,...recent,...(visual?[visual]:[]),{role:'user',content:'当前创作状态（由检查点生成）：'+JSON.stringify(summary)}];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
-  // Pi-style threshold compaction: summarize only when the actual preceding
-  // request became large, rather than paying for a summary every four turns.
-  // Keep six assistant cycles intact so live decisions and tool outcomes stay
-  // visible after a checkpoint. Images are never summarized as text.
-  if((state.usage?.at(-1)?.prompt_tokens||0)<38000)return null;
+  // Safety valve only. Control newly appended observations rather than
+  // repeatedly rebuilding already cached history at a character/image count.
   const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const enough=cutoff=>Number.isInteger(cutoff)&&cutoff>from&&messages.slice(from,cutoff).filter(message=>message.role==='assistant').length>=6;
-  const assistants=messages.flatMap((message,index)=>message.role==='assistant'?[index]:[]);
-  let cutoff=assistants.at(-6);
-  while(cutoff>2&&messages[cutoff]?.role==='tool')cutoff--;
-  if(!enough(cutoff))return null;
+  const last=state.usage?.at(-1);
+  const capacity=state.contextWindowTokens||1000000;
+  const estimated=last?((last.prompt_tokens||0)+(last.completion_tokens||0)):
+    messages.slice(from).reduce((n,m)=>n+(m.reasoning_content||'').length+JSON.stringify(m.tool_calls||[]).length+
+      (typeof m.content==='string'?m.content:(m.content||[]).filter(p=>p.type==='text').map(p=>p.text||'').join('')).length,0);
+  // Reserve 40% for the next response and newly appended multimodal input.
+  if(estimated<capacity*0.6)return null;
+  const assistants=messages.flatMap((message,index)=>message.role==='assistant'&&index>=from?[index]:[]);
+  const keep=2,minimumOlder=2;
+  if(assistants.length<keep+minimumOlder)return null;
+  const cutoff=assistants.at(-keep);
   const older=messages.slice(from,cutoff);
   return {cutoff,history:creativeCompactionTranscript(older)};
 }
@@ -259,14 +247,27 @@ export function iterationAdvice(messages){
   return repeated.length?'近期连续多次修改同一批对象（'+repeated.join('、')+'）。这通常是布局方向没有定下来：先缩小看整页，决定保留这组关系、把冲突素材移到 tray，或整体重排一个素材簇；若已没有明确影响阅读或完成度的问题，就交付。不要再把同一批对象逐件来回移动。':'';
 }
 
-export function failureGuidance(name,args,error){
+export function failureGuidance(name,args,error,document){
+  const parameterError=String(error.path||'')+' '+String(error.message||'');
+  if(/protocolVersion/.test(parameterError))return {hint:'protocolVersion 可省略，由运行时固定填写数字 2；若显式填写只能是数字 2。该调用未生效；按 Schema 修正后重试。'};
+  if(/baseSceneRevision/.test(parameterError))return {hint:'baseSceneRevision 可填 current，绑定你本轮看到的 Scene；也可逐字复制本条失败回执的 sceneRevision（sha256: 加 64 位十六进制字符），不可截短或使用 PNG 哈希。该调用未生效；不要仅为获取同一版本再调用 inspect。'};
+  if(name==='creation_title'&&/已经存在/.test(error.message||''))return {hint:'creation_title 只创建新标题；修改已有标题请 creation_inspect 查看组内子文字 id，再用 creation_apply 的 layer.update 修改 content、size、place 或 style；移动整组用标题组 id。失败调用没有生效，不要重复创建同 id。'};
   if(name==='creation_help')return {available:creationHelp()};
   if(name==='creation_finish'&&/存在未解决的问题/.test(error.message||''))return {hint:'review.issues 只列必须修好才能交付的画面缺陷。若这些只是可选的优化意见，移入 observations 并在当前画面无严重问题时以 issues:[] 再次提交；若确有缺陷，先合批修改并看新预览。'};
   if(name==='creation_finish'&&/独立画面审查发现/.test(error.message||''))return {hint:'这是对刚才画面的独立审查。针对列出的遮挡、裁字或越界做一次有针对性的合批修复；下一张自动预览若已解决，应重新调用 creation_finish 获取当前画面的新审查。不要一直追着旧画面的提示微调。可用 creation_inspect 查看图层树和实际坐标，用 layer.stack、layout.nudge 或 layout.alignEdge 修正。'};
   if(name!=='creation_apply')return undefined;
   const match=(error.path||error.message||'').match(/operations(?:\/|\[)(\d+)/),op=args?.operations?.[Number(match?.[1])]?.op;
   const operation=args?.operations?.[Number(match?.[1])];
-  if(op==='layer.update'&&operation?.place?.rotationDeg!==undefined&&!operation.place.at&&!operation.place.referenceAnchor)return {hint:'只改角度可用 layout.nudge，rotationDeg 表示相对当前角度的增量；若用 layer.update.place 设置绝对朝向，需同时提供 reference、at、unit，at 是对象中心在该参考框中的位置。整批编辑未生效，修正后重试。'};
+  if(['creation_paper','creation_title','creation_recipe'].includes(op))return {hint:op+' 是独立工具，不是 creation_apply.operations 的操作。请以独立 tool call 调用；可与 creation_apply 同轮使用。该编辑批次未执行。'};
+  if(op==='layer.update'&&document){
+    const scene=inspectCreationDocument(document),node=scene.layers.find(n=>n.id===operation.target||n.alias===operation.target);
+    if(node?.type==='group'&&(operation.style?.fontSizePt!==undefined||operation.size)){
+      const ids=new Set([node.id]);for(const layer of scene.layers)if(ids.has(layer.parent))ids.add(layer.id);
+      return {hint:'目标是组合。整组移动/旋转用组 id 的 place；字号、文字宽度和内容用下面的子文字 id 分别 layer.update。不要用 size 缩放整组；本批次未执行。',textChildren:scene.layers.filter(n=>ids.has(n.id)&&n.type==='text').map(({id,content,fontSizePt,world})=>({id,content,fontSizePt,widthMm:world?.sizeMm?.[0]}))};
+    }
+    if(node?.type==='material'&&operation.size)return {hint:'实体素材不能缩放。用 material.cut / material.tear 裁成所需尺寸，或只改 place/order；本批次未执行。'};
+  }
+  if(/penStyle/.test(parameterError))return {hint:'style.penStyle 仅支持 pen、ballpoint、brush、marker；一般笔迹可省略使用默认值。本批次未执行。'};
   if(op==='text.reflow')return {hint:'text.reflow 只用于 text.lettering 逐字标题组，且不接受 size 或 place。普通文字修改内容、位置、尺寸、样式请用 layer.update。整批编辑未生效，修正后重试。'};
   if(op==='graphic.add'&&operation?.geometry?.kind==='stroke')return {hint:'笔迹格式为 geometry:{kind:"stroke",unit:"mm",points:[{x:0,y:0,pressure:0.5},{x:12,y:1,pressure:0.5}]}。points 是对象数组，unit 放在 geometry 内；笔迹不支持 style.strokeDash，虚线请用 path 或基础图形。整批编辑未生效，修正后重试。'};
   if(op==='graphic.add'&&/geometry\/points/.test(error.path||error.message||'')&&args?.operations?.[Number(match?.[1])]?.geometry?.kind==='star')

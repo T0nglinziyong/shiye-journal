@@ -51,7 +51,7 @@ test('linked sizes are solved before anchors, persist through import and are ide
 test('size-only dependencies do not change position, once sizing detaches only size and supports scoped detach',async()=>{
  const {run}=await fixture();let d=run([shape(),shape('b',{size:linked('a'),place:at(130,100)})]);const before=worldBox(d.page,'b');
  d=run([{op:'layer.update',target:'a',size:size(55,40)}],d);near(worldBox(d.page,'b').cx,before.cx);near(node(d,'b').width,node(d,'a').width*1.2);
- d=run([{op:'layer.update',target:'b',place:follow('a')},{op:'layer.update',target:'b',size:size(10,12)}],d);assert.ok(node(d,'b').layoutConstraint.place);assert.equal(node(d,'b').layoutConstraint.size,undefined);
+ d=run([{op:'layer.update',target:'b',place:follow('a')},{op:'layer.update',target:'b',size:{...size(10,12),behavior:'once'}}],d);assert.ok(node(d,'b').layoutConstraint.place);assert.equal(node(d,'b').layoutConstraint.size,undefined);
  d=run([{op:'layer.update',target:'b',size:linked('a')},{op:'layout.detach',target:'b',scope:'place'}],d);assert.ok(node(d,'b').layoutConstraint.size);assert.equal(node(d,'b').layoutConstraint.place,undefined);
  d=run([{op:'layout.detach',target:'b',scope:'size'}],d);assert.equal(node(d,'b').layoutConstraint,undefined);
 });

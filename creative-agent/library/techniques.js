@@ -28,7 +28,8 @@ fieldHelp.layerRole='纸片相对同级对象的图层：underlay 垫底、overl
 function methodFields(method){
  const base=['write','relate','tear','window','split','weave'].includes(method.recipe)?['id']:common;
  let specific=fields[method.recipe];
- if(method.id==='title-composed')specific=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents'];
+ if(method.recipe==='title')specific=specific.filter(key=>!['glyph','letterStyles','backgrounds','accents'].includes(key));
+ if(method.defaults.treatment==='compose')specific=['text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents'];
  if(method.recipe==='graphic'){
   specific=specific.filter(k=>method.defaults.shape?!['seed','waypoints'].includes(k):k!=='options'&&(k!=='waypoints'||method.defaults.motif==='trail'));
   if(method.defaults.shape==='bubble')specific=[...specific,'text','fontFamily','fontSizePt'];
@@ -41,7 +42,7 @@ function resolvedMethod(id,variant){
  if(variant===undefined)return {base,method:base};
  const choice=base.variants?.find(option=>option.key===variant);
  if(!choice)throw Error('未知方法变体：'+variant);
- return {base,method:{...base,title:choice.title,when:choice.when,defaults:{...base.defaults,...choice.defaults},example:choice.example,lesson:choice.lesson,illustration:choice.illustration,demo:choice.demo}};
+ return {base,method:{...base,title:choice.title,when:choice.when,defaults:base.recipe==='title'?choice.defaults:{...base.defaults,...choice.defaults},example:choice.example,lesson:choice.lesson,illustration:choice.illustration,demo:choice.demo}};
 }
 export function describeTechnique(id,{includeFontSuggestions=true,variant}={}){
  const {base,method}=resolvedMethod(id,variant);
@@ -49,7 +50,7 @@ export function describeTechnique(id,{includeFontSuggestions=true,variant}={}){
  if(method.id==='magazine-offset')help.caption='主图下方的可选短图注，仅对应 aliases 首项；不自动编造';
  const example=method.demo||techniqueExample(method);
  const {demo:unused,...publicMethod}=method;
- return {...publicMethod,variants:base.variants?.map(({key,title,when})=>({key,title,when}))||[],...(variant?{variant}:{}),parameters:Object.fromEntries(names.map(k=>[k,{description:k==='variant'?`可选效果：${base.variants.map(option=>`${option.key}=${option.title}`).join('；')}；省略时使用默认效果`:help[k],...(includeFontSuggestions&&(k==='fontFamily'||k==='captionFontFamily')?{suggestedFonts:journalBundledFonts.map(f=>({family:f.family,label:f.label}))}:{}),required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')||(method.id==='title-cross-shadow'&&k==='caption')||(['title-scattered-round','title-number-route'].includes(method.id)&&k==='runs')||(method.defaults.shape==='bubble'&&k==='text')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{methodId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:{...example.parameters,...(variant?{variant}:{})}}}};
+ return {...publicMethod,variants:base.variants?.map(({key,title,when})=>({key,title,when}))||[],...(variant?{variant}:{}),parameters:Object.fromEntries(names.map(k=>[k,{description:k==='variant'?`可选效果：${base.variants.map(option=>`${option.key}=${option.title}`).join('；')}；省略时使用默认效果`:help[k],...(includeFontSuggestions&&(k==='fontFamily'||k==='captionFontFamily')?{suggestedFonts:journalBundledFonts.map(f=>({family:f.family,label:f.label}))}:{}),required:k==='id'||required[method.recipe].includes(k)||(k==='corePlace'&&method.defaults.reuseCore===true)||(method.id==='graphic-route'&&k==='waypoints')||(method.defaults.treatment==='cross-shadow'&&k==='caption')||(['scatter-round','scatter-triangle','number-route'].includes(method.defaults.treatment)&&k==='runs')||(method.defaults.shape==='bubble'&&k==='text')}])),geometryOptions:advancedShapeControls(method.defaults.shape||method.defaults.pattern),example:{materials:exampleMaterials.filter(a=>(example.parameters.aliases||[]).includes(a.alias)||example.before.some(op=>op.asset===a.alias)),prepare:example.before,note:'示例别名和已有节点来自本例准备步骤；实际调用替换成本次素材和节点。'},tool:{name:'creation_recipe',arguments:{methodId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:{...example.parameters,...(variant?{variant}:{})}}}};
 }
 function validate(method,params){
  libraryID(params.id);const allowed=new Set(methodFields(method));
@@ -57,8 +58,8 @@ function validate(method,params){
  for(const key of required[method.recipe])if(params[key]===undefined)throw Error('缺少参数：'+key);
  if(method.id==='graphic-route'&&params.waypoints===undefined)throw Error('转折阅读线需要两个以上真实焦点的 waypoints');
  if(method.defaults.shape==='bubble'&&params.text===undefined)throw Error('气泡批注框需要短文字 text');
- if(method.id==='title-cross-shadow'&&!params.caption?.trim())throw Error('穿字横带需要 caption 小字');
- if(['title-scattered-round','title-number-route'].includes(method.id)&&!params.runs)throw Error('错落字位需要 runs 词组');
+ if(method.defaults.treatment==='cross-shadow'&&!params.caption?.trim())throw Error('穿字横带需要 caption 小字');
+ if(['scatter-round','scatter-triangle','number-route'].includes(method.defaults.treatment)&&!params.runs)throw Error('错落字位需要 runs 词组');
  if(method.defaults.reuseCore&&!params.corePlace)throw Error('复用窗芯需要给出 corePlace');
  for(const key of ['widthMm','heightMm','fontSizePt','strokeWidthMm','lengthMm','periodMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<=0||params[key]>1000))throw Error('尺寸参数无效：'+key);
  for(const key of ['gapMm','amountMm','depthMm'])if(params[key]!==undefined&&(!Number.isFinite(params[key])||params[key]<0||params[key]>200))throw Error('间距参数无效：'+key);
@@ -85,7 +86,7 @@ const mmPlace=(x,y)=>({reference:'parent',at:[x,y],unit:'mm'});
 const measureTextHeight=(content,width,fontSizePt,fontFamily)=>measureSceneText({type:'text',content,width,...styleFor('text',{fontSizePt,fontFamily},{canvas:{height:100},physicalPageHeightMM:100})}).height;
 export function compileTechnique({methodId,parameters,materials=[]}){
  const {method}=resolvedMethod(methodId,parameters?.variant);validate(method,parameters);
- const p={...method.defaults,...parameters,...(method.defaults.options?{options:{...method.defaults.options,...parameters.options}}:{})},id=p.id,colors=p.colors||['#3D6871','#E6B45E','#F1E8D5'],font=p.fontFamily||'Xiaolai',fontSize=p.fontSizePt||18;
+ const p={...method.defaults,...parameters,...(method.defaults.style?{style:{...method.defaults.style,...parameters.style}}:{}),...(method.defaults.options?{options:{...method.defaults.options,...parameters.options}}:{})},id=p.id,colors=p.colors||['#3D6871','#E6B45E','#F1E8D5'],font=p.fontFamily||'Xiaolai',fontSize=p.fontSizePt||18;
  if(method.recipe==='weave'){
   libraryID(p.strip);
   if(!Array.isArray(p.through)||p.through.length<2||p.through.length>16)throw Error('穿插需要 2–16 个孔位');

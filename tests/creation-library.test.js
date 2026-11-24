@@ -109,23 +109,23 @@ test('missing slots remain empty; unknown source and repeated material are rejec
  assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[{alias:'m1'}],bindings:[{slotId:s[0].id,alias:'m1'},{slotId:s[1].id,alias:'m1'}]}),/重复/);
 });
 test('long titles retain their full content and unsupported parameters are explicit errors',async()=>{
- const text='很长的标题需要根据可用空间分行而不能丢掉后半段'.repeat(3),compiled=compileTechnique({methodId:'title-stack',parameters:{id:'long',text,widthMm:44}});
+ const text='很长的标题需要根据可用空间分行而不能丢掉后半段'.repeat(3),compiled=compileTechnique({methodId:'title-art',parameters:{variant:'stack',id:'long',text,widthMm:44}});
  assert.equal(compiled.operations[0].children.find(o=>o.op==='text.add').content,text);assert.ok(compiled.report.heightMm>38);
  const doc=await document([]);assert.equal(apply(doc,compiled.operations,[]).changed,true);
- assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'x',text:'你好',dangerous:1}}),/不支持/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'x',text:'你好',dangerous:1}}),/不支持/);
 });
 test('wide dotted titles stay within the scene command limit and gap shadows remain editable',async()=>{
- const dotted=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Little by little',at:[72,88],widthMm:120,fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:2}}});
+ const dotted=compileTechnique({methodId:'title-art',parameters:{variant:'script-dots',id:'dots',text:'Little by little',at:[72,88],widthMm:120,fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:2}}});
  assert.ok(dotted.operations[0].children.length<100);
  assert.equal(apply(await document([]),dotted.operations,[]).changed,true);
- const gap=compileTechnique({methodId:'title-gap-shadow',parameters:{id:'gap',text:'去看春天',colors:['#244D47','#D39368','#FFFDF6']}}).operations[0].children.find(op=>op.op==='text.add');
+ const gap=compileTechnique({methodId:'title-art',parameters:{variant:'gap-shadow',id:'gap',text:'去看春天',colors:['#244D47','#D39368','#FFFDF6']}}).operations[0].children.find(op=>op.op==='text.add');
  assert.equal(gap.style.fontFamily,'BaiLuBangBang');
  assert.deepEqual(gap.style.outline,{color:'#FFFDF6',widthMm:.3,offsetMm:[0,0]});
  assert.deepEqual(gap.style.shadow,{color:'#D39368',offsetMm:[1.5,1.5],blurMm:0});
 });
 test('tape title follows actual wrapped lines and remains an editable digital group',async()=>{
  const content='今天沿着河岸慢慢走，看见了很久没有留意的颜色';
- const compiled=compileTechnique({methodId:'title-tape',parameters:{id:'tape-title',text:content,widthMm:35,fontFamily:'HongLeiZhuoShu',pattern:'grid',tapeOpacity:.48}});
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'tape',id:'tape-title',text:content,widthMm:35,fontFamily:'HongLeiZhuoShu',pattern:'grid',tapeOpacity:.48}});
  const children=compiled.operations[0].children,text=children.find(o=>o.op==='text.add'&&o.content===content);
  const tapes=children.filter(o=>/^tape-title-tape\d+$/.test(o.id));
  assert.ok(tapes.length>1,'wrapped lines need separate tape strips');
@@ -134,10 +134,10 @@ test('tape title follows actual wrapped lines and remains an editable digital gr
  assert.ok(children.indexOf(text)>children.indexOf(tapes.at(-1)),'text is above tape');
  assert.ok(children.every(o=>o.op!=='material.add'),'digital tape does not consume real materials');
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
- assert.throws(()=>compileTechnique({methodId:'title-tape',parameters:{id:'invalid-tape',text:'短题',tapeOpacity:1}}),/透明度/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'tape',id:'invalid-tape',text:'短题',tapeOpacity:1}}),/透明度/);
 });
 test('six video lettering methods remain editable and expose their distinct constructions',async()=>{
- const ids=[['title-cross-shadow'],['title-scattered-round'],['title-scattered-round','triangle'],['title-number-route'],['title-script-dots'],['title-paper-lettering']];
+ const ids=[['title-art','cross-shadow'],['title-art','scattered-round'],['title-art','scattered-round-triangle'],['title-art','number-route'],['title-art','script-dots'],['title-art','paper-lettering']];
  for(const [id,variant] of ids){
   const parameters=describeTechnique(id,{variant}).tool.arguments.parameters;
   const compiled=compileTechnique({methodId:id,parameters}),children=compiled.operations[0].children;
@@ -145,15 +145,15 @@ test('six video lettering methods remain editable and expose their distinct cons
   assert.ok(children.some(o=>o.op==='graphic.add'),id+' editable visual construction');
   assert.equal(apply(await document([]),compiled.operations,[]).changed,true,id);
  }
- const cross=compileTechnique({methodId:'title-cross-shadow',parameters:{id:'cross',text:'秋日来信',caption:'AUTUMN',widthMm:75}}).operations[0].children;
+ const cross=compileTechnique({methodId:'title-art',parameters:{variant:'cross-shadow',id:'cross',text:'秋日来信',caption:'AUTUMN',widthMm:75}}).operations[0].children;
  assert.ok(cross.findIndex(o=>o.content==='AUTUMN')>cross.findIndex(o=>o.content==='秋日来信'));
  assert.ok(cross.some(o=>o.op==='graphic.add'&&o.style.fillOpacity===.82));
- assert.throws(()=>compileTechnique({methodId:'title-cross-shadow',parameters:{id:'x',text:'秋日'}}),/caption/);
- assert.throws(()=>compileTechnique({methodId:'title-cross-shadow',parameters:{id:'x',text:'秋日',caption:'A very long line of explanatory words that cannot fit',widthMm:36}}),/小字过长/);
- assert.throws(()=>compileTechnique({methodId:'title-number-route',parameters:{id:'x',text:'2026'}}),/runs/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'cross-shadow',id:'x',text:'秋日'}}),/caption/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'cross-shadow',id:'x',text:'秋日',caption:'A very long line of explanatory words that cannot fit',widthMm:36}}),/小字过长/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'number-route',id:'x',text:'2026'}}),/runs/);
 });
 test('title backdrops adapt to line width, remain behind text, and accept controlled visual variants',async()=>{
- const compile=(id,text,backdrop)=>compileTechnique({methodId:'title-paper-lettering',parameters:{id,text,widthMm:45,backdrop}});
+ const compile=(id,text,backdrop)=>compileTechnique({methodId:'title-art',parameters:{variant:'paper-lettering',id,text,widthMm:45,backdrop}});
  const opts={kind:'paper',color:'#345948',pattern:'grid',patternColor:'#E7C98A',paddingMm:4,densityMm:4,opacity:.9};
  const short=compile('short','春',opts),long=compile('long','春日去公园走一走',opts);
  const a=short.operations[0].children,b=long.operations[0].children;
@@ -162,7 +162,7 @@ test('title backdrops adapt to line width, remain behind text, and accept contro
  assert.ok(b.findIndex(o=>o.op==='text.add')>b.findIndex(o=>o.id==='long-backdrop0'));
  assert.equal(b.find(o=>o.content==='春日去公园走一走').style.color,'#FFF8EB');
  assert.equal(apply(await document([]),long.operations,[]).changed,true);
- const dots=compileTechnique({methodId:'title-script-dots',parameters:{id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,diameterMm:7,patternColor:'#E8B943'}}}).operations[0].children;
+ const dots=compileTechnique({methodId:'title-art',parameters:{variant:'script-dots',id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,diameterMm:7,patternColor:'#E8B943'}}}).operations[0].children;
  const dotShapes=dots.filter(o=>o.op==='graphic.add'&&o.id.startsWith('dots-backdrop-'));
  assert.ok(dotShapes.length>=4);
  assert.ok(dotShapes.every(o=>o.geometry.kind==='ellipse'));
@@ -175,7 +175,7 @@ test('title backdrops adapt to line width, remain behind text, and accept contro
  const word=dots.find(o=>o.op==='text.add'&&o.content==='Slow days');
  assert.ok(dotShapes.some(o=>o.place.at[0]>word.place.at[0]&&o.place.at[0]<word.place.at[0]+word.size.width-10),'large circles overlap the word instead of forming an outer border');
  for(const kind of ['band','brush','oval']){
-  const variant=compileTechnique({methodId:'title-label',parameters:{id:'back-'+kind,text:'晴天',backdrop:{kind,color:'#DBB66C',opacity:.7,paddingMm:5}}});
+  const variant=compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'back-'+kind,text:'晴天',backdrop:{kind,color:'#DBB66C',opacity:.7,paddingMm:5}}});
   const shape=variant.operations[0].children.find(o=>o.id==='back-'+kind+'-backdrop0');
   assert.equal(shape.geometry.kind,kind==='brush'?'path':kind==='oval'?'ellipse':'rect');
   assert.equal(shape.style.fillOpacity,.7);
@@ -188,7 +188,7 @@ test('tutorial backgrounds and ornaments stay editable with both supplied handwr
   ['BaiLuBangBang','喜欢这样的日子',{kind:'brush',paddingMm:7,color:'#E9AF76',pattern:'dots',patternColor:'#F6D9AF'},{kind:'spark',scaleMm:5.5,color:'#315D55'}],
   ['WoAiWanWeiWei','把风留在纸上',{kind:'paper',paddingMm:7,color:'#42665F',pattern:'stripes',patternColor:'#D9B67C',densityMm:3},{kind:'leaf',scaleMm:6,color:'#D9B67C'}]
  ]){
-  const id='font-'+font,compiled=compileTechnique({methodId:'title-label',parameters:{id,text,widthMm:115,fontFamily:font,backdrop,ornament,style:font==='WoAiWanWeiWei'?{color:'#FFF8EB'}:{}}});
+  const id='font-'+font,compiled=compileTechnique({methodId:'title-art',parameters:{variant:'label',id,text,widthMm:115,fontFamily:font,backdrop,ornament,style:font==='WoAiWanWeiWei'?{color:'#FFF8EB'}:{}}});
   const children=compiled.operations[0].children,main=children.find(op=>op.op==='text.add'&&op.content===text);
   assert.equal(main.style.fontFamily,font);
   assert.ok(children.findIndex(op=>op.id===id+'-backdrop0')<children.indexOf(main));
@@ -196,14 +196,14 @@ test('tutorial backgrounds and ornaments stay editable with both supplied handwr
   assert.ok(children.some(op=>op.id===id+'-ornament1'),'small echo remains a separate editable vector');
   assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
  }
- const dotted=compileTechnique({methodId:'title-script-dots',parameters:{id:'organic',text:'ordinary day',fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:3}}}).operations[0].children;
+ const dotted=compileTechnique({methodId:'title-art',parameters:{variant:'script-dots',id:'organic',text:'ordinary day',fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:3}}}).operations[0].children;
  assert.ok(dotted.some(op=>op.id==='organic-backdrop-0-0'));
  assert.ok(!dotted.some(op=>op.id.startsWith('organic-ornament')),'the video circle treatment does not add unrelated side decorations');
- const squares=compileTechnique({methodId:'title-label',parameters:{id:'blocks',text:'今天很开心',fontFamily:'BaiLuBangBang',variant:'blocks'}}).operations[0].children;
+ const squares=compileTechnique({methodId:'title-art',parameters:{variant:'label-blocks',id:'blocks',text:'今天很开心',fontFamily:'BaiLuBangBang',}}).operations[0].children;
  assert.ok(squares.some(op=>op.id==='blocks-backdrop-0-0'&&op.geometry.kind==='rect'));
  assert.ok(squares.findIndex(op=>op.id==='blocks-backdrop-0-0')<squares.findIndex(op=>op.op==='text.add'));
- assert.equal(apply(await document([]),compileTechnique({methodId:'title-label',parameters:{id:'blocks',text:'今天很开心',variant:'blocks'}}).operations,[]).changed,true);
- const tutorial=compileTechnique({methodId:'title-phrases',parameters:{id:'tutorial',text:'喜欢薄荷',fontFamily:'BaiLuBangBang',variant:'outline-ring',runs:[{text:'喜欢',backdrop:{kind:'squares',strokeOnly:true,strokeWidthMm:.8,diameterMm:11,patternColor:'#2869A5'}},{text:'薄荷',breakBefore:true,offsetMm:[13,0],backdrop:{kind:'ring',diameterMm:17,patternColor:'#D08371'}}]}});
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-art',parameters:{variant:'label-blocks',id:'blocks',text:'今天很开心',}}).operations,[]).changed,true);
+ const tutorial=compileTechnique({methodId:'title-art',parameters:{variant:'phrases-outline-ring',id:'tutorial',text:'喜欢薄荷',fontFamily:'BaiLuBangBang',runs:[{text:'喜欢',backdrop:{kind:'squares',strokeOnly:true,strokeWidthMm:.8,diameterMm:11,patternColor:'#2869A5'}},{text:'薄荷',breakBefore:true,offsetMm:[13,0],backdrop:{kind:'ring',diameterMm:17,patternColor:'#D08371'}}]}});
  const framed=tutorial.operations[0].children,frames=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-0-')),rings=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-1-ring'));
  assert.equal(frames.length,4,'the first phrase has four outlined squares');
  assert.ok(frames.every(op=>op.geometry.kind==='rect'&&op.style.fill===null&&op.style.stroke==='#2869A5'));
@@ -212,11 +212,11 @@ test('tutorial backgrounds and ornaments stay editable with both supplied handwr
  assert.ok(framed.indexOf(frames[0])<framed.findIndex(op=>op.op==='text.add'));
  assert.ok(framed.indexOf(rings[0])<framed.findIndex(op=>op.op==='text.add'));
  assert.equal(apply(await document([]),tutorial.operations,[]).changed,true);
- assert.throws(()=>compileTechnique({methodId:'title-label',parameters:{id:'bad',text:'春',ornament:{kind:'flower',scaleMm:12}}}),/点缀尺寸/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'bad',text:'春',ornament:{kind:'flower',scaleMm:12}}}),/点缀尺寸/);
 });
 test('composed title keeps glyph, paint, and separated underlay layers independently editable',async()=>{
  const id='composed',parameters={id,text:'2026听歌',fontFamily:'BaiLuBangBang',fontSizePt:31,widthMm:90,colors:['#233C64','#E5BC51','#FFFDF6'],glyph:{strokes:[{index:4,kind:'hotdog',box:[.38,.12,.18,.7]},{index:5,kind:'triangle',box:[.32,.17,.18,.65]}],numberShadow:{color:'#E5BC51',indices:[0,1,2,3]}},backgrounds:[{kind:'dots',color:'#E5BC51',diameterMm:2.3,gapMm:3},{kind:'squares',color:'#E5BC51',diameterMm:2.3,gapMm:3.2},{kind:'enclosure',color:'#E5BC51'}],accents:[{kind:'notes',placement:'upper-right',color:'#38869A',count:2}],style:{color:'#233C64',outline:{color:'#FFFDF6',widthMm:.22},shadow:{color:'#9AA7B4',offsetMm:[.7,.8],blurMm:0}}};
- const compiled=compileTechnique({methodId:'title-composed',parameters}),children=compiled.operations[0].children;
+ const compiled=compileTechnique({methodId:'title-art',parameters:{...parameters,variant:'composed'}}),children=compiled.operations[0].children;
  assert.ok(children.every(op=>op.op!=='material.add'));
  assert.equal(children.filter(op=>op.op==='text.add').map(op=>op.content).join(''),parameters.text);
  assert.equal(children.filter(op=>op.op==='layer.mask').length,2);
@@ -234,10 +234,10 @@ test('composed title keeps glyph, paint, and separated underlay layers independe
   }
  }
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
- assert.throws(()=>compileTechnique({methodId:'title-composed',parameters:{...parameters,id:'bad',glyph:{strokes:[{index:99,kind:'hotdog',box:[.3,.1,.2,.7]}]}}}),/笔画替换/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'composed',...parameters,id:'bad',glyph:{strokes:[{index:99,kind:'hotdog',box:[.3,.1,.2,.7]}]}}}),/笔画替换/);
 });
 test('split title inserts real middle text between two masked editable halves',async()=>{
- const compiled=compileTechnique({methodId:'title-composed',parameters:{id:'split-title',text:'人生的意义',fontFamily:'BaiLuBangBang',widthMm:100,colors:['#C63B85','#ED7A82','#FFFDF6'],glyph:{split:{middleText:'RENSHENG DE YIYI',gapMm:3,waveMm:1.3}},style:{shadow:{color:'#ED7A82',offsetMm:[.6,.7],blurMm:0}}}}),children=compiled.operations[0].children;
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'composed',id:'split-title',text:'人生的意义',fontFamily:'BaiLuBangBang',widthMm:100,colors:['#C63B85','#ED7A82','#FFFDF6'],glyph:{split:{middleText:'RENSHENG DE YIYI',gapMm:3,waveMm:1.3}},style:{shadow:{color:'#ED7A82',offsetMm:[.6,.7],blurMm:0}}}}),children=compiled.operations[0].children;
  assert.equal(children.filter(op=>op.op==='text.add'&&!op.id.includes('-middle-')).length,10);
  assert.equal(children.filter(op=>op.op==='layer.mask').length,10);
  const chinese=children.filter(op=>op.op==='text.add'&&!op.id.includes('-middle-'));
@@ -251,7 +251,7 @@ test('split title inserts real middle text between two masked editable halves',a
 });
 test('title backdrops mix scattered dots and squares with page-wide line and hash patterns',async()=>{
  const parameters={id:'mixed-marks',text:'手帐日记',fontSizePt:32,widthMm:100,backgrounds:[{kind:'mixed',diameterMm:2.9,gapMm:2.6,colors:['#E5B941','#82B8AC','#EF8E69']},{kind:'lines',count:4,color:'#9BB8AA'},{kind:'hashes',count:3,color:'#E8B18D'}]};
- const children=compileTechnique({methodId:'title-composed',parameters}).operations[0].children;
+ const children=compileTechnique({methodId:'title-art',parameters:{...parameters,variant:'composed'}}).operations[0].children;
  const marks=children.filter(op=>op.op==='graphic.add');
  assert.deepEqual(new Set(marks.map(op=>op.geometry.kind)),new Set(['ellipse','rect','path']));
  assert.ok(marks.filter(op=>op.geometry.kind==='path'&&op.size.width>40).length>=10,'line and hash patterns should span the entire title');
@@ -259,13 +259,13 @@ test('title backdrops mix scattered dots and squares with page-wide line and has
  assert.ok(new Set(scattered.map(op=>op.size.width.toFixed(1))).size>=4,'small mark sizes should visibly vary');
  assert.ok(new Set(scattered.map(op=>op.place.at[1].toFixed(1))).size>=4,'small marks should not form a regular baseline');
  assert.ok(children.every(op=>op.op!=='material.add'));
- assert.equal(apply(await document([]),compileTechnique({methodId:'title-composed',parameters}).operations,[]).changed,true);
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-art',parameters:{...parameters,variant:'composed'}}).operations,[]).changed,true);
 });
 test('composed lettering also works as smaller second and third level headings',async()=>{
- const contract=describeTechnique('title-composed',{includeFontSuggestions:false});
- assert.deepEqual(Object.keys(contract.parameters),['id','reference','at','rotationDeg','text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents']);
- const second=compileTechnique({methodId:'title-composed',parameters:{id:'heading-two',text:'今日片段',fontSizePt:20,widthMm:52,backgrounds:[{kind:'lines',count:3,color:'#B7C7BC',opacity:.45}]}});
- const third=compileTechnique({methodId:'title-composed',parameters:{id:'heading-three',text:'天气记录',fontSizePt:14,widthMm:42,backgrounds:[{kind:'dots',diameterMm:1.5,gapMm:3,color:'#DDAA78'}]}});
+ const contract=describeTechnique('title-art',{variant:'composed',includeFontSuggestions:false});
+ assert.deepEqual(Object.keys(contract.parameters),['id','reference','at','rotationDeg','variant','text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents']);
+ const second=compileTechnique({methodId:'title-art',parameters:{variant:'composed',id:'heading-two',text:'今日片段',fontSizePt:20,widthMm:52,backgrounds:[{kind:'lines',count:3,color:'#B7C7BC',opacity:.45}]}});
+ const third=compileTechnique({methodId:'title-art',parameters:{variant:'composed',id:'heading-three',text:'天气记录',fontSizePt:14,widthMm:42,backgrounds:[{kind:'dots',diameterMm:1.5,gapMm:3,color:'#DDAA78'}]}});
  assert.ok(second.report.heightMm>third.report.heightMm);
  assert.ok(second.operations[0].children.some(op=>op.geometry?.kind==='path'));
  assert.ok(third.operations[0].children.some(op=>op.geometry?.kind==='ellipse'));
@@ -275,12 +275,12 @@ test('composed lettering also works as smaller second and third level headings',
  assert.equal(apply(await document([]),third.operations,[]).changed,true);
 });
 test('postmark lesson renders a circular editable label, with caption outside the ring',()=>{
- const result=compileTechnique({methodId:'vintage-postmark',parameters:{id:'seal',text:'旅途',caption:'小记'}});
+ const result=compileTechnique({methodId:'title-art',parameters:{variant:'vintage-postmark',id:'seal',text:'旅途',caption:'小记'}});
  const children=result.operations[0].children,ring=children.find(op=>op.op==='graphic.add'),label=children.find(op=>op.op==='text.add'&&op.content==='旅途'),caption=children.find(op=>op.op==='text.add'&&op.content==='小记');
  assert.equal(ring.geometry.kind,'ellipse');assert.equal(ring.size.width,ring.size.height);
  assert.equal(label.style.textAlign,'center');assert.ok(label.place.at[1]>ring.size.height*.2);
  assert.ok(caption.place.at[1]>ring.size.height);
- assert.throws(()=>compileTechnique({methodId:'vintage-postmark',parameters:{id:'seal',text:'这一行长到放不进圆里',widthMm:18}}),/超出圆形范围/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'vintage-postmark',id:'seal',text:'这一行长到放不进圆里',widthMm:18}}),/超出圆形范围/);
 });
 test('graphic lesson examples show their focal objects and route requires real waypoints',()=>{
  const route=describeTechnique('graphic-route');
@@ -335,7 +335,7 @@ test('template ranking is deterministic and does not mutate real material dimens
 
 test('an existing editable title group can occupy a template slot without rasterization',async()=>{
  const assets=exampleMaterials.slice(0,2);let doc=await document(assets);
- doc=apply(doc,compileTechnique({methodId:'title-label',parameters:{id:'heading',text:'好天气'}}).operations,assets).document;
+ doc=apply(doc,compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'heading',text:'好天气'}}).operations,assets).document;
  const template=templateCatalog.templates.find(t=>t.id==='center-1'),slot=materialSlots(template)[0],heading=template.elements.find(e=>e.role==='title');
  const compiled=compileTemplate({templateId:template.id,id:'page-group',paper:{width:148,height:210},materials:assets,bindings:[{slotId:slot.id,alias:'m1'},{slotId:heading.id,node:'heading'}],nodes:[{id:'heading'}]});
  const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'compose-title',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},assets).document;
@@ -348,7 +348,7 @@ test('taxonomy and open semantic tags remain available in frozen matching source
 
 test('a title group replaces a template writing guide and retains editable text and foreground order',async()=>{
  let doc=await document([]);
- doc=apply(doc,compileTechnique({methodId:'title-gap-shadow',parameters:{id:'heading',text:'留住片刻'}}).operations,[]).document;
+ doc=apply(doc,compileTechnique({methodId:'title-art',parameters:{variant:'gap-shadow',id:'heading',text:'留住片刻'}}).operations,[]).document;
  const t=templateCatalog.templates.find(t=>t.id==='cream6-08');
  const compiled=compileTemplate({templateId:t.id,id:'spread',paper:{width:240,height:149},bindings:[{slotId:'headline',node:'heading'}],nodes:[{id:'heading'}],texts:{'middle-writing':'留一点时间，慢慢看。'}});
  const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'place-heading',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},[]).document;
@@ -370,24 +370,24 @@ test('every method exposes a complete example and distinct construction/review g
  }
 });
 test('phrase composition preserves the supplied text, meaningful grouping and physical font sizes',async()=>{
- const compiled=compileTechnique({methodId:'title-phrases',parameters:{id:'phrase',text:'把日常收好',fontSizePt:20,widthMm:36,runs:[{text:'把',role:'secondary'},{text:'日常',role:'primary'},{text:'收好',breakBefore:true}]}});
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'phrases',id:'phrase',text:'把日常收好',fontSizePt:20,widthMm:36,runs:[{text:'把',role:'secondary'},{text:'日常',role:'primary'},{text:'收好',breakBefore:true}]}});
  const texts=compiled.operations[0].children.filter(o=>o.op==='text.add');assert.equal(texts.map(t=>t.content).join(''),'把日常收好');
  assert.ok(texts[1].style.fontSizePt>texts[0].style.fontSizePt);assert.equal(texts[2].style.fontSizePt,20);
  assert.ok(texts[2].place.at[1]>texts[1].place.at[1]);assert.ok(texts.every(t=>!t.place.rotationDeg));
  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
- assert.throws(()=>compileTechnique({methodId:'title-phrases',parameters:{id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'phrases',id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
 });
 test('short Chinese staggered title runs retain enough width to read as words',()=>{
- const compiled=compileTechnique({methodId:'title-stack',parameters:{id:'staggered',variant:'stagger',text:'去拾一束星光',runs:[{text:'去拾'},{text:'一束'},{text:'星光'}]}});
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'stack-stagger',id:'staggered',text:'去拾一束星光',runs:[{text:'去拾'},{text:'一束'},{text:'星光'}]}});
  const words=compiled.operations[0].children.filter(operation=>operation.op==='text.add');
  assert.deepEqual(words.map(word=>word.content),['去拾','一束','星光']);
  assert.ok(words.every(word=>word.size.width>=20));
 });
 test('lettering recipes expose and preserve different bundled fonts',async()=>{
- const detail=describeTechnique('title-phrases');
+ const detail=describeTechnique('title-art',{variant:'phrases'});
  assert.ok(detail.parameters.fontFamily.suggestedFonts.some(font=>font.family==='HongLeiZhuoShu'));
  assert.ok(detail.parameters.captionFontFamily.suggestedFonts.some(font=>font.family==='Xiaolai'));
- const title=compileTechnique({methodId:'title-phrases',parameters:{id:'font-title',text:'收集日常',caption:'周末手记',fontFamily:'HongLeiZhuoShu',captionFontFamily:'Xiaolai',runs:[{text:'收集',fontFamily:'FontQu Smile'},{text:'日常',role:'primary'}]}});
+ const title=compileTechnique({methodId:'title-art',parameters:{variant:'phrases',id:'font-title',text:'收集日常',caption:'周末手记',fontFamily:'HongLeiZhuoShu',captionFontFamily:'Xiaolai',runs:[{text:'收集',fontFamily:'FontQu Smile'},{text:'日常',role:'primary'}]}});
  const titleTexts=title.operations[0].children.filter(op=>op.op==='text.add');
  assert.deepEqual(titleTexts.map(op=>op.style.fontFamily),['FontQu Smile','HongLeiZhuoShu','Xiaolai']);
  const applied=apply(await document([]),title.operations,[]);
@@ -478,7 +478,7 @@ test('template palette and omissions are explicit, preserve input assets, and ca
 });
 test('an existing title keeps the template stacking position rather than always becoming the top layer',async()=>{
  const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t);let doc=await document(fixture.materials);
- doc=apply(doc,compileTechnique({methodId:'title-label',parameters:{id:'heading',text:'日常'}}).operations,fixture.materials).document;
+ doc=apply(doc,compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'heading',text:'日常'}}).operations,fixture.materials).document;
  delete fixture.texts.e7;
  const compiled=compileTemplate({...fixture,templateId:t.id,id:'joined',bindings:[...fixture.bindings,{slotId:'e7',node:'heading'}],nodes:[{id:'heading'}]});
  const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'join-template',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},fixture.materials).document;

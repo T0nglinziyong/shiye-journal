@@ -2,11 +2,11 @@
   "version": 3,
   "methods": [
     {
-      "id": "title-composed",
+      "id": "title-art",
       "skill": "journal-lettering",
-      "title": "组合手写标题",
+      "title": "高级组合标题",
       "recipe": "title",
-      "when": "主标题、二级或三级小标题、日期题签等非正文短文字；用手写笔、荧光笔或打字组合字形、字效与背景",
+      "when": "常驻标题工具之外的拆字、穿字、逐字底形等组合；按 variant 读取对应方法，普通字效直接用 creation_title",
       "defaults": {
         "treatment": "compose",
         "fontFamily": "BaiLuBangBang"
@@ -91,130 +91,219 @@
           "guide": "creative-agent/skills/journal-lettering/SKILL.md",
           "scope": "按用户提供的手写标题照片拆解字形、字效与背景关系；拾页参数和数字笔画独立实现。"
         }
-      }
-    },
-    {
-      "id": "title-cross-shadow",
-      "skill": "journal-lettering",
-      "title": "横带穿字与同侧阴影",
-      "recipe": "title",
-      "when": "主字需要层次并用小字穿过中部",
-      "defaults": {
-        "treatment": "cross-shadow",
-        "fontFamily": "BaiLuBangBang"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-cross-shadow"
-      },
-      "example": {
-        "text": "晴天散步计划",
-        "caption": "WALK INTO SPRING",
-        "fontSizePt": 27,
-        "widthMm": 105,
-        "colors": [
-          "#294C45",
-          "#D39368",
-          "#F7E7CE"
-        ],
-        "captionFontFamily": "Xiaolai",
-        "fontFamily": "BaiLuBangBang",
-        "style": {
-          "shadow": {
-            "color": "#D39368",
-            "offsetMm": [
-              1.15,
-              1.25
-            ],
-            "blurMm": 0
-          }
-        }
-      },
-      "lesson": {
-        "principle": "主字阴影与中部小字横带组成一个可编辑标题组。",
-        "steps": [
-          "主字和小字分别选字体",
-          "横带按小字长度自动计算",
-          "统一主字投影方向，并检查遮挡后的读序"
-        ],
-        "check": [
-          "小字完整可读",
-          "横带没有覆盖整行主字"
-        ],
-        "source": {
-          "kind": "tutorial-mapping",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
-        }
-      }
-    },
-    {
-      "id": "title-scattered-round",
-      "skill": "journal-lettering",
-      "title": "错落字位与圆点点缀",
-      "recipe": "title",
-      "when": "用错落词组配圆形节奏",
-      "defaults": {
-        "treatment": "scatter-round",
-        "fontFamily": "BaiLuBangBang"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-scattered-round"
-      },
-      "example": {
-        "text": "慢慢收集",
-        "runs": [
-          {
-            "text": "慢慢",
-            "role": "secondary",
-            "rotationDeg": -3,
-            "fontFamily": "WoAiWanWeiWei"
-          },
-          {
-            "text": "收集",
-            "role": "primary",
-            "rotationDeg": 2,
-            "offsetMm": [
-              0,
-              1
-            ]
-          }
-        ],
-        "colors": [
-          "#394F48",
-          "#D49D6A",
-          "#F1E8D5"
-        ],
-        "fontFamily": "BaiLuBangBang",
-        "fontSizePt": 26,
-        "widthMm": 75
-      },
-      "lesson": {
-        "principle": "词组轻微错位，局部圆点响应字间留白。",
-        "steps": [
-          "按词义划分 runs",
-          "调整角度和基线",
-          "保留字间阅读顺序"
-        ],
-        "check": [
-          "圆点不压字",
-          "主词仍可读"
-        ],
-        "source": {
-          "kind": "tutorial-mapping",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
-        }
       },
       "variants": [
         {
-          "key": "triangle",
+          "title": "组合手写标题",
+          "when": "主标题、二级或三级小标题、日期题签等非正文短文字；用手写笔、荧光笔或打字组合字形、字效与背景",
+          "defaults": {
+            "treatment": "compose",
+            "fontFamily": "BaiLuBangBang"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-composed"
+          },
+          "example": {
+            "text": "听风的声音",
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 31,
+            "widthMm": 110,
+            "colors": [
+              "#25344C",
+              "#E8B65F",
+              "#FFFDF6"
+            ],
+            "glyph": {
+              "strokes": [
+                {
+                  "index": 0,
+                  "kind": "hotdog",
+                  "box": [
+                    0.42,
+                    0.09,
+                    0.2,
+                    0.77
+                  ]
+                }
+              ]
+            },
+            "backgrounds": [
+              {
+                "kind": "mixed",
+                "diameterMm": 2.5,
+                "gapMm": 3.2,
+                "colors": [
+                  "#E8B65F",
+                  "#94B5A3",
+                  "#DB8E72"
+                ]
+              }
+            ],
+            "accents": [
+              {
+                "kind": "notes",
+                "placement": "upper-right",
+                "color": "#38869A",
+                "sizeMm": 2.5,
+                "count": 3
+              }
+            ],
+            "style": {
+              "shadow": {
+                "color": "#8AA3AF",
+                "offsetMm": [
+                  0.7,
+                  0.8
+                ],
+                "blurMm": 0
+              }
+            }
+          },
+          "lesson": {
+            "principle": "分别决定字形笔画、文字颜色/阴影/描边、字下背景与边缘点缀，再叠成可编辑标题。",
+            "steps": [
+              "先选短标题与字体",
+              "给需要变化的单字指定笔画区域或拆字中部文字",
+              "选择一两种字效；圆点和方块作为分离的小点缀，横线和井字作为覆盖整组标题的底纹，也可使用反白底或包围线",
+              "预览检查遮挡、间距和读序"
+            ],
+            "check": [
+              "主标题、二级和三级小标题通过字号、宽度与装饰密度建立清楚层级，不把正文做成装饰标题",
+              "拆字标题的中间英文上下居中，首尾与中文标题对齐；中文整体比英文更高、横向更紧凑",
+              "圆点、方块大小与位置有变化、彼此分离且小于主字；横线或井字底纹覆盖整组标题且不妨碍阅读",
+              "替换笔画确实落在指定字上",
+              "标题和点缀都是文字或数字笔画，没有 material.add"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "按用户提供的手写标题照片拆解字形、字效与背景关系；拾页参数和数字笔画独立实现。"
+            }
+          },
+          "key": "composed"
+        },
+        {
+          "title": "横带穿字与同侧阴影",
+          "when": "主字需要层次并用小字穿过中部",
+          "defaults": {
+            "treatment": "cross-shadow",
+            "fontFamily": "BaiLuBangBang"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-cross-shadow"
+          },
+          "example": {
+            "text": "晴天散步计划",
+            "caption": "WALK INTO SPRING",
+            "fontSizePt": 27,
+            "widthMm": 105,
+            "colors": [
+              "#294C45",
+              "#D39368",
+              "#F7E7CE"
+            ],
+            "captionFontFamily": "Xiaolai",
+            "fontFamily": "BaiLuBangBang",
+            "style": {
+              "shadow": {
+                "color": "#D39368",
+                "offsetMm": [
+                  1.15,
+                  1.25
+                ],
+                "blurMm": 0
+              }
+            }
+          },
+          "lesson": {
+            "principle": "主字阴影与中部小字横带组成一个可编辑标题组。",
+            "steps": [
+              "主字和小字分别选字体",
+              "横带按小字长度自动计算",
+              "统一主字投影方向，并检查遮挡后的读序"
+            ],
+            "check": [
+              "小字完整可读",
+              "横带没有覆盖整行主字"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
+            }
+          },
+          "key": "cross-shadow"
+        },
+        {
+          "title": "错落字位与圆点点缀",
+          "when": "用错落词组配圆形节奏",
+          "defaults": {
+            "treatment": "scatter-round",
+            "fontFamily": "BaiLuBangBang"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-scattered-round"
+          },
+          "example": {
+            "text": "慢慢收集",
+            "runs": [
+              {
+                "text": "慢慢",
+                "role": "secondary",
+                "rotationDeg": -3,
+                "fontFamily": "WoAiWanWeiWei"
+              },
+              {
+                "text": "收集",
+                "role": "primary",
+                "rotationDeg": 2,
+                "offsetMm": [
+                  0,
+                  1
+                ]
+              }
+            ],
+            "colors": [
+              "#394F48",
+              "#D49D6A",
+              "#F1E8D5"
+            ],
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 26,
+            "widthMm": 75
+          },
+          "lesson": {
+            "principle": "词组轻微错位，局部圆点响应字间留白。",
+            "steps": [
+              "按词义划分 runs",
+              "调整角度和基线",
+              "保留字间阅读顺序"
+            ],
+            "check": [
+              "圆点不压字",
+              "主词仍可读"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
+            }
+          },
+          "key": "scattered-round"
+        },
+        {
           "title": "错落字位与三角点缀",
           "when": "错落标题需要锐角节奏",
           "defaults": {
             "treatment": "scatter-triangle",
             "fontFamily": "BaiLuBangBang"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-scattered-triangle"
           },
           "example": {
             "text": "城市散步",
@@ -257,10 +346,7 @@
               "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-scattered-triangle"
-          },
+          "key": "scattered-round-triangle",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -294,156 +380,147 @@
             },
             "before": []
           }
-        }
-      ]
-    },
-    {
-      "id": "title-number-route",
-      "skill": "journal-lettering",
-      "title": "倾斜数字与外围线条",
-      "recipe": "title",
-      "when": "日期或数字做成叙事标题",
-      "defaults": {
-        "treatment": "number-route",
-        "fontFamily": "BaiLuBangBang"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-number-route"
-      },
-      "example": {
-        "text": "2026·秋",
-        "runs": [
-          {
-            "text": "2026",
-            "role": "primary",
-            "rotationDeg": -4
-          },
-          {
-            "text": "·秋",
-            "role": "secondary",
-            "rotationDeg": 2
-          }
-        ],
-        "colors": [
-          "#394D57",
-          "#C88358",
-          "#F2E5D7"
-        ],
-        "fontFamily": "BaiLuBangBang",
-        "fontSizePt": 24,
-        "widthMm": 80
-      },
-      "lesson": {
-        "principle": "数字词组轻微倾斜，外侧线条在局部收束。",
-        "steps": [
-          "给年份或真实日期",
-          "主次词组分别调整角度",
-          "外围线条保留足够字脚距离"
-        ],
-        "check": [
-          "不虚构日期",
-          "线条不穿字"
-        ],
-        "source": {
-          "kind": "tutorial-mapping",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
-        }
-      }
-    },
-    {
-      "id": "title-script-dots",
-      "skill": "journal-lettering",
-      "title": "连写字与圆点底纹",
-      "recipe": "title",
-      "when": "短英文手写标题需要轻薄底纹",
-      "defaults": {
-        "treatment": "script-dots",
-        "fontFamily": "WoAiWanWeiWei",
-        "backdrop": {
-          "kind": "dots",
-          "densityMm": 3.4,
-          "diameterMm": 7,
-          "staggerMm": 2.2,
-          "patternColor": "#E8B943",
-          "opacity": 0.9
-        }
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-script-dots"
-      },
-      "example": {
-        "text": "Slow days",
-        "fontFamily": "WoAiWanWeiWei",
-        "fontSizePt": 25,
-        "widthMm": 70,
-        "backdrop": {
-          "kind": "dots",
-          "densityMm": 3.4,
-          "diameterMm": 7,
-          "staggerMm": 2.2,
-          "patternColor": "#E8B943",
-          "opacity": 0.9
         },
-        "colors": [
-          "#292621",
-          "#E8B943",
-          "#F6EBD8"
-        ]
-      },
-      "lesson": {
-        "principle": "大颗黄色圆点先落在字下，黑色连写字再叠上去；圆点与笔画明确重叠，不绕着字排成边框。",
-        "steps": [
-          "选择连写字体",
-          "调节圆点直径、密度、错列和颜色",
-          "预览笔画压在圆点上的重叠关系"
-        ],
-        "check": [
-          "圆点在字下而不是围着字",
-          "英文仍连写"
-        ],
-        "source": {
-          "kind": "tutorial-mapping",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
-        }
-      }
-    },
-    {
-      "id": "title-label",
-      "skill": "journal-lettering",
-      "title": "标签承载标题",
-      "recipe": "title",
-      "when": "把标题与纸片形成局部组合",
-      "defaults": {
-        "treatment": "label"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-label"
-      },
-      "lesson": {
-        "principle": "以可编辑数字底形承载标题，底形可配局部纹样。",
-        "steps": [
-          "设定标题宽度",
-          "从素材取字色与底色",
-          "选择 plain/dots/stripes/grid 后放置整组。"
-        ],
-        "check": [
-          "底形没有过大抢占主图",
-          "数字底形未被误认为新增实体纸。"
-        ],
-        "source": {
-          "kind": "project-synthesis",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
-        }
-      },
-      "variants": [
         {
-          "key": "blocks",
+          "title": "倾斜数字与外围线条",
+          "when": "日期或数字做成叙事标题",
+          "defaults": {
+            "treatment": "number-route",
+            "fontFamily": "BaiLuBangBang"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-number-route"
+          },
+          "example": {
+            "text": "2026·秋",
+            "runs": [
+              {
+                "text": "2026",
+                "role": "primary",
+                "rotationDeg": -4
+              },
+              {
+                "text": "·秋",
+                "role": "secondary",
+                "rotationDeg": 2
+              }
+            ],
+            "colors": [
+              "#394D57",
+              "#C88358",
+              "#F2E5D7"
+            ],
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 24,
+            "widthMm": 80
+          },
+          "lesson": {
+            "principle": "数字词组轻微倾斜，外侧线条在局部收束。",
+            "steps": [
+              "给年份或真实日期",
+              "主次词组分别调整角度",
+              "外围线条保留足够字脚距离"
+            ],
+            "check": [
+              "不虚构日期",
+              "线条不穿字"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
+            }
+          },
+          "key": "number-route"
+        },
+        {
+          "title": "连写字与圆点底纹",
+          "when": "短英文手写标题需要轻薄底纹",
+          "defaults": {
+            "treatment": "script-dots",
+            "fontFamily": "WoAiWanWeiWei",
+            "backdrop": {
+              "kind": "dots",
+              "densityMm": 3.4,
+              "diameterMm": 7,
+              "staggerMm": 2.2,
+              "patternColor": "#E8B943",
+              "opacity": 0.9
+            }
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-script-dots"
+          },
+          "example": {
+            "text": "Slow days",
+            "fontFamily": "WoAiWanWeiWei",
+            "fontSizePt": 25,
+            "widthMm": 70,
+            "backdrop": {
+              "kind": "dots",
+              "densityMm": 3.4,
+              "diameterMm": 7,
+              "staggerMm": 2.2,
+              "patternColor": "#E8B943",
+              "opacity": 0.9
+            },
+            "colors": [
+              "#292621",
+              "#E8B943",
+              "#F6EBD8"
+            ]
+          },
+          "lesson": {
+            "principle": "大颗黄色圆点先落在字下，黑色连写字再叠上去；圆点与笔画明确重叠，不绕着字排成边框。",
+            "steps": [
+              "选择连写字体",
+              "调节圆点直径、密度、错列和颜色",
+              "预览笔画压在圆点上的重叠关系"
+            ],
+            "check": [
+              "圆点在字下而不是围着字",
+              "英文仍连写"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
+            }
+          },
+          "key": "script-dots"
+        },
+        {
+          "title": "标签承载标题",
+          "when": "把标题与纸片形成局部组合",
+          "defaults": {
+            "treatment": "label"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-label"
+          },
+          "lesson": {
+            "principle": "以可编辑数字底形承载标题，底形可配局部纹样。",
+            "steps": [
+              "设定标题宽度",
+              "从素材取字色与底色",
+              "选择 plain/dots/stripes/grid 后放置整组。"
+            ],
+            "check": [
+              "底形没有过大抢占主图",
+              "数字底形未被误认为新增实体纸。"
+            ],
+            "source": {
+              "kind": "project-synthesis",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+            }
+          },
+          "key": "label"
+        },
+        {
           "title": "字下错位方块",
           "when": "短标题需要方块压在字下形成节奏，而不是整条底卡",
           "defaults": {
@@ -458,24 +535,9 @@
               "opacity": 0.78
             }
           },
-          "example": {
-            "text": "今天很开心",
-            "fontFamily": "BaiLuBangBang",
-            "fontSizePt": 24,
-            "widthMm": 78,
-            "colors": [
-              "#2D4C49",
-              "#E7BD75",
-              "#FFF9EF"
-            ],
-            "backdrop": {
-              "kind": "squares",
-              "densityMm": 5,
-              "diameterMm": 8,
-              "staggerMm": 2.2,
-              "patternColor": "#E7BD75",
-              "opacity": 0.78
-            }
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-block-lettering"
           },
           "lesson": {
             "principle": "若干略有错位的色块先垫在字下，深色标题覆盖在上面；可以改为圆形或圆方混合。",
@@ -495,9 +557,25 @@
               "scope": "取自用户强调的字下几何底纹需求；参数化图形为拾页独立实现。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-block-lettering"
+          "key": "label-blocks",
+          "example": {
+            "text": "今天很开心",
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 24,
+            "widthMm": 78,
+            "colors": [
+              "#2D4C49",
+              "#E7BD75",
+              "#FFF9EF"
+            ],
+            "backdrop": {
+              "kind": "squares",
+              "densityMm": 5,
+              "diameterMm": 8,
+              "staggerMm": 2.2,
+              "patternColor": "#E7BD75",
+              "opacity": 0.78
+            }
           },
           "demo": {
             "parameters": {
@@ -527,61 +605,56 @@
             },
             "before": []
           }
-        }
-      ]
-    },
-    {
-      "id": "title-phrases",
-      "skill": "journal-lettering",
-      "title": "主次词组标题",
-      "recipe": "title",
-      "when": "主词承重，连接词让出空间",
-      "defaults": {
-        "treatment": "phrases"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-phrases"
-      },
-      "example": {
-        "text": "把日常收好",
-        "runs": [
-          {
-            "text": "把",
-            "role": "secondary"
-          },
-          {
-            "text": "日常",
-            "role": "primary"
-          },
-          {
-            "text": "收好",
-            "role": "normal",
-            "breakBefore": true
-          }
-        ]
-      },
-      "lesson": {
-        "principle": "主词、辅助词和连接词形成不同字级，按整词分行。",
-        "steps": [
-          "给 runs 并保证拼接等于 text",
-          "设置 primary/secondary/normal",
-          "必要处显式 breakBefore。"
-        ],
-        "check": [
-          "所有文字都保留",
-          "主词确实承重",
-          "小字没有低于舒适阅读大小。"
-        ],
-        "source": {
-          "kind": "project-synthesis",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
-        }
-      },
-      "variants": [
+        },
         {
-          "key": "outline-ring",
+          "title": "主次词组标题",
+          "when": "主词承重，连接词让出空间",
+          "defaults": {
+            "treatment": "phrases"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-phrases"
+          },
+          "example": {
+            "text": "把日常收好",
+            "runs": [
+              {
+                "text": "把",
+                "role": "secondary"
+              },
+              {
+                "text": "日常",
+                "role": "primary"
+              },
+              {
+                "text": "收好",
+                "role": "normal",
+                "breakBefore": true
+              }
+            ]
+          },
+          "lesson": {
+            "principle": "主词、辅助词和连接词形成不同字级，按整词分行。",
+            "steps": [
+              "给 runs 并保证拼接等于 text",
+              "设置 primary/secondary/normal",
+              "必要处显式 breakBefore。"
+            ],
+            "check": [
+              "所有文字都保留",
+              "主词确实承重",
+              "小字没有低于舒适阅读大小。"
+            ],
+            "source": {
+              "kind": "project-synthesis",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+            }
+          },
+          "key": "phrases"
+        },
+        {
           "title": "空心方框与字下圈线",
           "when": "两段短词需要像大标题教程 2.0 一样，用空心方框与大圈线分区承托",
           "defaults": {
@@ -592,6 +665,10 @@
               "#D08371",
               "#20272B"
             ]
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-outline-block-ring"
           },
           "example": {
             "text": "喜欢薄荷",
@@ -652,10 +729,7 @@
               "scope": "按水岸芝芝《大标题教程 2.0》空心方框、圈线与标题的层次关系实现；文字与矢量均可编辑。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-outline-block-ring"
-          },
+          "key": "phrases-outline-ring",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -708,11 +782,14 @@
           }
         },
         {
-          "key": "circle",
           "title": "关键词圈注",
           "when": "一句话中只有一个词值得停顿",
           "defaults": {
             "treatment": "circle"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-circle"
           },
           "example": {
             "text": "收集小美好",
@@ -735,10 +812,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-circle"
-          },
+          "key": "phrases-circle",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -752,106 +826,107 @@
             },
             "before": []
           }
-        }
-      ]
-    },
-    {
-      "id": "title-paper-lettering",
-      "skill": "journal-lettering",
-      "title": "有色纸片承载浅字",
-      "recipe": "title",
-      "when": "标题需要手撕纸片般的色块",
-      "defaults": {
-        "treatment": "paper-lettering",
-        "style": {
-          "color": "#FFF8EB"
         },
-        "backdrop": {
-          "kind": "band",
-          "paddingMm": 6,
-          "color": "#355D55",
-          "opacity": 1
-        },
-        "fontFamily": "BaiLuBangBang"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-paper-lettering"
-      },
-      "example": {
-        "text": "今日小记",
-        "fontSizePt": 22,
-        "widthMm": 75,
-        "style": {
-          "color": "#FFF8EB"
-        },
-        "backdrop": {
-          "kind": "band",
-          "paddingMm": 6,
-          "color": "#355D55",
-          "opacity": 1
-        },
-        "fontFamily": "BaiLuBangBang"
-      },
-      "lesson": {
-        "principle": "整块深绿色卡纸垫在字下，白色手写字压在上面；底色比字群略大，保留清楚的四边。",
-        "steps": [
-          "从素材取深底浅字两色",
-          "调节纸片边距、纹样和不透明度",
-          "检查多行时每行纸片边界"
-        ],
-        "check": [
-          "纸片没有空占整张大卡",
-          "浅色字保持清晰"
-        ],
-        "source": {
-          "kind": "tutorial-mapping",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
-        }
-      }
-    },
-    {
-      "id": "title-stack",
-      "skill": "journal-lettering",
-      "title": "分行标题组",
-      "recipe": "title",
-      "when": "长标题适配窄区域",
-      "defaults": {
-        "treatment": "stack"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-stack"
-      },
-      "example": {
-        "text": "今天的风\n很温柔",
-        "widthMm": 42
-      },
-      "lesson": {
-        "principle": "通过语义断行形成紧凑字块，不用缩小字号塞进窄缝。",
-        "steps": [
-          "按语义在 text 中给换行",
-          "设定可用宽度",
-          "保留字号并检查自动换行。"
-        ],
-        "check": [
-          "没有孤立标点和意外半词",
-          "字块能与附近素材形成共同边线。"
-        ],
-        "source": {
-          "kind": "project-synthesis",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
-        }
-      },
-      "variants": [
         {
-          "key": "vertical",
+          "title": "有色纸片承载浅字",
+          "when": "标题需要手撕纸片般的色块",
+          "defaults": {
+            "treatment": "paper-lettering",
+            "style": {
+              "color": "#FFF8EB"
+            },
+            "backdrop": {
+              "kind": "band",
+              "paddingMm": 6,
+              "color": "#355D55",
+              "opacity": 1
+            },
+            "fontFamily": "BaiLuBangBang"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-paper-lettering"
+          },
+          "example": {
+            "text": "今日小记",
+            "fontSizePt": 22,
+            "widthMm": 75,
+            "style": {
+              "color": "#FFF8EB"
+            },
+            "backdrop": {
+              "kind": "band",
+              "paddingMm": 6,
+              "color": "#355D55",
+              "opacity": 1
+            },
+            "fontFamily": "BaiLuBangBang"
+          },
+          "lesson": {
+            "principle": "整块深绿色卡纸垫在字下，白色手写字压在上面；底色比字群略大，保留清楚的四边。",
+            "steps": [
+              "从素材取深底浅字两色",
+              "调节纸片边距、纹样和不透明度",
+              "检查多行时每行纸片边界"
+            ],
+            "check": [
+              "纸片没有空占整张大卡",
+              "浅色字保持清晰"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "借鉴倪以七《六种标题写法》的文字、底形、装饰关系；数字图形与参数为拾页独立实现。"
+            }
+          },
+          "key": "paper-lettering"
+        },
+        {
+          "title": "分行标题组",
+          "when": "长标题适配窄区域",
+          "defaults": {
+            "treatment": "stack"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-stack"
+          },
+          "example": {
+            "text": "今天的风\n很温柔",
+            "widthMm": 42
+          },
+          "lesson": {
+            "principle": "通过语义断行形成紧凑字块，不用缩小字号塞进窄缝。",
+            "steps": [
+              "按语义在 text 中给换行",
+              "设定可用宽度",
+              "保留字号并检查自动换行。"
+            ],
+            "check": [
+              "没有孤立标点和意外半词",
+              "字块能与附近素材形成共同边线。"
+            ],
+            "source": {
+              "kind": "project-synthesis",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+            }
+          },
+          "key": "stack"
+        },
+        {
           "title": "竖向标题",
           "when": "侧边形成纵向阅读轴",
           "defaults": {
             "treatment": "vertical"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-vertical"
+          },
+          "example": {
+            "text": "今天的风\n很温柔",
+            "widthMm": 42
           },
           "lesson": {
             "principle": "用纵向字序建立侧边轴，适合少量汉字。",
@@ -871,10 +946,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-vertical"
-          },
+          "key": "stack-vertical",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -889,11 +961,14 @@
           }
         },
         {
-          "key": "stagger",
           "title": "错落字群",
           "when": "少量关键词形成手写节奏",
           "defaults": {
             "treatment": "stagger"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-stagger"
           },
           "example": {
             "text": "慢慢收集",
@@ -932,10 +1007,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-stagger"
-          },
+          "key": "stack-stagger",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -966,11 +1038,18 @@
           }
         },
         {
-          "key": "curve",
           "title": "弧形标题",
           "when": "呼应圆形或弧形主体",
           "defaults": {
             "treatment": "curve"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-curve"
+          },
+          "example": {
+            "text": "今天的风\n很温柔",
+            "widthMm": 42
           },
           "lesson": {
             "principle": "单行文字沿浅弧呼应圆形主体，弧高可正负调节。",
@@ -990,10 +1069,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-curve"
-          },
+          "key": "stack-curve",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -1008,12 +1084,15 @@
           }
         },
         {
-          "key": "headline",
           "title": "窄栏大题",
           "when": "标题成为版面中的图形",
           "defaults": {
             "treatment": "stack",
             "fontSizePt": 30
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "magazine-headline"
           },
           "example": {
             "text": "今日\n收藏",
@@ -1037,10 +1116,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "magazine-headline"
-          },
+          "key": "stack-headline",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -1054,177 +1130,192 @@
             },
             "before": []
           }
-        }
-      ]
-    },
-    {
-      "id": "title-tape",
-      "skill": "journal-lettering",
-      "title": "半透明胶带标题",
-      "recipe": "title",
-      "when": "短标题需要轻薄底色，与附近纸片或照片连成局部图文组",
-      "defaults": {
-        "treatment": "tape",
-        "pattern": "stripes"
-      },
-      "example": {
-        "text": "散步手记",
-        "fontFamily": "HongLeiZhuoShu",
-        "widthMm": 56,
-        "colors": [
-          "#304B42",
-          "#809588",
-          "#E7DAC0"
-        ],
-        "tapeOpacity": 0.55
-      },
-      "lesson": {
-        "principle": "根据实际字行生成轻薄的可编辑数字胶带，让标题和相邻素材有接触关系，而不是铺满一张底卡。",
-        "steps": [
-          "从相邻素材取字色、胶带纹样色与底色",
-          "按完整标题和可用宽度决定换行；长标题每行各有短胶带",
-          "把标题组跨在纸片或照片的边缘，观察真实预览后调整位置与透明度。"
-        ],
-        "check": [
-          "标题文字完整且可读",
-          "胶带没有遮住主体和关键印刷字",
-          "数字胶带未被误算为实体素材。"
-        ],
-        "source": {
-          "kind": "project-synthesis",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "受 journal-page 的标题与胶带连接关系启发；拾页独立实现可编辑 Scene 图形，未复制其代码或案例图片。"
-        }
-      }
-    },
-    {
-      "id": "playful-bubble",
-      "skill": "journal-lettering",
-      "title": "气泡短记",
-      "recipe": "title",
-      "when": "短句与圆角底形形成对话感",
-      "defaults": {
-        "treatment": "bubble"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "playful-bubble"
-      },
-      "lesson": {
-        "principle": "短句与圆润底形组成轻松的文字块。",
-        "steps": [
-          "提供短句",
-          "设置字色底色",
-          "把圆润文字组靠近相关主体。"
-        ],
-        "check": [
-          "字没有贴边",
-          "底形不被误当实体",
-          "需要指向尾巴用气泡批注框。"
-        ],
-        "source": {
-          "kind": "project-synthesis",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
-        }
-      }
-    },
-    {
-      "id": "vintage-postmark",
-      "skill": "journal-lettering",
-      "title": "邮戳圈记",
-      "recipe": "title",
-      "when": "围绕短标签组织圆形印记",
-      "defaults": {
-        "treatment": "seal"
-      },
-      "example": {
-        "text": "旅途"
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "vintage-postmark"
-      },
-      "lesson": {
-        "principle": "用透明圈线和短标签表达收藏印记，不冒充真实邮戳。",
-        "steps": [
-          "给不含虚构事实的短词",
-          "设置圈线和底色",
-          "放到内容关联处。"
-        ],
-        "check": [
-          "不会暗示不存在的日期地点",
-          "没有额外实体印章库存",
-          "字可读。"
-        ],
-        "source": {
-          "kind": "project-synthesis",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
-        }
-      }
-    },
-    {
-      "id": "title-gap-shadow",
-      "skill": "journal-lettering",
-      "title": "留白间隔阴影",
-      "recipe": "title",
-      "when": "主标题需要明显的错位阴影，字身和影子之间保留纸面空隙",
-      "defaults": {
-        "treatment": "gap-shadow",
-        "fontFamily": "BaiLuBangBang",
-        "fontSizePt": 24
-      },
-      "illustration": {
-        "kind": "executable-schematic",
-        "id": "title-gap-shadow"
-      },
-      "example": {
-        "text": "去看春天",
-        "fontFamily": "BaiLuBangBang",
-        "fontSizePt": 25,
-        "widthMm": 80,
-        "colors": [
-          "#244D47",
-          "#D39368",
-          "#F8EEE1"
-        ],
-        "style": {
-          "shadow": {
-            "color": "#D39368",
-            "offsetMm": [
-              1.5,
-              1.5
-            ],
-            "blurMm": 0
-          }
-        }
-      },
-      "lesson": {
-        "principle": "使用真实字形的硬边偏移投影，阴影方向一致，字身与影子之间露出底色。",
-        "steps": [
-          "选择粗细变化明显且可读的短标题字体",
-          "将 colors[2] 设为标题所在纸面色；blurMm 设为 0，用 offsetMm 控制间隔，阴影色取页面强调色",
-          "先看底色和字影对比，再检查阴影是否侵入邻近正文"
-        ],
-        "check": [
-          "字身与影子之间仍能辨认纸面",
-          "阴影不压住其他内容"
-        ],
-        "source": {
-          "kind": "tutorial-mapping",
-          "guide": "creative-agent/skills/journal-lettering/SKILL.md",
-          "scope": "参考水岸芝芝《大标题教程 2.0》的间隔阴影关系；采用拾页文字与阴影参数实现，不复制原作者字形。"
-        }
-      },
-      "variants": [
+        },
         {
-          "key": "offset-outline",
+          "title": "半透明胶带标题",
+          "when": "短标题需要轻薄底色，与附近纸片或照片连成局部图文组",
+          "defaults": {
+            "treatment": "tape",
+            "pattern": "stripes"
+          },
+          "example": {
+            "text": "散步手记",
+            "fontFamily": "HongLeiZhuoShu",
+            "widthMm": 56,
+            "colors": [
+              "#304B42",
+              "#809588",
+              "#E7DAC0"
+            ],
+            "tapeOpacity": 0.55
+          },
+          "lesson": {
+            "principle": "根据实际字行生成轻薄的可编辑数字胶带，让标题和相邻素材有接触关系，而不是铺满一张底卡。",
+            "steps": [
+              "从相邻素材取字色、胶带纹样色与底色",
+              "按完整标题和可用宽度决定换行；长标题每行各有短胶带",
+              "把标题组跨在纸片或照片的边缘，观察真实预览后调整位置与透明度。"
+            ],
+            "check": [
+              "标题文字完整且可读",
+              "胶带没有遮住主体和关键印刷字",
+              "数字胶带未被误算为实体素材。"
+            ],
+            "source": {
+              "kind": "project-synthesis",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "受 journal-page 的标题与胶带连接关系启发；拾页独立实现可编辑 Scene 图形，未复制其代码或案例图片。"
+            }
+          },
+          "key": "tape"
+        },
+        {
+          "title": "气泡短记",
+          "when": "短句与圆角底形形成对话感",
+          "defaults": {
+            "treatment": "bubble"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "playful-bubble"
+          },
+          "lesson": {
+            "principle": "短句与圆润底形组成轻松的文字块。",
+            "steps": [
+              "提供短句",
+              "设置字色底色",
+              "把圆润文字组靠近相关主体。"
+            ],
+            "check": [
+              "字没有贴边",
+              "底形不被误当实体",
+              "需要指向尾巴用气泡批注框。"
+            ],
+            "source": {
+              "kind": "project-synthesis",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+            }
+          },
+          "key": "playful-bubble"
+        },
+        {
+          "title": "邮戳圈记",
+          "when": "围绕短标签组织圆形印记",
+          "defaults": {
+            "treatment": "seal"
+          },
+          "example": {
+            "text": "旅途"
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "vintage-postmark"
+          },
+          "lesson": {
+            "principle": "用透明圈线和短标签表达收藏印记，不冒充真实邮戳。",
+            "steps": [
+              "给不含虚构事实的短词",
+              "设置圈线和底色",
+              "放到内容关联处。"
+            ],
+            "check": [
+              "不会暗示不存在的日期地点",
+              "没有额外实体印章库存",
+              "字可读。"
+            ],
+            "source": {
+              "kind": "project-synthesis",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
+            }
+          },
+          "key": "vintage-postmark"
+        },
+        {
+          "title": "留白间隔阴影",
+          "when": "主标题需要明显的错位阴影，字身和影子之间保留纸面空隙",
+          "defaults": {
+            "treatment": "gap-shadow",
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 24
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-gap-shadow"
+          },
+          "example": {
+            "text": "去看春天",
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 25,
+            "widthMm": 80,
+            "colors": [
+              "#244D47",
+              "#D39368",
+              "#F8EEE1"
+            ],
+            "style": {
+              "shadow": {
+                "color": "#D39368",
+                "offsetMm": [
+                  1.5,
+                  1.5
+                ],
+                "blurMm": 0
+              }
+            }
+          },
+          "lesson": {
+            "principle": "使用真实字形的硬边偏移投影，阴影方向一致，字身与影子之间露出底色。",
+            "steps": [
+              "选择粗细变化明显且可读的短标题字体",
+              "将 colors[2] 设为标题所在纸面色；blurMm 设为 0，用 offsetMm 控制间隔，阴影色取页面强调色",
+              "先看底色和字影对比，再检查阴影是否侵入邻近正文"
+            ],
+            "check": [
+              "字身与影子之间仍能辨认纸面",
+              "阴影不压住其他内容"
+            ],
+            "source": {
+              "kind": "tutorial-mapping",
+              "guide": "creative-agent/skills/journal-lettering/SKILL.md",
+              "scope": "参考水岸芝芝《大标题教程 2.0》的间隔阴影关系；采用拾页文字与阴影参数实现，不复制原作者字形。"
+            }
+          },
+          "key": "gap-shadow"
+        },
+        {
           "title": "偏移轮廓标题",
           "when": "需要线性错位而非模糊投影",
           "defaults": {
             "treatment": "offset-outline",
-            "fontFamily": "BaiLuBangBang"
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 24
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-offset-outline"
+          },
+          "example": {
+            "text": "去看春天",
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 25,
+            "widthMm": 80,
+            "colors": [
+              "#244D47",
+              "#D39368",
+              "#F8EEE1"
+            ],
+            "style": {
+              "shadow": {
+                "color": "#D39368",
+                "offsetMm": [
+                  1.5,
+                  1.5
+                ],
+                "blurMm": 0
+              }
+            }
           },
           "lesson": {
             "principle": "描边向同一方向偏移，形成可识别的双轮廓节奏。",
@@ -1243,10 +1334,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-offset-outline"
-          },
+          "key": "gap-shadow-offset-outline",
           "demo": {
             "parameters": {
               "id": "demo",
@@ -1261,12 +1349,37 @@
           }
         },
         {
-          "key": "gradient-outline",
           "title": "渐变描边标题",
           "when": "彩色标题需要从邻近底色中分离",
           "defaults": {
             "treatment": "gradient-outline",
-            "fontFamily": "BaiLuBangBang"
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 24
+          },
+          "illustration": {
+            "kind": "executable-schematic",
+            "id": "title-gradient-outline"
+          },
+          "example": {
+            "text": "去看春天",
+            "fontFamily": "BaiLuBangBang",
+            "fontSizePt": 25,
+            "widthMm": 80,
+            "colors": [
+              "#244D47",
+              "#D39368",
+              "#F8EEE1"
+            ],
+            "style": {
+              "shadow": {
+                "color": "#D39368",
+                "offsetMm": [
+                  1.5,
+                  1.5
+                ],
+                "blurMm": 0
+              }
+            }
           },
           "lesson": {
             "principle": "用薄描边隔开渐变字与背景，字仍是可编辑文本。",
@@ -1285,10 +1398,7 @@
               "scope": "方法与参数为拾页归纳实现；原教程阅读范围以专题来源记录为准。"
             }
           },
-          "illustration": {
-            "kind": "executable-schematic",
-            "id": "title-gradient-outline"
-          },
+          "key": "gap-shadow-gradient-outline",
           "demo": {
             "parameters": {
               "id": "demo",

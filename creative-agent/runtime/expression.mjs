@@ -2,29 +2,24 @@ import {describeTechnique} from '../../creative-agent/library/techniques.js';
 import {inspectCreationDocument} from '../../src/creation-inspection.js';
 
 // A visible treatment, rather than merely a method mentioned in the plan.
-const expressiveIDs=new Set([
-  'title-stack','title-tape','title-label','title-gap-shadow','title-phrases',
-  'title-cross-shadow','title-scattered-round',
-  'title-number-route','title-script-dots','title-paper-lettering',
-  'color-echo','graphic-bubble','graphic-loop','accent-spark'
-]);
+const expressiveIDs=new Set(['title-art','color-echo','graphic-bubble','graphic-loop','accent-spark']);
 const colorIDs=new Set(['color-echo']);
 
 // Keep the choice set visible after conversation compaction without loading
 // every long lettering lesson or its image into the first model request.
 export function letteringEffectMenu(){
   return [
-    {id:'title-gap-shadow',effect:'留白间隔阴影',when:'大标题需要硬边错位投影；colors[2] 设为标题所在纸面色'},
-    {id:'title-gap-shadow',variant:'offset-outline',effect:'偏移轮廓',when:'需要清晰的错位线条而非模糊投影'},
-    {id:'title-gap-shadow',variant:'gradient-outline',effect:'渐变描边',when:'需要取自素材的两色字形与背景分离'},
-    {id:'title-tape',effect:'局部纸带承字',when:'标题需要与附近纸片或照片连接'},
-    {id:'title-cross-shadow',effect:'中部横带穿字',when:'大字与小字形成一组，保留统一阴影'},
-    {id:'title-scattered-round',effect:'错落字群与圆点',when:'词组有主次层级；用 runs 明确位置'},
-    {id:'title-scattered-round',variant:'triangle',effect:'错落字群与三角',when:'标题需要轻快的几何节奏'},
-    {id:'title-number-route',effect:'倾斜数字与外围线',when:'真实年份或日期做成局部焦点'},
-    {id:'title-script-dots',effect:'连写字与圆点底纹',when:'短英文标题要有可调间距的背景点'},
-    {id:'title-paper-lettering',effect:'有色纸片承浅字',when:'字行长度变化时纸片自动跟随'},
-    {id:'title-phrases',effect:'主次词组',when:'标题要有词组层级；可与上述文字 style 组合'}
+    {id:'title-art',variant:'gap-shadow',effect:'留白间隔阴影',when:'大标题需要硬边错位投影；colors[2] 设为标题所在纸面色'},
+    {id:'title-art',variant:'gap-shadow-offset-outline',effect:'偏移轮廓',when:'需要清晰的错位线条而非模糊投影'},
+    {id:'title-art',variant:'gap-shadow-gradient-outline',effect:'渐变描边',when:'需要取自素材的两色字形与背景分离'},
+    {id:'title-art',variant:'tape',effect:'局部纸带承字',when:'标题需要与附近纸片或照片连接'},
+    {id:'title-art',variant:'cross-shadow',effect:'中部横带穿字',when:'大字与小字形成一组，保留统一阴影'},
+    {id:'title-art',variant:'scattered-round',effect:'错落字群与圆点',when:'词组有主次层级；用 runs 明确位置'},
+    {id:'title-art',variant:'scattered-round-triangle',effect:'错落字群与三角',when:'标题需要轻快的几何节奏'},
+    {id:'title-art',variant:'number-route',effect:'倾斜数字与外围线',when:'真实年份或日期做成局部焦点'},
+    {id:'title-art',variant:'script-dots',effect:'连写字与圆点底纹',when:'短英文标题要有可调间距的背景点'},
+    {id:'title-art',variant:'paper-lettering',effect:'有色纸片承浅字',when:'字行长度变化时纸片自动跟随'},
+    {id:'title-art',variant:'phrases',effect:'主次词组',when:'标题要有词组层级；可与上述文字 style 组合'}
   ];
 }
 
@@ -39,7 +34,7 @@ export function expressionCards(document,brief){
   const style=[brief.style,...(Array.isArray(brief.styles)?brief.styles:[]),...(document.source.styles||[])].filter(Boolean).join(' ');
   const rich=/丰富|层叠|拼贴|童趣|复古|杂志/.test(style);
   const quiet=/留白|极简|清新|淡雅|安静|疏朗/.test(style);
-  const title=document.source.textMode==='none'?[{id:'graphic-loop'}]:rich?[{id:'title-paper-lettering'},{id:'title-cross-shadow'}]:quiet?[{id:'title-phrases'}]:[{id:'title-gap-shadow',variant:'offset-outline'},{id:'title-gap-shadow'}];
+  const title=document.source.textMode==='none'?[{id:'graphic-loop'}]:rich?[{id:'title-art',variant:'paper-lettering'},{id:'title-art',variant:'cross-shadow'}]:quiet?[{id:'title-art',variant:'phrases'}]:[{id:'title-art',variant:'gap-shadow-offset-outline'},{id:'title-art',variant:'gap-shadow'}];
   const color={id:'color-echo',...(rich?{variant:'bands'}:{})};
   const accents={id:'accent-spark',variant:rich?'sprig':'rings'};
   if(document.source.materials.length&&document.source.textMode!=='none')title.push({id:'graphic-route'});

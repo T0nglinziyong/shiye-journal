@@ -10,7 +10,7 @@ export function creationCompositionPriority(visualBalance,advisory,styles=[]){
   const gap=(advisory?.clusterAlignment||[]).find(item=>item.verticalGapFraction>.1);
   if(gap)return `${gap.page} 正文与主素材相隔较远。看真实预览区分有意停顿与关联断裂；只有关联不清时才移动正文或主素材，也可用共同轴线或颜色建立关系，不要求全部叠成一簇。`;
   const alignment=(advisory?.clusterAlignment||[]).find(item=>Math.abs(item.leftEdgeOffsetFraction)>.1);
-  if(alignment)return `${alignment.page} 正文与主素材的左边线明显错开。下一轮先看预览：若没有共同中心或连接，移动整段或素材，不用微小点阵遮掩。`;
+  if(alignment)return `${alignment.page} 正文与主素材的左边线不同；对角错位、阶梯与背景书写都可以成立，无需为了齐边或同中心而拉回横竖排列。只在真实读序或内容联系不清时调整位置。`;
   if(styles.includes('丰富层叠')&&advisory?.estimatedGraphicPaintFraction<.003&&advisory?.layers?.material>0)return '本次选择丰富层叠：检查材料自身纹样、叠压与文字是否已提供充分细节；只有画面仍单薄时，才在具体关系处补素材或可编辑图形，不按数字图形面积评分。';
   return null;
 }

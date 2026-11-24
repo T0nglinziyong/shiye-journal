@@ -109,7 +109,7 @@ const segmentMaterial=daemon?await createMaterialSegmenter({source:document.sour
   const name='cut-'+proposal.id+'.png';await writeFile(join(output,name),png,{mode:0o600});
   await writeFile(join(output,name+'.json'),JSON.stringify(proposal),{mode:0o600});return name;
 }}):undefined;
-const thinkingPolicy=study?'high':process.env.SHIYE_CREATIVE_THINKING_POLICY||'adaptive';
+const thinkingPolicy=study?'high':process.env.SHIYE_CREATIVE_THINKING_POLICY||'low';
 // Use the provider's normal deep-thinking output allowance. A small forced
 // max_tokens truncates reasoning + tool arguments and causes paid repeats.
 const provider=createDeepSeekCreativeModel({key:process.env.SHIYE_CREATIVE_API_KEY,effort:process.env.SHIYE_CREATIVE_EFFORT||'high',fetcher:study?(url,options)=>study.fetch(network.fetcher,url,options):network.fetcher});

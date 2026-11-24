@@ -40,7 +40,7 @@ test('optional tools are discoverable, persistent across phases and restricted t
   assert.equal(result.ok,true);
   assert.deepEqual(result.data.tools.map(tool=>tool.function.name).sort(),['read_template','workspace_create']);
   const restored=JSON.parse(JSON.stringify(f.state));
-  for(const phase of ['direction','layout','craft','review']){
+  for(const phase of ['direction','layout','craft','accents','review']){
     const names=selectHarnessTools(available,{...restored,phase}).map(tool=>tool.function.name);
     assert.ok(names.includes('read_template'));assert.ok(names.includes('workspace_create'));
     assert.ok(!names.includes('segment_material'));
@@ -121,13 +121,14 @@ test('context windowing preserves unsummarized decisions and recognizes the actu
   const messages=[...f.state.messages.slice(0,2)];
   for(let i=0;i<10;i++)messages.push({role:'assistant',content:i===0?'放弃居中布局，保留左侧标题作为阅读起点。':null,tool_calls:[{id:'c'+i,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'});
   const observation=f.state.messages.at(-1);
-  assert.match(observation.content[0].text,/当前纸面实物素材：/);
+  assert.match(observation.content[0].text,/当前真实画面：/);
+  assert.doesNotMatch(observation.content[0].text,/当前纸面实物素材：/,'material roles and geometry remain in the scene, not a duplicate list');
   messages.push(observation);
   const context=modelContext(messages,{...f.state,messages,compactedUntil:2,creativeMemory:''});
-  const summary=JSON.parse(context[2].content.slice(context[2].content.indexOf('：')+1));
-  assert.match(summary.creativeMemory,/放弃居中布局/);
-  assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
-  assert.equal(context.filter(message=>message===observation).length,1);
+  const summary=JSON.parse(context.at(-1).content.slice(context.at(-1).content.indexOf('：')+1));
+  assert.ok(context.some(m=>typeof m.content==='string'&&m.content.includes('放弃居中布局')));
+  assert.ok(Array.isArray(summary.scene.layers));assert.ok(Array.isArray(summary.scene.layerTree));
+  assert.equal(context.filter(message=>message===observation).length,0,'old automatic snapshots stay out of stable history');
 });
 
 test('no-text tasks do not receive writing or lettering method suggestions',()=>{
@@ -141,7 +142,7 @@ test('zero-material documentary tasks retain their facts without being told to i
   const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
   const state=initialHarnessState({document,skills,brief:{}});
   assert.doesNotMatch(state.messages[0].content,/允许写虚构的小场景/);
-  const constraints=JSON.parse(state.messages[1].content[0].text.split('\n').find(line=>line.startsWith('任务约束：')).slice('任务约束：'.length));
+  const constraints=JSON.parse(state.messages[1].content.filter(part=>part.type==='text').map(part=>part.text).join('\n').split('\n').find(line=>line.startsWith('任务约束：')).slice('任务约束：'.length));
   assert.equal(constraints.contentPolicy,'documentary');
   assert.equal(constraints.userText,'今天整理了书桌');
   assert.equal(constraints.providedFacts,'只记录整理书桌');
