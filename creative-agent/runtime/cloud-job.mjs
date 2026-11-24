@@ -109,7 +109,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
     const retryable=error.code==='CREATIVE_WORKER_STOPPED'||error.code==='CREATIVE_MODEL_TIMEOUT'||error instanceof TypeError&&error.message==='fetch failed'||[408,429,500,502,503,504].includes(error.status);
     try{
       if(retryable){const released=await rpc('shiye_release_creative_job_v1',{p_id:job.id,p_lease:job.lease_token});error.creativeRetry=released?.status==='queued';}
-      else await rpc('shiye_update_creative_job_v1',{p_id:job.id,p_lease:job.lease_token,p_error_code:['CREATIVE_DEADLINE','CREATIVE_RESOURCE_VERSION','CREATIVE_MODEL_TIMEOUT'].includes(error.code)?error.code:'CREATIVE_FAILED'});
+      else await rpc('shiye_update_creative_job_v1',{p_id:job.id,p_lease:job.lease_token,p_error_code:['CREATIVE_DEADLINE','CREATIVE_RESOURCE_VERSION','CREATIVE_MODEL_TIMEOUT','CREATIVE_CHECKPOINT_SIZE'].includes(error.code)?error.code:'CREATIVE_FAILED'});
       await ping(true);
     }catch{/* Cancelled or fenced workers cannot publish a result. */}
     throw error;

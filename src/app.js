@@ -90,7 +90,7 @@ import {sha256Hex} from './task-fingerprint.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory,restoreHistoryDraft,renameHistory,deleteDraft,historyTitle} from './project-history.js';
 import {newEditorSession,editorSessionHasEdits} from './editor-session-policy.js';
-import {editorExitDecision} from './editor-exit-policy.js';
+import {editorExitDecision,isBlankEditableProject} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
 import {defaultTools,configureShape} from './editor-tools-model.js';
 import {replaceSceneMaterial} from './scene-advanced-ops.js';
@@ -1257,7 +1257,7 @@ function saveProject(){
 }
 const pendingTrashStages=new Map();
 async function awaitTrashStages(ids){await Promise.all(ids.map(id=>pendingTrashStages.get(id)).filter(Boolean));}
-async function moveProjectsToTrash(ids){
+async function moveProjectsToTrash(ids,{silent=false}={}){
   const selected=new Set(ids),projects=state.projects.filter(p=>selected.has(p.id));
   if(!projects.length)return 0;
   const priorActive=state.activeProject,priorDraft=state.activeDraft;
@@ -1278,7 +1278,7 @@ async function moveProjectsToTrash(ids){
   for(const entry of entries)pendingTrashStages.set(entry.id,staged);
   try{
     await staged;
-    toast(entries.length?projects.length===entries.length?'已移到最近删除 · 云端后台同步中':'作品已移到最近删除，草稿已删除':'草稿已删除 · 云端后台同步中');
+    if(!silent)toast(entries.length?projects.length===entries.length?'已移到最近删除 · 云端后台同步中':'作品已移到最近删除，草稿已删除':'草稿已删除 · 云端后台同步中');
     return projects.length;
   }catch(error){
     const entryIDs=new Set(entries.map(entry=>entry.id));
@@ -1354,7 +1354,7 @@ async function runAppAction(action,id,value){try{
     // Viewing/closing an existing work must be read-only unless a user
     // action changed its data. Real edits have already called saveProject().
     view.endTextEditing?.();
-    if(action==='editor-done'){
+    if(action==='editor-done'&&!decision.discard){
       // Publishing is explicit; Back must not normalize legacy draft flags or
       // change timestamps merely because a user inspected an existing work.
       p.isDraft=decision.isDraft;
@@ -1362,6 +1362,7 @@ async function runAppAction(action,id,value){try{
       saveProject();
     }
     await flushSave();
+    if(decision.discard)await moveProjectsToTrash([p.id],{silent:true});
     if(publish)saveAISnapshotInBackground(p);
     const returnToMatching=state.offlineEditingReturnID===p.id;
     if(returnToMatching){
@@ -4222,6 +4223,9 @@ function recoverBackgroundCreation(){
 window.addEventListener('online',()=>void recoverBackgroundCreation());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void recoverBackgroundCreation();});
 const matchingSession=createMatchingSession({state,db,uid,asset,modelImage,rasterize,backgroundCreation,
+  discardBlankProject:async id=>{const p=state.projects.find(item=>item.id===id);if(!p)return true;
+    if(!isBlankEditableProject(p))return false;
+    await moveProjectsToTrash([id],{silent:true});return true;},
   createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,
   saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,
   supportsVision,flushSave,route,toast});

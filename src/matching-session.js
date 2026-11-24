@@ -9,6 +9,7 @@ import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-r
 import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
+import {isBlankEditableProject} from './editor-exit-policy.js';
 const ID='matching-session-v1';
 const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchPlacements','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose','recommendFilter'];
 export function creativeCompletionText(startedAt,completedAt=new Date().toISOString(),usage=null){
@@ -50,6 +51,10 @@ export function createMatchingSession(c){
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
  const update=()=>{if(c.state.route==='matching')notify();};
+ const discardFailedBlank=async v=>{
+   if(v.status!=='failed'||!v.linkedProjectID||!isBlankEditableProject(v.project)||!c.discardBlankProject)return;
+   if(await c.discardBlankProject(v.linkedProjectID)){v.linkedProjectID=null;await save();update();}
+ };
  const progressFor=(v,owner)=>event=>{
    if(account()!==owner)return;
    v.progress=event.message;
@@ -63,7 +68,7 @@ export function createMatchingSession(c){
    void c.backgroundCreation.resume(v.project,progressFor(v,owner)).then(async result=>{
      if(account()!==owner||!result)return;
      v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt,result.usage);await save();update();
-   }).catch(async error=>{if(account()!==owner)return;v.status='failed';v.progress=error.message;await save();update();});
+   }).catch(async error=>{if(account()!==owner)return;v.status='failed';v.progress=error.message;await save();await discardFailedBlank(v);update();});
  };
 
  return {
@@ -79,6 +84,7 @@ export function createMatchingSession(c){
         if(!saved.creativeCompletedJobs?.[v.cloudJobID]){v.status='running';v.progress='正在恢复后台任务';}
       }
       if(v.status==='running'&&v.project?.creativeTask?.id&&c.backgroundCreation)resumeVariant(v);
+      else if(v.status==='failed')await discardFailedBlank(v);
     }
   },
   progress(v){if(v.status!=='running'||!v.progressJob)return v.progress;const job=v.progressJob;return creativeJobProgress({...job,progress:{...job.progress,elapsedMs:(job.progress?.elapsedMs||0)+Math.max(0,Date.now()-(v.progressReceivedAt||Date.now()))}});},
@@ -122,7 +128,7 @@ export function createMatchingSession(c){
   },
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));const v=variants.find(v=>v.status==='running'&&v.project?.creativeTask?.id);if(v&&c.backgroundCreation)void c.backgroundCreation.cancel(v.project.creativeTask.id).catch(error=>c.toast(error.message));},
   async reset(clearContext=()=>{}){const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
-  async open(id){const v=variants.find(x=>x.id===id);if(!v||opening)return;if(v.status==='running'){c.state.creativePreviewVariantID=v.id;update();return;}opening=true;try{await queue;await c.flushSave();let existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(existing?.projectDocumentPath){existing=await c.db.completeProject(existing);c.state.projects=c.state.projects.map(p=>p.id===existing.id?existing:p);}if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());if(!existing)await c.db.stageProject(p);v.linkedProjectID=p.id;
+  async open(id){const v=variants.find(x=>x.id===id);if(!v||opening)return;if(v.status==='running'){c.state.creativePreviewVariantID=v.id;update();return;}if(v.status==='failed'&&isBlankEditableProject(v.project)){c.toast('这次创作尚未生成画面；请重新创作');return;}opening=true;try{await queue;await c.flushSave();let existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(existing?.projectDocumentPath){existing=await c.db.completeProject(existing);c.state.projects=c.state.projects.map(p=>p.id===existing.id?existing:p);}if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());if(!existing)await c.db.stageProject(p);v.linkedProjectID=p.id;
     await device.put(account(),matchingSnapshot(c.state,variants));
     if(!existing)c.state.projects.push(p);p.activeDraftID=variantResultProject(v,p).activeDraftID;c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.id;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async rebuild(id){
@@ -187,7 +193,8 @@ export function createMatchingSession(c){
     if(mode==='hybrid'){v.project=p;v.linkedProjectID=null;v.progress+='\n已生成可编辑候选；原始成图独立保留，细节仍需核对。';}
     {v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
     v.status='completed';
-   }catch(error){v.status=run.signal.aborted?'stopped':'failed';v.progress+='\n'+String(error.message||'创作失败').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]')+(checkpointFailed?'。本轮暂存失败，画面仍在当前页面；暂勿关闭。':'。已暂存的完整步骤仍保留。');}
+   }catch(error){v.status=run.signal.aborted?'stopped':'failed';v.progress+='\n'+String(error.message||'创作失败').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]')+(checkpointFailed?'。本轮暂存失败，画面仍在当前页面；暂勿关闭。':'。已暂存的完整步骤仍保留。');
+     if(v.status==='failed')try{await discardFailedBlank(v);}catch(cleanupError){console.warn('空白失败方案清理待重试',cleanupError?.message);}}
    finally {
     if(c.state.accountId===accountID)await recorder?.finish(v.status).catch(()=>{});
     if(controller===run)controller=null;

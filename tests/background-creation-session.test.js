@@ -64,4 +64,6 @@ test('running progress shows cumulative reported input/output tokens and restore
  assert.match(creativeJobProgress({status:'completed',progress:{turns:5,inputTokens:20,outputTokens:10}}),/创作完成，累计，5轮.*token输入20，复用0，输出10/);
  assert.doesNotMatch(creativeJobProgress({status:'running',progress:{turn:1}}),/token/);
  assert.doesNotMatch(creativeJobProgress({status:'running',progress:{inputTokens:-1,outputTokens:3}}),/token/);
+ assert.match(creativeJobProgress({status:'failed',error_code:'CREATIVE_CHECKPOINT_SIZE'}),/检查点超出容量/);
+ assert.doesNotMatch(creativeJobProgress({status:'failed',progress:{}}),/已保留后台检查点/);
 });
