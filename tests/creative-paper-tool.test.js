@@ -8,8 +8,9 @@ import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 import {inspectCreationDocument} from '../src/creation-inspection.js';
 const paper={id:'paper1',style:{fill:'#F1E5C9'},texture:'rough',edge:{style:'torn',seed:42},pattern:'ruled',translucency:.3,place:{reference:'page',at:[50,50],unit:'mm'},size:{width:60,height:70,unit:'mm'},order:{edge:'back'}};
-test('paper is initially available, defaults layering and rejects unknown texture',()=>{
- assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_paper'));
+test('paper compiler, defaults layering and rejects unknown texture',()=>{
+ assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_apply'));
+ assert.ok(!selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_paper'));
  const args={transactionId:'paper',baseSceneRevision:'sha256:'+'a'.repeat(64),papers:[paper]};
  validateValue(args,paperTool.function.parameters);
  assert.throws(()=>validateValue({...args,papers:[{...paper,texture:'glossy'}]},paperTool.function.parameters));
