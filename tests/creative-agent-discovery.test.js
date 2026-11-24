@@ -142,7 +142,7 @@ test('zero-material documentary tasks retain their facts without being told to i
   const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
   const state=initialHarnessState({document,skills,brief:{}});
   assert.doesNotMatch(state.messages[0].content,/允许写虚构的小场景/);
-  const constraints=JSON.parse(state.messages[1].content[0].text.split('\n').find(line=>line.startsWith('任务约束：')).slice('任务约束：'.length));
+  const constraints=JSON.parse(state.messages[1].content.filter(part=>part.type==='text').map(part=>part.text).join('\n').split('\n').find(line=>line.startsWith('任务约束：')).slice('任务约束：'.length));
   assert.equal(constraints.contentPolicy,'documentary');
   assert.equal(constraints.userText,'今天整理了书桌');
   assert.equal(constraints.providedFacts,'只记录整理书桌');

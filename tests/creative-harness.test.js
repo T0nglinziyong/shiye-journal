@@ -70,6 +70,7 @@ test('LangGraph asks for a shorter corrected call after malformed model JSON',as
     if(++turn===1)return answer({id:'broken',type:'function',function:{name:'creation_plan',arguments:'{"intent":"unfinished" trailing'}});
     if(turn===2){
       assert.ok(messages.some(message=>message.role==='tool'&&String(message.content).includes('工具参数不是完整的 JSON')));
+      assert.ok(messages.some(message=>message.role==='tool'&&String(message.content).includes('数组用 ]、对象用 }')));
       assert.ok(messages.some(message=>message.role==='assistant'&&message.tool_calls?.some(call=>call.id==='broken')));
       return answer(call('creation_plan',{intent:'在浅色纸面写一页短文'}));
     }

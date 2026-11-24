@@ -26,6 +26,9 @@ export function internalRecipeParameters(parameters,{title=false}={}){
   for(const [key,dest] of Object.entries(sizes))if(dest in p.size)p[key]=p.size[dest];
   delete p.size;
  }
+ if(title&&p.style){
+  for(const key of ['fontFamily','fontSizePt'])if(p.style[key]!==undefined)p[key]=p.style[key];
+ }
  if(p.style&&!title){
   if(Object.keys(p.style).some(key=>!paints.includes(key)))throw Error('本技巧 style 仅支持字体、字号、填色、透明度与线宽；标题技巧支持完整文字样式');
   Object.assign(p,p.style);delete p.style;
@@ -47,9 +50,12 @@ export function publicRecipeDescription(method){
   out[key==='text'?'content':key]=value;
  }
  if(out.runs)out.runs={...out.runs,description:'词组数组 [{content,role?,style?,breakBefore?,rotationDeg?,offsetMm?,backdrop?}]；content 拼接等于完整 content，字体字号统一放 style。'};
+ if(titleStyleRequired(fields))out.style={...out.style,description:'文字 style 与 text.add 相同；fontFamily/fontSizePt/color 控制字体、字号、字色，outline/gradient/shadow 等为可选效果。'};
  result.parameters=out;
  if(result.defaults)result.defaults=publicRecipeParameters(result.defaults);
  if(result.tool?.arguments){result.tool.arguments.parameters=publicRecipeParameters(result.tool.arguments.parameters);result.tool.arguments.baseSceneRevision='current';}
  if(result.parameterKeys)result.parameterKeys=[...new Set(result.parameterKeys.map(key=>placements.includes(key)?'place':key in sizes?'size':paints.includes(key)?'style':key==='text'?'content':key))];
  return result;
 }
+
+function titleStyleRequired(fields){return Boolean(fields.style);}

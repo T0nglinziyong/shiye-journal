@@ -28,7 +28,37 @@ test('every method description uses canonical fields and its example still compi
    const original=compileTechnique({methodId:method.id,parameters:raw.tool.arguments.parameters,materials:raw.example.materials});
    const result=compileTechnique({methodId:method.id,parameters:normalized.parameters,materials:raw.example.materials});
    assert.equal(result.operations.length,original.operations.length,method.id);
+   if(method.recipe==='title')assert.deepEqual(result.operations[0].children,original.operations[0].children,method.id+':'+variant);
   }
  }
  assert.throws(()=>internalRecipeParameters({id:'x',widthMm:30}),/统一使用/);
+});
+
+
+test('initial crop tool accepts valid tuples and rejects invalid dimensions before execution',()=>{
+ const validate=region=>validateValue({transactionId:'cut',baseSceneRevision:'current',operations:[{op:'material.cut',target:'paper',mode:'keep',region}]},contract('creation_apply'));
+ for(const shape of ['rect','ellipse']){
+  const region={shape,space:'local',unit:'ratio',box:[0,.1,.8,.9]};
+  assert.doesNotThrow(()=>validate(region));
+  for(const box of [[0,0,0,1],[0,0,1,-1],[0,0,1],[0,0,1,1,1],[0,0,'1',1]])assert.throws(()=>validate({...region,box}));
+ }
+ assert.doesNotThrow(()=>validate({shape:'edge',edge:'left',space:'local',amount:5,unit:'mm'}));
+ assert.doesNotThrow(()=>validate({shape:'polygon',space:'local',unit:'ratio',points:[[0,0],[1,0],[1,1]]}));
+});
+
+
+test('paper and title omission of order follows ordinary creation paint order',async()=>{
+ const {draft}=await import('../src/domain.js');
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const {applyCreationTransaction,creationSceneRevision}=await import('../src/creation-transaction.js');
+ const {compilePaperOperations}=await import('../creative-agent/runtime/paper-tool.mjs');
+ const base=await createCreationDocument({draft:draft(),assets:[]});
+ const paper={id:'paper',place:{reference:'page',at:[30,30],unit:'mm'},size:{width:50,height:50,unit:'mm'},style:{fill:'#ffffff'},texture:'medium',edge:'torn'};
+ const title={id:'heading',content:'测试',place:paper.place,size:{width:60,unit:'mm'},style:{fontSizePt:18,color:'#112233'}};
+ validateValue({transactionId:'p',baseSceneRevision:'current',papers:[paper]},contract('creation_paper'));
+ validateValue({transactionId:'t',baseSceneRevision:'current',titles:[title]},contract('creation_title'));
+ const apply=operations=>applyCreationTransaction(base,{protocolVersion:2,transactionId:'order',baseSceneRevision:creationSceneRevision(base),operations},[]).document.page.layers.sort((a,b)=>a.zIndex-b.zIndex).map(n=>n.id);
+ assert.deepEqual(apply([...compilePaperOperations({papers:[paper]}),...compileTitleOperations({titles:[title]})]),['paper','heading']);
+ assert.deepEqual(apply([...compileTitleOperations({titles:[title]}),...compilePaperOperations({papers:[paper]})]),['heading','paper']);
+ assert.deepEqual(apply([...compileTitleOperations({titles:[title]}),...compilePaperOperations({papers:[{...paper,order:{before:'heading'}}]})]),['paper','heading']);
 });

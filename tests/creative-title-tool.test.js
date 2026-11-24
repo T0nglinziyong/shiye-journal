@@ -61,3 +61,22 @@ test('explicit effect methods compile editable native styles without a recipe lo
   if(effect==='shadow')assert.equal(text.style.shadow.color,'#D8B678');
  }
 });
+
+test('minimal title defaults to plain and none, while phrase styles inherit title effects',()=>{
+ const {layout,effect,runs,backdrop,...minimal}=title;
+ const args={transactionId:'minimal',baseSceneRevision:'sha256:'+'a'.repeat(64),titles:[minimal]};
+ validateValue(args,titleTool.function.parameters);
+ const simple=compileTitleOperations(args)[0];
+ assert.equal(simple.children.filter(c=>c.op==='text.add').map(c=>c.content).join(''),minimal.content);
+ const styled={...minimal,layout:'stagger',effect:'gradient-outline',runs:[{content:'慢慢',style:{color:'#AA3344',fontSizePt:20}},{content:'生活',role:'secondary'}]};
+ validateValue({...args,titles:[styled]},titleTool.function.parameters);
+ const words=compileTitleOperations({titles:[styled]})[0].children.filter(c=>c.op==='text.add');
+ assert.equal(words[0].style.color,'#AA3344');
+ assert.equal(words[0].style.fontSizePt,20);
+ assert.ok(words.every(w=>w.style.gradient&&w.style.outline));
+ assert.equal(words[1].style.color,minimal.style.color);
+ assert.ok(JSON.stringify(titleTool.function.parameters).length<7000);
+ // Advanced rendering attributes are still available through ordinary edits,
+ // rather than a second full renderer contract on each phrase.
+ assert.throws(()=>validateValue({...args,titles:[{...minimal,style:{...minimal.style,blendMode:'multiply'}}]},titleTool.function.parameters));
+});

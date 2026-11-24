@@ -1,3 +1,4 @@
+import {creativeKnowledge} from './creative-knowledge.mjs';
 import {publicRecipeDescription,internalRecipeParameters} from './recipe-contract.mjs';
 import {techniqueCatalog} from '../library/techniques.js';
 import {creativeUsageSummary} from './usage.mjs';
@@ -24,7 +25,7 @@ import {creationCompositionPriority,detectCompositionLinks,trackCompositionAncho
 import {compileSegmentationCuts} from './segmentation.mjs';
 import {captureVisualState,recordCreativeDecision} from './observation.mjs';
 import {exploreCreativeDrafts} from './draft-exploration.mjs';
-import {creativePhases,creativeMethodGuide,phaseObservation,declaredCreativePhase,nextSkillCue} from './phases.mjs';
+import {creativePhases,creativeMethodGuide,phaseObservation,declaredCreativePhase} from './phases.mjs';
 import {evaluateCreativeFrame,attachCreativeReview} from './quality-evaluation.mjs';
 import {shortlistCreationMethods,compactInitialToolGuide,materialBrief,automaticSceneFeedback,modelContext,isCreativeSnapshot,creativeCompactionCandidate,fallbackCreativeMemory,iterationAdvice,failureGuidance} from './context.mjs';
 import {expressionCards} from './expression.mjs';
@@ -120,15 +121,11 @@ function latestPageImage(messages){
 }
 const system=`你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。五阶段是可交错的创作方法，由你根据画面决定，不由程序按工具类型推进。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
 
-Skill 是按需查询的工作方法，不是装饰配额。先看全局素材图和当前 Scene，当前任务需要具体判断时主动 read_skill：定配色读 journal-color；第一次形成构图前读 journal-composition；创建数字纸用 creation_paper 选择纸色、纹理、边缘和层序，普通色块仍用 graphic.add；纸层和露边难处理时读 paper-layering；标题用常驻 creation_title 直接组合字群排列、描边/空心/渐变和字后底形；这些是可选增强，复杂拆字或笔画技巧再读 journal-lettering；正文主题、分段或写面不明时读 journal-writing；对象接缝或视觉节奏缺细节时读 journal-accents / journal-graphics；照片叙事读 photo-story。按当前问题选择相关专题，方法可以综合运用，不必读全套；overview 取原则，methods 取少量候选，detail 取准确参数和示意图。构图由当前画面决定，用基础摆放、分组和图层命令试摆，不为三角形或 S 形等固定公式调用配方。独立查询可同轮合批；需要依据教程结果的编辑在读取后的下一轮执行。单个普通图形、正文样式、移动和层序直接用基础工具。不要把配方数当成画质指标。
+通用创作知识已经在固定任务上下文中完整提供，配色、构图、纸层、标题、正文、点缀、图形和照片叙事可直接综合运用，不必先逐个 read_skill overview。Skill 用于操作展开：methods 查候选，detail 带 methodId 取准确参数与示例；复杂拆字或笔画技巧再读 journal-lettering，裁切或开窗参数按需查询。普通纸张用 creation_paper，标题用 creation_title，基础图形、正文和层序直接用 creation_apply。独立查询可同轮合批；依赖查询结果的编辑留到下一轮。技法是可选增强，用户方向的完成度不是可选项。不要把配方数当成画质指标。
 
 方向：依据素材实际图像、纸张、用户要求确定主题、色彩与可写内容。标签仅辅助辨认和选写作话题，不能限制素材用途。可有一位、多位或没有单一主角；实体素材可留在暂存区，不必凑齐。印字卡、照片、纹样纸、可写素材、数字纸形或原纸都可承托图文。虚构叙事可作灵感，但不冒称用户亲历；纪实模式只写确认事实。
 
-构图：先试摆大块与内容簇，同时给标题和每段正文留真实可读写面，用承托、叠压、露边和跨接组织阅读。底纸和部分主物放正，少数有意倾斜。实体保持真实尺寸与数量，裁切留来源，不随意缩放或复制。双页允许不对称、对象不能跨中缝；重要文字与前景距外缘留纸边，底纸和小物可有意贴边。丰富页面要充实，留白可聚焦或书写，不把未完成空洞当设计。
-
-文字与点缀：看纸边、接缝和内容簇的断点，再选圆、星、线、笔迹、色条或胶带，尺度与颜色回应本页，不平均撒四角。每次修改自动预览，缩看重心、路线、疏密与装饰，近看字色、脸、裁切和层序。逐字检查正文与短注；图钉、星纹、孔洞和高反差印花即使在文字下方也会妨碍阅读。优先局部改位置、字色或换行，保留成立的构图，不自动为每段加底卡。窄条优先跨接、露边或两端压入邻近纸下，承字时只遮纸端不盖字；明确的票据和独立标签可保留。丰富层叠收尾检查小纸归属：同色但与主簇留着细缝仍可能漂浮，可连同文字搭入邻纸、藏入大纸后或移除；不设统一重叠比例，疏朗页可以分离。不因一次失败重排全页。案例只借关系，不是本次素材。
-
-跨案例共同方法：背景不限米白；可从一至三张主纸错位叠放，或撕分后呼应，中间留原页或再叠纸，不作为数量配额。正文优先进入现有卡纸可写处，不同段落分布在不同空间，同一空间可用H2/H3、问题或关键词区分；偶尔跨纸面但保持每字可读。可以没有全页大标题；标题位置灵活，数字可作为醒目的大点缀穿插纸边，不限于小号副题。规则卡片的局部边角可压入其他素材下，最外露轮廓优先由人物等不规则素材、圆星胶带接续，保护文字与脸。双页每页沿用单页逻辑，再做颜色呼应、面积反差与构图互补，例如一页集中中部、另一页分置上下；不是固定布局。案例共同展示这些可选关系，不必每例单独照做或把所有技巧用满。
+创作原则以固定任务中的通用知识为准：先试摆大块与内容簇，同时安排标题和每段正文的可读区域；区域可以直接在背景上，不等于新建纸张。构图、文字、纸层和装饰可以交错修改，数字和纸边连接也参与早期构图。案例只借关系，不是本次素材。
 
 阶段只作创作方法提示：构思与计划、打底与构图、标题与内容、装饰与点缀、最终检查，由你判断先后与回访。每次调用工具时可在同条回复首行写“阶段：<上述阶段名>”说明当前重点；无需单独调用进度工具或等待阶段批准。
 节奏：目标约六分钟完成。先简短构思并试摆，再看真实图合批处理标题、正文和纸边连接；同轮可以完成多个已确定的动作，不把一次小位移或单个点缀拆成独立一轮。保留最后约一分钟看图修正与交付；不能因赶时间把未解决缺陷声称通过。
@@ -156,8 +153,8 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
     :'\n本次是零素材创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。可编辑文字、程序绘制图形、荧光笔效果、线条与笔迹都可以使用。风格不等于内容主题；用户指定内容优先。'+(document.source.contentPolicy==='documentary'?'本次为纪实模式，只整理用户原文与确认事实；没有事实的部分保留可写空间，不编造经历或场景。':'可从 365 个话题候选选一个具体主题；允许写虚构的小场景，但不冒称用户亲历。')+'文字方法卡在规划后可用；需要更多方法时再 read_skill。不要调用实体素材或胶带操作。';
   return {resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseDeclared:false,firstLayoutTurn:null,initialLayerIDs:inspectCreationDocument(document).layers.map(l=>l.id),phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],referenceTemplateIDs:[],startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],discoveredTools:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
     messages:[{role:'system',content:system+'\n创作方法（自由组合，不是强制流水线）：\n'+creativeMethodGuide({...document.source,pageMode:document.page.pageMode})+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可用 Skill：'+JSON.stringify(catalog.map(({name,description})=>({name,description})))+'\n按需工具目录（调用 creation_help topics:[工具名] 展开，下一轮可调用；检索结果附带的读取工具会自动展开）：'+JSON.stringify(harnessToolCatalog(availableHarnessTools()))+'\n常用工具合同：'+JSON.stringify(compactInitialToolGuide(document))},
-      {role:'user',content:[{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({intent:document.source.intent,styles:document.source.styles,purposes:document.source.purposes,contentPolicy:document.source.contentPolicy,textPresentation:document.source.textPresentation,processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（用户指定主题优先；根据素材总图决定是否采用；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源编号与物理尺寸（名称仅供辨认，视觉角色看图决定）：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（依据页面模式与用户选定风格排序；只借对象簇、叠放和配色关系，按本次素材与纸张的真实尺寸比例改造）：'+JSON.stringify(referenceCases)},
-        {type:'text',text:document.source.materials.length?'素材总图与分类仅供选材，不决定最终角色或数量。先试摆有关系的对象，再根据真实画面增删；纸片、书写卡、照片、印字卡或星芒图案都可以是承托层，可写区以实际可读性判断。':'本次没有实体素材，靠文字与可编辑图形构图。'},
+      {role:'user',content:[{type:'text',text:creativeKnowledge},{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({intent:document.source.intent,styles:document.source.styles,purposes:document.source.purposes,contentPolicy:document.source.contentPolicy,textPresentation:document.source.textPresentation,processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（用户指定主题优先；根据素材总图决定是否采用；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源编号与物理尺寸（名称仅供辨认，视觉角色看图决定）：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（依据页面模式与用户选定风格排序；只借对象簇、叠放和配色关系，按本次素材与纸张的真实尺寸比例改造）：'+JSON.stringify(referenceCases)},
+        {type:'text',text:document.source.materials.length?'素材总图与分类仅供选材，不决定最终角色或数量。先选要展示的主体内容，再安排承托纸与写面，按实际画面增删和裁切；层序依据本页角色及要保留的图案，不按矩形或不规则外框分类。':'本次没有实体素材，靠文字与可编辑图形构图。'},
         ...(tray?[{type:'text',text:'全局素材编号图；始终可对照此图。需要局部细节时再调用 inspect_materials。'},{type:'image_url',image_url:{url:tray.imageURL}}]:[]),
         ]}]};
 }
@@ -216,14 +213,11 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       }
       if(contextState!==s)await onProgress(creativeUsageSummary(contextState));
       const apiMessages=modelContext(s.messages,{...contextState,contextNow:clock()});
-      const pageLayers=inspectCreationDocument(s.document).layers.filter(layer=>layer.surface==='page'&&!layer.hidden&&layer.opacity>0);
-      const skillCue=nextSkillCue({plan:s.plan,turns:s.turns,loadedSkills:s.loadedSkills,materialCount:s.document.source.materials.length,
-        textMode:s.document.source.textMode,visibleMaterials:pageLayers.filter(layer=>layer.type==='material').length,
-        visibleText:pageLayers.filter(layer=>layer.type==='text').length,remainingMs:s.deadlineAt-clock()});
+
       const methodChoices=s.plan?[...(s.recommendedMethods||[]).slice(0,3),...(s.expressionCards||[]).slice(0,4)]
         .map(({id,variant,skill,title,when})=>({id,...(variant?{variant}:{}),skill,title,when})):[];
       const guidanceParts={tools:'当前环境按需工具：'+JSON.stringify(harnessToolCatalog(availableTools)),
-        skills:skillCue?'下一步可读：'+skillCue:'',methods:methodChoices.length?'表达方法卡候选：'+JSON.stringify(methodChoices)+'。选中后 read_skill methods/detail 查参数，不要猜。':''};
+        methods:methodChoices.length?'表达方法卡候选：'+JSON.stringify(methodChoices)+'。选中后 read_skill methods/detail 查参数，不要猜。':''};
       const guidance=Object.entries(guidanceParts).filter(([key,value])=>value&&(contextState.compactedUntil!==s.compactedUntil||value!==s.guidanceParts?.[key])).map(([,value])=>value).join('\n');
       const persistentExtras=[];
       const appendStable=message=>{persistentExtras.push(message);const tail=apiMessages.findIndex(isCreativeSnapshot);apiMessages.splice(tail<0?apiMessages.length:tail,0,message);};
@@ -296,7 +290,10 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
         live(s,config);const name=call.function?.name,toolStarted=clock();let args;
         try{
           if(!availableTools.some(t=>t.function.name===name))throw Error('此运行环境未提供工具：'+name);
-          try{args=JSON.parse(call.function.arguments||'{}');}catch{throw Error('工具参数不是完整的 JSON 对象；本调用未执行，其他调用继续。请只重试失败的调用。');}
+          try{args=JSON.parse(call.function.arguments||'{}');}catch(error){
+            const position=String(error.message).match(/position (\d+)/)?.[1];
+            throw Error('工具参数不是完整的 JSON 对象'+(position?'（字符位置 '+position+'）':'')+'；检查数组用 ]、对象用 } 闭合，尤其 operations 末尾应为 ]}。本调用未执行，其他调用继续。请只重试失败的调用，不要重复成功操作。');
+          }
           if(!args||typeof args!=='object'||Array.isArray(args))throw Error('工具参数必须是 JSON 对象；本调用未执行，其他调用继续。');
           // All edits proposed in one model response may use its starting revision.
           // Rebase only that exact revision after earlier successful calls; stale
@@ -514,7 +511,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
           }
           discoveredTools=discoverHarnessTools(availableTools,discoveredTools,[name],data);
           results.push({name,ok:true,data});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:true,data})});
-        }catch(e){results.push({name,ok:false,code:e.code||'TOOL_ERROR',detail:e.message});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:false,code:e.code||'TOOL_ERROR',detail:e.message,sceneRevision:revision(document),currentPreview:s.preview?.sceneRevision===revision(document)?{pngHash:s.preview.pngHash,sceneRevision:s.preview.sceneRevision,artifact:s.preview.artifact}:null,guidance:failureGuidance(name,args,e)||{hint:'请根据当前工具 Schema 修正这一调用；修改前先确认最新画面和 Scene 版本。'}})});}
+        }catch(e){results.push({name,ok:false,code:e.code||'TOOL_ERROR',detail:e.message});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:false,code:e.code||'TOOL_ERROR',detail:e.message,sceneRevision:revision(document),currentPreview:s.preview?.sceneRevision===revision(document)?{pngHash:s.preview.pngHash,sceneRevision:s.preview.sceneRevision,artifact:s.preview.artifact}:null,guidance:failureGuidance(name,args,e,document)||{hint:'请根据当前工具 Schema 修正这一调用；修改前先确认最新画面和 Scene 版本。'}})});}
         trace.push({elapsedMs:clock()-s.startedAt,kind:'tool',turn:s.turns,phase:s.phase||'composition',name,ok:results.at(-1).ok,durationMs:clock()-toolStarted,sceneRevision:revision(document),pngHash:s.preview?.sceneRevision===revision(document)?s.preview.pngHash:null});
       }
       live(s,config);

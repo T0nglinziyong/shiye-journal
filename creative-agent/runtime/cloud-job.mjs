@@ -1,3 +1,4 @@
+import {loadStyleReferences,attachStyleReferences} from './style-references.mjs';
 import {createCreativeHarness,initialHarnessState} from './agent.mjs';
 import {loadCreationSkills} from './skills.mjs';
 import {JournalCheckpointSaver} from './checkpoints.mjs';
@@ -51,6 +52,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
     const {images,hashes}=await loadCreativeMaterialImages(input.document.source,{owner:job.user_id,store,lookupRecords,signal:controller.signal});
     controller.signal.throwIfAborted();
     const skills=await loadCreationSkills();
+    const styleReferences=await loadStyleReferences({styles:input.document.source.styles||[]});
     const renderer=await createHarnessRenderer({source:input.document.source,images,saveArtifact:async({png,pngHash,document,report})=>{
       const pngPath=prefix+'previews/'+pngHash.slice(7)+'.png',documentBytes=Buffer.from(JSON.stringify(document));
       const documentPath=prefix+'previews/'+creativeObjectHash(documentBytes).slice(7)+'.json';
@@ -78,6 +80,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
       const state=saved?undefined:initialHarnessState({document:input.document,skills,brief:input.brief,
         tray:await renderer.index(input.document,controller.signal),startedAt,deadlineAt:deadlineAt-10000,resourceVersion:resources.version});
       const harness=createPiCreativeHarness({...common,checkpoint:async value=>journal.append({method:'pi-snapshot',snapshot:value})});
+      attachStyleReferences(state,styleReferences);
       result=await harness.run({id:job.id,state,snapshot,signal:controller.signal});
     }else{
       const checkpointer=await new JournalCheckpointSaver({...journal,read:async()=>entries}).restore();
@@ -87,6 +90,7 @@ export async function runCloudCreativeJob(job,{store,rpc,listCheckpoints,lookupR
       if(saved)requireResourceVersion(saved.resources.release,resources.version);
       const state=saved?undefined:initialHarnessState({document:input.document,skills,brief:input.brief,
         tray:await renderer.index(input.document,controller.signal),startedAt,deadlineAt:deadlineAt-10000,resourceVersion:resources.version});
+      attachStyleReferences(state,styleReferences);
       result=await harness.run({id:job.id,state,signal:controller.signal});
     }
     controller.signal.throwIfAborted();

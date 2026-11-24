@@ -83,10 +83,10 @@ test('method details load only their matching image',async()=>{
 test('paged lettering methods offer the shared font catalog only once',async()=>{
   const skills=await loadCreationSkills(undefined,{illustrationRoot:null});
   const page=skills.read('journal-lettering',{level:'methods',page:0});
-  assert.equal(page.methods.length,8);
+  assert.equal(page.methods.length,1);
   assert.ok(page.suggestedFonts.some(font=>font.family==='FontQu Smile'));
   assert.ok(page.methods.every(method=>method.readWith.level==='detail'&&!('tool' in method)));
   assert.deepEqual(await skills.methodImageParts('journal-lettering',{level:'methods',page:0}),[]);
-  const detail=skills.read('journal-lettering',{level:'detail',methodId:'title-phrases'});
+  const detail=skills.read('journal-lettering',{level:'detail',methodId:'title-art',variant:'phrases'});
   assert.ok(detail.methods[0].parameters.captionFontFamily.suggestedFonts.some(font=>font.family==='Xiaolai'));
 });

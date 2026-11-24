@@ -227,7 +227,7 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{styles:['丰富层叠']}});
   assert.deepEqual(state.loadedSkills,[]);
-  assert.ok(state.recommendedMethods.some(method=>method.id==='title-phrases'));
+  assert.ok([...state.recommendedMethods,...state.expressionCards].some(method=>method.id==='title-art'));
   assert.ok(state.recommendedMethods.some(method=>method.id==='graphic-route'));
   assert.ok(!state.recommendedMethods.some(method=>method.id==='paper-peek'));
   assert.ok(!initialToolGuide(document).common.descriptions.some(item=>item.name==='material.add'));
@@ -252,10 +252,10 @@ test('lettering effects are delayed until the craft stage',async()=>{
   const {initialHarnessState}=await import('../creative-agent/runtime/agent.mjs');
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{intent:'做一页有手写感的记录',styles:['丰富层叠']}});
-  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-paper-lettering','title-cross-shadow','color-echo','accent-spark']);
+  assert.deepEqual(state.expressionCards.map(card=>card.id),['title-art','title-art','color-echo','accent-spark']);
   assert.ok(!state.messages[0].content.includes('title-cross-shadow'));
   const {letteringEffectMenu}=await import('../creative-agent/runtime/expression.mjs');
-  for(const [id,variant] of [['title-gap-shadow','offset-outline'],['title-gap-shadow','gradient-outline'],['title-tape'],['title-cross-shadow'],['title-scattered-round'],['title-scattered-round','triangle'],['title-number-route'],['title-script-dots'],['title-paper-lettering']])
+  for(const [id,variant] of [['title-art','gap-shadow-offset-outline'],['title-art','gap-shadow-gradient-outline'],['title-art','tape'],['title-art','cross-shadow'],['title-art','scattered-round'],['title-art','scattered-round-triangle'],['title-art','number-route'],['title-art','script-dots'],['title-art','paper-lettering']])
     assert.ok(letteringEffectMenu().some(item=>item.id===id&&item.variant===variant),`${id}:${variant||''}`);
   assert.ok(state.messages[0].content.length<30000);
 });
@@ -423,4 +423,37 @@ test('tray-only changes retain the latest matching page image and remove obsolet
  const before=JSON.stringify(messages),out=modelContext(messages,{document,visualState:{page:{signature:'current'},tray:{signature:'tray-new'}},preview:{sceneRevision:'current'}});
  assert.deepEqual(out.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').map(p=>p.image_url.url),['current','tray-new']);
  assert.equal(JSON.stringify(messages),before);assert.equal(out.at(-3).role,'tool');
+});
+
+
+test('first turn provides cutting and tearing examples without a help round',()=>{
+ const guide=compactInitialToolGuide({source:{materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[],textMode:'rich'}});
+ for(const name of ['material.cut','material.tear']){
+  const command=guide.common.find(item=>item.name===name);
+  assert.ok(command?.example);
+  assert.equal(command.example.op,name);
+  for(const field of command.required)assert.ok(field in command.example,field);
+ }
+ assert.ok(guide.common.some(item=>item.name==='region'));
+});
+
+
+test('failed tool routing and pen style get bounded actionable guidance',()=>{
+ const routed=failureGuidance('creation_apply',{operations:[{op:'creation_paper'}]},{message:'$/operations/0/op unknown'});
+ assert.match(routed.hint,/独立工具/);
+ const ink=failureGuidance('creation_apply',{operations:[{op:'graphic.add'}]},{path:'/operations/0/style/penStyle'});
+ assert.match(ink.hint,/pen、ballpoint、brush、marker/);
+});
+
+test('title group update error returns actual editable children without an extra inspect call',async()=>{
+ const {draft}=await import('../src/domain.js');
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const {applyCreationTransaction,creationSceneRevision}=await import('../src/creation-transaction.js');
+ const {compileTitleOperations}=await import('../creative-agent/runtime/title-tool.mjs');
+ const base=await createCreationDocument({draft:draft(),assets:[]});
+ const operations=compileTitleOperations({titles:[{id:'title',content:'测试',place:{reference:'page',at:[30,30],unit:'mm'},size:{width:60,unit:'mm'},style:{fontSizePt:18,color:'#112233'}}]});
+ const {document}=applyCreationTransaction(base,{protocolVersion:2,transactionId:'title',baseSceneRevision:creationSceneRevision(base),operations},[]);
+ const guidance=failureGuidance('creation_apply',{operations:[{op:'layer.update',target:'title',style:{fontSizePt:20}}]},{message:'operations[0] layer.update: group 不支持 style.fontSizePt'},document);
+ assert.equal(guidance.textChildren.length,1);assert.equal(guidance.textChildren[0].content,'测试');
+ assert.notEqual(guidance.textChildren[0].id,'title');assert.match(guidance.hint,/本批次未执行/);
 });

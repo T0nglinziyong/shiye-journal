@@ -2,6 +2,9 @@ import {titleTool} from './title-tool.mjs';
 import {paperTool} from './paper-tool.mjs';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
 import {creativePhases} from './phases.mjs';
+import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
+
+const inlineDefinition=value=>Array.isArray(value)?value.map(inlineDefinition):value&&typeof value==='object'?value.$ref?inlineDefinition(creationCommonDefinitions[value.$ref.split('/').at(-1)]):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,inlineDefinition(item)])):value;
 
 const object=(properties,required=[])=>({type:'object',additionalProperties:false,properties,required});
 const string={type:'string',minLength:1,maxLength:2000};
@@ -22,9 +25,10 @@ function turnBoundTool(tool){
     }}}};
 }
 export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)).map(tool=>tool.function.name==='creation_apply'?{
-  ...tool,function:{...tool.function,parameters:{...tool.function.parameters,properties:{...tool.function.parameters.properties,decision:decisionField,
+  ...tool,function:{...tool.function,parameters:{...tool.function.parameters,$schema:'https://json-schema.org/draft/2020-12/schema',properties:{...tool.function.parameters.properties,decision:decisionField,
     operations:{...tool.function.parameters.properties.operations,items:{...tool.function.parameters.properties.operations.items,properties:{...tool.function.parameters.properties.operations.items.properties,
-      geometry:{type:'object',description:'圆用 {kind:"ellipse"}，五角星用 {kind:"star",options:{points:5}}。尺寸在 size，填色在 style.fill。',properties:{kind:{type:'string'},options:{type:'object',properties:{points:{type:'integer',description:'仅 star 的角数；例如 5。'}},additionalProperties:true},points:{type:'array',description:'仅手绘 stroke 的轨迹点 [{x,y,pressure}]；星角数放 options.points。'}},additionalProperties:true}
+      region:{...inlineDefinition(creationCommonDefinitions.Region),description:'material.cut 的裁切区域：rect/ellipse.box=[x,y,width,height]；edge 指边条。space=local 使用当前裁片坐标，unit=mm 或 ratio。mode=keep 保留区域，remove 移除区域；keepRemainder=true 时同时给 resultId。基础裁切可与 material.add、移动和改层序同轮调用。'},
+      geometry:{type:'object',description:'圆用 {kind:"ellipse"}，五角星用 {kind:"star",options:{points:5}}。尺寸在 size，填色在 style.fill。',properties:{kind:{type:'string'},options:{type:'object',properties:{points:{type:'integer',description:'仅 star 的角数；例如 5。'}},additionalProperties:true},points:{type:'array',description:'仅手绘 stroke 的轨迹点 [{x,y,pressure}]，同时填写 geometry.unit:"mm"；星角数放 options.points。'}},additionalProperties:true}
     }}}
   }}}
 }:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询操作/公共参数合同或工具。topics 为空返回目录；topics:[工具名] 读取准确参数并在下一轮展开该工具。工具一经展开持续可用，不受阶段限制。'}}:tool),

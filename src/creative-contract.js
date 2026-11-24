@@ -4,7 +4,10 @@ import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {shapeOptionsJSONSchema} from './advanced-shape-options.js';
 // One executable contract is shared by provider tools, offline imports and local validation.
 import Ajv from 'ajv';
+import Ajv2020 from 'ajv/dist/2020.js';
 const validator=new Ajv({strict:false,strictNumbers:true,allErrors:false,coerceTypes:false,useDefaults:false,removeAdditional:false});
+// Honor the declared dialect so tuple bounds match the provider contract.
+const validator2020=new Ajv2020({strict:false,strictNumbers:true,allErrors:false,coerceTypes:false,useDefaults:false,removeAdditional:false});
 const compiled=new WeakMap();
 const object=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const string=(maxLength=48)=>({type:'string',minLength:1,maxLength});
@@ -90,7 +93,7 @@ const descriptions={
   finish_design:'仅能作为本轮最后调用，且前面全部成功；核验真实素材尺寸、裁片、必用素材和单方案取用。文字、留白与构图由创作者决定。'
 };
 export function validateValue(value,schema,path='$'){
-  let check=compiled.get(schema);if(!check){check=validator.compile(schema);compiled.set(schema,check);}if(check(value))return;
+  let check=compiled.get(schema);if(!check){check=(schema.$schema==='https://json-schema.org/draft/2020-12/schema'?validator2020:validator).compile(schema);compiled.set(schema,check);}if(check(value))return;
   const error=check.errors[0],field=error.params.additionalProperty||error.params.missingProperty||'',location=path+error.instancePath+(field?'.'+field:'');
   const reason=error.keyword==='additionalProperties'?'未实现或未知字段':error.keyword==='required'?'缺少字段':error.keyword==='enum'?'未实现或未知值':'合同不合法';throw Error(location+' '+reason+'：'+error.message);
 }
