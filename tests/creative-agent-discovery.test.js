@@ -1,3 +1,4 @@
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {draft} from '../src/domain.js';
@@ -19,6 +20,7 @@ async function fixture({critique}={}){
   let state=initialHarnessState({document,skills,brief:{}}),sequence=0;
   return {get state(){return state;},async call(name,args,{sameTurn=false}={}){
     if(!sameTurn)state={...state,turns:state.turns+1};
+    ({name,args}=canvasFixtureCall(name,args));
     const call={id:'call-'+(++sequence),type:'function',function:{name,arguments:JSON.stringify(args)}};
     state=await harness.executeToolCalls({state,calls:[call]});
     return state.results.at(-1);
@@ -30,24 +32,12 @@ async function arrange(f){
   assert.equal((await f.call('creation_apply',{protocolVersion:2,transactionId:'first',baseSceneRevision:creationSceneRevision(f.state.document),operations:[operation]})).ok,true);
 }
 
-test('optional tools are discoverable, persistent across phases and restricted to host capabilities',async()=>{
-  const available=availableHarnessTools();
-  assert.deepEqual(selectHarnessTools(available),available);
-  assert.ok(!available.some(tool=>tool.function.name==='creation_guide'));
-  assert.ok(!JSON.stringify(harnessToolCatalog(available)).includes('segment_material'));
-  const f=await fixture();
-  const result=await f.call('creation_help',{topics:['workspace_create','read_template']});
-  assert.equal(result.ok,true);
-  assert.deepEqual(result.data.tools.map(tool=>tool.function.name).sort(),['read_template','workspace_create']);
-  const restored=JSON.parse(JSON.stringify(f.state));
-  for(const phase of ['direction','layout','craft','accents','review']){
-    const names=selectHarnessTools(available,{...restored,phase}).map(tool=>tool.function.name);
-    assert.ok(names.includes('read_template'));assert.ok(names.includes('workspace_create'));
-    assert.ok(!names.includes('segment_material'));
-  }
-  assert.equal((await f.call('workspace_create',{id:'experiment',title:'试摆'})).ok,true);
-  assert.equal((await f.call('segment_material',{alias:'invented',box:[0,0,1,1]})).ok,false);
-  assert.equal((await f.call('creation_help',{topics:['segment_material']})).ok,false);
+test('the public tool set is small, stable and capability gated',async()=>{
+ const available=availableHarnessTools();assert.equal(available.length,10);assert.deepEqual(selectHarnessTools(available),available);
+ const f=await fixture();const result=await f.call('creation_help',{});assert.equal(result.ok,true);assert.equal(result.data.operations.length,8);
+ for(const phase of ['direction','layout','craft','accents','review'])assert.equal(selectHarnessTools(available,{phase}).length,10);
+ assert.equal((await f.call('workspace_create',{id:'experiment',title:'试摆'})).ok,true);
+ assert.equal((await f.call('segment_material',{alias:'invented',box:[0,0,1,1]})).ok,false);
 });
 
 for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCreativeHarness]])test(`${name} sends all supported tools from the first model turn`,async()=>{
@@ -56,10 +46,10 @@ for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCr
   const harness=create({skills,model:async({tools})=>{
     const names=tools.map(tool=>tool.function.name);
     if(++turns===1){
-      assert.equal(names.length,availableHarnessTools().length);assert.ok(names.includes('creation_paper'));assert.ok(names.includes('read_template'));
-      return {message:{role:'assistant',content:null,tool_calls:[{id:'discover',type:'function',function:{name:'creation_help',arguments:'{"topics":["read_template"]}'}}]}};
+      assert.equal(names.length,availableHarnessTools().length);assert.ok(names.includes('creation_apply'));assert.ok(names.includes('knowledge'));
+      return {message:{role:'assistant',content:null,tool_calls:[{id:'discover',type:'function',function:{name:'knowledge',arguments:'{"action":"help"}'}}]}};
     }
-    assert.ok(names.includes('read_template'));assert.ok(names.includes('workspace_create'));
+    assert.ok(names.includes('knowledge'));assert.ok(names.includes('workspace'));
     throw Error('discovery request verified');
   }});
   await assert.rejects(harness.run({id:'discovery-'+name,state:initialHarnessState({document,skills,brief:{}})}),/discovery request verified/);
@@ -70,7 +60,7 @@ test('reference search exposes returned readers without another discovery round'
   const f=await fixture();
   const result=await f.call('search_references',{kind:'templates',limit:2});
   assert.equal(result.ok,true);assert.ok(result.data.results.length);
-  assert.ok(selectHarnessTools(availableHarnessTools(),f.state).some(tool=>tool.function.name==='read_template'));
+  assert.ok(selectHarnessTools(availableHarnessTools(),f.state).some(tool=>tool.function.name==='knowledge'));
 });
 
 test('rereading a method restores its contract with a fresh example after a scene change',async()=>{
@@ -95,8 +85,7 @@ test('saved self-review cannot bypass independent delivery review',async()=>{
   let audits=0;
   const f=await fixture({critique:async()=>{audits++;return {blockingIssues:['标题遮住了正文'],notes:[]};}});
   await arrange(f);
-  assert.equal((await f.call('creation_review',{...f.state.preview,approved:true,observations:'标题清楚且位于页面上部',issues:[]})).ok,true);
-  const finish=await f.call('creation_finish',{summary:'完成'});
+  const finish=await f.call('creation_finish',{summary:'完成',review:{observations:'标题清楚且位于页面上部',issues:[]}});
   assert.equal(finish.ok,false);assert.match(finish.detail,/标题遮住了正文/);
   assert.equal(audits,1);assert.equal(f.state.status,'running');
 });

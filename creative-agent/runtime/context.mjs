@@ -1,3 +1,4 @@
+import {canvasGuide} from './canvas-interface.mjs';
 import {creationOperationSpecs} from '../../src/creation-command-spec.js';
 import {creativePhaseLabels} from './phases.mjs';
 import {creationHelp,inspectCreationDocument} from '../../src/creation-inspection.js';
@@ -48,7 +49,7 @@ export function initialToolGuide(document){
   const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
   const commandIndex=creationHelp();
   return {topics:commandIndex.topics,conventions:commandIndex.conventions,families:commandIndex.families,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组调前后用 layer.stack；组合用 group.create、layer.reparent、group.ungroup。','几何调整统一用 layout：nudge 按毫米/角度增量微调，matchRotation 跟另一素材对齐角度，alignEdge 贴齐指定可见边，align 按边界对齐或分布；这几项都保留实体尺寸。matchRotation、alignEdge 的相对角度都叫 offsetDeg；nudge.rotationDeg 是当前角度的增量。批量操作用 targets，单对象操作用 target。','数字纸用 creation_paper 批量创建，统一用 style.fill 选纸色、style.stroke 选印纹色，再选 texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条用 geometry:{kind:"stroke",unit:"mm",points:[{x,y,pressure}]}，geometry.unit 必填；笔迹样式用 stroke/strokeWidthMm，不传 fill 或 strokeDash；点线或虚线用 path/基础图形。','标题与正文统一用 content，尺寸用 size.width/unit，字体字号字色用 style.fontFamily/fontSizePt/color，runs 也用 content/style。标题用 creation_title：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。layer.update 只传变化字段，其他值保留：place:{rotationDeg:5} 只改角度，size:{width:40} 只改图形宽度，style:{outline:{widthMm:.6}} 只改已有描边粗细；无需复用开关。对象按字段合并，数组整体替换，允许 null 的效果用 null 清除。普通文字、paper.add 纸张、title.add 标题均用 layer.update 直接修改对象 id；标题可整体改内容、字号、宽度、字效和底形。text.reflow 只给 text.lettering 的逐字标题组重排。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
+    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组先 update.parent 改归属，再用 update.order 调整；组合用 group，解组用 ungroup。','位置和角度统一用 update.place；通过 reference、referenceAnchor、anchor、offset 表达与已有对象的边缘距离，通过 rotationDeg 指定角度。同批可修改多个对象。','数字纸用 creation_paper 批量创建，统一用 style.fill 选纸色、style.stroke 选印纹色，再选 texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条用 geometry:{kind:"stroke",unit:"mm",points:[{x,y,pressure}]}，geometry.unit 必填；笔迹样式用 stroke/strokeWidthMm，不传 fill 或 strokeDash；点线或虚线用 path/基础图形。','标题与正文统一用 content，尺寸用 size.width/unit，字体字号字色用 style.fontFamily/fontSizePt/color，runs 也用 content/style。文字技巧适用于标题、日期、数字、分段短句，统一 create(kind=text)：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。layer.update 只传变化字段，其他值保留：place:{rotationDeg:5} 只改角度，size:{width:40} 只改图形宽度，style:{outline:{widthMm:.6}} 只改已有描边粗细；无需复用开关。对象按字段合并，数组整体替换，允许 null 的效果用 null 清除。普通文字、paper.add 纸张、title.add 标题均用 layer.update 直接修改对象 id；标题可整体改内容、字号、宽度、字效和底形。组合文字使用 update 的 runs/layout 调整词组排布。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
 }
 
 function toolGuideDefinitions(){
@@ -65,14 +66,7 @@ function toolGuideDefinitions(){
  for(const variant of definitions.GraphicGeometry.oneOf||[])for(const conditional of variant.allOf||[]){const options=conditional.then?.properties?.options;if(options)referenceFields(options,'ShapeOptions');}
  return {...definitions,Operation:{description:'任一 operations 中列出的完整操作对象；用于组合内 children，可递归。'}};
 }
-export function compactInitialToolGuide(document){
- const guide=initialToolGuide(document);
- return {conventions:{...guide.conventions,creation:'新建未给 place 时进入 tray；组合已有对象保留原位。',update:'layer.update 只写变化字段；对象递归合并，数组整体替换；不支持的专属字段明确报错。',outputs:'解组和分片的 pieces 每项使用 id/place/order；未给 place/order 保留原位和层序。',objects:'paper.add/title.add 与素材、文字、图形共用 place/size/style/order；标题 content/effect/layout/backdrop/runs 和纸张 texture/edge/pattern 等直接用 layer.update 修改。'},
-  definitions:toolGuideDefinitions(),
-  operations:creationOperationSpecs.map(({name,summary,schema,examples,notes})=>({name,summary,parameters:schema,example:examples[0],notes})),
-  tapeAliases:guide.tapeAliases,
-  notes:['以上是完整操作合同，公共 $ref 在 definitions 中只定义一次，无需先 creation_help。','creation_apply 可同批创建、裁切、分片、摆放和修改；按声明顺序执行，后面的操作可引用前面生成的 id。','place.at+unit 与 referenceAnchor 二选一；offset 是 {value:[x,y],unit:"mm"}。','数字纸与实体素材都可 layer.cut/layer.split；layer.split 的角度是素材局部方向，place.rotationDeg 是成片在页面上的角度。','标题可以简洁，也可用 effect、layout、backdrop 和 runs 组合。复杂字形配方仍为可选增强，不是普通画布操作的前置步骤。']};
-}
+export function compactInitialToolGuide(document){return canvasGuide();}
 
 export function materialBrief(document){
   const required=new Set(document.source.requiredAssetIDs||[]);
@@ -272,7 +266,7 @@ export function failureGuidance(name,args,error,document){
   if(name==='creation_title'&&/已经存在/.test(error.message||''))return {hint:'creation_title 只创建新标题；修改已有标题直接用 creation_apply 的 layer.update，target 填标题组 id，只写需要变化的 content、size、place、style 或 effect。失败调用没有生效，不要重复创建同 id。'};
   if(name==='creation_help')return {available:creationHelp()};
   if(name==='creation_finish'&&/存在未解决的问题/.test(error.message||''))return {hint:'review.issues 只列必须修好才能交付的画面缺陷。若这些只是可选的优化意见，移入 observations 并在当前画面无严重问题时以 issues:[] 再次提交；若确有缺陷，先合批修改并看新预览。'};
-  if(name==='creation_finish'&&/独立画面审查发现/.test(error.message||''))return {hint:'这是对刚才画面的独立审查。针对列出的遮挡、裁字或越界做一次有针对性的合批修复；下一张自动预览若已解决，应重新调用 creation_finish 获取当前画面的新审查。不要一直追着旧画面的提示微调。可用 creation_inspect 查看图层树和实际坐标，用 layer.stack、layout.nudge 或 layout.alignEdge 修正。'};
+  if(name==='creation_finish'&&/独立画面审查发现/.test(error.message||''))return {hint:'这是对刚才画面的独立审查。针对列出的遮挡、裁字或越界做一次有针对性的合批修复；下一张自动预览若已解决，应重新调用 creation_finish 获取当前画面的新审查。不要一直追着旧画面的提示微调。可用 creation_inspect 查看图层树和实际坐标，用 update.order 和 update.place 修正。'};
   if(name!=='creation_apply')return undefined;
   const match=(error.path||error.message||'').match(/operations(?:\/|\[)(\d+)/),op=args?.operations?.[Number(match?.[1])]?.op;
   const operation=args?.operations?.[Number(match?.[1])];

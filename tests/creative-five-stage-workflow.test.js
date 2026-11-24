@@ -1,3 +1,4 @@
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -11,7 +12,7 @@ import {JournalCheckpointSaver,fileCheckpointJournal} from '../creative-agent/ru
 import {createCreativeHarness,initialHarnessState,harnessTools} from '../creative-agent/runtime/agent.mjs';
 import {toolsForCreativePhase,phaseGuide,declaredCreativePhase,creativePhaseLabels} from '../creative-agent/runtime/phases.mjs';
 
-const call=(name,args)=>({id:name+'-'+Math.random(),type:'function',function:{name,arguments:JSON.stringify(args)}});
+const call=(name,args)=>{({name,args}=canvasFixtureCall(name,args));return {id:name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}};};
 const answer=(...calls)=>({message:{role:'assistant',content:null,tool_calls:calls}});
 const assessment=observations=>({observations,issues:[]});
 const phase=(name,observations)=>call('creation_phase',{phase:name,reason:'本阶段检查通过',assessment:assessment(observations)});

@@ -1,3 +1,4 @@
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -20,9 +21,9 @@ test('the single-writer harness repairs one copied revision digit but rejects st
  assert.equal(canonicalToolRevision('not-a-revision',current),'not-a-revision');
 });
 
-const call=(name,args)=>({id:name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}});
-const answer=(...calls)=>({message:{role:'assistant',content:null,tool_calls:calls}});
-const phase=(to,observations,issues=[])=>call('creation_phase',{phase:to,reason:'阶段检查',assessment:{observations,issues}});
+const call=(name,args)=>{({name,args}=canvasFixtureCall(name,args));return {id:name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}};};
+const answer=(...calls)=>({message:{role:'assistant',content:calls.find(c=>c.declaration)?.declaration||null,tool_calls:calls.filter(c=>!c.declaration)}});
+const phase=(to,observations)=>({declaration:'阶段：'+({direction:'构思与计划',layout:'打底与构图',craft:'标题与内容',accents:'装饰与点缀',review:'最终检查'})[to]+'\n'+observations});
 const plan=()=>call('creation_plan',{intent:'记录具体日常',themeEvidence:{supportedBy:['用户要求制作手帐'],conflicts:[],response:'以短文记录具体小事'},palette:{source:'纸张和标题',main:'#465D54',secondary:'#E8DFC2',relationship:'echo',distribution:'浅底深字，少量绿色呼应'},composition:{visualAnchors:'标题、正文和色块形成多处视觉锚点',layout:'标题偏上，正文穿插在底纸上',connector:'绿色小点连接'},writingZones:[{role:'title',surface:'page',anchor:'左上',capacity:'short',legibility:'深字浅底'},{role:'body',surface:'page',anchor:'中下',capacity:'medium',legibility:'浅底'}],steps:[{task:'构图',status:'in_progress'}]});
 const edit=(revision,transactionId,operations)=>call('creation_apply',{protocolVersion:2,transactionId,baseSceneRevision:revision,operations});
 const text=(id,content,at)=>({op:'text.add',id,content,size:{width:55,unit:'mm'},place:{reference:'page',at,unit:'mm'},style:{fontSizePt:id==='title'?20:11}});
@@ -123,8 +124,8 @@ test('elapsed time does not hide search or editing tools',async t=>{
     if(turn===3)return answer(edit(p.sceneRevision,'layout-b',[text('note','在路上',[42,75])]));
     if(turn===4){
       assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
-      assert.ok(tools.some(tool=>tool.function.name==='search_references'));
-      assert.ok(tools.some(tool=>tool.function.name==='read_skill'));
+      assert.ok(tools.some(tool=>tool.function.name==='knowledge'));
+      assert.ok(tools.some(tool=>tool.function.name==='knowledge'));
       return answer(phase('craft','标题和短句已建立两个区域，装饰书写继续补齐'));
     }
     throw Error('paced stop');
@@ -133,7 +134,7 @@ test('elapsed time does not hide search or editing tools',async t=>{
   await assert.rejects(f.harness.run({id:'paced-layout',state:f.state}),/paced stop/);
   const saved=await f.harness.state('paced-layout');
   assert.equal(saved.phase,'craft');
-  assert.deepEqual(saved.results.map(result=>result.ok),[true]);
+  assert.deepEqual(saved.results.map(result=>result.ok),[]);
   assert.ok(!saved.document.page.layers.some(layer=>layer.id==='late'));
 });
 
@@ -144,7 +145,7 @@ test('the delivery window leaves editing and skill lookup available',async t=>{
   if(turn===2)return answer(edit(creationSceneRevision(f.document),'delivery-page',[text('title','一页小记',[35,30])]));
   if(turn===3){
    assert.ok(tools.some(tool=>tool.function.name==='creation_apply'));
-   assert.ok(tools.some(tool=>tool.function.name==='read_skill'));
+   assert.ok(tools.some(tool=>tool.function.name==='knowledge'));
    return answer(edit(p.sceneRevision,'delivery-repair',[text('body','把今天的小事认真记下来。',[45,85])]));
   }
   assert.ok(tools.some(tool=>tool.function.name==='creation_finish'));
@@ -234,7 +235,7 @@ test('model stage declarations do not require previous stages to pass',async t=>
   await assert.rejects(f.harness.run({id:'invalid-stage',state:f.state}),/intentional stop/);
   const saved=await f.harness.state('invalid-stage');
   assert.equal(saved.phase,'craft');
-  assert.deepEqual(saved.results.map(item=>item.ok),[true]);
+  assert.deepEqual(saved.results.map(item=>item.ok),[]);
   assert.equal(saved.plan.intent,'记录具体日常');
 });
 
@@ -245,12 +246,12 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
-      assert.ok(names.includes('read_template'),'参考读取工具从首轮可用，不依赖查询或阶段');
-      const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
-      title.style.letterSpacing=.3;title.style.letterSpacingPt=1.5;title.style.align='center';title.place.angleDeg=2;
+      assert.ok(names.includes('knowledge'),'参考读取工具从首轮可用，不依赖查询或阶段');
+      const title={...text('title','周末小记',[45,40]),place:{reference:'page',at:[45,40],unit:'mm'}};
+      title.style.letterSpacingMm=.53;title.style.textAlign='center';title.place.rotationDeg=2;
       return answer(edit(creationSceneRevision(f.document),'first',[
-        {op:'graphic.add',id:'paper',geometry:{kind:'shape',preset:'rect'},place:{at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},
-        {op:'graphic.add',id:'paper-accent',geometry:{kind:'shape',shape:'rect'},place:{reference:'page',at:[50,50],unit:'mm'},size:{width:4,height:4,unit:'mm'},style:{fill:'#465D54'}},title
+        {op:'graphic.add',id:'paper',geometry:{kind:'rect'},place:{reference:'page',at:[40,35],unit:'mm'},size:{width:50,height:20,unit:'mm'},style:{fill:'#F7F0E3'}},
+        {op:'graphic.add',id:'paper-accent',geometry:{kind:'rect'},place:{reference:'page',at:[50,50],unit:'mm'},size:{width:4,height:4,unit:'mm'},style:{fill:'#465D54'}},title
       ]));
     }
     if(turn===3){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'second',[text('note','雨后的第一杯茶',[48,70])]));}
@@ -287,13 +288,13 @@ test('finish refuses an old screenshot hash and then accepts the current revisio
   assert.ok(result.trace.some(item=>item.name==='creation_finish'&&item.ok===false));
 });
 
-test('layout remains editable after four previews and common ordering aliases work in craft',async t=>{
+test('layout remains editable after four previews and the unified ordering and workspace fields work in craft',async t=>{
   let turn=0;const f=await fixture(t,async({messages,tools})=>{
     turn++;const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1)return answer(plan());
     if(turn>=2&&turn<=5)return answer(edit(p?.sceneRevision||creationSceneRevision(f.document),'pass-'+turn,[text('note-'+turn,'第 '+turn+' 段文字',[40,20+turn*14])]));
     if(turn===6){assert.ok(names.includes('creation_apply'));return answer(phase('craft','四版构图已建立文字阅读路线，细节交由下一阶段'));}
-    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'order',target:'note-2',after:'note-3'},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'tray',at:[30,30],unit:'mm'}},text('body','今天写下一段新的记录。',[65,105]),{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect',options:{radius:0.02}},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC',shadow:{offsetMm:[1,1],blurMm:2,color:'#00000022'}}}]));}
+    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'layer.update',target:'note-2',order:{after:'note-3'}},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'page',surface:'tray',at:[30,30],unit:'mm'}},text('body','今天写下一段新的记录。',[65,105]),{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect'},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC',shadow:{offsetMm:[1,1],blurMm:2,color:'#000000'}}}]));}
     if(turn===8)return answer(phase('review','纸面文字与暂存对象各在正确空间，层序已调整'));
     return answer(call('creation_finish',{review:{observations:'纸面四段文字可读，暂存标题没有进入纸面',issues:[]}}));
   });
@@ -439,7 +440,7 @@ test('dedicated paper tool requires a plan, commits editable papers and undoes t
  await assert.rejects(f.harness.run({id:'paper-entry',state:f.state}),/stop after paper undo/);
  const saved=await f.harness.state('paper-entry');
  assert.equal(saved.document.page.layers.length,0);
- const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_paper');
+ const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_apply');
  assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
 });
 
@@ -454,7 +455,7 @@ test('dedicated title tool requires a plan, commits editable title groups and un
  await assert.rejects(f.harness.run({id:'title-entry',state:f.state}),/stop after title undo/);
  const saved=await f.harness.state('title-entry');
  assert.equal(saved.document.page.layers.length,0);
- const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_title');
+ const events=saved.trace.filter(e=>e.kind==='tool'&&e.name==='creation_apply');
  assert.equal(events[0].ok,false);assert.equal(events[1].ok,true);
 });
 

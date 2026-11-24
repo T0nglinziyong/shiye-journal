@@ -1,3 +1,4 @@
+import {canvasOperationNames,publicCanvasText} from './canvas-interface.mjs';
 import {titleTool} from './title-tool.mjs';
 import {paperTool} from './paper-tool.mjs';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
@@ -24,7 +25,7 @@ function turnBoundTool(tool){
       baseSceneRevision:{type:'string',pattern:'^(current|sha256:[a-f0-9]{64})$',description:'通常填 current，绑定本轮模型看到的 Scene；也可提供准确完整哈希。同轮多个编辑自动按顺序执行，旧版本仍拒绝。'}
     }}}};
 }
-export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)).map(tool=>tool.function.name==='creation_apply'?{
+const engineTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)).map(tool=>tool.function.name==='creation_apply'?{
   ...tool,function:{...tool.function,parameters:{...tool.function.parameters,$schema:'https://json-schema.org/draft/2020-12/schema',properties:{...tool.function.parameters.properties,decision:decisionField,
     operations:{...tool.function.parameters.properties.operations,items:{...tool.function.parameters.properties.operations.items,properties:{...tool.function.parameters.properties.operations.items.properties,
       region:{...inlineDefinition(creationCommonDefinitions.Region),description:'material.cut 的裁切区域：rect/ellipse.box=[x,y,width,height]；edge 指边条。space=local 使用当前裁片坐标，unit=mm 或 ratio。mode=keep 保留区域，remove 移除区域；keepRemainder=true 时同时给 resultId。基础裁切可与 material.add、移动和改层序同轮调用。'},
@@ -66,11 +67,21 @@ const groups=[
 ];
 
 export function availableHarnessTools({segmentMaterial}={}){
-  return harnessTools.filter(tool=>!['creation_guide','explore_drafts','select_draft'].includes(tool.function.name)&&
-    (segmentMaterial||!['segment_material','creation_apply_crops'].includes(tool.function.name)));
+  return selectHarnessTools(harnessTools.filter(tool=>!['creation_guide','explore_drafts','select_draft'].includes(tool.function.name)&&
+    (segmentMaterial||!['segment_material','creation_apply_crops'].includes(tool.function.name))));
 }
 
-export function selectHarnessTools(available){return available;}
+const queryRoutes={skill:'read_skill',search:'search_references',case:'read_case',template:'read_template',topics:'search_writing_topics',help:'creation_help'};
+const workspaceRoutes={create:'workspace_create',view:'workspace_view',close:'workspace_close'};
+const grouped=(name,routes,description)=>custom(name,description,{oneOf:Object.entries(routes).map(([action,target])=>{const original=engineTools.find(t=>t.function.name===target).function.parameters;return {...original,properties:{action:{const:action},...original.properties},required:['action',...(original.required||[])]};})});
+export const harnessTools=[...engineTools,grouped('knowledge',queryRoutes,'知识与参考查询：action=skill/search/case/template/topics/help；参数随 action 列全，可同轮多次调用。'),grouped('workspace',workspaceRoutes,'管理或查看工作空间：action=create/view/close。id=source 可重看素材总图。')];
+const publicNames=new Set(['creation_apply','creation_inspect','inspect_materials','knowledge','workspace','creation_recipe','creation_plan','creation_undo','creation_finish','creation_preview','segment_material','creation_apply_crops']);
+export function routeModelTool(name,args){const route=name==='knowledge'?queryRoutes:name==='workspace'?workspaceRoutes:null;if(!route)return {name,args};const {action,...rest}=args;if(!route[action])throw Error('未知 '+name+' action');return {name:route[action],args:rest};}
+export function selectHarnessTools(available){return available.filter(t=>publicNames.has(t.function.name)).map(t=>{
+ if(t.function.name!=='creation_apply')return {...t,function:{...t.function,description:publicCanvasText(t.function.description)}};
+ const result=structuredClone(t);result.function.description='批量提交 8 种对象操作：create/update/copy/delete/group/ungroup/cut/split。字段合同已完整提供；同一批原子执行，不同调用互不阻塞。';
+ result.function.parameters.properties.operations.items={type:'object',properties:{op:{enum:canvasOperationNames}},required:['op'],additionalProperties:true};return result;
+});}
 
 export function harnessToolCatalog(available=harnessTools){
   const names=new Set(available.map(tool=>tool.function.name));

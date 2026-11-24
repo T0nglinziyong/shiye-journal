@@ -347,8 +347,8 @@ test('failed parameter validation supplies targeted help without changing the op
   assert.ok(failureGuidance('creation_help',{},{}).available.topics.includes('place'));
   const star={operations:[{op:'graphic.add',id:'star',geometry:{kind:'star',points:5}}]};
   assert.match(failureGuidance('creation_apply',star,{path:'/operations/0/geometry/points'}).hint,/options/);
-  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}}).operations.find(item=>item.name==='graphic.add');
-  assert.equal(first.example.op,'graphic.add');
+  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}}).operations.find(item=>item.name==='create');
+  assert.equal(first.example.op,'create');
 });
 
 test('invalid stroke styling reports all mismatched fields and valid alternatives together',async()=>{
@@ -428,15 +428,9 @@ test('tray-only changes retain the latest matching page image and remove obsolet
 
 test('first turn provides cutting and tearing examples without a help round',()=>{
  const guide=compactInitialToolGuide({source:{materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[],textMode:'rich'}});
- for(const name of ['material.cut','material.tear']){
-  const command=guide.operations.find(item=>item.name===name);
-  assert.ok(command?.example);
-  assert.equal(command.example.op,name);
-  for(const field of command.parameters.required)assert.ok(field in command.example,field);
- }
+ for(const name of ['cut','split','ungroup'])assert.ok(guide.operations.find(item=>item.name===name)?.example);
  assert.ok(guide.definitions.Region);
- assert.ok(guide.operations.some(item=>item.name==='layer.split'));
- assert.ok(guide.operations.some(item=>item.name==='group.ungroup'));
+ assert.ok(guide.operations.find(item=>item.name==='cut').parameters.oneOf.some(s=>s.properties.method?.const==='tear'));
 });
 
 

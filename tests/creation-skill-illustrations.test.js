@@ -68,7 +68,7 @@ test('requested skills retain one attributed reference without duplicating it on
     assert.equal(count(messages),turns>=2?1:0);
     if(turns===2)assert.match(JSON.stringify(messages),/教程示意（仅供方法参考/);
     if(turns===3){const receipt=messages.findLast(message=>message.role==='tool');assert.equal(JSON.parse(receipt.content).data.alreadyLoaded,true);throw Error('image delivery verified');}
-    return {message:{role:'assistant',content:null,tool_calls:[{id:'read-'+turns,type:'function',function:{name:'read_skill',arguments:JSON.stringify({name:'optional-skill'})}}]}};
+    return {message:{role:'assistant',content:null,tool_calls:[{id:'read-'+turns,type:'function',function:{name:'knowledge',arguments:JSON.stringify({action:'skill',name:'optional-skill'})}}]}};
   }});
   await assert.rejects(harness.run({id:'images',state}),/image delivery verified/);assert.equal(turns,3);
 });
