@@ -4,7 +4,7 @@ const object=(properties,required=[])=>({type:'object',additionalProperties:fals
 // the same atomic graphics transaction, not another Scene or renderer.
 const inline=value=>Array.isArray(value)?value.map(inline):value&&typeof value==='object'?value.$ref?inline(definitions[value.$ref.split('/').at(-1)]):Object.fromEntries(Object.entries(value).map(([k,v])=>[k,inline(v)])):value;
 const color={type:'string',pattern:'^#[0-9A-Fa-f]{6}$'};
-export const paperTool={type:'function',function:{name:'creation_paper',description:'批量创建可编辑纸张：style.fill 选纸色、style.stroke 选印纹色，再选纹理强度、直边/撕边、印纹和透光度，默认无阴影。先按要承托的标题、正文或素材簇决定尺寸、露边与搭接；整页背景只统一气氛，不能替代局部打底，不默认每页铺一张近满版纸，也不逐物配一张底卡。纸张用此入口；普通色块仍用 graphic.add rect。order 明确放在谁后面，避免盖住正文。丰富层叠时，小纸应与主体纸簇有明确搭接或承托，不因颜色相近就将留着细缝的孤立卡片视为连接；疏朗风格可以有意分离。已有纸可用 layer.update 修改、用 creation_undo 撤回整批。',parameters:object({
+export const paperTool={type:'function',function:{name:'creation_paper',description:'批量创建可编辑纸张：style.fill 选纸色、style.stroke 选印纹色，再选纹理强度、直边/撕边、印纹和透光度，默认无阴影。先按要承托的标题、正文或素材簇决定尺寸、露边与搭接；整页背景只统一气氛，不能替代局部打底，不默认每页铺一张近满版纸，也不逐物配一张底卡。窄长纸条优先用来跨接纸边或让两端压在邻近对象下，不默认另造一条便签承载短句；短句可直接写入已有写面，独立便签应有舒展的文字空间和明确归属。纸张用此入口；普通色块仍用 graphic.add rect。order 明确放在谁后面，避免盖住正文。丰富层叠时，小纸应与主体纸簇有明确搭接或承托，不因颜色相近就将留着细缝的孤立卡片视为连接；疏朗风格可以有意分离。已有纸可用 layer.update 修改、用 creation_undo 撤回整批。',parameters:object({
  transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:{type:'string',pattern:'^sha256:[a-f0-9]{64}$'},decision:{type:'string',minLength:1,maxLength:400},
  papers:{type:'array',minItems:1,maxItems:32,items:object({
   id:inline(definitions.Id),place:inline(definitions.Place),size:{...inline(definitions.Size),required:['width','height','unit']},order:inline(definitions.Order),
