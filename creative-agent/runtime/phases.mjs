@@ -30,7 +30,7 @@ export function phaseGuide(phase,{styles=[],textMode='automatic',pageMode}={}){
   return '试摆、写字、点缀、看预览并调整可交错进行。合批放置有关对象；底纸或大素材承托一组，小对象可跨接边缘，保留有意遮挡。标题与正文提前占位，文字可分段写在纸面或清晰可读的素材内。缩看检查重心、阅读路线、空洞和可见装饰；近看检查层序、字色与遮挡。只对少数对象有意旋转，至少让一组边线呼应。'+(pageMode==='spread'?'对象不跨中缝；':'')+'重要内容距外缘留可见纸边。'+visualDensityBrief(styles)+(textMode==='none'?'本次不写文字。':'正文与标题应可读。')+'先修真实画面的问题；阶段不是关卡。';
 }
 
-export function phaseObservation(phase,{capture,spaceStatus,scene,feedback,advisory,previousReview,remainingSeconds,previousScene}){
+export function phaseObservation(phase,{capture,spaceStatus,scene,feedback,advisory,previousReview,remainingSeconds}){
   const base={phase,remainingSeconds};
   // Shape/type thresholds in foundation are useful offline diagnostics, but
   // they misclassify printed cards and illustrated paper as absent backing.
@@ -42,15 +42,7 @@ export function phaseObservation(phase,{capture,spaceStatus,scene,feedback,advis
     const compact={sceneRevision:scene.sceneRevision,page:scene.page,stacking:scene.stacking,layerTree:scene.layerTree,
       layers:scene.layers.map(({id,alias,type,parent,stackIndex,surface,world,asset,content,kind,fill,stroke,hidden,fontSizePt,cropRect,materialMask,vectorMask})=>({id,alias,type,parent,stackIndex,surface,world,asset,fontSizePt,...(cropRect||materialMask||vectorMask?{cropped:true}:{}),
         ...(typeof content==='string'?{content:content.slice(0,90)}:{}),kind,fill,stroke,hidden}))};
-    const prior=new Map((previousScene?.layers||[]).map(layer=>[layer.id,layer]));
-    const delta=previousScene?{sceneRevision:compact.sceneRevision,baseSceneRevision:previousScene.sceneRevision,mode:'delta',
-      layers:compact.layers.filter(layer=>JSON.stringify(layer)!==JSON.stringify(prior.get(layer.id))),
-      removed:previousScene.layers.filter(layer=>!compact.layers.some(now=>now.id===layer.id)).map(layer=>layer.id),
-      ...(JSON.stringify(compact.layerTree)!==JSON.stringify(previousScene.layerTree)?{layerTree:compact.layerTree}:{}),
-      ...(JSON.stringify(compact.page)!==JSON.stringify(previousScene.page)?{page:compact.page}:{}),
-      ...(JSON.stringify(compact.stacking)!==JSON.stringify(previousScene.stacking)?{stacking:compact.stacking}:{}),
-      inspection:'只列新增/变化对象与删除ID；其余沿用上一版本。完整图层可 creation_inspect。'}:compact;
-    return {...base,scene:delta,feedback:sceneFeedback,
+    return {...base,scene:compact,feedback:sceneFeedback,
       advisory:{limitations:advisory.limitations,observations:advisory.observations,
         textCoverCandidates:advisory.textCoverCandidates?.slice(0,8),gutterIntersections:advisory.gutterIntersections?.slice(0,8)},previousReview};
   }

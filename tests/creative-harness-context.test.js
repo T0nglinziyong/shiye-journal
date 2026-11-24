@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
+import {modelContext,isCreativeSnapshot,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
 import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 
 test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
@@ -28,7 +28,7 @@ test('an outdated task contract fails before any model invocation',async()=>{
   assert.throws(()=>initialHarnessState({document,skills:{catalog(){throw Error('must not load');}},brief:{}}),/合同已变化/);
 });
 
-test('model context keeps the global index and recent tool pair without rewriting superseded previews inside an epoch',()=>{
+test('model context keeps the global index and tool pair but only the latest preview',()=>{
   const system={role:'system',content:'system'};
   const source={role:'user',content:[{type:'image_url',image_url:{url:'source'}}]};
   const reasoning={role:'assistant',reasoning_content:'required provider reasoning',tool_calls:[{id:'call'}]};
@@ -36,7 +36,7 @@ test('model context keeps the global index and recent tool pair without rewritin
   const previews=Array.from({length:5},(_,i)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+i+'\n最新 Scene：many coordinates'},{type:'image_url',image_url:{url:'preview'+i}}]}));
   const input=[system,source,reasoning,receipt,...previews],before=JSON.stringify(input),out=modelContext(input);
   assert.equal(out[0],system);assert.deepEqual(out[1],source);assert.equal(out[2],reasoning);assert.equal(out[3],receipt);assert.equal(out.at(-1),previews.at(-1));
-  assert.equal(out.filter(m=>Array.isArray(m.content)).length,6);assert.equal(JSON.stringify(input),before);
+  assert.equal(out.filter(m=>Array.isArray(m.content)).length,2);assert.equal(JSON.stringify(input),before);
 });
 
 test('adding the first stage prompt cannot alter checkpoint messages or move the source index',()=>{
@@ -60,15 +60,15 @@ test('a preview does not mutate the source message and invalidate its cache pref
  assert.equal(source.content[2].image_url.url,'source-board');
 });
 
-test('state summary does not repeat the Scene already present in the latest preview',async()=>{
+test('current snapshot supplies the complete Scene rather than a revision or delta',async()=>{
  const {createCreationDocument}=await import('../src/creation-document.js');
  const {draft}=await import('../src/domain.js');
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"sceneRevision":"current"}\n最新 Scene：{"layers":[{"id":"visible"}]}'},{type:'image_url',image_url:{url:'preview'}}]};
  const out=modelContext([{role:'system',content:'rules'},{role:'user',content:'input'},{role:'assistant',content:'edit'},preview],{document,phase:'composition'});
  const summary=JSON.parse(out.at(-1).content.replace('当前创作状态（由检查点生成）：',''));
- assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
- assert.equal(out.at(-2),preview);
+ assert.ok(Array.isArray(summary.scene.layers));assert.ok(Array.isArray(summary.scene.layerTree));
+ assert.equal(out.filter(m=>isCreativeSnapshot(m)).length,2);
 });
 
 test('model context stays bounded as checkpoint history grows',()=>{
@@ -78,8 +78,8 @@ test('model context stays bounded as checkpoint history grows',()=>{
  const out=modelContext(messages,{compactedUntil:2+72*3});
  assert.equal(out[0],system);assert.deepEqual(out[1],index);
  assert.ok(out.length<=30);assert.equal(out.filter(m=>m.role==='assistant').length,8);
- assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,8);
- assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,9);
+ assert.equal(out.filter(m=>m.role==='tool').length,8);assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)&&m.content[0].text.startsWith('当前真实画面')).length,1);
+ assert.equal(out.filter(m=>m.role==='user').flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').length,2);
 });
 
 test('recent DeepSeek tool turns keep their complete reasoning content',()=>{
@@ -132,10 +132,10 @@ test('the latest preview remains visible after read-only help instead of becomin
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"pngHash":"sha256:abc"}'},{type:'image_url',image_url:{url:'data:image/png;base64,dGVzdA=='}}]};
  const messages=[{role:'system',content:'instructions'},{role:'user',content:[{type:'text',text:'index'}]},{role:'assistant',tool_calls:[]},preview];
- assert.equal(modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}}).filter(item=>item===preview).length,1);
+ assert.equal(modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}}).flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.image_url?.url==='data:image/png;base64,dGVzdA==').length,1);
  messages.push({role:'assistant',tool_calls:[{id:'help',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'help',content:'{"ok":true}'});
  const next=modelContext(messages,{document,preview:{pngHash:'sha256:abc',sceneRevision:'revision'}});
- assert.equal(next.some(item=>item===preview),true);
+ assert.equal(next.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.image_url?.url==='data:image/png;base64,dGVzdA==').length,1);
  assert.match(next.at(-1).content,/sha256:abc/);
 });
 
@@ -156,7 +156,7 @@ test('creative compaction carries design decisions and rejected attempts into la
  const out=modelContext(messages,state);
  assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
  assert.equal(out.filter(m=>m.role==='assistant').length,2);
- assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,3);
+ assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,2);
 });
 
 test('compaction never starts between two responses to one assistant tool batch',()=>{
@@ -406,17 +406,24 @@ test('ordinary long histories and image counts do not trigger compaction',()=>{
  assert.equal(creativeCompactionCandidate(messages,{compactedUntil:candidate.cutoff,usage:[{prompt_tokens:610000}]}),null);
 });
 
-test('rare compaction restores a full scene baseline once after retained deltas',async()=>{
+test('full snapshot is refreshed after compaction without accumulating old snapshots',async()=>{
  const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},
-  {role:'assistant',content:'older'},{role:'user',content:'older observation'},
-  {role:'assistant',content:'recent'},{role:'user',content:'scene delta'}];
- const state={document,compactedUntil:4};
- const first=modelContext(messages,state),baseline=first.filter(m=>typeof m.content==='string'&&m.content.startsWith('压缩后的完整图层基线'));
- assert.equal(baseline.length,1);assert.ok(JSON.parse(baseline[0].content.split('：')[1]).layers);
- const persisted=[...messages,...first.slice(first.indexOf(messages.at(-1))+1)];
- const next=modelContext(persisted,state);
- assert.equal(next.filter(m=>typeof m.content==='string'&&m.content.startsWith('压缩后的完整图层基线')).length,1);
- assert.deepEqual(next.slice(0,first.length),first);
+  {role:'assistant',content:'older'},{role:'user',content:'older decision'},
+  {role:'assistant',content:'recent'},{role:'user',content:'recent decision'}];
+ const state={document,compactedUntil:4},first=modelContext(messages,state);
+ const next=modelContext([...messages,...first.filter(isCreativeSnapshot)],state);
+ assert.equal(next.filter(isCreativeSnapshot).length,1);
+ assert.deepEqual(JSON.parse(next.at(-1).content.split('：')[1]).scene,JSON.parse(first.at(-1).content.split('：')[1]).scene);
+});
+
+test('tray-only changes retain the latest matching page image and remove obsolete workspace snapshots',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const frame=(id,version)=>({role:'user',content:[{type:'text',text:'当前真实画面：'+version},{type:'text',text:'工作空间 '+id+'；画面版本：'+version},{type:'image_url',image_url:{url:version}}]});
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},{role:'assistant',content:'edit'},frame('page','old'),frame('page','current'),frame('tray','tray-new'),{role:'assistant',content:'help'},{role:'tool',tool_call_id:'help',content:'help result'}];
+ const before=JSON.stringify(messages),out=modelContext(messages,{document,visualState:{page:{signature:'current'},tray:{signature:'tray-new'}},preview:{sceneRevision:'current'}});
+ assert.deepEqual(out.flatMap(m=>Array.isArray(m.content)?m.content:[]).filter(p=>p.type==='image_url').map(p=>p.image_url.url),['current','tray-new']);
+ assert.equal(JSON.stringify(messages),before);assert.equal(out.at(-3).role,'tool');
 });

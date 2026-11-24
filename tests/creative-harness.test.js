@@ -239,7 +239,7 @@ test('stage transition rejects skipping, unresolved issues and empty plans',asyn
 
 test('stage-specific guidance arrives when needed and repeated edits need no separate review',async t=>{
   let turn=0;const instructions=[];const f=await fixture(t,async({messages,tools,reasoningEffort})=>{
-    turn++;instructions.push(messages.at(-1).content);
+    turn++;instructions.push(messages.filter(m=>m.role==='user'&&typeof m.content==='string'&&!m.content.startsWith('当前创作状态')).map(m=>m.content).join('\n'));
     assert.equal(messages.filter(m=>m.role==='system').length,1,'only the fixed system prompt precedes history');
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
     if(turn===1){assert.equal(reasoningEffort,'high');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
@@ -265,7 +265,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   assert.ok(instructions[1].includes('表达方法卡候选'));
   assert.ok(instructions[1].includes('表达方法卡'));
   assert.ok(instructions[1].includes('可交错进行'));
-  assert.ok(!instructions[4].includes('可交错进行'),'unchanged stage instructions remain in history instead of being appended again');
+  assert.equal(instructions[4].split('可交错进行').length-1,1,'unchanged stage instructions remain once in stable history');
   assert.equal(f.renders(),3);
 });
 
@@ -501,10 +501,13 @@ test('review request timeout does not pretend the whole creative task is near it
 });
 
 
-test('ordinary requests extend the exact preceding request including dynamic state and guidance',async t=>{
+test('ordinary requests preserve stable history and refresh only the snapshot tail',async t=>{
  let turn=0,prior;const f=await fixture(t,async({messages,reasoningEffort})=>{
-  if(prior)assert.deepEqual(messages.slice(0,prior.length),prior,'the whole previous request must remain an unchanged prefix');
-  prior=structuredClone(messages);turn++;
+  const snapshot=m=>m.role==='user'&&(typeof m.content==='string'?m.content.startsWith('当前创作状态'):Array.isArray(m.content)&&m.content.some(p=>p.text?.includes('当前真实画面：')));
+  if(prior)assert.deepEqual(messages.slice(0,prior.length),prior,'all history before the old snapshot must remain unchanged');
+  const tail=messages.findIndex(snapshot);prior=structuredClone(tail<0?messages:messages.slice(0,tail));turn++;
+  if(turn>1){const current=messages.findLast(m=>typeof m.content==='string'&&m.content.startsWith('当前创作状态'));assert.ok(JSON.parse(current.content.slice(current.content.indexOf('：')+1)).scene.layers);}
+  assert.equal(messages.filter(m=>typeof m.content==='string'&&m.content.startsWith('当前创作状态')).length,turn===1?0:1);
   if(turn<=2)assert.equal(reasoningEffort,'high');else assert.equal(reasoningEffort,'low');
   if(turn===1)return answer(plan());
   if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout-prefix',[text('title','周末',[40,40]),text('body','午后的小雨落在窗沿，我把散开的纸片重新收好。',[45,85])]));

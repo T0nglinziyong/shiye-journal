@@ -24,7 +24,7 @@ import {captureVisualState,recordCreativeDecision} from './observation.mjs';
 import {exploreCreativeDrafts} from './draft-exploration.mjs';
 import {creativePhases,phaseObservation,phaseGuide,nextSkillCue} from './phases.mjs';
 import {evaluateCreativeFrame,attachCreativeReview} from './quality-evaluation.mjs';
-import {shortlistCreationMethods,compactInitialToolGuide,materialBrief,automaticSceneFeedback,modelContext,creativeCompactionCandidate,fallbackCreativeMemory,iterationAdvice,failureGuidance} from './context.mjs';
+import {shortlistCreationMethods,compactInitialToolGuide,materialBrief,automaticSceneFeedback,modelContext,isCreativeSnapshot,creativeCompactionCandidate,fallbackCreativeMemory,iterationAdvice,failureGuidance} from './context.mjs';
 import {expressionCards} from './expression.mjs';
 import {searchWritingTopics,writingTopicBrief,writingLengthPlan} from './writing-topics.mjs';
 
@@ -220,7 +220,9 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
         tools:'当前环境按需工具：'+JSON.stringify(harnessToolCatalog(availableTools)),
         skills:skillCue?'下一步可读：'+skillCue:'',methods:methodChoices.length?'表达方法卡候选：'+JSON.stringify(methodChoices)+'。选中后 read_skill methods/detail 查参数，不要猜。':''};
       const guidance=Object.entries(guidanceParts).filter(([key,value])=>value&&(contextState.compactedUntil!==s.compactedUntil||value!==s.guidanceParts?.[key])).map(([,value])=>value).join('\n');
-      if(guidance)apiMessages.push({role:'user',content:guidance});
+      const persistentExtras=[];
+      const appendStable=message=>{persistentExtras.push(message);const tail=apiMessages.findIndex(isCreativeSnapshot);apiMessages.splice(tail<0?apiMessages.length:tail,0,message);};
+      if(guidance)appendStable({role:'user',content:guidance});
       contextState={...contextState,guidanceParts};
       // Foundation metrics are advisory: a printed card, photograph, pattern,
       // or digital shape can support a collage without meeting a type/area gate.
@@ -228,7 +230,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       const activeTools=activeToolsForState(s);
       const stageEnteredAt=(s.phaseReviews||[]).at(-1)?.turn??0;
       if(s.phase==='layout'&&s.turns===stageEnteredAt&&s.referenceTemplateIDs?.[0]&&!(s.document.source.styles||[]).some(style=>/丰富|层叠|拼贴/.test(style))){
-        try{apiMessages.push({role:'user',content:[{type:'text',text:'匹配的抽象模板缩略图。只借位置、叠放与疏密关系，按本次素材真实比例改造；不复制示意图内容。'},...(await recipeImages([s.referenceTemplateIDs[0]]))]});}
+        try{appendStable({role:'user',content:[{type:'text',text:'匹配的抽象模板缩略图。只借位置、叠放与疏密关系，按本次素材真实比例改造；不复制示意图内容。'},...(await recipeImages([s.referenceTemplateIDs[0]]))]});}
         catch{/* 文本参考仍可用，缩略图不阻断创作。 */}
       }
       const deliberateTurn=!s.firstLayoutTurn;
@@ -237,9 +239,9 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       const reasoningEffort=reasoningPolicy==='adaptive'?(deliberateTurn?'high':'low'):reasoningPolicy;
       const reply=await model({messages:apiMessages,tools:activeTools,signal:config.signal,remainingMs:s.deadlineAt-clock(),reasoningEffort,recoveringFromTruncation:Boolean(s.usage.at(-1)?.truncated)});
       live(s,config);
-      const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages,...apiMessages.slice(apiMessages.lastIndexOf(s.messages.at(-1))+1)];
-      // Persist the exact request suffix (state, restored images, guidance).
-      // The next request can extend this full prefix instead of replacing it.
+      const usage=[...s.usage,{turn:s.turns+1,...reply.usage,modelMs:clock()-modelStarted,truncated:Boolean(reply.truncated),inputImages:apiMessages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(p=>p.type==='image_url').length:0),0)}],messages=[...s.messages,...persistentExtras];
+      // Persist changed guidance, not the ephemeral full-state/image tail.
+      // Next turn appends this answer to the stable history before a new tail.
       await onProgress(creativeUsageSummary({...contextState,turns:s.turns+1,usage}));
       const trace=traceEvent(contextState,{kind:'model',turn:s.turns+1,phase:s.phase||'composition',model:reply.model||null,reasoningEffort:reply.effectiveEffort||reasoningPolicy,durationMs:clock()-modelStarted,toolCount:activeTools.length,inputImages:usage.at(-1).inputImages,inputTokens:reply.usage?.prompt_tokens||null,outputTokens:reply.usage?.completion_tokens||null,truncated:Boolean(reply.truncated)});
       if(reply.truncated){messages.push({role:'user',content:'上一轮输出截断，没有执行。不要重复整体规划或读取已加载教程；本轮只执行一个完整的小工具调用，优先运行已选配方，随后根据自动预览继续。'});return {run:{...contextState,messages,trace,turns:s.turns+1,usage,calls:[],noProgress:s.noProgress+1}};}
@@ -438,7 +440,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
             const view=await viewSpace(document,args.id,config.signal);live(s,config);
             if(view&&!/^data:image\/(png|jpeg|webp);base64,/.test(view.imageURL))throw Error('工作空间图像无效');
             if(view?.signature&&visualState[args.id]&&visualState[args.id].signature!==view.signature)throw Error('工作空间图像版本与当前 Scene 不一致，请重新预览');
-            if(view)images.push({type:'text',text:'工作空间 '+args.id+'；对象：'+JSON.stringify(view.items||view.parkedIDs||[])},{type:'image_url',image_url:{url:view.imageURL}});
+            if(view)images.push({type:'text',text:'工作空间 '+args.id+'；画面版本：'+(view.signature||visualState[args.id]?.signature||'unknown')+'；对象：'+JSON.stringify(view.items||view.parkedIDs||[])},{type:'image_url',image_url:{url:view.imageURL}});
             if(view&&visualState[args.id])visualState[args.id].lastSeenTurn=s.turns;
             data={id:args.id,empty:!view,items:view?.items||[],parkedIDs:view?.parkedIDs||[]};progress=true;
           }
@@ -576,10 +578,10 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
         if(result.usage){auxiliaryUsage=[...auxiliaryUsage,{kind:'independent_visual_review',...result.usage}];await onProgress(creativeUsageSummary({...s,auxiliaryUsage}));}
       }
       const phase=s.phase||'direction';
-      const observation=phaseObservation(phase,{capture,spaceStatus,scene,feedback,advisory,previousReview,remainingSeconds,previousScene:s.observationScene});
-      const observationScene=phaseObservation('layout',{scene,feedback:{},advisory:{}}).scene;
+      const observation=phaseObservation(phase,{capture,spaceStatus,scene,feedback,advisory,previousReview,remainingSeconds});
+      const {scene:observedScene,...observationFeedback}=observation;
       const writingChanged=JSON.stringify(writing)!==JSON.stringify(s.observationWriting);
-      const observationText=(craftAudit?.blockingIssues?.length?'独立文字与画面审查发现必须先修复：'+craftAudit.blockingIssues.join('；')+'。先调整文字所在纸面、遮挡或段落宽度，再补其他细节。\n':'')+(layoutAudit?.blockingIssues?.length?'独立构图审查发现必须先修复：'+layoutAudit.blockingIssues.join('；')+'。可以移回暂存区、换主素材或重排底纸；先处理这些问题，再继续写字。\n':'')+(withdrawnMaterials.length?'本轮从纸面撤下的实物素材：'+withdrawnMaterials.map(item=>item.title).join('、')+'。请看新图确认原有承托或连接是否因此变弱；若变平，可撤回或换一种连接。\n':'')+(compositionAnchorNotes.length?'构图关系复核：'+compositionAnchorNotes.join('；')+'\n':'')+(rotationNote?'角度复核：'+rotationNote+'\n':'')+(compositionPriority?'本轮最先核对的画面问题（几何与像素提示，须看真实图确认）：'+compositionPriority+'\n':'')+'当前真实画面：'+JSON.stringify(capture)+'\n场景观察：'+JSON.stringify(observation)+(writing&&writingChanged?'\n按当前纸面已摆素材复核正文篇幅：'+JSON.stringify(writing):'');
+      const observationText=(craftAudit?.blockingIssues?.length?'独立文字与画面审查发现必须先修复：'+craftAudit.blockingIssues.join('；')+'。先调整文字所在纸面、遮挡或段落宽度，再补其他细节。\n':'')+(layoutAudit?.blockingIssues?.length?'独立构图审查发现必须先修复：'+layoutAudit.blockingIssues.join('；')+'。可以移回暂存区、换主素材或重排底纸；先处理这些问题，再继续写字。\n':'')+(withdrawnMaterials.length?'本轮从纸面撤下的实物素材：'+withdrawnMaterials.map(item=>item.title).join('、')+'。请看新图确认原有承托或连接是否因此变弱；若变平，可撤回或换一种连接。\n':'')+(compositionAnchorNotes.length?'构图关系复核：'+compositionAnchorNotes.join('；')+'\n':'')+(rotationNote?'角度复核：'+rotationNote+'\n':'')+(compositionPriority?'本轮最先核对的画面问题（几何与像素提示，须看真实图确认）：'+compositionPriority+'\n':'')+'当前真实画面：'+JSON.stringify(capture)+(writing&&writingChanged?'\n按当前纸面已摆素材复核正文篇幅：'+JSON.stringify(writing):'');
       const previousDeliveryReview=[...independentReviews].reverse().find(item=>item.phase==='review');
       const reviewingRepair=previousDeliveryReview?.blockingIssues?.length&&previousDeliveryReview.pngHash!==capture.pngHash;
       const compositionCheck=visualDensityBrief(s.document.source.styles)+' '+(reviewingRepair?'上次独立审查针对旧画面。现在只核对那几处阻断问题是否已解决；若已解决，用 creation_finish 获取本画面的新审查。不要继续根据旧提示反复微调或添加无关元素。':'缩小看整页：逐页核对四角与正文和素材的共同中心。视觉路线实际经过哪些上/下、左/右停留点？疏密是否符合用户选择，内容关联是否清楚？每页是否有真实可见的承托层或纸面连接？有无可编辑形状能改善构图？现有材料与图文是否已经完成所需层次；若仍需点缀，它应回应哪里？是否跨中缝、贴外缘？若有具体可见问题，选择影响最大的一两处合批修复；若没有，就调用 creation_finish，不必为了多做一轮而修改。');
@@ -588,7 +590,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       const trace=traceEvent(s,{kind:'render',turn:s.turns,phase:s.phase||'composition',durationMs:clock()-renderStarted-layoutAuditDuration-craftAuditDuration,rendererMs:preview.renderMs||null,sceneRevision:capture.sceneRevision,pngHash:capture.pngHash,changedSpaces:changedSpaces.map(view=>view.id)});
       if(layoutAudit)trace.push({elapsedMs:clock()-s.startedAt,kind:'independent_visual_review',turn:s.turns,phase:'layout',durationMs:layoutAuditDuration,blockingIssues:layoutAudit.blockingIssues.length,unavailable:layoutAudit.unavailable,pngHash:capture.pngHash});
       if(craftAudit)trace.push({elapsedMs:clock()-s.startedAt,kind:'independent_visual_review',turn:s.turns,phase:'craft',durationMs:craftAuditDuration,blockingIssues:craftAudit.blockingIssues.length,unavailable:craftAudit.unavailable,pngHash:capture.pngHash});
-      return {run:{...s,phase,firstLayoutTurn,preview:capture,previewTurn:s.turns,observationScene,observationWriting:writing,review:null,reviewPending:true,spaceSignatures,visualState,pageMaterials,compositionAnchors,qualityFrames,trace,messages,needsRender:false,independentReviews,auxiliaryUsage}};
+      return {run:{...s,phase,firstLayoutTurn,preview:capture,previewTurn:s.turns,observationFeedback,observationNotes:observationText,observationWriting:writing,review:null,reviewPending:true,spaceSignatures,visualState,pageMaterials,compositionAnchors,qualityFrames,trace,messages,needsRender:false,independentReviews,auxiliaryUsage}};
     })
     .addEdge(START,'model').addEdge('model','tools')
     .addConditionalEdges('tools',({run})=>run.status==='completed'?END:run.needsRender?'render':'model')

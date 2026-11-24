@@ -3,7 +3,6 @@ import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
 import {validateWebScene} from '../../src/web-scene-workbench.js';
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
-import {phaseObservation} from './phases.mjs';
 import {techniqueCatalog} from '../../creative-agent/library/techniques.js';
 
 export function recommendCreationSkills(skills,document,brief={}){
@@ -129,71 +128,63 @@ export function paperFoundationStatus(document,inspection=inspectCreationDocumen
     hint:'承托层可以是已有的纹样纸、可写卡、纸片或数字纸形；先试摆真实素材，只有缺少合适写面或色彩关系时再加数字纸。'};
 }
 
+// Automatic snapshots are ephemeral request tails. The checkpoint retains
+// their original images for audit/review, but model history keeps decisions,
+// reasoning and tool receipts rather than obsolete copies of the workspace.
+export function isCreativeSnapshot(message){
+  if(message.role!=='user')return false;
+  if(typeof message.content==='string')return /^(当前创作状态|压缩后的完整图层基线)/.test(message.content);
+  return Array.isArray(message.content)&&message.content.some(p=>p.type==='text'&&p.text?.includes('当前真实画面：'));
+}
+
 export function modelContext(messages,state={}){
-  // The stage prompt is inserted into the outgoing request. Never let that
-  // insertion mutate the checkpoint's source messages.
   if(messages.length<=2)return [...messages];
-  // Keep the request prefix byte-for-byte stable within a compaction epoch.
-  // Do not rewrite old receipts or remove images on each ordinary turn.
-  const index=messages[1];
-  const turns=messages.flatMap((message,i)=>message.role==='assistant'?[i]:[]);
-  const opening=messages.slice(2,turns[0]??messages.length).filter(m=>m.role==='user'&&typeof m.content==='string');
   let start=Math.max(2,Number.isInteger(state.compactedUntil)?state.compactedUntil:2);
   while(start>2&&messages[start]?.role==='tool')start--;
-  const isPreview=message=>message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='text'&&part.text?.includes('当前真实画面：'));
-  const compactedRecent=messages.slice(start);
-  const lastPreview=compactedRecent.findLastIndex(isPreview);
-  // A tray-only render may carry no page image. Keep exactly the page image
-  // matching the current visual signature, even after several read-only turns.
-  const signature=state.visualState?.page?.signature;
-  const pageParts=message=>{
-    if(!signature||!Array.isArray(message.content))return null;
-    const i=message.content.findIndex(part=>part.type==='text'&&part.text?.startsWith('工作空间 page；')&&part.text.includes('画面版本：'+signature));
-    return i>=0&&message.content[i+1]?.type==='image_url'?message.content.slice(i,i+2):null;
-  };
-  if(signature&&!compactedRecent.some(pageParts)){
-    const prior=messages.findLast(message=>pageParts(message));
-    if(prior)compactedRecent.push({role:'user',content:pageParts(prior)});
-  }
-  // A tutorial is a comparison reference, not a one-turn material inspection.
-  // Keep one most recently studied example beside the current artwork, even
-  // when its read_skill call has left the rolling history window.
-  let tutorialParts;
-  for(const message of messages){
+  const latestPreview=messages.findLast(m=>Array.isArray(m.content)&&isCreativeSnapshot(m));
+  const workspaceParts=new Map();
+  for(const message of messages.slice(2)){
     if(message.role!=='user'||!Array.isArray(message.content))continue;
     for(let i=0;i<message.content.length-1;i++){
-      const part=message.content[i];
-      if(part.type==='text'&&part.text?.startsWith('教程示意（')&&message.content[i+1].type==='image_url')tutorialParts=message.content.slice(i,i+2);
+      const p=message.content[i],id=p.type==='text'&&/^工作空间 ([^；]+)；/.exec(p.text||'')?.[1];
+      if(!id||id==='source'||message.content[i+1]?.type!=='image_url')continue;
+      const signature=state.visualState?.[id]?.signature;
+      if(signature&&!p.text.includes('画面版本：'+signature))continue;
+      if(state.spaces&&!state.spaces.some(space=>space.id===id))continue;
+      workspaceParts.set(id,message.content.slice(i,i+2));
     }
   }
-  if(tutorialParts&&!compactedRecent.some(message=>Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'&&part.image_url?.url===tutorialParts[1].image_url?.url))){
-    compactedRecent.push({role:'user',content:tutorialParts});
+  const stable=message=>{
+    if(isCreativeSnapshot(message))return null;
+    if(message.role!=='user'||!Array.isArray(message.content))return message;
+    const parts=[];
+    for(let i=0;i<message.content.length;i++){
+      const p=message.content[i];
+      if(p.type==='text'&&/^工作空间 (?!source；)[^；]+；/.test(p.text||'')&&message.content[i+1]?.type==='image_url'){i++;continue;}
+      parts.push(p);
+    }
+    return parts.length===message.content.length?message:parts.length?{...message,content:parts}:null;
+  };
+  const recent=messages.slice(start).map(stable).filter(Boolean);
+  const firstAssistant=messages.findIndex(m=>m.role==='assistant');
+  const opening=messages.slice(2,firstAssistant<0?messages.length:firstAssistant).filter(m=>m.role==='user'&&typeof m.content==='string'&&!isCreativeSnapshot(m)&&!recent.includes(m));
+  const prefix=[...messages.slice(0,2),...opening,...(state.creativeMemory?[{role:'user',content:'已压缩的早期创作记忆：'+state.creativeMemory}]:[])];
+  // Retain one studied example across the rare history compaction boundary.
+  let tutorial;
+  for(const m of messages)if(m.role==='user'&&Array.isArray(m.content))for(let i=0;i<m.content.length-1;i++){
+    if(m.content[i].type==='text'&&m.content[i].text?.startsWith('教程示意（')&&m.content[i+1].type==='image_url')tutorial=m.content.slice(i,i+2);
   }
-  const pinnedOpening=opening.filter(m=>!compactedRecent.includes(m));
-  const memoryMessage=state.creativeMemory?{role:'user',content:'已压缩的早期创作记忆：'+state.creativeMemory}:null;
-  const prefix=[messages[0],index,...pinnedOpening,...(memoryMessage?[memoryMessage]:[])];
-  if(!state.document)return [...prefix,...compactedRecent];
-  const names=new Map(messages.slice(2,start).flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>[call.id,call.function?.name]):[]));
-  const references=messages.slice(2,start).filter(message=>message.role==='tool'&&['read_skill','read_case'].includes(names.get(message.tool_call_id))).flatMap(message=>{
-    try{const receipt=JSON.parse(message.content);return receipt.ok?[{tool:names.get(message.tool_call_id),detail:JSON.stringify(receipt.data).slice(0,1200)}]:[];}catch{return [];}
-  }).slice(-2);
-  const inspected=inspectCreationDocument(state.document);
-  // The newest automatic observation already carries the same Scene. Keep only
-  // its revision in the state summary so a long page is not billed twice.
-  const previewVisible=lastPreview>=0;
-  const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
-  // After a rare history rebuild, append one authoritative baseline after
-  // retained deltas. Persist it just like every actual request suffix.
-  const baselineLabel='压缩后的完整图层基线（'+start+'）：';
-  if(start>2&&!compactedRecent.some(m=>typeof m.content==='string'&&m.content.startsWith(baselineLabel))){
-    const snapshot=phaseObservation('layout',{scene:inspected,feedback:{},advisory:{}}).scene;
-    compactedRecent.push({role:'user',content:baselineLabel+JSON.stringify(snapshot)});
-  }
-  const summary={phase:state.phase||'direction',scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision}:null,
-    loadedSkills:(state.loadedSkills||[]).map(({name})=>name), ...(references.length?{references}:{}), reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
+  if(tutorial&&!recent.some(m=>Array.isArray(m.content)&&m.content.some(p=>p.image_url?.url===tutorial[1].image_url?.url)))recent.push({role:'user',content:tutorial});
+  if(!state.document)return [...prefix,...recent,...(latestPreview?[latestPreview]:[])];
+  const images=[...workspaceParts.values()].flat();
+  const snapshotImages=images.length?images:(latestPreview?.content.filter(p=>p.type==='image_url')||[]);
+  const visual=state.preview||latestPreview?{role:'user',content:[{type:'text',text:'当前真实画面：'+JSON.stringify(state.preview||{})},...snapshotImages]}:null;
+  const summary={phase:state.phase||'direction',scene:inspectCreationDocument(state.document),preview:state.preview||null,
+    plan:state.plan||null,loadedSkills:(state.loadedSkills||[]).map(({name})=>name),reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
+    observation:state.observationFeedback||null,notes:state.observationNotes||null,
     taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},
-    inspection:'最新图层与图片见最近画面观察；完整参数可用 creation_inspect，工具失败见本轮回执；计划沿用最近 creation_plan。'};
-  return [...prefix,...compactedRecent,{role:'user',content:'当前创作状态（由检查点生成）：'+JSON.stringify(summary)}];
+    inspection:'这是当前完整图层清单和层序，不是增量；旧画面快照已移除。所有位置以此版本为准；完整原生字段可按需 creation_inspect(full=true)。'};
+  return [...prefix,...recent,...(visual?[visual]:[]),{role:'user',content:'当前创作状态（由检查点生成）：'+JSON.stringify(summary)}];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
