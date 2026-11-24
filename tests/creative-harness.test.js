@@ -264,7 +264,8 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   assert.ok(!instructions[0].includes('表达方法卡'));
   assert.ok(instructions[1].includes('表达方法卡候选'));
   assert.ok(instructions[1].includes('表达方法卡'));
-  assert.ok(instructions[4].includes('可交错进行'));
+  assert.ok(instructions[1].includes('可交错进行'));
+  assert.ok(!instructions[4].includes('可交错进行'),'unchanged stage instructions remain in history instead of being appended again');
   assert.equal(f.renders(),3);
 });
 

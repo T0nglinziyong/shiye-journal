@@ -121,7 +121,8 @@ test('context windowing preserves unsummarized decisions and recognizes the actu
   const messages=[...f.state.messages.slice(0,2)];
   for(let i=0;i<10;i++)messages.push({role:'assistant',content:i===0?'放弃居中布局，保留左侧标题作为阅读起点。':null,tool_calls:[{id:'c'+i,function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'});
   const observation=f.state.messages.at(-1);
-  assert.match(observation.content[0].text,/当前纸面实物素材：/);
+  assert.match(observation.content[0].text,/场景观察：/);
+  assert.doesNotMatch(observation.content[0].text,/当前纸面实物素材：/,'material roles and geometry remain in the scene, not a duplicate list');
   messages.push(observation);
   const context=modelContext(messages,{...f.state,messages,compactedUntil:2,creativeMemory:''});
   const summary=JSON.parse(context.at(-1).content.slice(context.at(-1).content.indexOf('：')+1));

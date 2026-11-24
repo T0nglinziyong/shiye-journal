@@ -146,7 +146,7 @@ test('creative compaction carries design decisions and rejected attempts into la
    {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
    {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
  );
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
  assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,11);
  assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
  assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
@@ -164,7 +164,7 @@ test('compaction never starts between two responses to one assistant tool batch'
  for(let i=0;i<12;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  messages.push({role:'assistant',tool_calls:[{id:'first',function:{name:'creation_phase',arguments:'{}'}},{id:'second',function:{name:'creation_help',arguments:'{}'}}]},{role:'tool',tool_call_id:'first',content:'{"ok":true}'},{role:'tool',tool_call_id:'second',content:'{"ok":true}'});
  const cutoff=messages.length-1;
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[{messageIndex:cutoff}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[{messageIndex:cutoff}]});
  assert.ok(candidate.cutoff<messages.length-3);
  const context=modelContext(messages,{compactedUntil:cutoff});
  const calls=new Set(context.flatMap(message=>message.role==='assistant'?(message.tool_calls||[]).map(call=>call.id):[]));
@@ -176,7 +176,7 @@ test('soft creative loops compact completed turns without a phase transition',()
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  assert.equal(creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:30000}]}),null);
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[]});
  assert.ok(candidate);
  assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
  assert.equal(messages[candidate.cutoff].role,'assistant');
@@ -185,7 +185,7 @@ test('soft creative loops compact completed turns without a phase transition',()
 test('an old phase marker does not suppress later cadence compaction',()=>{
  const messages=[{role:'system',content:'rules'},{role:'user',content:'input'}];
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
- const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:61000}],phaseReviews:[{messageIndex:4}]});
+ const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:610000}],phaseReviews:[{messageIndex:4}]});
  assert.ok(candidate);
  assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
 });
@@ -391,32 +391,32 @@ test('ordinary turns reuse the complete prior history prefix despite changing Sc
 });
 
 
-test('budget compaction triggers after four cycles by text or images without touching recent reasoning',()=>{
- const make=(reasoning,images)=>[{role:'system',content:'rules'},{role:'user',content:'original task'},...Array.from({length:4},(_,i)=>[
-  {role:'assistant',reasoning_content:reasoning,tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:'{}'}}]},
+test('ordinary long histories and image counts do not trigger compaction',()=>{
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},...Array.from({length:10},(_,i)=>[
+  {role:'assistant',reasoning_content:'x'.repeat(31000),tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:'{}'}}]},
   {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
-  {role:'user',content:Array.from({length:images},()=>({type:'image_url',image_url:{url:'test'}}))}
+  {role:'user',content:Array.from({length:3},()=>({type:'image_url',image_url:{url:'image'}}))}
  ]).flat()];
- for(const messages of [make('x'.repeat(31000),0),make('short',3)]){
-  const candidate=creativeCompactionCandidate(messages,{usage:[{prompt_tokens:20000}]});
-  assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,2);
-  const state={compactedUntil:candidate.cutoff,creativeMemory:'decisions'};
-  const out=modelContext(messages,state),recent=out.filter(m=>m.role==='assistant');
-  assert.equal(recent.length,2);assert.equal(recent[0].reasoning_content,messages[candidate.cutoff].reasoning_content);
-  assert.equal(creativeCompactionCandidate(messages,{...state,usage:[{prompt_tokens:90000}]}),null,'do not compact again until two more complete cycles exist');
- }
+ assert.equal(creativeCompactionCandidate(messages,{usage:[{prompt_tokens:120000,completion_tokens:30000}],firstLayoutTurn:10,turns:10}),null);
+ const candidate=creativeCompactionCandidate(messages,{usage:[{prompt_tokens:570000,completion_tokens:40000}]});
+ assert.ok(candidate);
+ const retained=modelContext(messages,{compactedUntil:candidate.cutoff});
+ assert.equal(retained.filter(m=>m.role==='assistant').length,2);
+ assert.equal(retained.find(m=>m.role==='assistant').reasoning_content,'x'.repeat(31000));
+ assert.equal(creativeCompactionCandidate(messages,{compactedUntil:candidate.cutoff,usage:[{prompt_tokens:610000}]}),null);
 });
 
-
-test('budget rebuild coincides with first-layout handoff and preserves its whole tool cycle',()=>{
- const messages=[{role:'system',content:'rules'},{role:'user',content:'source'}];
- for(let i=0;i<3;i++)messages.push({role:'assistant',reasoning_content:'reasoning-'+i,tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:'{}'}}]},
-  {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},{role:'user',content:'render '+i});
- const state={firstLayoutTurn:3,turns:3,usage:[{prompt_tokens:61000}]};
- const candidate=creativeCompactionCandidate(messages,state);
- assert.equal(candidate.history.filter(m=>m.role==='assistant').length,2);
- const retained=modelContext(messages,{...state,compactedUntil:candidate.cutoff});
- assert.equal(retained.filter(m=>m.role==='assistant').length,1);
- assert.equal(retained.find(m=>m.role==='assistant').reasoning_content,'reasoning-2');
- assert.equal(creativeCompactionCandidate(messages,{...state,turns:4}),null,'ordinary rounds retain at least two cycles');
+test('rare compaction restores a full scene baseline once after retained deltas',async()=>{
+ const {createCreationDocument}=await import('../src/creation-document.js'),{draft}=await import('../src/domain.js');
+ const document=await createCreationDocument({draft:draft(),assets:[]});
+ const messages=[{role:'system',content:'rules'},{role:'user',content:'task'},
+  {role:'assistant',content:'older'},{role:'user',content:'older observation'},
+  {role:'assistant',content:'recent'},{role:'user',content:'scene delta'}];
+ const state={document,compactedUntil:4};
+ const first=modelContext(messages,state),baseline=first.filter(m=>typeof m.content==='string'&&m.content.startsWith('压缩后的完整图层基线'));
+ assert.equal(baseline.length,1);assert.ok(JSON.parse(baseline[0].content.split('：')[1]).layers);
+ const persisted=[...messages,...first.slice(first.indexOf(messages.at(-1))+1)];
+ const next=modelContext(persisted,state);
+ assert.equal(next.filter(m=>typeof m.content==='string'&&m.content.startsWith('压缩后的完整图层基线')).length,1);
+ assert.deepEqual(next.slice(0,first.length),first);
 });

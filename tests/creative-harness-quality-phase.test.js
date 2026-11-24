@@ -52,3 +52,19 @@ test('compact observations retain hierarchy, physical geometry, font size and cu
  assert.equal(out.scene.layers[0].cropped,true);assert.equal(out.scene.layers[0].materialMask,undefined);assert.equal(out.scene.layers[1].fontSizePt,11);
  assert.equal(out.scene.layerTree[0].children[0].id,'cut-paper');
 });
+
+
+test('scene deltas reconstruct edits, deletions, group movement and layer order',()=>{
+ const observe=(scene,previousScene)=>phaseObservation('layout',{scene,previousScene,feedback:{},advisory:{}}).scene;
+ const make=(revision,layers)=>({sceneRevision:revision,page:{width:100},layerTree:layers.map(l=>({id:l.id})),stacking:'back-to-front',layers});
+ const prior=observe(make('r1',[{id:'paper',type:'shape',stackIndex:0,world:{centerMm:[20,30]}},{id:'text',type:'text',stackIndex:1,parent:'paper',content:'保留',world:{centerMm:[25,35]}},{id:'removed',type:'shape',stackIndex:2}]));
+ const scene=make('r2',[{id:'new',type:'shape',stackIndex:0},{id:'paper',type:'shape',stackIndex:1,world:{centerMm:[30,40]}},{id:'text',type:'text',stackIndex:2,parent:'paper',content:'保留',world:{centerMm:[35,45]}}]);
+ const delta=observe(scene,prior),full=observe(scene);
+ assert.equal(delta.baseSceneRevision,'r1');assert.deepEqual(delta.removed,['removed']);
+ const reconstructed=new Map(prior.layers.map(l=>[l.id,l]));
+ for(const id of delta.removed)reconstructed.delete(id);
+ for(const l of delta.layers)reconstructed.set(l.id,l);
+ assert.deepEqual([...reconstructed.values()].sort((a,b)=>a.stackIndex-b.stackIndex),full.layers);
+ assert.deepEqual(delta.layerTree,full.layerTree);
+ const unchanged=observe(scene,full);assert.deepEqual(unchanged.layers,[]);assert.equal(unchanged.layerTree,undefined);
+});

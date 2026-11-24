@@ -3,6 +3,7 @@ import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
 import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
 import {validateWebScene} from '../../src/web-scene-workbench.js';
 import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
+import {phaseObservation} from './phases.mjs';
 import {techniqueCatalog} from '../../creative-agent/library/techniques.js';
 
 export function recommendCreationSkills(skills,document,brief={}){
@@ -181,33 +182,33 @@ export function modelContext(messages,state={}){
   // its revision in the state summary so a long page is not billed twice.
   const previewVisible=lastPreview>=0;
   const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
+  // After a rare history rebuild, append one authoritative baseline after
+  // retained deltas. Persist it just like every actual request suffix.
+  const baselineLabel='压缩后的完整图层基线（'+start+'）：';
+  if(start>2&&!compactedRecent.some(m=>typeof m.content==='string'&&m.content.startsWith(baselineLabel))){
+    const snapshot=phaseObservation('layout',{scene:inspected,feedback:{},advisory:{}}).scene;
+    compactedRecent.push({role:'user',content:baselineLabel+JSON.stringify(snapshot)});
+  }
   const summary={phase:state.phase||'direction',scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision}:null,
-    plan:state.plan?{intent:state.plan.intent,composition:state.plan.composition,writingZones:state.plan.writingZones}:null,
-    loadedSkills:state.loadedSkills, references, reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
-    lastResults:(state.results||[]).filter(row=>!row.ok).map(({name,code,detail})=>({name,code,detail})),
+    loadedSkills:(state.loadedSkills||[]).map(({name})=>name), ...(references.length?{references}:{}), reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
     taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},
-    inspection:'最新图层与图片见最近画面观察；完整参数可用 creation_inspect，未解决错误见 lastResults。'};
+    inspection:'最新图层与图片见最近画面观察；完整参数可用 creation_inspect，工具失败见本轮回执；计划沿用最近 creation_plan。'};
   return [...prefix,...compactedRecent,{role:'user',content:'当前创作状态（由检查点生成）：'+JSON.stringify(summary)}];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
-  // Compact whole completed cycles, never individual reasoning/tool fields.
-  // Budget the next request as well: a large answer or new images can cross
-  // the budget even when the preceding request was still small.
+  // Safety valve only. Control newly appended observations rather than
+  // repeatedly rebuilding already cached history at a character/image count.
   const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const active=messages.slice(from);
-  let chars=0,images=0;
-  for(const m of active){
-    chars+=(m.reasoning_content||'').length+JSON.stringify(m.tool_calls||[]).length;
-    if(typeof m.content==='string')chars+=m.content.length;
-    else for(const p of m.content||[]){if(p.type==='text')chars+=(p.text||'').length;else if(p.type==='image_url')images++;}
-  }
-  if((state.usage?.at(-1)?.prompt_tokens||0)<60000&&chars<120000&&images<12)return null;
+  const last=state.usage?.at(-1);
+  const capacity=state.contextWindowTokens||1000000;
+  const estimated=last?((last.prompt_tokens||0)+(last.completion_tokens||0)):
+    messages.slice(from).reduce((n,m)=>n+(m.reasoning_content||'').length+JSON.stringify(m.tool_calls||[]).length+
+      (typeof m.content==='string'?m.content:(m.content||[]).filter(p=>p.type==='text').map(p=>p.text||'').join('')).length,0);
+  // Reserve 40% for the next response and newly appended multimodal input.
+  if(estimated<capacity*0.6)return null;
   const assistants=messages.flatMap((message,index)=>message.role==='assistant'&&index>=from?[index]:[]);
-  // Align a needed rebuild with the one high -> low handoff, avoiding two
-  // adjacent cache misses. The just-rendered layout cycle remains intact.
-  const handoff=(state.reasoningPolicy??'adaptive')==='adaptive'&&state.firstLayoutTurn===state.turns&&state.turns>0;
-  const keep=handoff?1:2,minimumOlder=handoff?1:2;
+  const keep=2,minimumOlder=2;
   if(assistants.length<keep+minimumOlder)return null;
   const cutoff=assistants.at(-keep);
   const older=messages.slice(from,cutoff);
