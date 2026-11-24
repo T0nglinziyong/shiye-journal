@@ -31,9 +31,7 @@ export function phaseGuide(phase,{styles=[],textMode='automatic',pageMode}={}){
 }
 
 export function phaseObservation(phase,{capture,spaceStatus,scene,feedback,advisory,previousReview,remainingSeconds}){
-  const current=Object.fromEntries(Object.entries(spaceStatus.current||{}).map(([id,value])=>[id,{empty:value.empty,items:value.items,parkedIDs:value.parkedIDs,lastSeenTurn:value.lastSeenTurn}]));
-  const changed=(spaceStatus.changed||[]).map(({id,items,parkedIDs,empty})=>({id,items,parkedIDs,empty}));
-  const base={phase,spaces:spaceStatus.spaces,current,changed,remainingSeconds};
+  const base={phase,remainingSeconds};
   // Shape/type thresholds in foundation are useful offline diagnostics, but
   // they misclassify printed cards and illustrated paper as absent backing.
   const sceneFeedback={...feedback};delete sceneFeedback.foundation;
@@ -42,9 +40,11 @@ export function phaseObservation(phase,{capture,spaceStatus,scene,feedback,advis
     // automatic image observation needs only enough structure for the next
     // placement/order decision; repeating every style field costs tokens.
     const compact={sceneRevision:scene.sceneRevision,page:scene.page,stacking:scene.stacking,layerTree:scene.layerTree,
-      layers:scene.layers.map(({id,alias,type,parent,surface,world,asset,content,kind,fill,stroke,hidden})=>({id,alias,type,parent,surface,world,asset,
+      layers:scene.layers.map(({id,alias,type,parent,stackIndex,surface,world,asset,content,kind,fill,stroke,hidden,fontSizePt,cropRect,materialMask,vectorMask})=>({id,alias,type,parent,stackIndex,surface,world,asset,fontSizePt,...(cropRect||materialMask||vectorMask?{cropped:true}:{}),
         ...(typeof content==='string'?{content:content.slice(0,90)}:{}),kind,fill,stroke,hidden}))};
-    return {...base,scene:compact,feedback:sceneFeedback,advisory,previousReview};
+    return {...base,scene:compact,feedback:sceneFeedback,
+      advisory:{limitations:advisory.limitations,observations:advisory.observations,
+        textCoverCandidates:advisory.textCoverCandidates?.slice(0,8),gutterIntersections:advisory.gutterIntersections?.slice(0,8)},previousReview};
   }
   return {...base,scene:{sceneRevision:scene.sceneRevision,layers:scene.layers.filter(layer=>layer.surface==='page')},feedback:sceneFeedback,advisory:{observations:advisory.observations},previousReview};
 }

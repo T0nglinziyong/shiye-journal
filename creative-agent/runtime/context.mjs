@@ -181,26 +181,33 @@ export function modelContext(messages,state={}){
   // its revision in the state summary so a long page is not billed twice.
   const previewVisible=lastPreview>=0;
   const scene=previewVisible?{sceneRevision:inspected.sceneRevision}:{sceneRevision:inspected.sceneRevision,page:inspected.page,layers:inspected.layers.filter(layer=>state.phase!=='review'||layer.surface==='page').map(({id,type,surface,asset,content,world,hidden,parent})=>({id,type,surface,asset,content:typeof content==='string'?content.slice(0,120):undefined,world,hidden,parent}))};
-  // Windowing must not silently erase decisions before the token threshold
-  // triggers model compaction. Summarize only the uncovered interval locally.
-  const memoryStart=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const memory=start>memoryStart?fallbackCreativeMemory(state.creativeMemory,creativeCompactionTranscript(messages.slice(memoryStart,start)),state):state.creativeMemory;
-  const summary={creativeMemory:memory||null,memoryNote:'creativeMemory 只总结较早回合；若与最新 Scene 或下方原始回合冲突，以最新信息为准',phase:state.phase||'direction',phaseReviews:(state.phaseReviews||[]).map(({from,to,observations,adjustments})=>({from,to,observations,adjustments})),plan:state.plan,decisions:(state.decisions||[]).slice(-6),spaces:state.spaces,visualState:state.visualState||null,scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision,artifact:state.preview.artifact}:null,loadedSkills:state.loadedSkills,recommendedMethods:(state.recommendedMethods||[]).map(({id,skill,title})=>({id,skill,title})),skillReferences:state.phase==='review'?[]:(state.skillReferences||[]),references:state.phase==='review'?[]:references,lastResults:(state.results||[]).slice(-6).map(({name,ok,code,detail})=>({name,ok,code,detail})),drafts:state.phase==='review'?[]:(state.drafts||[]).map(({id,goal,pngHash,baseSceneRevision})=>({id,goal,pngHash,baseSceneRevision})),undoAvailable:(state.undoStack||[]).length,reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),review:state.review||null};
-  return [...prefix,...compactedRecent,{role:'user',content:'当前创作状态（由检查点生成，早期对话已压缩）：'+JSON.stringify(summary)}];
+  const summary={phase:state.phase||'direction',scene,preview:state.preview?{pngHash:state.preview.pngHash,sceneRevision:state.preview.sceneRevision}:null,
+    plan:state.plan?{intent:state.plan.intent,composition:state.plan.composition,writingZones:state.plan.writingZones}:null,
+    loadedSkills:state.loadedSkills, references, reviewPending:state.reviewPending??Boolean(state.preview&&!state.review),
+    lastResults:(state.results||[]).filter(row=>!row.ok).map(({name,code,detail})=>({name,code,detail})),
+    taskReminder:{styles:state.document.source.styles,processing:state.document.source.processing,textMode:state.document.source.textMode,contentPolicy:state.document.source.contentPolicy},
+    inspection:'最新图层与图片见最近画面观察；完整参数可用 creation_inspect，未解决错误见 lastResults。'};
+  return [...prefix,...compactedRecent,{role:'user',content:'当前创作状态（由检查点生成）：'+JSON.stringify(summary)}];
 }
 
 export function creativeCompactionCandidate(messages,state={}){
-  // Pi-style threshold compaction: summarize only when the actual preceding
-  // request became large, rather than paying for a summary every four turns.
-  // Keep six assistant cycles intact so live decisions and tool outcomes stay
-  // visible after a checkpoint. Images are never summarized as text.
-  if((state.usage?.at(-1)?.prompt_tokens||0)<38000)return null;
+  // Compact whole completed cycles, never individual reasoning/tool fields.
+  // Budget the next request as well: a large answer or new images can cross
+  // the budget even when the preceding request was still small.
   const from=Number.isInteger(state.compactedUntil)?state.compactedUntil:2;
-  const enough=cutoff=>Number.isInteger(cutoff)&&cutoff>from&&messages.slice(from,cutoff).filter(message=>message.role==='assistant').length>=6;
-  const assistants=messages.flatMap((message,index)=>message.role==='assistant'?[index]:[]);
-  let cutoff=assistants.at(-6);
-  while(cutoff>2&&messages[cutoff]?.role==='tool')cutoff--;
-  if(!enough(cutoff))return null;
+  const active=messages.slice(from);
+  let chars=0,images=0;
+  for(const m of active){
+    chars+=(m.reasoning_content||'').length+JSON.stringify(m.tool_calls||[]).length;
+    if(typeof m.content==='string')chars+=m.content.length;
+    else for(const p of m.content||[]){if(p.type==='text')chars+=(p.text||'').length;else if(p.type==='image_url')images++;}
+  }
+  if((state.usage?.at(-1)?.prompt_tokens||0)<38000&&chars<80000&&images<10)return null;
+  const assistants=messages.flatMap((message,index)=>message.role==='assistant'&&index>=from?[index]:[]);
+  // Keep the last two cycles verbatim, including all reasoning and receipts.
+  // At least two older cycles must be removed to avoid rebuilding every turn.
+  if(assistants.length<4)return null;
+  const cutoff=assistants.at(-2);
   const older=messages.slice(from,cutoff);
   return {cutoff,history:creativeCompactionTranscript(older)};
 }

@@ -66,7 +66,7 @@ test('state summary does not repeat the Scene already present in the latest prev
  const document=await createCreationDocument({draft:draft(),assets:[]});
  const preview={role:'user',content:[{type:'text',text:'当前真实画面：{"sceneRevision":"current"}\n最新 Scene：{"layers":[{"id":"visible"}]}'},{type:'image_url',image_url:{url:'preview'}}]};
  const out=modelContext([{role:'system',content:'rules'},{role:'user',content:'input'},{role:'assistant',content:'edit'},preview],{document,phase:'composition'});
- const summary=JSON.parse(out.at(-1).content.replace('当前创作状态（由检查点生成，早期对话已压缩）：',''));
+ const summary=JSON.parse(out.at(-1).content.replace('当前创作状态（由检查点生成）：',''));
  assert.deepEqual(Object.keys(summary.scene),['sceneRevision']);
  assert.equal(out.at(-2),preview);
 });
@@ -147,7 +147,7 @@ test('creative compaction carries design decisions and rejected attempts into la
    {role:'user',content:[{type:'text',text:'当前真实画面：'+i},{type:'image_url',image_url:{url:'preview'+i}}]}
  );
  const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{from:'layout',to:'craft',messageIndex:17}]});
- assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,7);
+ assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,11);
  assert.match(JSON.stringify(candidate.history),/主图太拥挤/);
  assert.doesNotMatch(JSON.stringify(candidate.history),/private reasoning|preview0/);
  const {createCreationDocument}=await import('../src/creation-document.js');
@@ -155,8 +155,8 @@ test('creative compaction carries design decisions and rejected attempts into la
  const state={compactedUntil:candidate.cutoff,creativeMemory:'居中排布拥挤，改为左侧留白。',document:await createCreationDocument({draft:draft(),assets:[]})};
  const out=modelContext(messages,state);
  assert.match(out[2].content,/居中排布拥挤，改为左侧留白/);
- assert.equal(out.filter(m=>m.role==='assistant').length,6);
- assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,7);
+ assert.equal(out.filter(m=>m.role==='assistant').length,2);
+ assert.equal(out.filter(m=>m.role==='user'&&Array.isArray(m.content)).length,3);
 });
 
 test('compaction never starts between two responses to one assistant tool batch',()=>{
@@ -178,7 +178,7 @@ test('soft creative loops compact completed turns without a phase transition',()
  assert.equal(creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:30000}]}),null);
  const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[]});
  assert.ok(candidate);
- assert.equal(candidate.history.filter(item=>item.role==='assistant').length,7);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
  assert.equal(messages[candidate.cutoff].role,'assistant');
 });
 
@@ -187,7 +187,7 @@ test('an old phase marker does not suppress later cadence compaction',()=>{
  for(let i=0;i<13;i++)messages.push({role:'assistant',tool_calls:[{id:'a'+i,function:{name:'creation_apply',arguments:'{}'}}]},{role:'tool',tool_call_id:'a'+i,content:'{"ok":true}'});
  const candidate=creativeCompactionCandidate(messages,{compactedUntil:2,usage:[{prompt_tokens:39000}],phaseReviews:[{messageIndex:4}]});
  assert.ok(candidate);
- assert.equal(candidate.history.filter(item=>item.role==='assistant').length,7);
+ assert.equal(candidate.history.filter(item=>item.role==='assistant').length,11);
 });
 
 test('failed model compaction keeps the design intent and rejected work',()=>{
@@ -387,5 +387,22 @@ test('ordinary turns reuse the complete prior history prefix despite changing Sc
   assert.deepEqual(request.slice(0,messages.length),messages);
   assert.match(request.at(-1).content,/当前创作状态/);
   assert.equal(JSON.stringify(messages),before);
+ }
+});
+
+
+test('budget compaction triggers after four cycles by text or images without touching recent reasoning',()=>{
+ const make=(reasoning,images)=>[{role:'system',content:'rules'},{role:'user',content:'original task'},...Array.from({length:4},(_,i)=>[
+  {role:'assistant',reasoning_content:reasoning,tool_calls:[{id:'c'+i,function:{name:'creation_apply',arguments:'{}'}}]},
+  {role:'tool',tool_call_id:'c'+i,content:'{"ok":true}'},
+  {role:'user',content:Array.from({length:images},()=>({type:'image_url',image_url:{url:'test'}}))}
+ ]).flat()];
+ for(const messages of [make('x'.repeat(21000),0),make('short',3)]){
+  const candidate=creativeCompactionCandidate(messages,{usage:[{prompt_tokens:20000}]});
+  assert.ok(candidate);assert.equal(candidate.history.filter(m=>m.role==='assistant').length,2);
+  const state={compactedUntil:candidate.cutoff,creativeMemory:'decisions'};
+  const out=modelContext(messages,state),recent=out.filter(m=>m.role==='assistant');
+  assert.equal(recent.length,2);assert.equal(recent[0].reasoning_content,messages[candidate.cutoff].reasoning_content);
+  assert.equal(creativeCompactionCandidate(messages,{...state,usage:[{prompt_tokens:90000}]}),null,'do not compact again until two more complete cycles exist');
  }
 });

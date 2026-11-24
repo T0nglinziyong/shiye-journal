@@ -29,7 +29,7 @@ const text=(id,content,at)=>({op:'text.add',id,content,size:{width:55,unit:'mm'}
 const previewOf=messages=>{
   const entry=messages.findLast(message=>message.role==='user'&&Array.isArray(message.content)&&message.content[0]?.text?.startsWith('当前真实画面：'));
   if(entry)return JSON.parse(entry.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
-  const summary=messages.find(message=>message.role==='user'&&typeof message.content==='string'&&message.content.startsWith('当前创作状态'));
+  const summary=messages.findLast(message=>message.role==='user'&&typeof message.content==='string'&&message.content.startsWith('当前创作状态'));
   return summary&&JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
 };
 async function fixture(t,model,{clock,afterRender}={}){
@@ -242,7 +242,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
     turn++;instructions.push(messages.at(-1).content);
     assert.equal(messages.filter(m=>m.role==='system').length,1,'only the fixed system prompt precedes history');
     const p=previewOf(messages),names=tools.map(item=>item.function.name);
-    if(turn===1){assert.equal(reasoningEffort,'low');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
+    if(turn===1){assert.equal(reasoningEffort,'high');assert.ok(names.includes('creation_apply'));return answer(plan(),phase('layout','素材主题与配色已经明确，采用多锚点布局'));}
     if(turn===2){
       assert.ok(!names.includes('read_template'),'参考读取工具在查询后展开，不随阶段自动加载');
       const title={...text('title','周末小记',[45,40]),place:{at:[45,40],unit:'mm'}};
@@ -497,4 +497,19 @@ test('review request timeout does not pretend the whole creative task is near it
  assert.match(sent.messages[0].content,/局部衬底/);
  await model.critique({imageURL:'data:image/png;base64,dGVzdA==',phase:'review',style:'丰富层叠',remainingMs:25000,taskRemainingMs:45000});
  assert.match(sent.messages[0].content,/交付时间将至/);
+});
+
+
+test('ordinary requests extend the exact preceding request including dynamic state and guidance',async t=>{
+ let turn=0,prior;const f=await fixture(t,async({messages,reasoningEffort})=>{
+  if(prior)assert.deepEqual(messages.slice(0,prior.length),prior,'the whole previous request must remain an unchanged prefix');
+  prior=structuredClone(messages);turn++;
+  if(turn<=2)assert.equal(reasoningEffort,'high');else assert.equal(reasoningEffort,'low');
+  if(turn===1)return answer(plan());
+  if(turn===2)return answer(edit(creationSceneRevision(f.document),'layout-prefix',[text('title','周末',[40,40]),text('body','午后的小雨落在窗沿，我把散开的纸片重新收好。',[45,85])]));
+  if(turn===3)return answer(call('creation_help',{topics:['layer.update']}));
+  return answer(call('creation_finish',{review:{observations:'文字完整可读，已检查画面',issues:[],pngHash:previewOf(messages).pngHash,sceneRevision:previewOf(messages).sceneRevision}}));
+ });
+ const result=await f.harness.run({id:'prefix-persistence',state:f.state});
+ assert.equal(result.status,'completed');assert.equal(result.firstLayoutTurn,2);
 });

@@ -32,7 +32,7 @@ test('cloud worker commits hash-verified editable output after real rendering an
       const visual=messages.findLast(m=>Array.isArray(m.content)&&/^(当前真实画面：|本轮最先核对的画面问题)/.test(m.content[0]?.text||''));
       // Unchanged previews may be represented by the checkpoint hash rather
       // than sending the same image bytes into another model call.
-      const summary=messages.find(m=>m.role==='user'&&typeof m.content==='string'&&m.content.startsWith('当前创作状态'));
+      const summary=messages.findLast(m=>m.role==='user'&&typeof m.content==='string'&&m.content.startsWith('当前创作状态'));
       const currentVisual=visual?.content[0]?.text?.startsWith('当前真实画面：')?visual:null;
       const preview=currentVisual?JSON.parse(currentVisual.content[0].text.split('\n')[0].slice('当前真实画面：'.length)):JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
       if(modelCalls===3)return reply(call('creation_phase',{phase:'craft',reason:'构图已确定',assessment:{observations:'左上标题清晰，右下仍有正文位置',issues:[]}}));

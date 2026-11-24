@@ -19,7 +19,7 @@ const plan={intent:'记录周末的彩色小事',themeEvidence:{supportedBy:['�
 const previewOf=messages=>{
   const message=messages.findLast(item=>item.role==='user'&&Array.isArray(item.content)&&item.content[0]?.text?.startsWith('当前真实画面：'));
   if(message)return JSON.parse(message.content[0].text.split('\n')[0].slice('当前真实画面：'.length));
-  const summary=messages.find(item=>item.role==='user'&&typeof item.content==='string'&&item.content.startsWith('当前创作状态'));
+  const summary=messages.findLast(item=>item.role==='user'&&typeof item.content==='string'&&item.content.startsWith('当前创作状态'));
   return summary&&JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
 };
 
