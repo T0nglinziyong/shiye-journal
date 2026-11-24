@@ -1362,18 +1362,23 @@ async function runAppAction(action,id,value){try{
       saveProject();
     }
     await flushSave();
-    if(decision.discard)await moveProjectsToTrash([p.id],{silent:true});
-    if(publish)saveAISnapshotInBackground(p);
     const returnToMatching=state.offlineEditingReturnID===p.id;
-    if(returnToMatching){
-      await matchingSession.reflectProject(p);
-      state.offlineEditingReturnID=null;
+    if(decision.discard){
+      // A storage update can render while deletion is in flight. Leave the
+      // editor before clearing its active project, including on slow devices.
+      route(returnToMatching?'matching':'works',{replaceHistory:true});
+      await moveProjectsToTrash([p.id],{silent:true});
     }
+    if(publish)saveAISnapshotInBackground(p);
+    if(returnToMatching&&!decision.discard){
+      await matchingSession.reflectProject(p);
+    }
+    if(returnToMatching)state.offlineEditingReturnID=null;
     parity.workTab=decision.tab;
     parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
     resetCatalogPage('works');
     state.activeProject=null;state.activeDraft=null;
-    route(returnToMatching?'matching':'works',{replaceHistory:true});
+    if(!decision.discard)route(returnToMatching?'matching':'works',{replaceHistory:true});
     break;
   }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':if(state.editingPaperCorners)await previewCorrection();else{state.paperAdjustmentOriginalCorners=state.paperCorners?structuredClone(state.paperCorners):null;state.editingPaperCorners=true;render();}break;case 'confirm-import':{

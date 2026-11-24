@@ -27,6 +27,16 @@ click('#blank-create-confirm');
 await waitFor(()=>win.document.body.classList.contains('editing'));
 click('.swift-editor-head [data-act="back-works"]');
 await waitFor(()=>win.document.querySelector('#view').dataset.renderedRoute==='works');
+assert.equal(win.document.querySelectorAll('.card[data-act="open-project"]').length,0,'empty page is discarded');
+click('#work-create');
+await waitFor(()=>!!win.document.querySelector('#blank-create-confirm'));
+click('#blank-create-confirm');
+await waitFor(()=>win.document.body.classList.contains('editing'));
+click('.swift-editor-toolbar [data-act="tool"][data-val="shape"]');
+await waitFor(()=>!!win.document.querySelector('[data-shape-kind]'));
+click('[data-shape-kind]');
+click('.swift-editor-head [data-act="back-works"]');
+await waitFor(()=>win.document.querySelector('#view').dataset.renderedRoute==='works');
 assert.ok($('.card[data-act="open-project"]'));
 
 
