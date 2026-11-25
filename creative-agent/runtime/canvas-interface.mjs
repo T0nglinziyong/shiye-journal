@@ -1,3 +1,4 @@
+import {uniformOpacitySchema,assertUniformOpacity,resetPaperSurfaceOpacity} from './opacity-contract.mjs';
 import {withoutShadowSchema,assertNoShadowInput} from './shadow-policy.mjs';
 import Ajv2020 from 'ajv/dist/2020.js';
 // Model-facing object language. Lower into the existing atomic Scene reducer;
@@ -32,12 +33,13 @@ export const canvasOperations=[
  {name:'cut',summary:'按 region/mode 裁切素材或生成纸张，区域支持角度；保留原位。实体特殊工艺可 method=tear（轨迹撕裂）、window（开窗）、glyph（字形镂空）。普通裁切省略 method。',parameters:cuts,example:{op:'cut',target:'paper',mode:'keep',region:{shape:'rect',space:'local',unit:'ratio',box:[.1,.1,.8,.8],rotationDeg:10}}},
  {name:'split',summary:'沿 split.through/rotationDeg 将素材或生成纸张一分为二，可选撕边；实体还可按 pieces[].region 分多块。每片统一 id/place/order；已有对象未指定摆放保留原位，直接 asset 取新料未指定摆放进入待放区。',parameters:splits,example:{op:'split',target:'paper',split:{through:[.5,.5],unit:'ratio',rotationDeg:25,edge:{style:'torn',seed:42}},pieces:[{id:'a'},{id:'b',place:{reference:'page',at:[90,120],unit:'mm'}}]}}
 ];
-for(const entry of canvasOperations)entry.parameters=withoutShadowSchema(entry.parameters);
-const modelDefinitions=withoutShadowSchema(creationCommonDefinitions);
+for(const entry of canvasOperations)entry.parameters=uniformOpacitySchema(withoutShadowSchema(entry.parameters));
+const modelDefinitions=uniformOpacitySchema(withoutShadowSchema(creationCommonDefinitions));
 export const canvasOperationNames=canvasOperations.map(s=>s.name);
 const validators=new Map();
 export function validateCanvasOperations(operations){
  assertNoShadowInput(operations);
+ assertUniformOpacity(operations);
  if(!Array.isArray(operations)||!operations.length)throw Error('operations 必须是非空数组');
  for(const [i,operation] of operations.entries()){
   const entry=canvasOperations.find(s=>s.name===operation?.op);if(!entry)throw Error('未知画布操作 '+operation?.op+'；仅支持 '+canvasOperationNames.join('/'));
@@ -50,7 +52,9 @@ export function validateCanvasOperations(operations){
   if(operation.children)validateCanvasOperations(operation.children);
  }
 }
-export function lowerCanvasOperations(operations){
+export function lowerCanvasOperations(operations,{document}={}){
+ const find=(nodes,id)=>(nodes||[]).flatMap(n=>[n,...(n.children?flatten(n.children):[])]).find(n=>n.id===id);
+ const flatten=nodes=>nodes.flatMap(n=>[n,...flatten(n.children||[])]);
  if(!Array.isArray(operations))throw Error('operations 必须为数组');
  return operations.flatMap(item=>{
   const {op,kind,method,...p}=item;
@@ -67,11 +71,11 @@ export function lowerCanvasOperations(operations){
    if(relation)commands.push({op:'material.relate',target:p.target,relation});
    if(mask)commands.push({op:'layer.mask',target:p.target,...mask});
    if(fit)commands.push({op:'text.fit',...change,fit});
-   else if(Object.keys(change).some(k=>k!=='target'))commands.push({op:'layer.update',...change});
+   else if(Object.keys(change).some(k=>k!=='target'))commands.push({op:'layer.update',...resetPaperSurfaceOpacity(change,find(document?.page.layers,p.target))});
    if(!commands.length)throw Error('update 至少指定一个需要修改的字段');
    return commands;
   }
-  if(op==='group')return [{op:p.children?'group.compose':'group.create',...p,...(p.children?{children:lowerCanvasOperations(p.children)}:{})}];
+  if(op==='group')return [{op:p.children?'group.compose':'group.create',...p,...(p.children?{children:lowerCanvasOperations(p.children,{document})}:{})}];
   if(op==='cut')return [{op:method?{tear:'material.tear',window:'material.window',glyph:'material.glyphKnockout'}[method]:'layer.cut',...p}];
   if(op==='split')return [{op:p.split?'layer.split':'material.split',...p}];
   const direct={copy:'layer.duplicate',delete:'layer.delete',ungroup:'group.ungroup'};
@@ -91,7 +95,7 @@ export function canvasGuide(){
  // Keep only transitively referenced definitions; do not ship unused engine APIs.
  const used=new Set();const visit=x=>{if(!x||typeof x!=='object')return;if(x.$ref){const n=x.$ref.split('/')[2];if(!used.has(n)){used.add(n);visit(definitions[n]);}}for(const v of Object.values(x))if(typeof v==='object')Array.isArray(v)?v.forEach(visit):visit(v);};
  canvasOperations.forEach(visit);
- return {conventions:{shadows:'创作工具不提供阴影；纸层用露边、纹理、透明度体现关系，文字可用描边和字后底形。',create:'新建无 place 进入 tray；组合内默认父组中心。',update:'只写变化字段；未写保持不变。',outputs:'pieces 使用 id/place/order；已有部分未给摆放保留原位。',placement:'place.at+unit 与 referenceAnchor 二选一；anchor 是目标锚点。相对距离用 reference:node:id、referenceAnchor、anchor 和 offset:{value:[x,y],unit:mm}。',batch:'同一批按序执行，后项可引用前项 id；整批原子校验。不同工具调用独立失败。'},definitions:Object.fromEntries([...used].map(n=>[n,definitions[n]])),operations:canvasOperations};
+ return {conventions:{opacity:'所有对象统一 style.opacity，0 完全透明、1 完全不透明；创建与修改相同，未写保留原值。硫酸纸与透明胶带均通过此字段表达透光，文字保持独立。',shadows:'创作工具不提供阴影；纸层用露边、纹理、透明度体现关系，文字可用描边和字后底形。',create:'新建无 place 进入 tray；组合内默认父组中心。',update:'只写变化字段；未写保持不变。',outputs:'pieces 使用 id/place/order；已有部分未给摆放保留原位。',placement:'place.at+unit 与 referenceAnchor 二选一；anchor 是目标锚点。相对距离用 reference:node:id、referenceAnchor、anchor 和 offset:{value:[x,y],unit:mm}。',batch:'同一批按序执行，后项可引用前项 id；整批原子校验。不同工具调用独立失败。'},definitions:Object.fromEntries([...used].map(n=>[n,definitions[n]])),operations:canvasOperations};
 }
 
 export function publicCanvasText(value){
@@ -115,5 +119,5 @@ export function publicToolData(value,key=''){
  if(value.kind==='title'&&value.parameters)return {...value,kind:'text',parameters:publicToolData(value.parameters)};
  const routes={read_skill:'skill',search_references:'search',read_case:'case',read_template:'template',search_writing_topics:'topics',creation_help:'help'};
  if(routes[value.tool]){const {tool,...rest}=value;return {tool:'knowledge',action:routes[tool],...publicToolData(rest)};}
- return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,publicToolData(v,k)]));
+ return Object.fromEntries(Object.entries(value).filter(([k])=>k!=='translucency').map(([k,v])=>[k,publicToolData(v,k)]));
 }

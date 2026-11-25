@@ -75,4 +75,4 @@ creation_apply 只接受 create/update/copy/delete/group/ungroup/cut/split 八�
 
 模型普通运行的 10 个函数工具分为：批量编辑 creation_apply；查看 creation_inspect / inspect_materials / creation_preview；知识 knowledge 与高级配方 creation_recipe；工作空间 workspace；计划 creation_plan、撤销 creation_undo、交付 creation_finish。
 
-标题与日期、数字都使用 create(kind=text)：content 为内容，style 管字体字号字色，effect 管描边/空心/错位轮廓/渐变描边，layout 与 runs 管词组排列，backdrop 管字后底形。纸张使用 create(kind=paper)：style.fill 为纸色，texture 为纸纹，edge 为边缘，pattern 为 plain/ruled/grid/dots，translucency 为透光程度。两者均通过 place/size/order 摆放和确定层序，修改用 update.target 与变化字段。
+标题与日期、数字都使用 create(kind=text)：content 为内容，style 管字体字号字色，effect 管描边/空心/错位轮廓/渐变描边，layout 与 runs 管词组排列，backdrop 管字后底形。纸张使用 create(kind=paper)：style.fill 为纸色，texture 为纸纹，edge 为边缘，pattern 为 plain/ruled/grid/dots，style.opacity 为不透明度（0 完全透明、1 完全不透明），与素材、胶带和文字一致。两者均通过 place/size/order 摆放和确定层序，修改用 update.target 与变化字段。

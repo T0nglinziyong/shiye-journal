@@ -1,3 +1,4 @@
+import {assertUniformOpacity} from './opacity-contract.mjs';
 import {assertNoShadowInput,assertNoNewSceneShadows} from './shadow-policy.mjs';
 import {lowerCanvasOperations,validateCanvasOperations,publicCanvasText,publicToolData,canvasGuide} from './canvas-interface.mjs';
 import {creativeKnowledge} from './creative-knowledge.mjs';
@@ -304,8 +305,8 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
           }
           if(!args||typeof args!=='object'||Array.isArray(args))throw Error('工具参数必须是 JSON 对象；本调用未执行，其他调用继续。');
           if(name==='knowledge'||name==='workspace'){validateValue(args,schemas.get(name));({name,args}=routeModelTool(name,args));}
-          if(['creation_apply','creation_recipe'].includes(name))assertNoShadowInput(args);
-          if(name==='creation_apply'){validateCanvasOperations(args.operations);args={...args,operations:lowerCanvasOperations(args.operations)};}
+          if(['creation_apply','creation_recipe'].includes(name)){assertNoShadowInput(args);assertUniformOpacity(args);}
+          if(name==='creation_apply'){validateCanvasOperations(args.operations);args={...args,operations:lowerCanvasOperations(args.operations,{document})};}
           // All edits proposed in one model response may use its starting revision.
           // Rebase only that exact revision after earlier successful calls; stale
           // revisions from another turn retain the normal conflict protection.
