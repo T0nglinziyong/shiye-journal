@@ -1,4 +1,7 @@
 import {creativeKnowledge} from './creative-knowledge.mjs';
+import {lowerCanvasOperations,validateCanvasOperations,publicCanvasText,publicToolData,canvasGuide} from './canvas-interface.mjs';
+import {assertNoShadowInput,assertNoNewSceneShadows} from './shadow-policy.mjs';
+import {assertUniformOpacity} from './opacity-contract.mjs';
 import {publicRecipeDescription,internalRecipeParameters} from './recipe-contract.mjs';
 import {techniqueCatalog} from '../library/techniques.js';
 import {creativeUsageSummary} from './usage.mjs';
@@ -10,7 +13,7 @@ import {matchJournalCases,searchLibraryReferences,caseDetails,templateDetails,co
 import fontManifest from '../../src/assets/fonts/manifest.json' with {type:'json'};
 import {offlineBundledFonts} from '../../src/offline-bundled-fonts.mjs';
 import {Annotation,StateGraph,START,END} from '@langchain/langgraph';
-import {harnessTools,availableHarnessTools,selectHarnessTools,discoverHarnessTools,harnessToolCatalog,turnBoundEditTools} from './tools.mjs';
+import {harnessTools,availableHarnessTools,selectHarnessTools,discoverHarnessTools,harnessToolCatalog,turnBoundEditTools,routeModelTool} from './tools.mjs';
 export {harnessTools} from './tools.mjs';
 import {applyCreationTransaction,creationSceneRevision} from '../../src/creation-transaction.js';
 import {inspectCreationDocument,creationHelp} from '../../src/creation-inspection.js';
@@ -151,12 +154,15 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
   const zeroMaterialInstruction=document.source.materials.length?'':document.source.textMode==='none'
     ?'\n本次是零素材且禁止文字的创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。使用程序绘制图形、荧光笔效果、线条与笔迹构图，不要调用实体素材或胶带操作。'
     :'\n本次是零素材创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。可编辑文字、程序绘制图形、荧光笔效果、线条与笔迹都可以使用。风格不等于内容主题；用户指定内容优先。'+(document.source.contentPolicy==='documentary'?'本次为纪实模式，只整理用户原文与确认事实；没有事实的部分保留可写空间，不编造经历或场景。':'可从 365 个话题候选选一个具体主题；允许写虚构的小场景，但不冒称用户亲历。')+'文字方法卡在规划后可用；需要更多方法时再 read_skill。不要调用实体素材或胶带操作。';
-  return {resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseDeclared:false,firstLayoutTurn:null,initialLayerIDs:inspectCreationDocument(document).layers.map(l=>l.id),phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],referenceTemplateIDs:[],startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],discoveredTools:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
-    messages:[{role:'system',content:system+'\n创作方法（自由组合，不是强制流水线）：\n'+creativeMethodGuide({...document.source,pageMode:document.page.pageMode})+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可用 Skill：'+JSON.stringify(catalog.map(({name,description})=>({name,description})))+'\n按需工具目录（调用 creation_help topics:[工具名] 展开，下一轮可调用；检索结果附带的读取工具会自动展开）：'+JSON.stringify(harnessToolCatalog(availableHarnessTools()))+'\n常用工具合同：'+JSON.stringify(compactInitialToolGuide(document))},
+  const initial={resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseDeclared:false,firstLayoutTurn:null,initialLayerIDs:inspectCreationDocument(document).layers.map(l=>l.id),phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],referenceTemplateIDs:[],startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],discoveredTools:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
+    messages:[{role:'system',content:system+'\n创作方法（自由组合，不是强制流水线）：\n'+creativeMethodGuide({...document.source,pageMode:document.page.pageMode})+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可用 Skill：'+JSON.stringify(catalog.map(({name,description})=>({name,description})))+'\n当前工具入口：'+JSON.stringify(availableHarnessTools().map(t=>t.function.name))+'\n常用工具合同：'+JSON.stringify(compactInitialToolGuide(document))},
       {role:'user',content:[{type:'text',text:creativeKnowledge},{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({intent:document.source.intent,styles:document.source.styles,purposes:document.source.purposes,contentPolicy:document.source.contentPolicy,textPresentation:document.source.textPresentation,processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（用户指定主题优先；根据素材总图决定是否采用；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源编号与物理尺寸（名称仅供辨认，视觉角色看图决定）：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（依据页面模式与用户选定风格排序；只借对象簇、叠放和配色关系，按本次素材与纸张的真实尺寸比例改造）：'+JSON.stringify(referenceCases)},
         {type:'text',text:document.source.materials.length?'素材总图与分类仅供选材，不决定最终角色或数量。先选要展示的主体内容，再安排承托纸与写面，按实际画面增删和裁切；层序依据本页角色及要保留的图案，不按矩形或不规则外框分类。':'本次没有实体素材，靠文字与可编辑图形构图。'},
         ...(tray?[{type:'text',text:'全局素材编号图；始终可对照此图。需要局部细节时再调用 inspect_materials。'},{type:'image_url',image_url:{url:tray.imageURL}}]:[]),
         ]}]};
+  initial.messages[0].content=publicCanvasText(initial.messages[0].content);
+  initial.messages[1].content[0].text=publicCanvasText(initial.messages[1].content[0].text);
+  return initial;
 }
 
 export function createCreativeHarness({model,skills,render,renderDraft,reviewDetails,viewSpace,inspectMaterials,segmentMaterial,measureText,checkpointer,capabilities={},clock=Date.now,onProgress=()=>{},reasoningPolicy='low'}){
@@ -213,6 +219,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       }
       if(contextState!==s)await onProgress(creativeUsageSummary(contextState));
       const apiMessages=modelContext(s.messages,{...contextState,contextNow:clock()});
+      for(const message of apiMessages)if(message.role==='system')message.content=publicCanvasText(message.content);
 
       const methodChoices=s.plan?[...(s.recommendedMethods||[]).slice(0,3),...(s.expressionCards||[]).slice(0,4)]
         .map(({id,variant,skill,title,when})=>({id,...(variant?{variant}:{}),skill,title,when})):[];
@@ -287,14 +294,17 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
       };
       let progress=false,discoveredTools=[...(s.discoveredTools||[])];
       for(const [index,call] of s.calls.entries()){
-        live(s,config);const name=call.function?.name,toolStarted=clock();let args;
+        live(s,config);const modelToolName=call.function?.name,toolStarted=clock();let name=modelToolName,args;
         try{
-          if(!availableTools.some(t=>t.function.name===name))throw Error('此运行环境未提供工具：'+name);
+          if(!selectHarnessTools(availableTools).some(t=>t.function.name===name))throw Error('此运行环境未提供工具：'+name);
           try{args=JSON.parse(call.function.arguments||'{}');}catch(error){
             const position=String(error.message).match(/position (\d+)/)?.[1];
             throw Error('工具参数不是完整的 JSON 对象'+(position?'（字符位置 '+position+'）':'')+'；检查数组用 ]、对象用 } 闭合，尤其 operations 末尾应为 ]}。本调用未执行，其他调用继续。请只重试失败的调用，不要重复成功操作。');
           }
           if(!args||typeof args!=='object'||Array.isArray(args))throw Error('工具参数必须是 JSON 对象；本调用未执行，其他调用继续。');
+          if(name==='knowledge'||name==='workspace'){validateValue(args,schemas.get(name));({name,args}=routeModelTool(name,args));}
+          if(['creation_apply','creation_recipe'].includes(name)){assertNoShadowInput(args);assertUniformOpacity(args);}
+          if(name==='creation_apply'){validateCanvasOperations(args.operations);args={...args,operations:lowerCanvasOperations(args.operations,{document})};}
           // All edits proposed in one model response may use its starting revision.
           // Rebase only that exact revision after earlier successful calls; stale
           // revisions from another turn retain the normal conflict protection.
@@ -314,7 +324,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
           if(name==='creation_apply'&&args.operations?.some(operation=>operation.style?.edge))throw Error('数字图形不支持 style.edge 撕边。请去掉该字段直接保留纸片，或对真实纸张素材单独调用 material.edge；不要反复查询 style.edge。');
           if(name==='creation_help'&&Array.isArray(args.topics))args.topics=args.topics.map(topic=>topic==='anchor'?'place':topic);
           if(name==='creation_recipe'&&args.kind===undefined)args.kind='technique';
-          validateValue(args,schemas.get(name));let data;
+          if(!['creation_apply','knowledge','workspace'].includes(modelToolName))validateValue(args,schemas.get(name));let data;
           if(name==='read_skill'){
             data=skills.read(args.name,args);if(data.methods)data.methods=data.methods.map(publicRecipeDescription);const selection=[args.level||'overview',args.methodId||'',args.variant||'',args.page||0].join(':');
             const alreadyLoaded=loadedSkills.some(v=>v.name===data.name&&v.version===data.version&&(v.selection||'overview:::0')===selection);
@@ -438,16 +448,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
             if(view&&visualState[args.id])visualState[args.id].lastSeenTurn=s.turns;
             data={id:args.id,empty:!view,items:view?.items||[],parkedIDs:view?.parkedIDs||[]};progress=true;
           }
-          else if(name==='creation_help'){
-            const tools=(args.topics||[]).filter(topic=>schemas.has(topic));
-            const unavailable=tools.filter(name=>!availableTools.some(tool=>tool.function.name===name));
-            if(unavailable.length)throw Error('此运行环境未提供工具：'+unavailable.join('、'));
-            const recipeBatch=(args.topics||[]).some(topic=>['with','creation_recipe.with'].includes(topic));
-            const topics=(args.topics||[]).filter(topic=>!schemas.has(topic)&&!['with','creation_recipe.with'].includes(topic));
-            discoveredTools=discoverHarnessTools(availableTools,discoveredTools,tools);
-            data={toolCatalog:harnessToolCatalog(availableTools),...(topics.length||!tools.length&&!recipeBatch?compactCreationHelp(creationHelp({...args,topics})):{}),...(tools.length?{tools:availableTools.filter(t=>tools.includes(t.function.name))}:{}),
-              ...(recipeBatch?{recipeBatch:{tool:'creation_recipe',with:[{methodId:'另一技巧 ID',parameters:{}}],limit:2,note:'主方法与 with 中的方法使用同一事务编号和最新 Scene 版本，一次原子提交、一次预览；每个 parameters 按各自预读方法卡填写。'}}:{})};
-          }
+          else if(name==='creation_help'){data=canvasGuide();}
           else if(name==='creation_inspect')data=inspectCreationDocument(document,{...args,edgeQuads:capabilities.edgeQuads});
           else if(name==='inspect_materials'){
             if(args.keys.some(key=>!document.source.materials.some(m=>m.alias===key)))throw Error('素材不在本次授权来源中');
@@ -510,7 +511,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
             if(!observedTools.includes(key)){observedTools.push(key);progress=true;}
           }
           discoveredTools=discoverHarnessTools(availableTools,discoveredTools,[name],data);
-          results.push({name,ok:true,data});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:true,data})});
+          results.push({name,ok:true,data});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:true,data:publicToolData(data)})});
         }catch(e){results.push({name,ok:false,code:e.code||'TOOL_ERROR',detail:e.message});messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify({ok:false,code:e.code||'TOOL_ERROR',detail:e.message,sceneRevision:revision(document),currentPreview:s.preview?.sceneRevision===revision(document)?{pngHash:s.preview.pngHash,sceneRevision:s.preview.sceneRevision,artifact:s.preview.artifact}:null,guidance:failureGuidance(name,args,e,document)||{hint:'请根据当前工具 Schema 修正这一调用；修改前先确认最新画面和 Scene 版本。'}})});}
         trace.push({elapsedMs:clock()-s.startedAt,kind:'tool',turn:s.turns,phase:s.phase||'composition',name,ok:results.at(-1).ok,durationMs:clock()-toolStarted,sceneRevision:revision(document),pngHash:s.preview?.sceneRevision===revision(document)?s.preview.pngHash:null});
       }

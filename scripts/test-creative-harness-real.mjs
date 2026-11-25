@@ -1,3 +1,4 @@
+import {loadStyleReferences,attachStyleReferences} from '../creative-agent/runtime/style-references.mjs';
 import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -76,7 +77,7 @@ if(seedPath){
  document=await reissueStudySeed(JSON.parse(bytes),document,assets);
  studySeed={reissuedTask:true,file:resolve(seedPath),sha256:'sha256:'+createHash('sha256').update(bytes).digest('hex')};
 }
-await writeFile(join(output,'input-audit.json'),JSON.stringify({studyMode,intent:document.source.intent,references:studyReferences.records,seed:studySeed,blankStart:!seedPath,caseNotes:Boolean(notesPath),promptHash:createHash('sha256').update(document.source.intent).digest('hex')},null,2),{flag:'wx'});
+if(!resume)await writeFile(join(output,'input-audit.json'),JSON.stringify({studyMode,intent:document.source.intent,references:studyReferences.records,seed:studySeed,blankStart:!seedPath,caseNotes:Boolean(notesPath),promptHash:createHash('sha256').update(document.source.intent).digest('hex')},null,2),{flag:'wx'});
 const stageNotes=notesPath?await readFile(resolve(notesPath),'utf8'):'';
 const renderer=await createHarnessRenderer({source:document.source,images,saveArtifact:async({png,pngHash,document,report})=>{
   const name='preview-'+pngHash.slice(7,23)+'.png';
@@ -102,6 +103,9 @@ if(studySeed){
  seedParts.push({type:'text',text:'工作空间 page；这是本阶段起点的真实页面，保留已成立的关系，在它上面继续当前研究步骤。'},{type:'image_url',image_url:{url:view.imageURL}});
  await writeFile(join(output,'seed.json'),JSON.stringify(studySeed,null,2),{mode:0o600});
 }
+const productionReferences=await loadStyleReferences({styles:document.source.styles});
+attachStyleReferences(initial,productionReferences);
+await writeFile(join(output,'production-references.json'),JSON.stringify(productionReferences.records,null,2));
 const checkpointer=await new JournalCheckpointSaver(fileCheckpointJournal(join(output,'checkpoints.jsonl'))).restore();
 const network=createCreativeNetwork({dns:process.env.SHIYE_CREATIVE_DNS||'system'});
 const daemon=process.env.SHIYE_CREATIVE_SAM_ROOT?new SamDaemonClient(process.env.SHIYE_CREATIVE_SAM_ROOT):null;

@@ -9,7 +9,7 @@ import {applyCreationTransaction,creationSceneRevision} from '../src/creation-tr
 import {inspectCreationDocument} from '../src/creation-inspection.js';
 const paper={id:'paper1',style:{fill:'#F1E5C9'},texture:'rough',edge:'torn',pattern:'ruled',translucency:.3,place:{reference:'page',at:[50,50],unit:'mm'},size:{width:60,height:70,unit:'mm'},order:{edge:'back'}};
 test('paper is initially available, defaults layering and rejects unknown texture',()=>{
- assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_paper'));
+ assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_apply'));
  const args={transactionId:'paper',baseSceneRevision:'sha256:'+'a'.repeat(64),papers:[paper]};
  validateValue(args,paperTool.function.parameters);
  assert.throws(()=>validateValue({...args,papers:[{...paper,texture:'glossy'}]},paperTool.function.parameters));

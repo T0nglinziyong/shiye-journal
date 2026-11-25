@@ -8,9 +8,14 @@ import {runCloudCreativeJob} from '../creative-agent/runtime/cloud-job.mjs';
 import {creativeObjectHash} from '../creative-agent/runtime/cloud-journal.mjs';
 import {installedCreationResources} from '../creative-agent/runtime/resources.mjs';
 import fontManifest from '../src/assets/fonts/manifest.json' with {type:'json'};
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 
-const call=(name,args)=>({id:name,type:'function',function:{name,arguments:JSON.stringify(args)}});
-const reply=(...calls)=>({message:{role:'assistant',content:null,reasoning_content:'test-only',tool_calls:calls},usage:{prompt_tokens:120,completion_tokens:30}});
+const call=(name,args)=>{
+  if(name==='creation_phase')return {declaration:'阶段：'+({layout:'打底与构图',craft:'标题与内容',review:'最终检查'})[args.phase]};
+  ({name,args}=canvasFixtureCall(name,args));
+  return {id:name,type:'function',function:{name,arguments:JSON.stringify(args)}};
+};
+const reply=(...calls)=>({message:{role:'assistant',content:calls.find(c=>c.declaration)?.declaration||null,reasoning_content:'test-only',tool_calls:calls.filter(c=>!c.declaration)},usage:{prompt_tokens:120,completion_tokens:30}});
 test('cloud worker commits hash-verified editable output after real rendering and a durable journal',async()=>{
   const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',user='10000000001',prefix=`${user}/creative/${id}/`;
   const document=await createCreationDocument({draft:draft(),assets:[]});

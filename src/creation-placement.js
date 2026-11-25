@@ -2,6 +2,19 @@
 import {spatialPath,worldBox,matrixAngle} from './scene-spatial.js';
 const anchors={'top-left':[0,0],'top-center':[.5,0],'top-right':[1,0],'middle-left':[0,.5],center:[.5,.5],'middle-right':[1,.5],'bottom-left':[0,1],'bottom-center':[.5,1],'bottom-right':[1,1]};
 const rotate=(x,y,degrees)=>{const a=degrees*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return [x*c-y*s,x*s+y*c];};
+// Generated paper keeps its original texture frame after cutting. Placement
+// anchors use the surviving contour, so it behaves like a physical crop.
+function paperBounds(node){
+ if(node?.type!=='shape'||node.kind!=='paper'||!node.vectorMask)return null;
+ const xs=node.vectorMask.outer.map(p=>p[0]),ys=node.vectorMask.outer.map(p=>p[1]);
+ return {left:Math.min(...xs),top:Math.min(...ys),right:Math.max(...xs),bottom:Math.max(...ys)};
+}
+export function creationPlacementBox(page,id){
+ const box=worldBox(page,id),bounds=paperBounds(spatialPath(page.layers,id)?.node);
+ if(!bounds)return box;
+ const [dx,dy]=rotate(((bounds.left+bounds.right)/2-.5)*box.w,((bounds.top+bounds.bottom)/2-.5)*box.h,box.rotation);
+ return {...box,cx:box.cx+dx,cy:box.cy+dy,w:box.w*(bounds.right-bounds.left),h:box.h*(bounds.bottom-bounds.top)};
+}
 export function creationReferenceBox(page,reference,parentID){
  const width=page.canvas.width,height=page.canvas.height;
  if(reference==='page'||reference==='parent'&&!parentID)return {cx:width/2,cy:height/2,w:width,h:height,rotation:0};
@@ -10,7 +23,7 @@ export function creationReferenceBox(page,reference,parentID){
   if(page.pageMode!=='spread')throw Error('单页不能引用 page.left/right');
   return {cx:reference==='page.left'?width/4:width*3/4,cy:height/2,w:width/2,h:height,rotation:0};
  }
- if(reference.startsWith('node:'))return worldBox(page,reference.slice(5));
+ if(reference.startsWith('node:'))return creationPlacementBox(page,reference.slice(5));
  throw Error('尚未定义的定位参照：'+reference);
 }
 // Use one frame for binding, solving and manual editing. Never feed a solved
@@ -25,7 +38,7 @@ export function creationRotationFrame(page,place,parentID=null){
 export function bindCreationRotation(page,place,worldRotation,parentID=null){
  return {...place,rotationDeg:place.rotationDeg??(worldRotation-creationRotationFrame(page,place,parentID))};
 }
-export function resolveCreationPlace(page,place,{widthMm,heightMm,rotationDeg=0,parentID=null}={}){
+export function resolveCreationPlace(page,place,{widthMm,heightMm,rotationDeg=0,parentID=null,node=null}={}){
  if(!place||typeof place!=='object')throw Error('缺少 place');
  if(place.referenceBounds==='visible'||place.targetBounds==='visible')throw Error('当前 Scene 尚不能解析 visible 锚点');
  if(!Number.isFinite(widthMm)||!Number.isFinite(heightMm)||widthMm<=0||heightMm<=0)throw Error('定位需要已确定的目标尺寸');
@@ -58,6 +71,7 @@ export function resolveCreationPlace(page,place,{widthMm,heightMm,rotationDeg=0,
  const anchor=anchors[place.anchor||'center'];if(!anchor)throw Error('目标锚点无效');
  const rotation=(place.rotationDeg??rotationDeg)+creationRotationFrame(page,place,parentID);
  if(!Number.isFinite(rotation))throw Error('旋转角度无效');
- const [ax,ay]=rotate((anchor[0]-.5)*widthMm*scale,(anchor[1]-.5)*heightMm*scale,rotation);
+ const bounds=paperBounds(node),u=bounds?bounds.left+anchor[0]*(bounds.right-bounds.left):anchor[0],v=bounds?bounds.top+anchor[1]*(bounds.bottom-bounds.top):anchor[1];
+ const [ax,ay]=rotate((u-.5)*widthMm*scale,(v-.5)*heightMm*scale,rotation);
  return {x:x-ax,y:y-ay,rotation};
 }

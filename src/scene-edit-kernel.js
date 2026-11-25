@@ -1,3 +1,4 @@
+import {validatePaperColors} from './paper-colors.js';
 import {validatePaperSurface} from './paper-surface.js';
 import {validateGraphicEffects} from './graphic-effects.js';
 import {validateTextEffects} from './text-effects.js';
@@ -138,13 +139,15 @@ export function applyScenePatchBatch(page,changes,{policy=AI_SCENE_POLICY,confir
 
 export function applyScenePagePatch(page,values,{policy=AI_SCENE_POLICY}={}){
  requireScenePolicy(policy);
- const allowed=new Set(['paperColor','paperPattern','paperColumns','paperRuling','drawCenterGutter']);
+ const allowed=new Set(['paperColor','paperColors','paperPattern','paperColumns','paperRuling','drawCenterGutter']);
  for(const [key,value] of Object.entries(values)){
   if(!allowed.has(key))throw Error('纸张属性不在允许范围：'+key);
+  if(key==='paperColors')validatePaperColors(value);
   if(key==='paperColor'&&!/^#[0-9a-fA-F]{6}$/.test(value))throw Error('纸色无效');
   if(key==='paperPattern'&&!['plain','lines','grid','dots','columns'].includes(value))throw Error('纸张图案无效');
   if(['paperColumns','drawCenterGutter'].includes(key)&&typeof value!=='boolean')throw Error('纸张选项需为布尔值');
  }
+ if(Object.hasOwn(values,'paperColor')&&!Object.hasOwn(values,'paperColors'))delete page.paperColors;
  for(const [key,value] of Object.entries(values))if(value===undefined)delete page[key];else page[key]=copy(value);
  return page;
 }
