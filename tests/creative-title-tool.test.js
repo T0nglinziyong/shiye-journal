@@ -8,7 +8,7 @@ import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 const title={id:'title',content:'慢慢生活',place:{reference:'page',at:[50,40],unit:'mm'},order:{edge:'front'},size:{width:90,unit:'mm'},layout:'stagger',effect:'none',runs:[{content:'慢慢',role:'primary',rotationDeg:-4},{content:'生活',role:'secondary',offsetMm:[0,2]}],style:{fontSizePt:22,color:'#354A55',outline:{color:'#F5EDDA',widthMm:.35}},backdrop:{kind:'mixed',patternColor:'#B78B65'}};
 test('title is always visible with typed combinable effects and rejects invalid parameters',()=>{
- assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_title'));
+ assert.ok(selectHarnessTools(availableHarnessTools()).some(t=>t.function.name==='creation_apply'));
  const args={transactionId:'title',baseSceneRevision:'sha256:'+'a'.repeat(64),titles:[title]};validateValue(args,titleTool.function.parameters);
  assert.throws(()=>validateValue({...args,titles:[{...title,layout:'random'}]},titleTool.function.parameters));
  assert.throws(()=>compileTitleOperations({titles:[{...title,runs:[{content:'少字'}]}]}),/拼接/);

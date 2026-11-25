@@ -10,8 +10,9 @@ import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../creative-agent/runtime/checkpoints.mjs';
 import {createCreativeHarness,initialHarnessState,harnessTools} from '../creative-agent/runtime/agent.mjs';
 import {toolsForCreativePhase,phaseGuide,declaredCreativePhase,creativePhaseLabels} from '../creative-agent/runtime/phases.mjs';
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 
-const call=(name,args)=>({id:name+'-'+Math.random(),type:'function',function:{name,arguments:JSON.stringify(args)}});
+const call=(name,args)=>{({name,args}=canvasFixtureCall(name,args));return {id:name+'-'+Math.random(),type:'function',function:{name,arguments:JSON.stringify(args)}};};
 const answer=(...calls)=>({message:{role:'assistant',content:null,tool_calls:calls}});
 const assessment=observations=>({observations,issues:[]});
 const phase=(name,observations)=>call('creation_phase',{phase:name,reason:'本阶段检查通过',assessment:assessment(observations)});

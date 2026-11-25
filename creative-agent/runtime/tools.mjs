@@ -1,3 +1,4 @@
+import {canvasOperationNames,publicCanvasText} from './canvas-interface.mjs';
 import {titleTool} from './title-tool.mjs';
 import {paperTool} from './paper-tool.mjs';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
@@ -24,14 +25,14 @@ function turnBoundTool(tool){
       baseSceneRevision:{type:'string',pattern:'^(current|sha256:[a-f0-9]{64})$',description:'通常填 current，绑定本轮模型看到的 Scene；也可提供准确完整哈希。同轮多个编辑自动按顺序执行，旧版本仍拒绝。'}
     }}}};
 }
-export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)).map(tool=>tool.function.name==='creation_apply'?{
+const engineTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)).map(tool=>tool.function.name==='creation_apply'?{
   ...tool,function:{...tool.function,parameters:{...tool.function.parameters,$schema:'https://json-schema.org/draft/2020-12/schema',properties:{...tool.function.parameters.properties,decision:decisionField,
     operations:{...tool.function.parameters.properties.operations,items:{...tool.function.parameters.properties.operations.items,properties:{...tool.function.parameters.properties.operations.items.properties,
       region:{...inlineDefinition(creationCommonDefinitions.Region),description:'material.cut 的裁切区域：rect/ellipse.box=[x,y,width,height]；edge 指边条。space=local 使用当前裁片坐标，unit=mm 或 ratio。mode=keep 保留区域，remove 移除区域；keepRemainder=true 时同时给 resultId。基础裁切可与 material.add、移动和改层序同轮调用。'},
       geometry:{type:'object',description:'圆用 {kind:"ellipse"}，五角星用 {kind:"star",options:{points:5}}。尺寸在 size，填色在 style.fill。',properties:{kind:{type:'string'},options:{type:'object',properties:{points:{type:'integer',description:'仅 star 的角数；例如 5。'}},additionalProperties:true},points:{type:'array',description:'仅手绘 stroke 的轨迹点 [{x,y,pressure}]，同时填写 geometry.unit:"mm"；星角数放 options.points。'}},additionalProperties:true}
     }}}
   }}}
-}:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询操作/公共参数合同或工具。topics 为空返回目录；topics:[工具名] 读取准确参数并在下一轮展开该工具。工具一经展开持续可用，不受阶段限制。'}}:tool),
+}:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询已前置的操作/公共参数合同，供诊断重查；所有工具从第一轮可用，不需要先查询才能调用。'}}:tool),
   paperTool,
   titleTool,
   custom('segment_material','在真实素材上给出 0–1 比例 xyxy 框，调用 SAM 查看候选裁片。只提议，不修改作品；先看彩色轮廓，再用 creation_apply_crops 裁切。',object({alias:{type:'string'},box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['alias','box'])),
@@ -42,7 +43,7 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
   custom('search_writing_topics','按素材或指定词从 365 个手帐话题中找可写切口；仅返回少量题目，不把题库塞进上下文。',object({query:{type:'string',maxLength:100},limit:{type:'integer',minimum:1,maximum:8},exclude:{type:'array',maxItems:20,items:{type:'integer',minimum:1,maximum:365}}})),
   custom('read_case','查看创作者案例的构图、配色、对象关系与制作顺序；仅借鉴方法，不把案例图像当作素材。',object({id:{type:'string',maxLength:80}},['id'])),
   custom('creation_recipe','按 read_skill 返回的 methodId 执行技巧，创建可编辑组合；with 可合批执行另一个技巧。parameters 中位置统一用 place、尺寸用 size、文字用 content、外观用 style，方法专有字段按详情填写，kind 可省略，修改后自动预览。',object({kind:{enum:['technique']},methodId:{type:'string',maxLength:80},transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:sceneRevision,parameters:{type:'object',maxProperties:24,additionalProperties:true},with:{type:'array',minItems:1,maxItems:2,items:object({methodId:{type:'string',maxLength:80},parameters:{type:'object',maxProperties:24,additionalProperties:true}},['methodId','parameters'])},decision:decisionField},['methodId','transactionId','baseSceneRevision','parameters'])),
-  custom('creation_plan','记录落实用户方向的可修改构思，不改写用户的主题、风格、疏密或文字要求。首次编辑前必须记录；通常只填 intent 一段话，说明纸层/主体关系与可写位置，即可同轮合批试摆。其他字段及子字段均可选，仅需长期保留时才填，避免在各字段重复同一段计划。methods.id 是构思名称，执行配方才需要 read_skill 返回的准确 methodId。',object({intent:string,methods:{type:'array',maxItems:3,items:object({id:string,purpose:string},['id'])},themeEvidence:object({supportedBy:{type:'array',maxItems:8,items:string},conflicts:{type:'array',maxItems:8,items:string},response:string}),palette:object({source:string,main:string,secondary:string,accent:string,relationship:{enum:['echo','contrast','tonal']},distribution:string}),composition:object({visualAnchors:string,layout:string,connector:string,layering:string,writingSpace:string}),writingZones:{type:'array',maxItems:16,items:object({role:{enum:['title','body','heading','annotation']},surface:{...string,description:'写面说明，例如原页、素材内部、数字纸，或跨原页与纸边；这是构思，不是图层 surface 参数。'},anchor:string,capacity:{enum:['short','medium','long']},legibility:string,flowGroup:string,sequence:{type:'integer',minimum:1,maximum:16}})},steps:{type:'array',minItems:1,maxItems:8,items:object({task:string,status:{enum:['pending','in_progress','completed']}})}},['intent'])),
+  custom('creation_plan','记录落实用户方向的可修改构思，不改写用户的主题、风格、疏密或文字要求。首次编辑前必须记录；通常只填 intent 一两句，说明本轮准备验证的主次和空间关系，即可同轮合批试摆；这不是整份成品的逐件施工清单，文字区域待主块试摆后再具体安排。其他字段及子字段均可选，仅需长期保留时才填，避免在各字段重复同一段计划。methods.id 是构思名称，执行配方才需要 read_skill 返回的准确 methodId。',object({intent:string,methods:{type:'array',maxItems:3,items:object({id:string,purpose:string},['id'])},themeEvidence:object({supportedBy:{type:'array',maxItems:8,items:string},conflicts:{type:'array',maxItems:8,items:string},response:string}),palette:object({source:string,main:string,secondary:string,accent:string,relationship:{enum:['echo','contrast','tonal']},distribution:string}),composition:object({visualAnchors:string,layout:string,connector:string,layering:string,writingSpace:string}),writingZones:{type:'array',maxItems:16,items:object({role:{enum:['title','body','heading','annotation']},surface:{...string,description:'写面说明，例如原页、素材内部、数字纸，或跨原页与纸边；这是构思，不是图层 surface 参数。'},anchor:string,capacity:{enum:['short','medium','long']},legibility:string,flowGroup:string,sequence:{type:'integer',minimum:1,maximum:16}})},steps:{type:'array',minItems:1,maxItems:8,items:object({task:string,status:{enum:['pending','in_progress','completed']}})}},['intent'])),
   custom('creation_phase','可选地声明当前工作重点；由模型自主选择，不触发阶段门槛或额外审查，通常直接在回复首行说明即可。',object({phase:{enum:creativePhases},reason:decisionField,assessment:object({observations:string,issues:{type:'array',maxItems:8,items:string},adjustments:string},['observations','issues'])},['phase','reason','assessment'])),
   custom('explore_drafts','需要比较明显不同的布局方向或连续修订仍不满意时，后台并行生成 2–3 个独立可编辑草稿并返回真实截图；只探索，不修改主作品。',object({goals:{type:'array',minItems:2,maxItems:3,items:{type:'string',minLength:8,maxLength:180}}},['goals'])),
   custom('select_draft','看过所有草稿截图后，选择一个方案作为主 Scene；必须说明选它的理由，随后自动渲染并重新审查。',object({id:{type:'string',pattern:'^draft_[0-9]+_[1-3]$'},decision:decisionField},['id','decision'])),
@@ -58,7 +59,6 @@ export const harnessTools=[...creationAgentTools.filter(t=>!['inspect_materials'
 
 // Discovery changes the model's reading surface, never its permissions or the
 // executable contract. A learned tool stays visible across phases/checkpoints.
-const core=new Set(['creation_plan','creation_help','creation_inspect','creation_apply','creation_paper','creation_title','read_skill','creation_recipe','search_references','inspect_materials','creation_preview','creation_undo','creation_finish']);
 const groups=[
   {purpose:'参考案例、模板与写作选题',names:['read_case','read_template','search_writing_topics']},
   {purpose:'重看素材总图、管理独立试摆空间',names:['workspace_view','workspace_create','workspace_close']},
@@ -67,14 +67,21 @@ const groups=[
 ];
 
 export function availableHarnessTools({segmentMaterial}={}){
-  return harnessTools.filter(tool=>!['creation_guide','explore_drafts','select_draft'].includes(tool.function.name)&&
-    (segmentMaterial||!['segment_material','creation_apply_crops'].includes(tool.function.name)));
+  return selectHarnessTools(harnessTools.filter(tool=>!['creation_guide','explore_drafts','select_draft'].includes(tool.function.name)&&
+    (segmentMaterial||!['segment_material','creation_apply_crops'].includes(tool.function.name))));
 }
 
-export function selectHarnessTools(available,state={}){
-  const learned=new Set(state.discoveredTools||[]);
-  return available.filter(tool=>core.has(tool.function.name)||learned.has(tool.function.name));
-}
+const queryRoutes={skill:'read_skill',search:'search_references',case:'read_case',template:'read_template',topics:'search_writing_topics',help:'creation_help'};
+const workspaceRoutes={create:'workspace_create',view:'workspace_view',close:'workspace_close'};
+const grouped=(name,routes,description)=>custom(name,description,{oneOf:Object.entries(routes).map(([action,target])=>{const original=engineTools.find(t=>t.function.name===target).function.parameters;return {...original,properties:{action:{const:action},...original.properties},required:['action',...(original.required||[])]};})});
+export const harnessTools=[...engineTools,grouped('knowledge',queryRoutes,'知识与参考查询：action=skill/search/case/template/topics/help；参数随 action 列全，可同轮多次调用。'),grouped('workspace',workspaceRoutes,'管理或查看工作空间：action=create/view/close。id=source 可重看素材总图。')];
+const publicNames=new Set(['creation_apply','creation_inspect','inspect_materials','knowledge','workspace','creation_recipe','creation_plan','creation_undo','creation_finish','creation_preview','segment_material','creation_apply_crops']);
+export function routeModelTool(name,args){const route=name==='knowledge'?queryRoutes:name==='workspace'?workspaceRoutes:null;if(!route)return {name,args};const {action,...rest}=args;if(!route[action])throw Error('未知 '+name+' action');return {name:route[action],args:rest};}
+export function selectHarnessTools(available){return available.filter(t=>publicNames.has(t.function.name)).map(t=>{
+ if(t.function.name!=='creation_apply')return {...t,function:{...t.function,description:publicCanvasText(t.function.description)}};
+ const result=structuredClone(t);result.function.description='批量提交 8 种对象操作：create/update/copy/delete/group/ungroup/cut/split。创建纸张用 create(kind=paper,size,style.fill,texture,place)，标题和短句用 create(kind=text,content,size,style，可选 effect/layout/runs/backdrop)，圆星点缀用 create(kind=graphic,geometry.kind=ellipse/star,size,style.fill,place)；底色用 update(target=page.left 或 page.right,paperColor)，修改已有对象用 update(target,仅变化字段)。同一批原子执行。';
+ result.function.parameters.properties.operations.items={type:'object',properties:{op:{enum:canvasOperationNames}},required:['op'],additionalProperties:true};return result;
+});}
 
 export function harnessToolCatalog(available=harnessTools){
   const names=new Set(available.map(tool=>tool.function.name));
@@ -85,13 +92,13 @@ export function harnessToolCatalog(available=harnessTools){
 export function discoverHarnessTools(available,previous=[],requested=[],data){
   const allowed=new Set(available.map(tool=>tool.function.name));
   const learned=new Set(previous.filter(name=>allowed.has(name)));
-  for(const name of requested)if(allowed.has(name)&&!core.has(name))learned.add(name);
+  for(const name of requested)if(allowed.has(name))learned.add(name);
   // Reference results carry exact readWith routes. Expose those tools on the
   // next turn without requiring a separate discovery call for each result.
   const visit=value=>{
     if(!value||typeof value!=='object')return;
     const name=value.readWith?.tool;
-    if(allowed.has(name)&&!core.has(name))learned.add(name);
+    if(allowed.has(name))learned.add(name);
     for(const child of Object.values(value))if(child&&typeof child==='object')visit(child);
   };
   visit(data);

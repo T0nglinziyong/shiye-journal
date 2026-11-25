@@ -362,6 +362,11 @@ export function validateSceneExtensions(d){
  function walk(nodes,depth){if(!Array.isArray(nodes)||depth>SCENE_MAX_GROUP_DEPTH||nodes.length>5000)throw Error('Scene 图层树过深或过大');
   for(const node of nodes){if(!node||!kinds.has(node.type)||typeof node.id!=='string'||!node.id||seen.has(node.id))throw Error('Scene 图层类型或编号重复');seen.add(node.id);count++;if(count>10000)throw Error('Scene 图层总数超限');
    sceneLayerStyle(node);validateTextEffects(node);validateGraphicEffects(node);
+   if(node.creationObject){
+    const meta=node.creationObject;
+    if(meta.kind==='paper'?(node.type!=='shape'||node.kind!=='paper'):meta.kind==='title'?node.type!=='group':true)throw Error('创作对象语义与图层类型不一致');
+    if(meta.cutMask){if(meta.kind!=='paper')throw Error('裁片轮廓只适用于数字纸');validateVectorMask(meta.cutMask);}
+   }
    if(node.vectorMaskHistory!==undefined){
     if(!Array.isArray(node.vectorMaskHistory)||node.vectorMaskHistory.length>32||
       node.vectorMaskHistory.some(step=>!step||!['hide','show'].includes(step.mode)||

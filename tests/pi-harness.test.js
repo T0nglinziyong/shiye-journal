@@ -6,8 +6,9 @@ import {creationSceneRevision} from '../src/creation-transaction.js';
 import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 import {initialHarnessState} from '../creative-agent/runtime/agent.mjs';
 import {createPiCreativeHarness} from '../creative-agent/runtime/pi-agent.mjs';
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 
-const call=(name,args)=>({id:'call-'+name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}});
+const call=(name,args)=>{({name,args}=canvasFixtureCall(name,args));return {id:'call-'+name+'-'+Math.random().toString(36).slice(2),type:'function',function:{name,arguments:JSON.stringify(args)}};};
 const plan=()=>call('creation_plan',{intent:'周末小记',themeEvidence:{supportedBy:['用户要求创作手帐'],conflicts:[],response:'写一段普通周末记录'},palette:{source:'纸面',main:'#465D54',secondary:'#E8DFC2',relationship:'echo',distribution:'浅底深字'},composition:{visualAnchors:'标题和短文',layout:'上方标题，下方短文',connector:'一条细线'},writingZones:[{role:'title',surface:'page',anchor:'左上',capacity:'short',legibility:'浅底深字'},{role:'body',surface:'page',anchor:'中下',capacity:'medium',legibility:'浅底深字'}],steps:[{task:'排版',status:'in_progress'}]});
 
 test('Pi loop executes the existing scene tools and completes from a real preview',async()=>{

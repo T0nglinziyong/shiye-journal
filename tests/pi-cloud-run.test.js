@@ -8,8 +8,9 @@ import {runCloudCreativeJob,creativeRuntimeForCheckpoints} from '../creative-age
 import {creativeObjectHash} from '../creative-agent/runtime/cloud-journal.mjs';
 import {installedCreationResources} from '../creative-agent/runtime/resources.mjs';
 import {CREATIVE_JOB_FORMAT} from '../src/creative-job-package.js';
+import {canvasFixtureCall} from './lib/canvas-model-fixtures.js';
 
-const call=(name,args)=>({id:'pi-'+name,type:'function',function:{name,arguments:JSON.stringify(args)}});
+const call=(name,args)=>{({name,args}=canvasFixtureCall(name,args));return {id:'pi-'+name,type:'function',function:{name,arguments:JSON.stringify(args)}};};
 test('new cloud jobs use LangGraph even when the old Pi environment flag is set',async()=>{
   const old=process.env.SHIYE_CREATIVE_RUNTIME;process.env.SHIYE_CREATIVE_RUNTIME='pi';
   try{
