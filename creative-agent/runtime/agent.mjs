@@ -1,3 +1,4 @@
+import {assertNoShadowInput,assertNoNewSceneShadows} from './shadow-policy.mjs';
 import {lowerCanvasOperations,validateCanvasOperations,publicCanvasText,publicToolData,canvasGuide} from './canvas-interface.mjs';
 import {creativeKnowledge} from './creative-knowledge.mjs';
 import {publicRecipeDescription,internalRecipeParameters} from './recipe-contract.mjs';
@@ -120,7 +121,8 @@ function latestPageImage(messages){
   }
   return null;
 }
-const system=`你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。五阶段是可交错的创作方法，由你根据画面决定，不由程序按工具类型推进。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
+const system=`创作工具关闭阴影：不要设置 shadow 或选阴影字效；用露边、纹理、透明叠色、描边和字后底形表达关系。
+你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。五阶段是可交错的创作方法，由你根据画面决定，不由程序按工具类型推进。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
 
 通用创作知识已经在固定任务上下文中完整提供，配色、构图、纸层、标题、正文、点缀、图形和照片叙事可直接综合运用，不必先逐个 read_skill overview。Skill 用于操作展开：methods 查候选，detail 带 methodId 取准确参数与示例；复杂拆字或笔画技巧再读 journal-lettering，全部画布操作合同已在固定输入提供，裁切、撕边、分片与解组可直接使用。各对象可同批通过 creation_apply 创建：paper.add、title.add、material.add、text.add、graphic.add；修改统一 layer.update，只写变化字段。新建省略 place 进入 tray；已有对象修改、解组、分片省略 place 保留原位。独立查询可同轮合批；依赖查询结果的编辑留到下一轮。技法是可选增强，用户方向的完成度不是可选项。不要把配方数当成画质指标。
 
@@ -172,6 +174,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
   const activeToolsForState=s=>selectHarnessTools(availableTools,s);
   const constrainApplied=(before,applied,transactionId)=>{
     if(!applied.changed)return;
+    assertNoNewSceneShadows(before,applied.document);
     const beforeCorrection=structuredClone(applied.document.page.layers);
     const corrections=constrainCreationToPages(before,applied.document);
     if(corrections.length){
@@ -301,6 +304,7 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
           }
           if(!args||typeof args!=='object'||Array.isArray(args))throw Error('工具参数必须是 JSON 对象；本调用未执行，其他调用继续。');
           if(name==='knowledge'||name==='workspace'){validateValue(args,schemas.get(name));({name,args}=routeModelTool(name,args));}
+          if(['creation_apply','creation_recipe'].includes(name))assertNoShadowInput(args);
           if(name==='creation_apply'){validateCanvasOperations(args.operations);args={...args,operations:lowerCanvasOperations(args.operations)};}
           // All edits proposed in one model response may use its starting revision.
           // Rebase only that exact revision after earlier successful calls; stale

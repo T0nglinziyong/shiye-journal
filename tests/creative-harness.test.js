@@ -294,7 +294,7 @@ test('layout remains editable after four previews and the unified ordering and w
     if(turn===1)return answer(plan());
     if(turn>=2&&turn<=5)return answer(edit(p?.sceneRevision||creationSceneRevision(f.document),'pass-'+turn,[text('note-'+turn,'第 '+turn+' 段文字',[40,20+turn*14])]));
     if(turn===6){assert.ok(names.includes('creation_apply'));return answer(phase('craft','四版构图已建立文字阅读路线，细节交由下一阶段'));}
-    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'layer.update',target:'note-2',order:{after:'note-3'}},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'page',surface:'tray',at:[30,30],unit:'mm'}},text('body','今天写下一段新的记录。',[65,105]),{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect'},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC',shadow:{offsetMm:[1,1],blurMm:2,color:'#000000'}}}]));}
+    if(turn===7){assert.ok(names.includes('creation_apply'));return answer(edit(p.sceneRevision,'craft-order',[{op:'layer.update',target:'note-2',order:{after:'note-3'}},{...text('tray-note','暂存的标题',[30,30]),place:{reference:'page',surface:'tray',at:[30,30],unit:'mm'}},text('body','今天写下一段新的记录。',[65,105]),{op:'graphic.add',id:'backing-paper',geometry:{kind:'rect'},size:{width:18,height:12,unit:'mm'},place:{reference:'page',at:[25,110],unit:'mm'},style:{fill:'#FBF6EC'}}]));}
     if(turn===8)return answer(phase('review','纸面文字与暂存对象各在正确空间，层序已调整'));
     return answer(call('creation_finish',{review:{observations:'纸面四段文字可读，暂存标题没有进入纸面',issues:[]}}));
   });

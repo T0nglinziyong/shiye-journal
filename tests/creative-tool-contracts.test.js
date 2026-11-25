@@ -1,3 +1,4 @@
+import {withoutShadowExamples} from '../creative-agent/runtime/shadow-policy.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {harnessTools} from '../creative-agent/runtime/tools.mjs';
@@ -19,7 +20,7 @@ test('editing tools share current revision and title uses the same text style at
 
 test('every method description uses canonical fields and its example still compiles',()=>{
  for(const method of techniqueCatalog.methods){
-  for(const variant of [undefined,...(method.variants||[]).map(v=>v.key)]){
+  for(const variant of [undefined,...(method.variants||[]).map(v=>v.key).filter(key=>!/(^|-)shadow($|-)/.test(key))]){
    const raw=describeTechnique(method.id,{variant}),detail=publicRecipeDescription(raw);
    for(const key of ['at','reference','rotationDeg','widthMm','heightMm','text','fontSizePt','fontFamily','fill','strokeWidthMm','opacity']){assert.ok(!(key in detail.parameters),method.id+': '+key);assert.ok(!(key in (detail.defaults||{})),method.id+' default: '+key);}
    const normalized=internalRecipeParameters(detail.tool.arguments.parameters,{title:method.recipe==='title'});
@@ -28,7 +29,7 @@ test('every method description uses canonical fields and its example still compi
    const original=compileTechnique({methodId:method.id,parameters:raw.tool.arguments.parameters,materials:raw.example.materials});
    const result=compileTechnique({methodId:method.id,parameters:normalized.parameters,materials:raw.example.materials});
    assert.equal(result.operations.length,original.operations.length,method.id);
-   if(method.recipe==='title')assert.deepEqual(result.operations[0].children,original.operations[0].children,method.id+':'+variant);
+   if(method.recipe==='title')assert.deepEqual(result.operations[0].children,withoutShadowExamples(original.operations[0].children),method.id+':'+variant);
   }
  }
  assert.throws(()=>internalRecipeParameters({id:'x',widthMm:30}),/统一使用/);

@@ -22,13 +22,13 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 
 - **字形与字群**：短标题可以拆字夹入小字、改变局部竖撇笔画、逐字错落、旋转或弧形排布。`title-art` 的 composed 变体 的 `glyph.split` 做上下拆字，`glyph.strokes` 按指定字位与局部 box 遮去原区域再补圆头或三角笔画；它不会自动识别汉字笔画。只有在预览能准确定位笔画时才用 strokes，避免遮掉相邻部件。逐字位置与角度用 `text.lettering`，弧形用 `style.curveHeightMm`；错落排布不等于笔画变形。
 - **字后点缀**：让圆点、方块、短横纹、井字纹或色带从字群后露出，跟随标题宽度、字间空隙和外轮廓。`backgrounds` 可组合这些底形；词组各有背景用 title-art 的 phrases 或 paper-lettering 变体。只在旁边摆一颗星，不等于字后设计。
-- **描边与字心**：`style.outline` 可直接给文字加轮廓；错位轮廓用 `creation_title.effect=offset-outline`。按周围纸色选择深字浅边、浅字深边或空心字，保留字腔；跨越不同底色时检查每一个字。纸张少阴影不妨碍标题使用清楚、克制的轮廓。
+- **描边与字心**：`style.outline` 可直接给文字加轮廓；错位轮廓用 `creation_title.effect=offset-outline`。按周围纸色选择深字浅边、浅字深边或空心字，保留字腔；跨越不同底色时检查每一个字。创作不使用阴影，文字仍可使用清楚、克制的轮廓。
 
 需要组合时先读 `read_skill({name:"journal-lettering",level:"detail",methodId:"title-art",variant:"composed"})`，明确选择 `glyph`、`style`、`backgrounds` 中适用的层，再调用配方；不要只改示例的字体与文字。已有合适标题应保留，改善主标题不意味着给所有副题套同样字效。
 
 ## 常驻标题工具
 
-新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve，省略为 plain；`runs` 明确词组主次、旋转和偏移；`effect` 直接选 outline / hollow / offset-outline / gradient-outline / shadow / none，省略为 none，`accentColor` 选择效果配色，`style` 保留常用字体、字号、字色、字距、行距和描边设置；runs.style 仅覆盖字体、字号、字色、粗体或斜体，其余效果继承整体。渐变、阴影的细调在创建后通过 layer.update 完成；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `content`、`place`、`order`、`size:{width,unit:"mm"}` 与 `style:{fontFamily,fontSizePt,color}`；runs 也用 content/style。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
+新建标题可直接用 `creation_title`，无需先查配方：`layout` 选 plain / stagger / curve，省略为 plain；`runs` 明确词组主次、旋转和偏移；`effect` 直接选 outline / hollow / offset-outline / gradient-outline / none，省略为 none，`accentColor` 选择效果配色，`style` 保留常用字体、字号、字色、字距、行距和描边设置；runs.style 仅覆盖字体、字号、字色、粗体或斜体，其余效果继承整体。渐变的细调在创建后通过 layer.update 完成；`backdrop` 给字后添加笔刷、圆点、方块或圈形。每项标题明确 `content`、`place`、`order`、`size:{width,unit:"mm"}` 与 `style:{fontFamily,fontSizePt,color}`；runs 也用 content/style。这些效果是可选项，不能把效果数量当作质量标准。标题与底形生成同一个可编辑组，可整体移动或撤销；子文字和底形用 `layer.update` 修改。复杂拆字与笔画替换仍按需查询下面的方法。
 
 ## 基础操作与高级组合
 
@@ -39,7 +39,6 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 | variant | 用途 |
 | --- | --- |
 | composed | 拆字、替换局部笔画、组合多层字后背景 |
-| cross-shadow | 大字中穿过小字，保留统一阴影 |
 | scattered-round / scattered-round-triangle | 词组错落与圆形或三角底形 |
 | number-route | 数字成为焦点，结合外围线条 |
 | paper-lettering | 承字底形跟随不同长度的字行 |
@@ -55,7 +54,7 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 
 ## 标题、底形与细节的联系
 
-字群可以探出纸形、跨过局部色带、沿图像轮廓错落，或以空心/反白与实心图案形成对比。先判断字群与附近材料的形状和位置，再选阴影、描边、渐变、圈线、网格或短笔迹；多种技巧可组合，但每一种都要改善可读性、节奏或内容联系。标题不必独占页顶，原素材大字也不必再配同义副题与英文页脚。
+字群可以探出纸形、跨过局部色带、沿图像轮廓错落，或以空心/反白与实心图案形成对比。先判断字群与附近材料的形状和位置，再选描边、渐变、圈线、网格或短笔迹；多种技巧可组合，但每一种都要改善可读性、节奏或内容联系。标题不必独占页顶，原素材大字也不必再配同义副题与英文页脚。
 
 工具边界：普通文本样式不能任意拉伸某一笔或生成真实混色笔触；组合标题的局部笔画替换依赖手动给定区域，不能冒称自动理解笔画。检查变形后是否仍能顺畅读出原字。
 
@@ -67,7 +66,7 @@ description: 设计可编辑的主标题、二三级小标题和局部批注；�
 
 字号不能仅按汉字数估算：同一字号的不同字体字宽不同。`text.add.size.height` 是最小高度，文字会换行扩展，不能当裁切框。单行题签或短词组在同一事务中先添加文字，再 `text.fit` 指定实际可用宽高、可读字号范围和 `fit.maxLines:1`；有意分行的题目可限制为 2 行。`text.fit` 可同时带 `style` 改字体、颜色、行距，按新样式适配，最终字号由 fit 范围决定。工具在有渲染器时按实际字体测量，放不下会报错，不能截字。若缩小后失去主次，调整词组拆分、位置或宽度，而不是继续缩成小字。
 
-题签内部留出纸边与装饰的余量，文字框不要等同整张纸。反白标题只有落在深底上才清楚；跨到浅底的字可分组换色、改位置或另选字效。下划线、阴影与副题分配不同空间，不能穿过下一行小字。预览要逐字读一遍，检查意外孤字换行、编号撞正文和纸边外溢，再开始正文。
+题签内部留出纸边与装饰的余量，文字框不要等同整张纸。反白标题只有落在深底上才清楚；跨到浅底的字可分组换色、改位置或另选字效。下划线与副题分配不同空间，不能穿过下一行小字。预览要逐字读一遍，检查意外孤字换行、编号撞正文和纸边外溢，再开始正文。
 
 ## 收尾验收
 

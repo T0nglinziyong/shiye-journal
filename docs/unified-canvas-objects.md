@@ -68,3 +68,11 @@ creation_apply 只接受 create/update/copy/delete/group/ungroup/cut/split 八�
 对照以 098c3697 为基线，使用同一份自有八件素材任务包、八张已授权案例图、low 思考、360 秒时限、空白双页起点。两组没有附加功能演示任务。验收脚本使用线上相同的 loadStyleReferences/attachStyleReferences 路径，实际请求中有九张图（素材总图加八张参考）；逐图指纹及任务提示哈希一致。参考附件修复只涉及测试脚本，不改变线上参考加载逻辑。
 
 同条件结果：旧接口 12 轮 / 246.2 秒 / 无工具失败；新接口 11 轮 / 299.6 秒 / 一次图层 ID 不存在，模型自行恢复并完成交付。累计未命中输入 / 复用 / 输出分别为旧接口 206,101 / 869,120 / 42,614，新接口 153,384 / 583,936 / 34,892，均含独立审查。两组通过最终 Scene 校验；新图已有圆星点缀和图文层次，但纸张阴影偏重。此单次对照不证明画质或速度稳定提升。最终代码完整回归 2112 通过、1 跳过、0 失败，界面测试、构建、平台检查通过。
+
+## 关闭创作阴影入口
+
+创作模型的公共样式合同不再提供 shadow，文字 effect 也不再提供 shadow。嵌套 runs、组合 children 和配方参数同样受限；执行器提交前检查编译结果，配方默认值或复制对象不能绕过限制生成新阴影。已存在的作品阴影不被自动改写，手动编辑与底层渲染合同不变。阴影配方变体不再列入模型的方法目录，示例移除阴影字段；纸纹、描边、错位轮廓、字后底形与透明叠色仍可使用。
+
+模型普通运行的 10 个函数工具分为：批量编辑 creation_apply；查看 creation_inspect / inspect_materials / creation_preview；知识 knowledge 与高级配方 creation_recipe；工作空间 workspace；计划 creation_plan、撤销 creation_undo、交付 creation_finish。
+
+标题与日期、数字都使用 create(kind=text)：content 为内容，style 管字体字号字色，effect 管描边/空心/错位轮廓/渐变描边，layout 与 runs 管词组排列，backdrop 管字后底形。纸张使用 create(kind=paper)：style.fill 为纸色，texture 为纸纹，edge 为边缘，pattern 为 plain/ruled/grid/dots，translucency 为透光程度。两者均通过 place/size/order 摆放和确定层序，修改用 update.target 与变化字段。

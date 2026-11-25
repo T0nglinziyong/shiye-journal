@@ -1,3 +1,4 @@
+import {withoutShadowExamples} from './shadow-policy.mjs';
 // The creative model uses Scene's place/size/style/content vocabulary. The
 // library compiler remains an implementation detail, not a second tool dialect.
 const placements=['reference','at','rotationDeg'];
@@ -42,7 +43,7 @@ export function internalRecipeParameters(parameters,{title=false}={}){
  return {parameters:p,placement};
 }
 export function publicRecipeDescription(method){
- const result=structuredClone(method),fields=result.parameters||{},out={};
+ const result=withoutShadowExamples(method),fields=result.parameters||{},out={};
  for(const [key,value] of Object.entries(fields)){
   if(placements.includes(key)){out.place??={description:'与普通编辑相同的 place：reference、at、unit、anchor、rotationDeg；按当前图定位整个技巧组。',required:false};continue;}
   if(key in sizes){out.size??={description:'与普通编辑相同的 size：width / height 与 unit:"mm"，表示生成内容的范围，不缩放实体素材。',required:false};out.size.required||=value.required;continue;}
@@ -50,7 +51,8 @@ export function publicRecipeDescription(method){
   out[key==='text'?'content':key]=value;
  }
  if(out.runs)out.runs={...out.runs,description:'词组数组 [{content,role?,style?,breakBefore?,rotationDeg?,offsetMm?,backdrop?}]；content 拼接等于完整 content，字体字号统一放 style。'};
- if(titleStyleRequired(fields))out.style={...out.style,description:'文字 style 与 text.add 相同；fontFamily/fontSizePt/color 控制字体、字号、字色，outline/gradient/shadow 等为可选效果。'};
+ if(titleStyleRequired(fields))out.style={...out.style,description:'文字 style 与 text.add 相同；fontFamily/fontSizePt/color 控制字体、字号、字色，outline/gradient 等为可选效果。'};
+ if(out.variant?.description)out.variant.description=out.variant.description.split('；').filter(part=>!/(^|[ ：])(?:cross-|gap-)?shadow=/.test(part)).join('；');
  result.parameters=out;
  if(result.defaults)result.defaults=publicRecipeParameters(result.defaults);
  if(result.tool?.arguments){result.tool.arguments.parameters=publicRecipeParameters(result.tool.arguments.parameters);result.tool.arguments.baseSceneRevision='current';}
