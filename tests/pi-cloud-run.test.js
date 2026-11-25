@@ -26,8 +26,8 @@ test('new cloud jobs use LangGraph even when the old Pi environment flag is set'
       turn++;let next;
       if(turn===1)next=call('creation_plan',{intent:'周末小记',themeEvidence:{supportedBy:['用户要求'],conflicts:[],response:'记录普通周末'},palette:{source:'纸面',main:'#465D54',secondary:'#E8DFC2',relationship:'echo',distribution:'浅底深字'},composition:{visualAnchors:'标题和短文',layout:'上方标题，下方短文',connector:'一条线'},writingZones:[{role:'title',surface:'page',anchor:'左上',capacity:'short',legibility:'浅底深字'},{role:'body',surface:'page',anchor:'中下',capacity:'medium',legibility:'浅底深字'}],steps:[{task:'排版',status:'in_progress'}]});
       else if(turn===2)next=call('creation_apply',{protocolVersion:2,transactionId:'pi-cloud-text',baseSceneRevision:creationSceneRevision(document),operations:[
-        {op:'text.add',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
-        {op:'text.add',id:'body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
+        {op:'create',kind:'text',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
+        {op:'create',kind:'text',id:'body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
       ]});
       else if(turn===3)next=call('creation_finish',{review:{observations:'标题在上，正文在下，纸面可读',issues:[]}});
       else throw Error('extra turn');

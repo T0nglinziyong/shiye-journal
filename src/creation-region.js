@@ -104,7 +104,12 @@ export function creationRegionGeometry(region,{sourceSize,localSize,crop,output=
  }
  const mm=p=>region.unit==='mm'?p:[p[0]*viewport[0],p[1]*viewport[1]];
  const source=p=>{const v=mm(p);return region.space==='source'?v:[crop.x*sw+v[0]/lw*crop.width*sw,crop.y*sh+v[1]/lh*crop.height*sh];};
- const sourceRings=rings.map(ring=>ring.map(source));
+ let sourceRings=rings.map(ring=>ring.map(source));
+ if(region.rotationDeg){
+  if(!region.box)throw Error('rotationDeg 仅用于矩形或椭圆区域');
+  const [x,y,w,h]=region.box,center=source([x+w/2,y+h/2]),a=region.rotationDeg*Math.PI/180;
+  sourceRings=sourceRings.map(ring=>ring.map(([px,py])=>[center[0]+(px-center[0])*Math.cos(a)-(py-center[1])*Math.sin(a),center[1]+(px-center[0])*Math.sin(a)+(py-center[1])*Math.cos(a)]));
+ }
  let geometry;
  if(region.shape==='path'&&sourceRings.length>1){
   const entries=sourceRings.map(ring=>({ring,shape:normalizeGeometry([[ring]]),area:Math.abs(ringArea(ring)),sign:Math.sign(ringArea(ring))})).sort((a,b)=>b.area-a.area);

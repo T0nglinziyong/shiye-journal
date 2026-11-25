@@ -126,14 +126,14 @@ test('split can take authorized stock directly with explicit piece placement and
  assert.throws(()=>run([{op:'material.split',asset:'unauthorized',pieces}]),/素材别名不存在/);
  assert.throws(()=>run([{op:'material.split',asset:'m1',pieces:[pieces[0],{...pieces[0],id:'overlap'}]}]),/重叠|区域/);
 });
-test('split requires exactly one source type and explicit placements for direct stock',()=>{
+test('split requires exactly one source and accepts omitted placements',()=>{
  const piece={id:'a',region:rect([0,0,.5,1])};
  for(const operation of [
   {op:'material.split',asset:'m1',target:'paper',pieces:[{...piece,place:at}]},
-  {op:'material.split',pieces:[piece]},
-  {op:'material.split',asset:'m1',pieces:[piece]}
+  {op:'material.split',pieces:[piece]}
  ])assert.throws(()=>validateCreationV2Commands(batch([operation])),/commands/);
  assert.doesNotThrow(()=>validateCreationV2Commands(batch([{op:'material.split',target:'paper',pieces:[piece]}])));
+ assert.doesNotThrow(()=>validateCreationV2Commands(batch([{op:'material.split',asset:'m1',pieces:[piece]}])));
 });
 test('split inside rotated group preserves the local frame and occupancy',async()=>{
  const {run,assets}=await setup();const next=run([{op:'group.compose',id:'paper-group',layoutBox:{width:120,height:120,unit:'mm'},place:{...at,rotationDeg:15},children:[add('parent',local),{op:'graphic.add',id:'mark',geometry:{kind:'ellipse'},size:{width:4,height:4,unit:'mm'},place:{...local,at:[.8,.8]}}]},

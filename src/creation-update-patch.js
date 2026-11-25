@@ -2,7 +2,7 @@
 // model call. Arrays replace as a whole; null only clears nullable fields.
 import Ajv2020 from 'ajv/dist/2020.js';
 import {selfContainedCreationSchema} from './creation-v2-contract.js';
-import {creationReferenceBox} from './creation-placement.js';
+import {creationReferenceBox,creationPlacementBox} from './creation-placement.js';
 import {spatialPath,worldBox} from './scene-spatial.js';
 const ajv=new Ajv2020({strict:false,allErrors:true});
 const checks=Object.fromEntries(['Place','Size','Style','GraphicGeometry'].map(name=>[name,ajv.compile(selfContainedCreationSchema({$ref:'#/$defs/'+name}))]));
@@ -11,7 +11,7 @@ const rotate=(x,y,degrees)=>{const a=degrees*Math.PI/180;return [x*Math.cos(a)-y
 const anchors={'top-left':[0,0],'top-center':[.5,0],'top-right':[1,0],'middle-left':[0,.5],center:[.5,.5],'middle-right':[1,.5],'bottom-left':[0,1],'bottom-center':[.5,1],'bottom-right':[1,1]};
 function currentPlace(page,node,patch,parent){
  if(node.layoutConstraint?.place)return structuredClone(node.layoutConstraint.place);
- const box=worldBox(page,node.id),s=page.canvas.height/page.physicalPageHeightMM;
+ const box=creationPlacementBox(page,node.id),s=page.canvas.height/page.physicalPageHeightMM;
  const base={reference:patch.reference||'page',unit:patch.unit||'mm',anchor:patch.anchor||'center',axes:patch.axes||'reference'};
  const ref=creationReferenceBox(page,base.reference,parent),a=anchors[base.anchor];
  const [ax,ay]=rotate((a[0]-.5)*box.w,(a[1]-.5)*box.h,box.rotation);

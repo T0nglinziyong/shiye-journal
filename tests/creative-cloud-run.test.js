@@ -10,7 +10,7 @@ import {installedCreationResources} from '../creative-agent/runtime/resources.mj
 import fontManifest from '../src/assets/fonts/manifest.json' with {type:'json'};
 
 const call=(name,args)=>({id:name,type:'function',function:{name,arguments:JSON.stringify(args)}});
-const reply=(...calls)=>({message:{role:'assistant',content:null,reasoning_content:'test-only',tool_calls:calls},usage:{prompt_tokens:120,completion_tokens:30}});
+const reply=(...calls)=>({message:{role:'assistant',content:calls.filter(c=>c.function.name==='creation_phase').map(c=>'阶段：'+JSON.parse(c.function.arguments).phase).join('\n')||null,reasoning_content:'test-only',tool_calls:calls.filter(c=>c.function.name!=='creation_phase')},usage:{prompt_tokens:120,completion_tokens:30}});
 test('cloud worker commits hash-verified editable output after real rendering and a durable journal',async()=>{
   const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',user='10000000001',prefix=`${user}/creative/${id}/`;
   const document=await createCreationDocument({draft:draft(),assets:[]});
@@ -28,7 +28,7 @@ test('cloud worker commits hash-verified editable output after real rendering an
     },model:async({messages})=>{
       if(modelCalls===0){assert.match(messages[0].content,/Xiaolai/);assert.ok(messages[0].content.includes(fontManifest.version));}
       if(++modelCalls===1)return reply(call('creation_plan',{intent:'测试',themeEvidence:{supportedBy:['用户要求'],conflicts:[],response:'用一句话记录想法'},palette:{source:'纸面',main:'#445566',secondary:'#EEEEDD',relationship:'echo',distribution:'浅底深字'},composition:{visualAnchors:'标题和正文共同构成焦点',layout:'左上标题，右下正文',connector:'颜色呼应'},writingZones:[{role:'title',surface:'page',anchor:'左上',capacity:'short',legibility:'深字浅底'},{role:'body',surface:'page',anchor:'右下',capacity:'short',legibility:'浅底'}],steps:[{task:'添加可编辑文字并看图',status:'in_progress'}]}),call('creation_phase',{phase:'layout',reason:'方向已确定',assessment:{observations:'主题、配色和双焦点布局已确定',issues:[]}}));
-      if(modelCalls===2)return reply(call('creation_apply',{protocolVersion:2,transactionId:'text',baseSceneRevision:creationSceneRevision(document),operations:[{op:'text.add',id:'title',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
+      if(modelCalls===2)return reply(call('creation_apply',{protocolVersion:2,transactionId:'text',baseSceneRevision:creationSceneRevision(document),operations:[{op:'create',kind:'text',id:'title',content:'一页新的想法',place:{reference:'page',at:[40,50],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
       const visual=messages.findLast(m=>Array.isArray(m.content)&&/^(当前真实画面：|本轮最先核对的画面问题)/.test(m.content[0]?.text||''));
       // Unchanged previews may be represented by the checkpoint hash rather
       // than sending the same image bytes into another model call.
@@ -36,7 +36,7 @@ test('cloud worker commits hash-verified editable output after real rendering an
       const currentVisual=visual?.content[0]?.text?.startsWith('当前真实画面：')?visual:null;
       const preview=currentVisual?JSON.parse(currentVisual.content[0].text.split('\n')[0].slice('当前真实画面：'.length)):JSON.parse(summary.content.slice(summary.content.indexOf('：')+1)).preview;
       if(modelCalls===3)return reply(call('creation_phase',{phase:'craft',reason:'构图已确定',assessment:{observations:'左上标题清晰，右下仍有正文位置',issues:[]}}));
-      if(modelCalls===4)return reply(call('creation_apply',{protocolVersion:2,transactionId:'body',baseSceneRevision:preview.sceneRevision,operations:[{op:'text.add',id:'body',content:'把今天的新想法写下来。',place:{reference:'page',at:[55,85],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
+      if(modelCalls===4)return reply(call('creation_apply',{protocolVersion:2,transactionId:'body',baseSceneRevision:preview.sceneRevision,operations:[{op:'create',kind:'text',id:'body',content:'把今天的新想法写下来。',place:{reference:'page',at:[55,85],unit:'mm'},size:{width:60,unit:'mm'},style:{fontFamily:'Xiaolai'}}]}));
       if(modelCalls===5)return reply(call('creation_phase',{phase:'review',reason:'书写已完成',assessment:{observations:'左上标题与下方正文形成清楚的文字层级',issues:[]}}));
       return reply(call('creation_finish',{review:{observations:'标题与正文均清楚，页面有完整的文字层级',issues:[]}}));
     }});

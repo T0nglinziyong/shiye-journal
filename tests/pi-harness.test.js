@@ -18,8 +18,8 @@ test('Pi loop executes the existing scene tools and completes from a real previe
     turn++;let tool;
     if(turn===1)tool=plan();
     else if(turn===2)tool=call('creation_apply',{protocolVersion:2,transactionId:'pi-smoke',baseSceneRevision:currentRevision,operations:[
-      {op:'text.add',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
-      {op:'text.add',id:'body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
+      {op:'create',kind:'text',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
+      {op:'create',kind:'text',id:'body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
     ]});
     else if(turn===3){
       assert.ok(messages.some(m=>m.role==='user'&&Array.isArray(m.content)&&m.content.some(p=>p.type==='image_url')));
@@ -55,8 +55,8 @@ test('Pi resumes a saved scene and transcript after a model interruption',async(
   const continuing=createPiCreativeHarness({skills,render,checkpoint:async value=>{snapshot=structuredClone(value);},model:async()=>{
     resumed++;
     const tool=resumed===1?call('creation_apply',{protocolVersion:2,transactionId:'after-resume',baseSceneRevision:creationSceneRevision(snapshot.state.document),operations:[
-      {op:'text.add',id:'resumed-title',content:'周末',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
-      {op:'text.add',id:'resumed-body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
+      {op:'create',kind:'text',id:'resumed-title',content:'周末',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
+      {op:'create',kind:'text',id:'resumed-body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
     ]}):call('creation_finish',{summary:'继续完成',review:{observations:'标题清楚可读',issues:[]}});
     return {message:{role:'assistant',content:null,tool_calls:[tool]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};
   }});
@@ -71,7 +71,7 @@ test('Pi sends a requested method illustration as image data to the model',async
   const initial=initialHarnessState({document,skills,brief:{}});
   let turn=0;
   const harness=createPiCreativeHarness({skills,model:async({messages})=>{
-    if(++turn===1)return {message:{role:'assistant',content:null,tool_calls:[call('read_skill',{name:'photo-story',level:'detail',methodId:'photo-film'})]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};
+    if(++turn===1)return {message:{role:'assistant',content:null,tool_calls:[call('knowledge',{action:'skill',name:'photo-story',level:'detail',methodId:'photo-film'})]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};
     assert.ok(messages.some(message=>message.role==='user'&&Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url')));
     throw Error('method image delivered');
   }});
@@ -88,8 +88,8 @@ test('Pi asks for a corrected tool call when DeepSeek returns malformed argument
     if(turn===1)return {message:{role:'assistant',content:null,tool_calls:[{id:'bad-call',type:'function',function:{name:'creation_plan',arguments:'{"intent":"broken" trailing'}}]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};
     if(turn===2){assert.ok(messages.some(message=>message.role==='assistant'&&String(message.content).includes('工具参数不是完整的 JSON')));return {message:{role:'assistant',content:null,tool_calls:[plan()]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};}
     if(turn===3)return {message:{role:'assistant',content:null,tool_calls:[call('creation_apply',{protocolVersion:2,transactionId:'after-bad-json',baseSceneRevision:creationSceneRevision(document),operations:[
-      {op:'text.add',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
-      {op:'text.add',id:'body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
+      {op:'create',kind:'text',id:'title',content:'周末小记',size:{width:55,unit:'mm'},place:{reference:'page',at:[35,30],unit:'mm'},style:{fontSizePt:20}},
+      {op:'create',kind:'text',id:'body',content:'午后的风从窗边吹进来。',size:{width:70,unit:'mm'},place:{reference:'page',at:[45,85],unit:'mm'},style:{fontSizePt:11}}
     ]})]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};
     return {message:{role:'assistant',content:null,tool_calls:[call('creation_finish',{summary:'完成',review:{observations:'标题和正文清楚',issues:[],pngHash:preview.pngHash,sceneRevision:preview.sceneRevision}})]},usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}};
   },render:async doc=>{preview={pngHash:'sha256:'+'a'.repeat(64),sceneRevision:creationSceneRevision(doc),imageURL:'data:image/png;base64,dGVzdA=='};return preview;}});

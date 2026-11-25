@@ -52,7 +52,7 @@ export function validateSceneLayout(page){
     if(place.reference==='parent'&&parent&&!byID.get(parent)?.layoutBox)throw Error('parent 比例定位需要稳定 layoutBox');
     if(node.type==='group'&&!node.layoutBox)throw Error('组合持续定位需要稳定 layoutBox');
     const box=worldBox(page,key),scale=page.canvas.height/page.physicalPageHeightMM;
-    resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent});
+    resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent,node});
    }
   }
   visiting.delete(key);done.add(key);
@@ -69,7 +69,7 @@ export function solveSceneLayout(page){
   if(node.layoutConstraint?.place){
    const current=worldBox(page,key),scale=page.canvas.height/page.physicalPageHeightMM;
    const place=bindCreationRotation(page,node.layoutConstraint.place,current.rotation,parent);node.layoutConstraint.place=place;
-   setWorldPosition(page,key,resolveCreationPlace(page,place,{widthMm:current.w/scale,heightMm:current.h/scale,parentID:parent}));
+   setWorldPosition(page,key,resolveCreationPlace(page,place,{widthMm:current.w/scale,heightMm:current.h/scale,parentID:parent,node}));
   }
   busy.delete(key);done.add(key);
  };
@@ -79,7 +79,7 @@ export function applyScenePlacement(page,id,place,{deferSolve=false}={}){
  const path=spatialPath(page.layers,id);if(!path)throw Error('定位图层不存在：'+id);
  const node=path.node,parent=parentID(page,id),box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM;
  const bound=bindCreationRotation(page,place,box.rotation,parent);
- setWorldPosition(page,id,resolveCreationPlace(page,bound,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent}));
+ setWorldPosition(page,id,resolveCreationPlace(page,bound,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent,node}));
  if(bound.behavior==='linked')node.layoutConstraint={...node.layoutConstraint,place:structuredClone(bound)};
  else if(node.layoutConstraint)delete node.layoutConstraint.place;
  cleanConstraint(node);if(!deferSolve)solveSceneLayout(page);return node;
@@ -93,7 +93,7 @@ export function reconcileManualSceneMove(page,id,{deferSolve=false}={}){
  const path=spatialPath(page.layers,id);if(!path)throw Error('图层不存在：'+id);
  if(path.node.layoutConstraint?.place){
   const place=structuredClone(path.node.layoutConstraint.place),parent=parentID(page,id);place.rotationDeg=worldBox(page,id).rotation-creationRotationFrame(page,place,parent);delete place.offset;
-  const box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM,expected=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent});
+  const box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM,expected=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent,node:path.node});
   path.node.layoutConstraint.place.rotationDeg=place.rotationDeg;path.node.layoutConstraint.place.offset={value:[(box.cx-expected.x)/scale,(box.cy-expected.y)/scale],unit:'mm',space:'page'};
  }
  if(!deferSolve)solveSceneLayout(page);
