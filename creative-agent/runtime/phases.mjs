@@ -38,21 +38,21 @@ export function nextSkillCue({plan,turns=0,loadedSkills=[],materialCount=0,textM
 
 const guides={
     direction:'看素材总图，确定主题、配色、素材关系与可写位置；creation_plan 用一两句 intent 简记即可，不展开多套方案或逐件坐标推演，已确定的试摆可同轮执行。先得到真实画面，再据图调整。',
-    layout:'重点看局部打底承托、叠压露边、阅读路线与疏密。整页背景只统一气氛；要围绕具体标题、正文或素材簇决定底纸的尺寸与露出轮廓，一张近满版底纸不能替代这些局部关系。大纸与小纸建立连接，标题正文提前占位；可以裁切或移出不合适素材，不必全部贴满。',
+    layout:'重点看局部打底承托、叠压露边、阅读路线与疏密。整页背景只统一气氛；要围绕具体标题、正文或素材簇决定底纸的尺寸与露出轮廓，一张近满版底纸不能替代这些局部关系。先判断纸块是深入穿插、清楚分置，还是由其他内容跨越衔接；别以一点点碰边代替构图关系。标题正文提前占位；可以裁切或移出不合适素材，不必全部贴满。',
     craft:'重点安排标题与正文，让文字参与构图并依托实际写面。检查主次、字号、字色和遮挡；标题可按需要使用错位、变形、描边或字后背景，不强制特效。',
     accents:'收尾时先缩看最新预览，沿主簇、次簇和双页之间的视觉路线找仍显突兀的纸边、两件素材的接缝、标题端部或重心偏轻处；这些位置可以各用不同尺度的现有小素材、胶带、实心圆点、星形或短线连接与呼应，不预设点缀个数。圆星可让中心靠纸边，一部分压纸、一部分探出；通过 order.before/after 放入对应层间或压住边缘，保护文字和人物。A6 页面可先试约 5–12mm 的主点缀并按画面调整，别把所有圆星缩成 1–2mm 微点，也别只在空角悬空撒星。以手机整页能看出接合、节奏与色彩呼应为准，数量服从疏密；用户只用真实素材时遵守限制。确定落点后同轮合批完成点缀和局部修正，再看图判断各处是否真的起作用。',
     review:'缩看整体构图与配色，近看文字、层序、遮挡和页边；逐页核对主簇之外的转折与次级内容是否也有合适的纸边连接或色彩呼应。点缀若只像孤立散点就移动或撤掉；若仍有明显断开的关系，可继续补入有作用的细节，不因已有一两颗圆点就提前收尾。将影响阅读、遮挡和纸边连接的问题集中在一个批次修正，再看新图并 creation_finish。不要为 1mm 位移、略浅的颜色等可选细节逐轮返工；已成立的构图与文字层级保持稳定，不开启新的美化循环。'
   };
 
 export function creativeMethodGuide(options={}){
-  return creativePhases.map(phase=>creativePhaseLabels[phase]+'：'+guides[phase]).join('\n')+'\n这些方法可交错使用，由你判断工作重点。'+visualDensityBrief(options.styles||[])+(options.textMode==='none'?'本次不写文字。':'标题和正文应可读。')+(options.pageMode==='spread'?'两页配色相互呼应，各有重点；小纸与底纸保持有意连接，注意中缝。':'');
+  return creativePhases.map(phase=>creativePhaseLabels[phase]+'：'+guides[phase]).join('\n')+'\n这些方法可交错使用，由你判断工作重点。'+visualDensityBrief(options.styles||[])+(options.textMode==='none'?'本次不写文字。':'标题和正文应可读。')+(options.pageMode==='spread'?'两页配色相互呼应，各有重点；各页分别判断纸块该叠放还是分置，注意中缝。':'');
 }
 
 export function phaseGuide(phase,{styles=[],textMode='automatic',pageMode}={}){
   return '当前关注：'+creativePhaseLabels[phase]+'。'+(guides[phase]||guides.layout)+
     '五个阶段可交错、可回到任意图层调整；由你根据最新画面选择工作重点，不代表上一阶段已验收，不必调用工具汇报进度。'+
     visualDensityBrief(styles)+(textMode==='none'?'本次不写文字。':'标题和正文应可读。')+
-    (pageMode==='spread'?'两页配色相互呼应，各有重点；小纸与底纸保持有意连接，注意中缝。':'');
+    (pageMode==='spread'?'两页配色相互呼应，各有重点；各页分别判断纸块该叠放还是分置，注意中缝。':'');
 }
 
 export function phaseObservation(phase,{capture,spaceStatus,scene,feedback,advisory,previousReview,remainingSeconds}){

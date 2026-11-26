@@ -4,6 +4,7 @@ import {creativeRunParameters} from './ai-creation-session.js';
 import {createCloudCreativeJobs,watchCloudCreativeJob} from './cloud-creative-jobs.js';
 import {commitAIDraft} from './ai-run-target.js';
 import {importWebScene} from './web-scene-workbench.js';
+import {generatedProjectTitle,shouldApplyGeneratedTitle} from './creative-project-title.js';
 
 const phases={queued:'已提交，等待计算服务器',loading:'正在读取素材',thinking:'正在构思与编辑',preview:'正在检查实际画面',completed:'创作完成',failed:'创作未完成，已保留任务记录',cancelled:'已停止创作'};
 export function creativeJobProgress(job){
@@ -34,6 +35,10 @@ export async function applyBackgroundCreativeResult({project,document,job,assets
     }else{
       const candidate={...generated,id:job.id,title:(generated.title||'方案')+' · AI 候选'};
       project.drafts.push(candidate);result={targetDraftID:candidate.id,candidate:true};
+    }
+    if(!result.candidate&&shouldApplyGeneratedTitle(project)){
+      const title=generatedProjectTitle(document.page);
+      if(title)project.title=title;
     }
     project.creativeCompletedJobs={...project.creativeCompletedJobs,[job.id]:result.targetDraftID};
     if(project.creativeTask?.id===job.id)project.creativeTask={...project.creativeTask,status:'completed'};
@@ -94,7 +99,7 @@ export function createBackgroundCreationSession({getAccount,getAssets,getProject
       const document=await createCreationDocument(parameters);
       guard();
       reference=await api.prepare({projectID:project.id,document,brief:{intent:prompt,styles:parameters.styles,purposes:parameters.pagePurposes,contentPolicy:parameters.contentPolicy}});
-      guard();project.creativeTask={id:reference.id,taskHash:document.source.taskHash,targetDraftID:draft.id,status:'uploading'};
+      guard();project.creativeTask={id:reference.id,taskHash:document.source.taskHash,targetDraftID:draft.id,originalTitle:project.title,status:'uploading'};
       await persist(project);await onProgress?.({jobID:reference.id,projectID:project.id,status:'uploading',message:'正在提交创作设置，完成后可锁屏'});
       guard();await api.submit(reference);guard();
       project.creativeTask.status='queued';await persist(project);
