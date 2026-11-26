@@ -1459,7 +1459,10 @@ async function runAppAction(action,id,value){try{
     else if(dirtyProjects.size||dirtyUsageAssets.size)void flushSave().catch(()=>{});
     if(opening!==editorOpenSequence)break;
     if(p.isSnapshot){state.previewProjectID=p.id;route('projectPreview');break;}
-    if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}
+    // The list already holds the current cloud summary. Fetching the same
+    // metadata again before its document adds a network/cache round trip.
+    p=state.projects.find(project=>project.id===id)||p;
+    if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.completeProject(p);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}
     rememberProjectSaveBaseline(p);
     state.activeProject=p;state.activeDraft=p.activeDraftID;state.offlineEditingReturnID=null;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');break;}
   case 'preview-back':navigateBack('works');break;case 'preview-continue':{await handle('open-project',state.previewProjectID);break;}

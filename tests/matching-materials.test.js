@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recommendForDirection,buildMaterialScope,recommendationWeights,normalizeRecommendationDirection} from '../src/matching-materials.js';
+import {recommendForDirection,scoreRecommendationCandidates,buildMaterialScope,recommendationWeights,normalizeRecommendationDirection} from '../src/matching-materials.js';
 import {matchingRecommendations,matchingViewModel} from '../src/matching-view.js';
 const make=(id,kind,title,tags=[])=>({id,kind,title,tags,reviewStatus:'ready',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}});
 const assets=[make('paper','paper','浅绿方格纸',['清单']),make('photo','photo','旅途照片',['旅行']),make('ticket','paper','车票',['旅途']),make('flower','sticker','花朵贴纸',['植物']),make('hidden','photo','私人照片')];
@@ -90,6 +90,13 @@ test('direction switches reuse precomputed scores until recommendation inputs ch
  const updated=matchingRecommendations(state);
  state.excludedAssetIDs=['theme'];
  assert.notStrictEqual(matchingRecommendations(state),updated);
+});
+test('large libraries keep every candidate while bounding expensive template matching',()=>{
+ const many=Array.from({length:300},(_,index)=>make('large-'+index,'paper','素材 '+index));
+ const rows=scoreRecommendationCandidates({assets:many,pageSize:{width:210,height:297}});
+ assert.equal(rows.length,300);
+ assert.ok(rows.filter(row=>row.templateFit).length<=96);
+ assert.ok(rows.every(row=>Number.isFinite(row.score)));
 });
 
 test('personal materials retain priority over equally relevant current built-ins',()=>{

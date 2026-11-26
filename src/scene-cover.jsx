@@ -1,8 +1,9 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 
 // A work cover is the 480px Canvas 2D rendering of its saved Scene. The
 // editor's interactive Fabric canvas is never used as the thumbnail source.
 export function SceneCover({draft,source,priority=false,localCover='',loadLocalCover,projectID=null,revision=''}){
+  const visibleRef=useRef(null);
   const [,refresh]=useState(0),[error,setError]=useState(''),[failedRemote,setFailedRemote]=useState(''),
     [failedLocal,setFailedLocal]=useState(''),[loadedCover,setLoadedCover]=useState(''),
     [localLookup,setLocalLookup]=useState(null);
@@ -20,12 +21,19 @@ export function SceneCover({draft,source,priority=false,localCover='',loadLocalC
   const lookupKey=JSON.stringify([projectID,revision,direct]);
   useEffect(()=>{
     if(!loadLocalCover)return;
-    let active=true;
-    Promise.resolve().then(()=>loadLocalCover()).then(url=>{
+    let active=true,observer;
+    const load=()=>Promise.resolve().then(()=>loadLocalCover()).then(url=>{
       if(active)setLocalLookup({key:lookupKey,url:url||'',checked:true});
     }).catch(()=>{if(active)setLocalLookup({key:lookupKey,url:'',checked:true});});
-    return ()=>{active=false;};
-  },[lookupKey,!!loadLocalCover]);
+    if(priority||typeof IntersectionObserver!=='function')void load();
+    else if(visibleRef.current){
+      observer=new IntersectionObserver(entries=>{
+        if(entries.some(entry=>entry.isIntersecting)){observer.disconnect();void load();}
+      },{rootMargin:'180px'});
+      observer.observe(visibleRef.current);
+    }
+    return ()=>{active=false;observer?.disconnect();};
+  },[lookupKey,!!loadLocalCover,priority]);
   if(!draft)return null;
   const remote=direct?source(direct):'';
   const local=(typeof localCover==='function'?localCover():localCover)||
@@ -34,12 +42,12 @@ export function SceneCover({draft,source,priority=false,localCover='',loadLocalC
   // Wait for the account-scoped IndexedDB cover check before mounting the
   // private cloud image. On a cache miss this lasts only one local read.
   if(loadLocalCover&&!preferredLocal&&localLookup?.key!==lookupKey)
-    return <span className="work-cover-pending" role="status">正在准备预览…</span>;
+    return <span ref={visibleRef} className="work-cover-pending" role="status">正在准备预览…</span>;
   // The private-image loader uses a transparent one-pixel SVG while its COS
   // request is pending. It must never hide an already rendered local cover.
   const cached=preferredLocal||
     (remote&&!remote.startsWith('data:image/svg+xml,')&&failedRemote!==remote?remote:'');
-  if(cached)return <img className="work-reference" loading={priority?'eager':'lazy'}
+  if(cached)return <img ref={visibleRef} className="work-reference" loading={priority?'eager':'lazy'}
     fetchPriority={priority?'high':undefined} decoding="async" src={cached} alt="作品完整封面"
     onError={()=>{if(cached===preferredLocal){setFailedLocal(preferredLocal);return;}
       setFailedRemote(remote);
@@ -47,7 +55,7 @@ export function SceneCover({draft,source,priority=false,localCover='',loadLocalC
   // Keep the placeholder image mounted: the private-image loader discovers
   // image nodes, then replaces their SVG source with the saved cloud cover.
   if(remote&&failedRemote!==remote)return <>
-    <img className="work-reference" loading={priority?'eager':'lazy'}
+    <img ref={visibleRef} className="work-reference" loading={priority?'eager':'lazy'}
       fetchPriority={priority?'high':undefined} decoding="async" src={remote} alt="作品完整封面"
       onLoad={event=>{const img=event.currentTarget;
         if(img.naturalWidth>1&&!img.currentSrc.includes('#shiye-image='))setLoadedCover(direct);}}
@@ -55,5 +63,5 @@ export function SceneCover({draft,source,priority=false,localCover='',loadLocalC
         window.dispatchEvent(new CustomEvent('shiye-work-cover-failed',{detail:{projectID}}));}}/>
     {loadedCover!==direct?<span className="work-cover-pending" role="status">{error||'正在准备预览…'}</span>:null}
   </>;
-  return <span className="work-cover-pending" role="status">{error||'正在准备预览…'}</span>;
+  return <span ref={visibleRef} className="work-cover-pending" role="status">{error||'正在准备预览…'}</span>;
 }
