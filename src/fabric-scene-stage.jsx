@@ -12,7 +12,6 @@ import {polygonContains,selectionBounds} from './canvas-selection.js';
 import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,transformSceneLasso} from './scene-lasso.js';
 import {attachSceneV2,assertSceneEditable,sceneLayerEntries} from './scene-v2.js';
 import {sceneDisplaySiblings} from './craft-display.js';
-import {prepareSceneFonts} from './scene-renderer.js';
 import {appendInkStroke,editableInkLayer} from './ink-groups.js';
 import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
 import {createFabricSelectionPreview} from './fabric-selection-preview.js';
@@ -228,7 +227,10 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
     const start=async()=>{
       try{
         attachSceneV2(draft);
-        const [fabric]=await Promise.all([import('fabric'),prepareSceneFonts(draft)]);
+        // Show the paper and start layer projection as soon as Fabric is ready.
+        // Text nodes prepare their own fonts in the bridge; waiting for every
+        // font here kept the entire editor blank on a cold connection.
+        const fabric=await import('fabric');
         if(disposed)return;
         canvas=new fabric.Canvas(canvasRef.current,{
           width:draft.canvas.width,height:draft.canvas.height,

@@ -1003,6 +1003,45 @@ function MatchingVariantCover({variant,session,source}){
     </div>}
   </div>;
 }
+function CreativeLiveCanvas({variant,session}){
+  const host=useRef(null);
+  const [size,setSize]=useState({width:window.innerWidth,height:window.innerHeight-100});
+  const [imageSize,setImageSize]=useState({width:1420,height:1000});
+  const [requestedZoom,setRequestedZoom]=useState(1);
+  const [visibleZoom,setVisibleZoom]=useState(1);
+  const [fitRevision,setFitRevision]=useState(0);
+  const url=session.previewURL?.(variant);
+  useLayoutEffect(()=>{
+    const element=host.current;
+    if(!element)return;
+    const measure=()=>setSize({width:element.clientWidth,height:element.clientHeight});
+    const observer=new ResizeObserver(measure);observer.observe(element);measure();
+    return ()=>observer.disconnect();
+  },[]);
+  useEffect(()=>{setRequestedZoom(1);setVisibleZoom(1);setFitRevision(value=>value+1);},[url]);
+  const ratio=imageSize.width/imageSize.height;
+  const width=Math.max(1,Math.min(size.width-24,(size.height-24)*ratio));
+  const height=width/ratio;
+  const draft={id:'creative-live-'+variant.id,canvas:imageSize,paperColor:'#fff',paperPattern:''};
+  return <>
+    <div className="creative-live-zoom" aria-label="画面缩放">
+      <button type="button" className="btn mini" aria-label="缩小画面"
+        onClick={()=>setRequestedZoom(Math.max(1,visibleZoom-.25))}>－</button>
+      <span>{Math.round(visibleZoom*100)}%</span>
+      <button type="button" className="btn mini" aria-label="放大画面"
+        onClick={()=>setRequestedZoom(Math.min(16,visibleZoom+.25))}>＋</button>
+      <button type="button" className="btn mini" onClick={()=>{setRequestedZoom(1);setFitRevision(value=>value+1);}}>适合屏幕</button>
+    </div>
+    <main ref={host} className="creative-live-stage" aria-label="只读创作画面">
+      {url?<FabricPageViewport draft={draft} width={width} height={height} zoom={requestedZoom}
+        resetSignal={fitRevision} onViewportChange={scale=>setVisibleZoom(scale)}>
+        <img src={url} alt="正在创作的实际画面" draggable="false"
+          onLoad={event=>{const image=event.currentTarget;
+            if(image.naturalWidth&&image.naturalHeight)setImageSize({width:image.naturalWidth,height:image.naturalHeight});}}/>
+      </FabricPageViewport>:<p>正在准备第一张画面…</p>}
+    </main>
+  </>;
+}
 export function MatchingSessionPanel({session,state,source,onAction}){
   const [,refresh]=useState(0);
   useEffect(()=>session.subscribe(()=>refresh(version=>version+1)),[session]);
@@ -1021,8 +1060,7 @@ export function MatchingSessionPanel({session,state,source,onAction}){
   return <section className="panel match-previews" data-match-scroll="previews">
     {preview?createPortal(<div className="creative-live-view" role="dialog" aria-modal="true" aria-label="创作画面">
       <header><button className="btn" onClick={()=>session.closePreview()}>返回搭配</button><span>{session.progress(preview)}</span></header>
-      <main>{session.previewURL?.(preview)?<img src={session.previewURL(preview)} alt="正在创作的实际画面"/>:<p>正在准备第一张画面…</p>}</main>
-      <footer aria-label="只读工具栏"><button disabled>选择</button><button disabled>素材</button><button disabled>文字</button><button disabled>图形</button><span>预览模式，请返回后打开完成方案继续编辑</span></footer>
+      <CreativeLiveCanvas variant={preview} session={session}/>
     </div>,document.body):null}
     <h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p>
     <div className="match-variant-grid" data-match-scroll="variants">{variants.length?
