@@ -93,7 +93,24 @@ test('methods learned from Skills execute together with the same methodId field'
   const saved=await f.harness.state('method-id-recipe');
   assert.ok(saved.document.page.layers.some(layer=>layer.id==='star'));
   assert.ok(saved.document.page.layers.some(layer=>layer.id==='star-small'));
-  assert.ok(saved.trace.some(event=>event.kind==='tool'&&event.name==='creation_recipe'&&event.ok));
+  assert.ok(saved.trace.some(event=>event.kind==='tool'&&event.name==='creation_apply'&&event.ok));
+});
+
+test('a single-graphic recipe remains editable with the common size patch',async t=>{
+  let turn=0;const f=await fixture(t,async()=>{
+    if(++turn===1)return answer(call('creation_plan',{intent:'用手绘圆圈点缀标题'}));
+    if(turn===2)return answer(edit(creationSceneRevision(f.document),'editable-loop',[
+      {op:'recipe',methodId:'graphic-loop',params:{id:'loop',place:{at:[72,88]},size:{width:12,height:12},colors:['#D5A45B']}},
+      {op:'update',target:'loop',size:{width:24,height:18}}
+    ]));
+    throw Error('stop after editable loop');
+  });
+  await assert.rejects(f.harness.run({id:'editable-loop',state:f.state}),/stop after editable loop/);
+  const saved=await f.harness.state('editable-loop');
+  const loop=saved.document.page.layers.find(layer=>layer.id==='loop');
+  assert.equal(loop?.type,'shape');
+  assert.ok(loop.width>loop.height);
+  assert.ok(saved.trace.some(event=>event.kind==='tool'&&event.name==='creation_apply'&&event.ok));
 });
 
 test('read_skill returns a directly usable method example with the current Scene revision',async t=>{
@@ -104,10 +121,10 @@ test('read_skill returns a directly usable method example with the current Scene
       const result=JSON.parse(messages.findLast(message=>message.role==='tool').content);
       assert.equal(result.ok,true);
       const args=result.data.methods[0].tool.arguments;
-      assert.equal(args.methodId,'graphic-loop');
+      assert.equal(args.operations[0].methodId,'graphic-loop');
       assert.equal(args.baseSceneRevision,creationSceneRevision(f.document));
       assert.match(args.transactionId,/^skill-/);
-      return answer(call('creation_recipe',args));
+      return answer(call('creation_apply',args));
     }
     throw Error('stop after Skill example');
   });
@@ -270,7 +287,7 @@ test('stage-specific guidance arrives when needed and repeated edits need no sep
   assert.equal(f.renders(),3);
 });
 
-test('finish refuses an old screenshot hash and then accepts the current revision',async t=>{
+test('finish binds the current preview and scene revision without model-supplied hashes',async t=>{
   let turn=0;const f=await fixture(t,async({messages})=>{
     turn++;const p=previewOf(messages);
     if(turn===1)return answer(plan(),phase('layout','主题配色及多锚点布局已决定'));
@@ -278,13 +295,13 @@ test('finish refuses an old screenshot hash and then accepts the current revisio
     if(turn===3)return answer(phase('craft','标题已形成构图，正文位置仍可用'));
     if(turn===4)return answer(edit(p.sceneRevision,'craft',[text('body','今天终于等到一场雨。',[50,85])]));
     if(turn===5)return answer(phase('review','标题和正文构成可读的两层内容'));
-    if(turn===6)return answer(call('creation_finish',{review:{observations:'已看标题和正文的当前图',issues:[],pngHash:'sha256:'+'0'.repeat(64)}}));
-    return answer(call('creation_finish',{review:{observations:'标题和正文清楚，层次与颜色协调',issues:[],pngHash:p.pngHash,sceneRevision:p.sceneRevision}}));
+    return answer(call('creation_finish',{summary:'标题和正文清楚，层次与颜色协调'}));
   });
   const result=await f.harness.run({id:'stale-review',state:f.state});
   assert.equal(result.status,'completed');
   assert.equal(result.review.pngHash,result.preview.pngHash);
-  assert.ok(result.trace.some(item=>item.name==='creation_finish'&&item.ok===false));
+  assert.equal(result.review.sceneRevision,result.preview.sceneRevision);
+  assert.equal(turn,6);
 });
 
 test('layout remains editable after four previews and the unified ordering and workspace fields work in craft',async t=>{
@@ -528,7 +545,7 @@ test('one model turn awaits create, skill, failed call, edge cut and inspect in 
    call('creation_apply',{transactionId:'ordered-create',baseSceneRevision:'current',operations:[{op:'create',kind:'paper',id:'ordered-paper',size:{width:70,height:100,unit:'mm'},style:{fill:'#CCDDEE',paperSurface:{kind:'torn'}}}]}),
    call('knowledge',{action:'skill',name:'paper-layering',level:'overview'}),
    {id:'ordered-bad',type:'function',function:{name:'creation_apply',arguments:'{broken'}},
-   call('creation_apply',{transactionId:'ordered-cut',baseSceneRevision:'current',operations:[{op:'cut',method:'edge',target:'ordered-paper',edge:{style:'torn',edges:['bottom'],depthMm:1,seed:42}}]}),
+   call('creation_apply',{transactionId:'ordered-cut',baseSceneRevision:'current',operations:[{op:'shape',method:'edge',target:'ordered-paper',edge:{style:'torn',edges:['bottom'],depthMm:1,seed:42}}]}),
    call('creation_inspect',{})
   );
   throw Error('stop ordered calls');

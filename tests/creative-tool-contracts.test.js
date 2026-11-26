@@ -22,7 +22,8 @@ test('every method description uses canonical fields and its example still compi
   for(const variant of [undefined,...(method.variants||[]).map(v=>v.key)]){
    const raw=describeTechnique(method.id,{variant}),detail=publicRecipeDescription(raw);
    for(const key of ['at','reference','rotationDeg','widthMm','heightMm','text','fontSizePt','fontFamily','fill','strokeWidthMm','opacity']){assert.ok(!(key in detail.parameters),method.id+': '+key);assert.ok(!(key in (detail.defaults||{})),method.id+' default: '+key);}
-   const normalized=internalRecipeParameters(detail.tool.arguments.parameters,{title:method.recipe==='title'});
+   assert.equal(detail.tool.name,'creation_apply');
+   const normalized=internalRecipeParameters(detail.tool.arguments.operations[0].params,{title:method.recipe==='title'});
    // Both compile against the same example assets; existing-node operations
    // are compiled here and transaction/source validation stays in the harness.
    const original=compileTechnique({methodId:method.id,parameters:raw.tool.arguments.parameters,materials:raw.example.materials});
@@ -32,6 +33,16 @@ test('every method description uses canonical fields and its example still compi
   }
  }
  assert.throws(()=>internalRecipeParameters({id:'x',widthMm:30}),/统一使用/);
+ const stroke=internalRecipeParameters({id:'ring',style:{stroke:'#A45C63'},size:{width:18,height:18,unit:'mm'}},{title:false});
+ assert.equal(stroke.parameters.colors[0],'#A45C63');
+ assert.equal(stroke.parameters.widthMm,18);
+ assert.throws(()=>internalRecipeParameters({id:'ring',style:{stroke:'red'}},{title:false}),/六位 HEX/);
+ const implicitUnits=internalRecipeParameters({id:'ring',place:{at:[40,60],offset:{value:[2,3]}},size:{width:18,height:18}},{title:false});
+ assert.deepEqual(implicitUnits.placement,{reference:'page',at:[40,60],unit:'mm',offset:{value:[2,3],unit:'mm'}});
+ assert.equal(implicitUnits.parameters.widthMm,18);
+ assert.equal(implicitUnits.parameters.heightMm,18);
+ const requiredPlacement=techniqueCatalog.methods.find(method=>method.recipe==='paper');
+ assert.equal(publicRecipeDescription(describeTechnique(requiredPlacement.id)).parameters.place.required,true);
 });
 
 

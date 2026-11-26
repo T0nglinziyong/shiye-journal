@@ -1,14 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {modelContext,isCreativeSnapshot,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,initialToolGuide,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
+import {modelContext,isCreativeSnapshot,creativeCompactionCandidate,creativeCompactionTranscript,fallbackCreativeMemory,recommendCreationSkills,shortlistCreationMethods,iterationAdvice,compactInitialToolGuide,failureGuidance} from '../creative-agent/runtime/context.mjs';
 import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
-
-test('initial tape guidance uses frozen source type rather than appearance or title',()=>{
- const source={textMode:'none',materials:[{alias:'long-paper',assetID:'a'},{alias:'real-tape',assetID:'b'}],sourceSnapshots:[{assetID:'a',kind:'paper',title:'胶带图案长条纸'},{assetID:'b',kind:'tape',title:'花纹'}]};
- assert.deepEqual(initialToolGuide({source}).tapeAliases,['real-tape']);
- source.materials.pop();
- const guide=initialToolGuide({source});assert.deepEqual(guide.tapeAliases,[]);assert.ok(guide.notes.some(n=>n.includes('本次没有胶带')));
-});
 
 test('real Pi parameter mistakes receive exact correction in the LangGraph path',()=>{
  const stroke=failureGuidance('creation_apply',{operations:[{op:'graphic.add',geometry:{kind:'stroke'},style:{strokeDash:'dot'}}]},{path:'operations/0/style/strokeDash'});
@@ -230,7 +223,7 @@ test('zero-material skill routing offers lettering and drawn graphics without so
   assert.ok([...state.recommendedMethods,...state.expressionCards].some(method=>method.id==='title-art'));
   assert.ok(state.recommendedMethods.some(method=>method.id==='graphic-route'));
   assert.ok(!state.recommendedMethods.some(method=>method.id==='paper-peek'));
-  assert.ok(!initialToolGuide(document).common.descriptions.some(item=>item.name==='material.add'));
+  assert.match(state.messages[1].content[1].text,/工具只使用本次素材别名：\[\]/);
   assert.match(state.messages[0].content,/零素材创作/);
   assert.ok(!state.messages[0].content.includes('基础 Skill、匹配风格和常用参数已自动提供'));
   assert.ok(state.messages[0].content.length<100000);
@@ -342,10 +335,15 @@ test('automatic material facts retain physical dimensions and expose missing req
   const {createCreationDocument}=await import('../src/creation-document.js');
   const {draft}=await import('../src/domain.js');
   const {materialBrief,automaticSceneFeedback}=await import('../creative-agent/runtime/context.mjs');
+  const {initialHarnessState}=await import('../creative-agent/runtime/agent.mjs');
   const asset={id:'paper',title:'必用纸片',kind:'paper',physicalWidthMM:55.7,physicalHeightMM:69.6};
-  const document=await createCreationDocument({draft:draft(),assets:[asset],aliases:{m1:asset.id},requiredAssetIDs:[asset.id]});
-  const [fact]=materialBrief(document);assert.equal(fact.widthMM,55.7);assert.equal(fact.heightMM,69.6);assert.equal(fact.required,true);assert.equal(fact.priority,'required');
+  const optional={id:'sticker',title:'可选贴纸',kind:'sticker',physicalWidthMM:22,physicalHeightMM:25};
+  const document=await createCreationDocument({draft:draft(),assets:[asset,optional],aliases:{m1:asset.id,m2:optional.id},requiredAssetIDs:[asset.id]});
+  const [fact]=materialBrief(document);assert.equal(fact.widthMM,55.7);assert.equal(fact.heightMM,69.6);assert.equal(fact.kind,'paper');assert.equal(fact.required,true);assert.equal(fact.priority,'required');
   const feedback=automaticSceneFeedback(document);assert.equal(feedback.required[0].present,false);assert.equal(feedback.finalValidation.ok,false);assert.match(feedback.finalValidation.issue,/必用素材/);
+  const state=initialHarnessState({document,skills:{catalog:()=>[]},brief:{style:'自动安排'}});
+  assert.match(state.messages[1].content[1].text,/"alias":"m1"[^\n]*"required":true/);
+  assert.match(state.messages[1].content[1].text,/"alias":"m2"[^\n]*"required":false/);
 });
 
 test('failed parameter validation supplies targeted help without changing the operation',async()=>{
@@ -356,8 +354,8 @@ test('failed parameter validation supplies targeted help without changing the op
   assert.ok(failureGuidance('creation_help',{},{}).available.topics.includes('place'));
   const star={operations:[{op:'graphic.add',id:'star',geometry:{kind:'star',points:5}}]};
   assert.match(failureGuidance('creation_apply',star,{path:'/operations/0/geometry/points'}).hint,/options/);
-  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}}).operations.find(item=>item.name==='create');
-  assert.equal(first.example.op,'create');
+  const first=compactInitialToolGuide({source:{materials:[],sourceSnapshots:[],textMode:'none'}});
+  assert.equal(first.examples.create[0].op,'create');
 });
 
 test('invalid stroke styling reports all mismatched fields and valid alternatives together',async()=>{
@@ -437,9 +435,10 @@ test('tray-only changes retain the latest matching page image and remove obsolet
 
 test('first turn provides cutting and tearing examples without a help round',()=>{
  const guide=compactInitialToolGuide({source:{materials:[{alias:'m1',assetID:'a'}],sourceSnapshots:[],textMode:'rich'}});
- for(const name of ['cut','split','ungroup'])assert.ok(guide.operations.find(item=>item.name===name)?.example);
- assert.ok(guide.definitions.Region);
- assert.ok(guide.operations.find(item=>item.name==='cut').parameters.oneOf.some(s=>s.properties.method?.const==='tear'));
+ assert.ok(guide.examples.shape.length>=3);
+ assert.ok(guide.examples.ungroup[0]);
+ assert.ok(guide.commonParameters.Region);
+ assert.ok(guide.operationParameters.find(item=>item.name==='shape').variants.some(s=>s.fields.method==='"edge"'));
 });
 
 

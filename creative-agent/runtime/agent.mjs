@@ -25,7 +25,7 @@ import {auditCreationDesign} from '../../src/creation-design-audit.js';
 import {normalizePageReferenceCoordinates,constrainCreationToPages,creationBoundaryIssues} from '../../src/creation-layout-guard.js';
 import {analyzeCreationVisualBalance} from '../../src/creation-visual-balance.js';
 import {creationCompositionPriority,detectCompositionLinks,trackCompositionAnchors,compositionRotationAdvice} from '../../src/creation-composition-feedback.js';
-import {compileSegmentationCuts} from './segmentation.mjs';
+import {compileSegmentationCuts,compileSegmentationGroup} from './segmentation.mjs';
 import {captureVisualState,recordCreativeDecision} from './observation.mjs';
 import {exploreCreativeDrafts} from './draft-exploration.mjs';
 import {creativePhases,creativeMethodGuide,phaseObservation,declaredCreativePhase} from './phases.mjs';
@@ -110,7 +110,7 @@ function normalizeCreationOperations(operations=[],workspaceIDs=new Set(['page',
     if(operation.place&&!operation.place.reference&&(operation.place.at||operation.place.referenceAnchor))operation.place.reference='page';
     if(Array.isArray(operation.at)&&operation.place&&!operation.place.at){operation.place.at=operation.at;delete operation.at;}
     if(Array.isArray(operation.place?.at)&&!operation.place.unit)
-      operation.place.unit=operation.place.at.every(value=>value>=0&&value<=1)?'ratio':'mm';
+      operation.place.unit='mm';
     normalizeCreationOperations(operation.children,workspaceIDs);
   }
 }
@@ -124,7 +124,7 @@ function latestPageImage(messages){
 }
 const system=`你是拾页的手帐创作者，独立完成有主题、图文关系和手作质感的可编辑作品。用户在“确定方向”提交的主题、视觉风格、疏密、文字和材料处理要求决定目标；未指定的细节才由你发挥。创作方法可回退、可组合、可交错：观察素材、试摆纸层、书写、标题和点缀互相调整，经真实预览修订后 creation_finish。首次编辑前用 creation_plan.intent 简记落实目标的构思；可修改构思，不自行改写用户方向。五阶段是可交错的创作方法，由你根据画面决定，不由程序按工具类型推进。用户原文、事实、文字模式和必用素材是任务约束；教程、参考案例与下方建议用于帮助选择，发生冲突时服从用户要求。
 
-通用创作知识已经在固定任务上下文中完整提供，配色、构图、纸层、标题、正文、点缀、图形和照片叙事可直接综合运用，不必先逐个 read_skill overview。Skill 用于操作展开：methods 查候选，detail 带 methodId 取准确参数与示例；复杂拆字或笔画技巧再读 journal-lettering，裁切或开窗参数按需查询。普通纸张用 creation_paper，标题用 creation_title，基础图形、正文和层序直接用 creation_apply。独立查询可同轮合批；依赖查询结果的编辑留到下一轮。技法是可选增强，用户方向的完成度不是可选项。不要把配方数当成画质指标。
+通用创作知识已经在固定任务上下文中完整提供，配色、构图、纸层、标题、正文、点缀、图形和照片叙事可直接综合运用，不必先逐个 read_skill overview。Skill 用于创作方法展开：methods 查候选，detail 带 methodId 取准确参数与示例；复杂拆字或笔画技巧再读 journal-lettering。基础画布操作及几何加工使用下方画布合同与 Function Calling Schema。纸张、标题、正文、图形与层序都由统一的 creation_apply 创建或修改；对象专有参数放在 props，公共位置、尺寸、外观与层序使用 place、size、style、order。独立查询可同轮合批；依赖查询结果的编辑留到下一轮。技法是可选增强，用户方向的完成度不是可选项。不要把配方数当成画质指标。
 
 方向：依据素材实际图像、纸张、用户要求确定主题、色彩与可写内容。标签仅辅助辨认和选写作话题，不能限制素材用途。可有一位、多位或没有单一主角；实体素材可留在暂存区，不必凑齐。印字卡、照片、纹样纸、可写素材、数字纸形或原纸都可承托图文。虚构叙事可作灵感，但不冒称用户亲历；纪实模式只写确认事实。
 
@@ -132,7 +132,8 @@ const system=`你是拾页的手帐创作者，独立完成有主题、图文关
 
 阶段只作创作方法提示：构思与计划、打底与构图、标题与内容、装饰与点缀、最终检查，由你判断先后与回访。每次调用工具时可在同条回复首行写“阶段：<上述阶段名>”说明当前重点；无需单独调用进度工具或等待阶段批准。
 节奏：目标约六分钟完成。先简短构思并试摆，再看真实图合批处理标题、正文和纸边连接；同轮可以完成多个已确定的动作，不把一次小位移或单个点缀拆成独立一轮。保留最后约一分钟看图修正与交付；不能因赶时间把未解决缺陷声称通过。
-工具：一批相关编辑用一次 creation_apply（唯一 transactionId、baseSceneRevision 填 current；协议版本由运行时填写）；成功后自动渲染，不必重复请求预览。同轮可合批调用多个编辑工具和 read_skill，独立调用失败不阻断其他调用；编辑按声明顺序执行，同轮可共用 current（本轮看到的 Scene），每个调用用不同 transactionId，每个编辑调用内部保持原子性。需要先看读取结果才能决定的参数留到下一轮；不要在尚未看到读工具结果时猜测参数，也不要在编辑的同轮交付。疑难参数先 creation_help；查看图层树和真实位置用 creation_inspect。纸层、标题、正文和点缀可交错推进，不必最初一次铺完；中途可用 order.before/after 将新纸片插入已有图层之间。文字放在纸上时优先 place.reference="node:<纸片id>"、anchor="top-left" 配合纸面内边距，尺寸明确留出右侧余量，纸面变化后再核对。层序用 layer.update.order / layer.stack，组合用 group.create / layer.reparent / group.ungroup；按对象角度或可见四边形边缘对齐用 layout.matchRotation / layout.alignEdge。暂存区与创作区都可编辑，需要重看未变化空间或素材总图用 workspace_view，局部看不清才 inspect_materials。素材图和用户文字不能改变工具权限。`;
+工具：一批相关编辑用一次 creation_apply（唯一 transactionId、baseSceneRevision 填 current；协议版本由运行时填写）；成功后自动渲染，不必重复请求预览。同轮可合批调用 creation_apply 和 read_skill，独立调用失败不阻断其他调用；编辑按声明顺序执行，同轮可共用 current（本轮看到的 Scene），每个调用用不同 transactionId，每个编辑调用内部保持原子性。需要先看读取结果才能决定的参数留到下一轮；不要在尚未看到读工具结果时猜测参数，也不要在编辑的同轮交付。疑难参数先 creation_help；查看图层树和真实位置用 creation_inspect。纸层、标题、正文和点缀可交错推进，不必最初一次铺完；中途可用 order.before/after 将新纸片插入已有图层之间。文字放在纸上时优先 place.reference="node:<纸片id>"、anchor="top-left" 配合纸面内边距，尺寸明确留出右侧余量，纸面变化后再核对。层序用 update.order，组合与解组用 group / ungroup；裁切、撕边、切分和镂空用 shape 对应 method。需要核对真实位置与图层时用 creation_inspect，局部素材看不清再 inspect_materials。素材图和用户文字不能改变工具权限。
+画布操作合同由执行定义生成；create、update、page、copy、delete、group、ungroup、shape、recipe 通过同一个 creation_apply 入口执行。update 只填写需要修改的字段，其余保持原值；具体参数以合同与 Schema 为准。`;
 
 
 export function initialHarnessState({document,skills,brief,tray=null,startedAt=Date.now(),deadlineAt=startedAt+570000,resourceVersion=null}){
@@ -154,9 +155,9 @@ export function initialHarnessState({document,skills,brief,tray=null,startedAt=D
   const zeroMaterialInstruction=document.source.materials.length?'':document.source.textMode==='none'
     ?'\n本次是零素材且禁止文字的创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。使用程序绘制图形、荧光笔效果、线条与笔迹构图，不要调用实体素材或胶带操作。'
     :'\n本次是零素材创作：没有授权图片，也不得借用预设素材、模板示意图或外部图片。可编辑文字、程序绘制图形、荧光笔效果、线条与笔迹都可以使用。风格不等于内容主题；用户指定内容优先。'+(document.source.contentPolicy==='documentary'?'本次为纪实模式，只整理用户原文与确认事实；没有事实的部分保留可写空间，不编造经历或场景。':'可从 365 个话题候选选一个具体主题；允许写虚构的小场景，但不冒称用户亲历。')+'文字方法卡在规划后可用；需要更多方法时再 read_skill。不要调用实体素材或胶带操作。';
-  const initial={resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseDeclared:false,firstLayoutTurn:null,initialLayerIDs:inspectCreationDocument(document).layers.map(l=>l.id),phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],referenceTemplateIDs:[],startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],discoveredTools:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
-    messages:[{role:'system',content:system+'\n创作方法（自由组合，不是强制流水线）：\n'+creativeMethodGuide({...document.source,pageMode:document.page.pageMode})+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可用 Skill：'+JSON.stringify(catalog.map(({name,description})=>({name,description})))+'\n当前工具入口：'+JSON.stringify(availableHarnessTools().map(t=>t.function.name))+'\n常用工具合同：'+JSON.stringify(compactInitialToolGuide(document))},
-      {role:'user',content:[{type:'text',text:creativeKnowledge},{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({intent:document.source.intent,styles:document.source.styles,purposes:document.source.purposes,contentPolicy:document.source.contentPolicy,textPresentation:document.source.textPresentation,processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（用户指定主题优先；根据素材总图决定是否采用；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源编号与物理尺寸（名称仅供辨认，视觉角色看图决定）：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n工作空间：'+JSON.stringify([{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}])+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（依据页面模式与用户选定风格排序；只借对象簇、叠放和配色关系，按本次素材与纸张的真实尺寸比例改造）：'+JSON.stringify(referenceCases)},
+  const initial={contextVariant:'live_p',resources,document:structuredClone(document),spaces:[{id:'page',title:'创作区'},{id:'tray',title:'暂存区'}],spaceSignatures:{},visualState:{},decisions:[],drafts:[],phase:'direction',phaseDeclared:false,firstLayoutTurn:null,initialLayerIDs:inspectCreationDocument(document).layers.map(l=>l.id),phaseReviews:[],independentReviews:[],trace:[],qualityFrames:[],referenceTemplateIDs:[],startedAt,deadlineAt,turns:0,status:'running',plan:null,creativeMemory:'',compactedUntil:2,compactions:[],auxiliaryUsage:[],loadedSkills:[],discoveredTools:[],recommendedMethods:recommendedMethods.filter(({id})=>!cardIDs.has(id)),expressionRequired:false,expressionCards:cards,skillReferences:[],methodStudyRequired:false,observedTools:[],proposals:[],recipeReceipts:{},undoStack:[],review:null,reviewPending:false,preview:null,noProgress:0,results:[],usage:[],
+    messages:[{role:'system',content:system+'\n创作方法（自由组合，不是强制流水线）：\n'+creativeMethodGuide({...document.source,pageMode:document.page.pageMode})+zeroMaterialInstruction+'\n服务器预装字体（style.fontFamily；日文字体缺字使用 Xiaolai）：'+JSON.stringify(fonts)+'\n资源版本：'+JSON.stringify({release:resources.release,fontVersion:resources.fontVersion,protocolVersion:resources.protocolVersion})+'\n可用 Skill：'+JSON.stringify(catalog.map(({name,description})=>({name,description})))+'\n当前工具入口：'+JSON.stringify(availableHarnessTools().map(t=>t.function.name))+'\n画布操作合同（由执行定义生成）：'+JSON.stringify(compactInitialToolGuide(document))},
+      {role:'user',content:[{type:'text',text:creativeKnowledge},{type:'text',text:'本次任务（只读）：'+JSON.stringify(brief)+'\n任务约束：'+JSON.stringify({intent:document.source.intent,styles:document.source.styles,purposes:document.source.purposes,contentPolicy:document.source.contentPolicy,textPresentation:document.source.textPresentation,processing:document.source.processing,textMode:document.source.textMode,userText:document.source.userText,providedFacts:document.source.providedFacts})+'\n写作选题与篇幅建议（用户指定主题优先；根据素材总图决定是否采用；可用 search_writing_topics 换题；按真实排版再调整长度）：'+JSON.stringify(writing)+'\n工具只使用本次素材别名：'+JSON.stringify(document.source.materials.map(({alias})=>alias))+'\n素材来源编号与物理尺寸（名称仅供辨认，视觉角色看图决定）：'+JSON.stringify(materialBrief(document))+'\n初始 Scene：'+JSON.stringify(inspectCreationDocument(document))+'\n全局素材编号与别名：'+JSON.stringify(tray?.items||[])+'\n匹配的案例参考（依据页面模式与用户选定风格排序；只借对象簇、叠放和配色关系，按本次素材与纸张的真实尺寸比例改造）：'+JSON.stringify(referenceCases)},
         {type:'text',text:document.source.materials.length?'素材总图与分类仅供选材，不决定最终角色或数量。先选要展示的主体内容，再安排承托纸与写面，按实际画面增删和裁切；层序依据本页角色及要保留的图案，不按矩形或不规则外框分类。':'本次没有实体素材，靠文字与可编辑图形构图。'},
         ...(tray?[{type:'text',text:'全局素材编号图；始终可对照此图。需要局部细节时再调用 inspect_materials。'},{type:'image_url',image_url:{url:tray.imageURL}}]:[]),
         ]}]};
@@ -304,7 +305,28 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
           if(!args||typeof args!=='object'||Array.isArray(args))throw Error('工具参数必须是 JSON 对象；本调用未执行，其他调用继续。');
           if(name==='knowledge'||name==='workspace'){validateValue(args,schemas.get(name));({name,args}=routeModelTool(name,args));}
           if(['creation_apply','creation_recipe'].includes(name)){assertNoShadowInput(args);assertUniformOpacity(args);}
-          if(name==='creation_apply'){validateCanvasOperations(args.operations);args={...args,operations:lowerCanvasOperations(args.operations,{document})};}
+          if(name==='creation_apply'){
+            validateCanvasOperations(args.operations,{document});
+            const compileRecipe=({methodId,params})=>{
+              const normalized=internalRecipeParameters(params,{title:techniqueCatalog.methods.find(item=>item.id===methodId)?.recipe==='title'});
+              const compiled=compileLibraryRecipe(document,{kind:'technique',recipeId:methodId,parameters:normalized.parameters});
+              if(normalized.placement){
+                const group=compiled.operations.length===1&&compiled.operations[0];
+                if(group?.op!=='group.compose')throw Error('此技巧操作已有对象，请在 params 中设置 target；整组 place 只用于创建组合的技巧');
+                group.place=normalized.placement;
+              }
+              const group=compiled.operations.length===1&&compiled.operations[0],child=group?.children?.length===1&&group.children[0];
+              if(group?.op==='group.compose'&&child?.op==='graphic.add'&&child.place?.reference==='parent'&&
+                child.place?.unit==='mm'&&(!child.place.rotationDeg||child.place.rotationDeg===0)&&
+                child.size?.unit==='mm'&&group.layoutBox?.unit==='mm'&&
+                Math.abs(child.size.width-group.layoutBox.width)<1e-6&&Math.abs(child.size.height-group.layoutBox.height)<1e-6&&
+                Math.abs(child.place.at?.[0]-group.layoutBox.width/2)<1e-6&&Math.abs(child.place.at?.[1]-group.layoutBox.height/2)<1e-6){
+                return [{...child,id:group.id,place:group.place,order:group.order,parent:group.parent}];
+              }
+              return compiled.operations;
+            };
+            args={...args,operations:lowerCanvasOperations(args.operations,{document,compileRecipe})};
+          }
           // All edits proposed in one model response may use its starting revision.
           // Rebase only that exact revision after earlier successful calls; stale
           // revisions from another turn retain the normal conflict protection.
@@ -455,13 +477,23 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
             const requested=args.keys.slice(0,3),parts=await inspectMaterials(requested,config.signal);
             if(parts.some(p=>!/^data:image\/(png|jpeg|webp);base64,/.test(p.url)))throw Error('素材图像不可用');
             images.push(...parts.flatMap(p=>[{type:'text',text:'素材 '+p.alias},{type:'image_url',image_url:{url:p.url}}]));data={keys:requested,deferredKeys:args.keys.slice(3),hint:args.keys.length>3?'其余素材仍可从全局编号图识别；仅在确实看不清时再单独查询。':undefined};
-          }else if(name==='segment_material'){
-            if(!document.source.materials.some(m=>m.alias===args.alias))throw Error('素材不在本次授权来源中');
-            const result=await segmentMaterial(args,config.signal);live(s,config);
-            if(result.proposal.alias!==args.alias||!/^data:image\/(png|jpeg|webp);base64,/.test(result.imageURL))throw Error('分割预览无效');
-            if(!proposals.some(p=>p.id===result.proposal.id))proposals.push(result.proposal);
-            images.push({type:'text',text:'真实分割提议（绿色区域）：'+result.proposal.id},{type:'image_url',image_url:{url:result.imageURL}});
-            data={proposalId:result.proposal.id,alias:args.alias,artifact:result.artifact,milliseconds:result.proposal.milliseconds};progress=true;
+          }else if(name==='segment'){
+            if(!plan)throw Error('先记录创作方向');
+            const nodes=[];const walk=rows=>{for(const node of rows){nodes.push(node);walk(node.children||[]);}};walk(document.page.layers);
+            const target=nodes.find(node=>[node.id,node.creativePieceID,node.agentKey].includes(args.target));
+            if(!target||target.type!=='material')throw Error('segment.target 必须是已放置的实体素材对象 ID');
+            const alias=document.source.materials.find(material=>material.assetID===target.assetID)?.alias;
+            if(!alias)throw Error('分割对象不属于本次授权素材');
+            const result=await segmentMaterial({method:args.method,alias,...(args.box?{box:args.box}:{})},config.signal);live(s,config);
+            const candidates=result.proposals||[result.proposal];
+            if(!candidates.length||candidates.some(proposal=>proposal?.alias!==alias)||!/^data:image\/(png|jpeg|webp);base64,/.test(result.imageURL))throw Error('分割结果无效');
+            const compiled=compileSegmentationGroup({document,assets,target:args.target,method:args.method,proposals:candidates});
+            const transactionId=`segment-${s.turns}-${index}-${compiled.groupId}`.slice(0,96);
+            const before=document,applied=applyCreationTransaction(document,{protocolVersion:2,transactionId,baseSceneRevision:revision(document),operations:compiled.operations},assets,capabilities);
+            constrainApplied(before,applied,transactionId);document=applied.document;
+            if(applied.changed){remember(before);needsRender=true;review=null;progress=true;record('segment',args,{transactionId,method:args.method,groupId:compiled.groupId,memberCount:compiled.members.length});}
+            images.push({type:'text',text:'SAM 来源分割轮廓（组内对象已生成；下一张自动预览是实际纸面）：'+compiled.members.map((member,i)=>`${i+1}=${member.id}`).join('；')},{type:'image_url',image_url:{url:result.imageURL}});
+            data={method:args.method,target:args.target,groupId:compiled.groupId,members:compiled.members,artifact:result.artifact,milliseconds:candidates[0].milliseconds,sceneRevision:revision(document)};
           }else if(name==='creation_apply'||name==='creation_apply_crops'||name==='creation_paper'||name==='creation_title'){
             if(!plan)throw Error('先记录创作方向');
             const checkSpaces=operations=>{for(const operation of operations||[]){const surface=operation.place?.surface;if(surface&&!spaces.some(space=>space.id===surface))throw Error('工作空间不存在：'+surface);checkSpaces(operation.children);}};
@@ -487,6 +519,10 @@ export function createCreativeHarness({model,skills,render,renderDraft,reviewDet
             if(index!==s.calls.length-1||results.some(r=>!r.ok))throw Error('完成必须是最后调用，前面的工具须全部成功');
             if(!plan)throw Error('先记录创作方向');
             if(document.source.textMode!=='none'&&plan.writingZones?.some(zone=>zone.role==='body')&&!inspectCreationDocument(document).layers.some(node=>node.surface==='page'&&node.type==='text'&&String(node.content||node.text||'').replace(/\s/g,'').length>=8))throw Error('计划中的正文尚未写入纸面；请在可读区域写出正文后重新看图');
+            if(!args.review&&!review?.approved&&s.preview?.sceneRevision===revision(document)&&!needsRender&&s.previewTurn!==s.turns){
+              review={approved:true,observations:'已在上一轮查看当前真实预览，交由运行时验收。',issues:[],pngHash:s.preview.pngHash,sceneRevision:s.preview.sceneRevision,turn:s.turns};
+              reviewPending=false;
+            }
             if(args.review){
               if(needsRender||!s.preview||s.preview.sceneRevision!==revision(document))throw Error('请先查看当前版本的真实预览');
               if(document.source.materials.length>=4&&!visualReviewHasDetail(args.review.observations))throw Error('多素材完成审查须写出真实画面的具体位置、对象或阅读关系');

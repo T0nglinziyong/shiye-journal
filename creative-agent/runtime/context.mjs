@@ -1,4 +1,4 @@
-import {canvasGuide} from './canvas-interface.mjs';
+import {compactCanvasGuide} from './canvas-interface.mjs';
 import {creativePhaseLabels} from './phases.mjs';
 import {creationHelp,inspectCreationDocument} from '../../src/creation-inspection.js';
 import {creationCommandRegistry} from '../../src/creation-v2-contract.js';
@@ -42,22 +42,13 @@ export function shortlistCreationMethods(document,brief={}){
   return [...new Set(candidates)].map(id=>methods.get(id)).filter(method=>method&&(document.source.textMode!=='none'||!['journal-writing','journal-lettering'].includes(method.skill))).map(({id,title,when,skill})=>({id,title,when,skill,readWith:{name:skill,level:'detail',methodId:id}}));
 }
 
-export function initialToolGuide(document){
-  const topics=[...(document.source.materials.length?['material.add','material.cut','material.tear','region']:[]),'layer.update','graphic.add','place','size','order'];
-  if(document.source.textMode!=='none')topics.push('text.add');
-  const tapeAliases=document.source.materials.filter(m=>document.source.sourceSnapshots.find(s=>s.assetID===m.assetID)?.kind==='tape').map(m=>m.alias);
-  const commandIndex=creationHelp();
-  return {topics:commandIndex.topics,conventions:commandIndex.conventions,families:commandIndex.families,common:creationHelp({topics}),tapeAliases,fieldDefinitions:{Color:creationCommonDefinitions.Color,Letters:creationCommonDefinitions.Letters},
-    notes:['常用操作、全局素材编号图与尺寸已加载；复杂参数先用 creation_help 查询精确命令名，如 text.add（不是 text）。','place.at 必须是 [x,y] 数组；相对定位使用 reference、referenceAnchor、anchor 和 offset。','creation_inspect 返回从后到前的 layerTree；后加的纸遮住素材时，用 layer.update.order={before:素材ID} 或 edge=back 调整。跨组调前后用 layer.stack；组合用 group.create、layer.reparent、group.ungroup。','几何调整统一用 layout：nudge 按毫米/角度增量微调，matchRotation 跟另一素材对齐角度，alignEdge 贴齐指定可见边，align 按边界对齐或分布；这几项都保留实体尺寸。matchRotation、alignEdge 的相对角度都叫 offsetDeg；nudge.rotationDeg 是当前角度的增量。批量操作用 targets，单对象操作用 target。','数字纸用 creation_paper 批量创建，统一用 style.fill 选纸色、style.stroke 选印纹色，再选 texture、edge，可加 pattern 和 translucency；默认无阴影。order 明确层序，勿盖正文。纯色矩形适合普通色块，纸层分工与露边可读 paper-layering。graphic.add 的常用 kind 是 rect、ellipse、star。星角数量写 geometry.options.points，例如 {kind:"star",options:{points:5}}。圆圈、方块、星星都用 size.width/height 和 style.fill/stroke。手写压感线条用 geometry:{kind:"stroke",unit:"mm",points:[{x,y,pressure}]}，geometry.unit 必填；笔迹样式用 stroke/strokeWidthMm，不传 fill 或 strokeDash；点线或虚线用 path/基础图形。','标题与正文统一用 content，尺寸用 size.width/unit，字体字号字色用 style.fontFamily/fontSizePt/color，runs 也用 content/style。标题用 creation_title：layout 选择 plain/stagger/curve，runs 设置词组大小角色与错位，effect 直接选 outline/hollow/offset-outline/gradient-outline/shadow/none，accentColor 配色，style 可微调，backdrop 设置字后衬形；可组合也可简洁。整组移动用 layer.update，子文字和底形同样可编辑；复杂拆字读 journal-lettering。','material.tape 只能使用 tapeAliases 中的来源；列表为空时本次没有胶带。普通长条纸、文字剪片用 material.add 或合法裁切。','创建用 id，修改已有对象用 target；不要在 layer.update 中传 id。layer.update 只传变化字段，其他值保留：place:{rotationDeg:5} 只改角度，size:{width:40} 只改图形宽度，style:{outline:{widthMm:.6}} 只改已有描边粗细；无需复用开关。对象按字段合并，数组整体替换，允许 null 的效果用 null 清除。普通 text.add 文字改内容、位置、尺寸、样式都用 layer.update；标题是组合，整组只移动/旋转，改字号或宽度须使用 Scene 中的子文字 id；text.reflow 只给 text.lettering 的逐字标题组重排。','透明填充用 style.fill:null，不能写 none。grid/dots/stripes 的 fill 是底色、stroke 是纹样色；行列数 1–128；stripes.angle=0 横向、90 纵向。横线纸 linedNote 用 rows 控制行数，不接收 spacing。颜色用六位 HEX；文字用 style.color，图形和笔迹用 style.stroke 或 style.fill，不能对 ink 使用 style.color。']};
-}
-
-export function compactInitialToolGuide(document){return canvasGuide();}
+export function compactInitialToolGuide(){return compactCanvasGuide();}
 
 export function materialBrief(document){
   const required=new Set(document.source.requiredAssetIDs||[]);
   return document.source.materials.map(m=>{
     const s=document.source.sourceSnapshots.find(s=>s.assetID===m.assetID),a=assetFromSourceSnapshot(s,{frozenRevision:true});
-    return {alias:m.alias,title:s.title,widthMM:a.physicalWidthMM,heightMM:a.physicalHeightMM,required:required.has(m.assetID),priority:Object.entries(document.source.materialPriority||{}).find(([,ids])=>Array.isArray(ids)&&ids.includes(m.assetID))?.[0],tapeAxis:s.tapeAxis};
+    return {alias:m.alias,title:s.title,kind:s.kind,widthMM:a.physicalWidthMM,heightMM:a.physicalHeightMM,required:required.has(m.assetID),priority:Object.entries(document.source.materialPriority||{}).find(([,ids])=>Array.isArray(ids)&&ids.includes(m.assetID))?.[0],tapeAxis:s.tapeAxis};
   });
 }
 

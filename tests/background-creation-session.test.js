@@ -4,6 +4,7 @@ import {draft} from '../src/domain.js';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 import {applyBackgroundCreativeResult,createBackgroundCreationSession,creativeJobProgress} from '../src/background-creation-session.js';
+import {generatedProjectTitle} from '../src/creative-project-title.js';
 
 async function fixture(){
   const d=draft(),project={id:'project',title:'测试',activeDraftID:d.id,drafts:[d]};
@@ -30,6 +31,26 @@ test('unchanged draft is updated once; mismatched project or task cannot be appl
   const f=await fixture();const result=await applyBackgroundCreativeResult({...f,persist:async()=>{}});
   assert.equal(result.candidate,false);assert.equal(f.project.drafts.length,1);assert.equal(f.project.drafts[0].layers[0].content,'后台完成的标题');
   const other=await fixture();other.job.project_id='another';await assert.rejects(applyBackgroundCreativeResult({...other,persist:async()=>{}}),/不属于/);
+});
+test('completed AI artwork names the default project from its actual heading',async()=>{
+  const f=await fixture();f.project.title='新的手账';f.project.creativeTask.originalTitle='新的手账';
+  f.document.title='自动安排手帐';
+  const result=await applyBackgroundCreativeResult({...f,persist:async()=>{}});
+  assert.equal(result.project.title,'后台完成的标题');
+});
+test('a later human project name is not replaced by the AI heading',async()=>{
+  const f=await fixture();f.project.creativeTask.originalTitle='新的手账';f.project.title='我的周末';
+  await applyBackgroundCreativeResult({...f,persist:async()=>{}});
+  assert.equal(f.project.title,'我的周末');
+});
+test('title choice prefers a real heading and ignores body copy or parked text',()=>{
+  assert.equal(generatedProjectTitle({layers:[
+    {id:'body',type:'text',content:'今天走了很长的路，沿途看到很多风景。',fontSize:20},
+    {id:'title-L',type:'text',content:'先出发，再想',fontSize:52},
+    {id:'title-old',type:'text',content:'旧标题',fontSize:80,isParked:true}
+  ]}),'先出发，再想');
+  assert.equal(generatedProjectTitle({layers:[{id:'body',type:'text',content:'一段普通正文',fontSize:20}]}),null);
+  assert.equal(generatedProjectTitle({layers:[{id:'heading',type:'text',content:'今天出发！',fontSize:48}]}),'今天出发！');
 });
 test('reopening subscribes to the same job and closing observers never cancels the server',async()=>{
   const f=await fixture();f.job.progress={turns:7,inputTokens:1200,outputTokens:360};let hooks,cancels=0,stops=0,owner='account',updates=[];

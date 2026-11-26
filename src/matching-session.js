@@ -10,6 +10,7 @@ import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,cr
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
 import {isBlankEditableProject} from './editor-exit-policy.js';
+import {generatedProjectTitle,shouldApplyGeneratedTitle} from './creative-project-title.js';
 const ID='matching-session-v1';
 const KEYS=['matchCreationMode','basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchPlacements','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchPurpose','recommendFilter'];
 export function creativeCompletionText(startedAt,completedAt=new Date().toISOString(),usage=null){
@@ -67,7 +68,7 @@ export function createMatchingSession(c){
    const owner=account();
    void c.backgroundCreation.resume(v.project,progressFor(v,owner)).then(async result=>{
      if(account()!==owner||!result)return;
-     v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt,result.usage);await save();update();
+     v.project=result.project;v.title=result.project.title;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt,result.usage);await save();update();
    }).catch(async error=>{if(account()!==owner)return;v.status='failed';v.progress=error.message;await save();await discardFailedBlank(v);update();});
  };
 
@@ -153,7 +154,7 @@ export function createMatchingSession(c){
     await save();ensureAccount();
     if(mode==='edit'){
       const result=await c.backgroundCreation.generate({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,prompt:p.intent||'',onProgress:progressFor(v,account()),signal:run.signal});
-      ensureAccount();v.project=result.project;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt,result.usage);await save();update();return;
+      ensureAccount();v.project=result.project;v.title=result.project.title;v.linkedProjectID=result.project.id;v.status='completed';v.completedAt=result.completedAt||new Date().toISOString();v.progress=creativeCompletionText(v.createdAt,v.completedAt,result.usage);await save();update();return;
     }
     if(mode!=='edit'){
      let snapshot=referenceSnapshot;
@@ -190,6 +191,8 @@ export function createMatchingSession(c){
     ensureAccount();
     if(mode==='hybrid'&&!output.draft?.layers?.length)throw Error('重建未产生可编辑图层；原始成图已保留，未保存空候选');
     await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode='tools';
+    if(shouldApplyGeneratedTitle(p))p.title=generatedProjectTitle(output.draft)||p.title;
+    v.title=p.title;
     if(mode==='hybrid'){v.project=p;v.linkedProjectID=null;v.progress+='\n已生成可编辑候选；原始成图独立保留，细节仍需核对。';}
     {v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
     v.status='completed';

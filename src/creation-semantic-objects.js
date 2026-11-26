@@ -11,7 +11,7 @@ export function compileTitleOperations({titles}){
    error.message=error.message.replaceAll('widthMm','size.width').replaceAll('fontSizePt','style.fontSizePt');
    throw error;
   }
-  return {op:'group.compose',id:parameters.id,layoutBox:{width:title.width,height:title.height,unit:'mm'},place,order,children:title.children};
+  return {op:'group.compose',id:parameters.id,layoutBox:{width:title.width,height:Math.max(title.height,size.height||0),unit:'mm'},place,order,children:title.children};
  });
 }
 
