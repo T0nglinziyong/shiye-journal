@@ -34,9 +34,10 @@ async function arrange(f){
 
 test('optional tools are discoverable, persistent across phases and restricted to host capabilities',async()=>{
   const available=availableHarnessTools();
-  assert.equal(selectHarnessTools(available).length,10);
+  assert.equal(selectHarnessTools(available).length,8);
+  assert.ok(!available.some(tool=>tool.function.name==='creation_recipe'));
   assert.ok(!available.some(tool=>tool.function.name==='creation_guide'));
-  assert.ok(!JSON.stringify(harnessToolCatalog(available)).includes('segment_material'));
+  assert.ok(!JSON.stringify(harnessToolCatalog(available)).includes('segment'));
   const f=await fixture();
   const result=await f.call('creation_help',{topics:['workspace_create','read_template']});
   assert.equal(result.ok,true);
@@ -44,12 +45,11 @@ test('optional tools are discoverable, persistent across phases and restricted t
   const restored=JSON.parse(JSON.stringify(f.state));
   for(const phase of ['direction','layout','craft','accents','review']){
     const names=selectHarnessTools(available,{...restored,phase}).map(tool=>tool.function.name);
-    assert.ok(names.includes('knowledge'));assert.ok(names.includes('workspace'));
-    assert.ok(!names.includes('segment_material'));
+    assert.ok(names.includes('knowledge'));assert.ok(!names.includes('workspace'));
+    assert.ok(!names.includes('segment'));
   }
-  assert.equal((await f.call('workspace_create',{id:'experiment',title:'试摆'})).ok,true);
-  assert.equal((await f.call('segment_material',{alias:'invented',box:[0,0,1,1]})).ok,false);
-  assert.equal((await f.call('creation_help',{topics:['segment_material']})).ok,true);
+  assert.equal((await f.call('segment',{method:'extract',alias:'invented',box:[0,0,1,1]})).ok,false);
+  assert.equal((await f.call('creation_help',{topics:['segment']})).ok,true);
 });
 
 for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCreativeHarness]])test(`${name} sends only discovered tools to the model`,async()=>{
@@ -58,14 +58,40 @@ for(const [name,create] of [['LangGraph',createCreativeHarness],['Pi',createPiCr
   const harness=create({skills,model:async({tools})=>{
     const names=tools.map(tool=>tool.function.name);
     if(++turns===1){
-      assert.equal(names.length,10);assert.ok(names.includes('creation_apply'));assert.ok(names.includes('knowledge'));
+      assert.equal(names.length,8);assert.ok(names.includes('creation_apply'));assert.ok(names.includes('knowledge'));
       return {message:{role:'assistant',content:null,tool_calls:[{id:'discover',type:'function',function:{name:'knowledge',arguments:'{"action":"help","topics":["read_template"]}'}}]}};
     }
-    assert.ok(names.includes('knowledge'));assert.ok(names.includes('workspace'));
+    assert.ok(names.includes('knowledge'));assert.ok(!names.includes('workspace'));
     throw Error('discovery request verified');
   }});
   await assert.rejects(harness.run({id:'discovery-'+name,state:initialHarnessState({document,skills,brief:{}})}),/discovery request verified/);
   assert.equal(turns,2);
+});
+
+test('a recipe and ordinary canvas edits share one atomic apply transaction',async()=>{
+ const f=await fixture();
+ assert.equal((await f.call('creation_plan',{intent:'用圈注连接图形和文字'})).ok,true);
+ const revision=creationSceneRevision(f.state.document);
+ const result=await f.call('creation_apply',{transactionId:'recipe-batch',baseSceneRevision:'current',operations:[
+  {op:'create',kind:'paper',id:'base',size:{width:55,height:60},style:{fill:'#F0E6D4'},place:{reference:'page',at:[40,40]}},
+  {op:'recipe',methodId:'graphic-loop',params:{id:'ring',size:{width:22,height:22},place:{reference:'page',at:[55,55]}}}
+ ]});
+ assert.equal(result.ok,true,result.detail);
+ assert.notEqual(creationSceneRevision(f.state.document),revision);
+ assert.ok(f.state.document.page.layers.some(node=>node.id==='base'));
+});
+
+test('an invalid recipe rejects the entire mixed canvas batch before any edit commits',async()=>{
+ const f=await fixture();
+ assert.equal((await f.call('creation_plan',{intent:'测试同批回滚'})).ok,true);
+ const revision=creationSceneRevision(f.state.document);
+ const result=await f.call('creation_apply',{transactionId:'recipe-invalid',baseSceneRevision:'current',operations:[
+  {op:'create',kind:'paper',id:'would-be-created',size:{width:40,height:50},style:{fill:'#F0E6D4'},place:{reference:'page',at:[40,40]}},
+  {op:'recipe',methodId:'unknown-method',params:{id:'invalid'}}
+ ]});
+ assert.equal(result.ok,false);
+ assert.equal(creationSceneRevision(f.state.document),revision);
+ assert.ok(!f.state.document.page.layers.some(node=>node.id==='would-be-created'));
 });
 
 test('reference search exposes returned readers without another discovery round',async()=>{

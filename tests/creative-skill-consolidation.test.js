@@ -8,6 +8,7 @@ import {initialHarnessState} from '../creative-agent/runtime/agent.mjs';
 import {createCreationDocument} from '../src/creation-document.js';
 import {applyCreationTransaction,creationSceneRevision} from '../src/creation-transaction.js';
 import {draft} from '../src/domain.js';
+import {colorfulScrapbookSkill} from '../creative-agent/runtime/style-skill.mjs';
 import {creativeKnowledge} from '../creative-agent/runtime/creative-knowledge.mjs';
 import {modelContext} from '../creative-agent/runtime/context.mjs';
 
@@ -64,22 +65,31 @@ test('all creative knowledge is available before any skill call and survives sna
   const document=await createCreationDocument({draft:draft(),assets:[]});
   const state=initialHarnessState({document,skills,brief:{style:'清新'}});
   const prompt=state.messages[0].content;
-  assert.ok(prompt.includes('不必先逐个 knowledge(action=skill) overview'));
-  assert.ok(prompt.includes('create(kind=text'));
-  assert.ok(prompt.includes('可选增强'));
-  assert.ok(prompt.includes('复杂拆字或笔画技巧再读 journal-lettering'));
+  assert.ok(prompt.includes('你是拾页的手帐创作者'));
+  assert.ok(prompt.includes('画布操作合同（由执行定义生成）'));
+  assert.ok(prompt.includes('纸张、标题、正文、图形与层序都由统一的 creation_apply'));
   assert.ok(prompt.length<100000);
   for(const method of ['create','update','split','ungroup'])assert.ok(prompt.includes(method));
   assert.equal(state.loadedSkills.length,0);
   assert.equal(state.messages[1].content[0].text,publicCanvasText(creativeKnowledge));
-  for(const topic of ['一起安排纸、图和字','从素材簇建立纸层','选择关系','正文的真实排版检查','数字也可以成为构图对象','从真实案例提取的层次','按素材选择结构'])assert.ok(creativeKnowledge.includes(topic));
+  for(const topic of ['对角与 Z 形','纸张','标题','点缀'])assert.ok(creativeKnowledge.includes(topic));
   const original=JSON.stringify(state.messages.slice(0,2));
   const observations=[0,1].map(n=>({role:'user',content:[{type:'text',text:'当前真实画面：'+n},{type:'image_url',image_url:{url:'preview-'+n}}]}));
   const out=modelContext([...state.messages,...observations]);
   assert.equal(JSON.stringify(out.slice(0,2)),original);
   assert.equal(out.filter(m=>Array.isArray(m.content)).flatMap(m=>m.content).filter(p=>p.text===publicCanvasText(creativeKnowledge)).length,1);
-  assert.ok(creativeKnowledge.length>10000,'retain concrete creative examples, not a topic summary');
-  assert.ok(!creativeKnowledge.includes('methodCatalog'));
+  assert.ok(creativeKnowledge.length>1100,'retain actionable creative knowledge, not a topic list');
+});
+
+test('style lesson retains concrete methods and visual review criteria',()=>{
+ const p0=colorfulScrapbookSkill({variant:'p0'}),p1=colorfulScrapbookSkill({variant:'p1'});
+ assert.equal(p1,p0);
+ assert.match(p1,/Intermediate|初稿/);
+ assert.match(p1,/创作过程与完成度/);
+ assert.match(p1,/中尺度的字群、日期数字/);
+ assert.match(p1,/规整分栏中的越界元素/);
+ assert.match(p1,/日期、地点及编号只在有依据时使用/);
+ assert.match(p1,/必须用的素材要在成品中有效可见/);
 });
 
 

@@ -36,7 +36,7 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
  const next=structuredClone(node),s=sceneScale(page);
  Object.assign(next,styleFor(node.type,change.style,page,node));
  if(change.content!==undefined){if(node.type!=='text')throw Error('content 只适用于文字');next.content=change.content;}
- if(change.name!==undefined){if(node.type!=='group')throw Error('name 只适用于组合');next.name=change.name;}
+ if(change.name!==undefined)next.name=change.name;
  if(change.hidden!==undefined){next.hidden=change.hidden;next.isHidden=change.hidden;if(!change.hidden){next.isParked=false;next.workspaceId='page';}}
  if(change.place?.surface){next.workspaceId=change.place.surface;next.isParked=change.place.surface!=='page';if(next.isParked){next.hidden=false;next.isHidden=false;}}
  if(change.locked!==undefined){next.isLocked=change.locked;next.locked=change.locked;}

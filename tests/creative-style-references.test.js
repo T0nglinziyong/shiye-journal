@@ -34,7 +34,7 @@ test('private style references are hash checked, direction scoped and attached o
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('new creative context keeps shared knowledge and examples before task data',async()=>{
+test('live P creative context keeps shared knowledge, task, and reference images in their original order',async()=>{
  const {draft}=await import('../src/domain.js');
  const {createCreationDocument}=await import('../src/creation-document.js');
  const {loadCreationSkills}=await import('../creative-agent/runtime/skills.mjs');
@@ -45,10 +45,36 @@ test('new creative context keeps shared knowledge and examples before task data'
  assert.match(fixed,/画布操作合同（由执行定义生成）/);
  assert.ok(!fixed.includes('写今天的手帐'));
  attachStyleReferences(state,{records:[{file:'case.png'}],parts:[{type:'text',text:'案例学习重点'},{type:'image_url',image_url:{url:'data:image/png;base64,example'}}]});
- assert.equal(state.messages.length,2);
+ assert.equal(state.messages.length,3);
  assert.match(state.messages[1].content[0].text,/通用创作知识/);
- assert.equal(state.messages[1].content[1].text,'案例学习重点');
- assert.equal(state.messages[1].content[2].type,'image_url');
- assert.match(state.messages[1].content[3].text,/本次任务/);
- assert.ok(!state.messages[1].content[3].text.includes('匹配的案例参考'));
+ assert.match(state.messages[1].content[1].text,/本次任务/);
+ assert.match(state.messages[1].content[1].text,/匹配的案例参考/);
+ assert.equal(state.messages[2].content[0].text,'案例学习重点');
+ assert.equal(state.messages[2].content[1].type,'image_url');
+});
+
+test('P1 adds case-specific observation before its image while P0 keeps only the image',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'shiye-style-case-'));
+ try{
+  await writeFile(join(root,'D143.png'),tinyPNG);
+  await writeFile(join(root,'manifest.json'),JSON.stringify({version:1,styles:['自动安排'],references:[{file:'D143.png',sha256:'sha256:'+createHash('sha256').update(tinyPNG).digest('hex')}]}));
+  const p0=await loadStyleReferences({root,styles:['自动安排'],variant:'p0'});
+  const p1=await loadStyleReferences({root,styles:['自动安排'],variant:'p1'});
+  assert.equal(p0.parts.length,2);
+  assert.equal(p1.parts.length,3);
+  assert.match(p1.parts[1].text,/Q1\/Q2\/Q3/);
+  assert.equal(p1.parts[2].type,'image_url');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('five-single reference set includes all single pages and omits spread examples',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'shiye-five-single-'));
+ try{
+  const files=['D143.png','D146.png','D153.png','D158.png','D162.png','white-pink.png'];
+  for(const file of files)await writeFile(join(root,file),tinyPNG);
+  await writeFile(join(root,'manifest.json'),JSON.stringify({version:1,styles:['自动安排'],references:files.map(file=>({file,sha256:'sha256:'+createHash('sha256').update(tinyPNG).digest('hex')}))}));
+  const refs=await loadStyleReferences({root,styles:['自动安排'],referenceSet:'five_single'});
+  assert.deepEqual(refs.records.map(row=>row.file),files.slice(0,5));
+  assert.equal(refs.parts.filter(part=>part.type==='image_url').length,5);
+ }finally{await rm(root,{recursive:true,force:true});}
 });

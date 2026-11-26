@@ -93,20 +93,21 @@ def main():
         output = Path(job["output"])
         source_bytes = source.read_bytes()
         source_image = Image.open(source)
+        material_scope = job.get("scope") in ("material", "material-foreground", "material-detect-all")
         material_prompt = job.get("scope") == "material" and job.get("box") is not None
-        if job.get("scope") not in (None, "material") or (job.get("scope") == "material" and not material_prompt):
-            raise ValueError("Material segmentation requires a box prompt")
-        if material_prompt:
+        if job.get("scope") not in (None, "material", "material-foreground", "material-detect-all") or (job.get("scope") == "material" and not material_prompt) or (job.get("scope") in ("material-foreground", "material-detect-all") and job.get("box") is not None):
+            raise ValueError("Invalid material segmentation method or box")
+        if material_scope:
             rgba = source_image.convert("RGBA")
             background = Image.new("RGBA", rgba.size, "white")
             image = np.array(Image.alpha_composite(background, rgba).convert("RGB"), copy=True)
         else:
             image = np.array(source_image.convert("RGB"), copy=True)
         height, width = image.shape[:2]
-        if min(width, height) < (32 if material_prompt else 600) or width * height > (4_000_000 if material_prompt else 20_000_000):
+        if min(width, height) < (32 if material_scope else 600) or width * height > (4_000_000 if material_scope else 20_000_000):
             raise ValueError("SAM image size is out of bounds")
         ratio = width / height
-        if not material_prompt and min(abs(ratio - 297 / 210), abs(ratio - 210 / 297)) > .05:
+        if not material_scope and min(abs(ratio - 297 / 210), abs(ratio - 210 / 297)) > .05:
             raise ValueError("Input is not a corrected A4 page")
         if model_size not in cache:
             cache[model_size] = build_sam2(config, str(root / "checkpoints" / checkpoint),
@@ -145,7 +146,7 @@ def main():
                 mask, _, _ = largest_connected_component(masks[best] > 0)
                 if hybrid:
                     mask = smooth_mask(mask)
-                if material_prompt:
+                if material_scope:
                     mask &= np.asarray(rgba)[:, :, 3] >= 128
                     mask, _, _ = largest_connected_component(mask)
                 candidates = [{"segmentation": mask, "soft_logits": masks[best],
@@ -213,6 +214,8 @@ def main():
                     min(item["bbox_xyxy"][1] for item in group),
                     min(item["bbox_xyxy"][0] for item in group)))
             def packed_object(mask, logits=None):
+                if material_scope:
+                    mask = mask & (np.asarray(rgba)[:, :, 3] >= 128)
                 ys, xs = np.nonzero(mask)
                 if not len(xs):
                     return None
@@ -222,7 +225,7 @@ def main():
                         "maskBits": base64.b64encode(packed.tobytes()).decode("ascii"),
                         "maskAlphaZlib": encode_mask_alpha(mask[y0:y1, x0:x1],
                             logits[y0:y1, x0:x1] if logits is not None else None)}
-                if material_prompt:
+                if material_scope:
                     # Source-relative contours retain holes and are used by the
                     # same physical cut validator as manual editable cutouts.
                     contours, hierarchy = cv2.findContours(mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)

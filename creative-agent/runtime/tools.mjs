@@ -1,4 +1,4 @@
-import {canvasOperationNames,canvasOperations,publicCanvasText} from './canvas-interface.mjs';
+import {canvasOperations,canvasOperationToolSchema,publicCanvasText} from './canvas-interface.mjs';
 import {titleTool} from './title-tool.mjs';
 import {paperTool} from './paper-tool.mjs';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
@@ -35,7 +35,12 @@ const engineTools=[...creationAgentTools.filter(t=>!['inspect_materials','creati
 }:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询已前置的操作/公共参数合同，供诊断重查；所有工具从第一轮可用，不需要先查询才能调用。'}}:tool),
   paperTool,
   titleTool,
-  custom('segment_material','在真实素材上给出 0–1 比例 xyxy 框，调用 SAM 查看候选裁片。只提议，不修改作品；先看彩色轮廓，再用 creation_apply_crops 裁切。',object({alias:{type:'string'},box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['alias','box'])),
+  custom('segment','AI 智能分割已放置的实体素材对象，原对象变成可编辑组合，返回组与成员 ID。extract 用 0–1 比例 xyxy box 提取指定对象；foreground 自动去背景并可保留多个前景主体；detect_all 检测多个独立对象并组织子组。主体保留原位，剩余区域保存在组内并隐藏；所有来源区域仍可编辑，不会复制实体素材。用 update 独立摆放组内成员。',{
+    oneOf:[
+      object({method:{const:'extract'},target:string,box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['method','target','box']),
+      object({method:{const:'foreground'},target:string},['method','target']),
+      object({method:{const:'detect_all'},target:string},['method','target'])
+    ]}),
   custom('creation_apply_crops','把已查看的分割提议批量应用到对应来源的已放置素材。与普通编辑一样原子校验、保留真实来源。',object({transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:sceneRevision,cuts:{type:'array',minItems:1,maxItems:12,items:object({proposalId:string,target:string,mode:{enum:['keep','remove']},resultId:string,keepRemainder:{type:'boolean'}},['proposalId','target','mode'])},decision:decisionField},['transactionId','baseSceneRevision','cuts'])),
   custom('read_skill','分层读取教程：overview 是专题判断与目录；methods 每次给最多 8 个简要用法；detail 给方法参数和示意图，detail 必须带 methodId，可直接跳到 detail；variant 只在 detail 使用。重复读取会恢复准确参数与当前版本示例。',object({name:{type:'string',pattern:'^[a-z0-9-]{1,64}$'},level:{enum:['overview','methods','detail']},methodId:{type:'string',maxLength:80},variant:{type:'string',maxLength:40},page:{type:'integer',minimum:0,maximum:20}},['name'])),
   custom('search_references','检索模板、技巧和电子手帐案例；仅借鉴构图、配色和对象关系。',object({query:{type:'string',maxLength:160},kind:{enum:['all','templates','techniques','cases']},styles:{type:'array',maxItems:6,items:string},content:{type:'array',maxItems:6,items:string},reference:{enum:['page','page.left','page.right']},limit:{type:'integer',minimum:1,maximum:8}})),
@@ -61,26 +66,26 @@ const engineTools=[...creationAgentTools.filter(t=>!['inspect_materials','creati
 // executable contract. A learned tool stays visible across phases/checkpoints.
 const groups=[
   {purpose:'参考案例、模板与写作选题',names:['read_case','read_template','search_writing_topics']},
-  {purpose:'重看素材总图、管理独立试摆空间',names:['workspace_view','workspace_create','workspace_close']},
-  {purpose:'分割真实素材并查看裁片提议',names:['segment_material','creation_apply_crops']},
+  {purpose:'AI 智能分割实体素材为可编辑组合',names:['segment']},
   {purpose:'额外记录阶段检查或画面意见',names:['creation_phase','creation_review']},
 ];
 
 export function availableHarnessTools({segmentMaterial}={}){
   return selectHarnessTools(harnessTools.filter(tool=>!['creation_guide','explore_drafts','select_draft'].includes(tool.function.name)&&
-    (segmentMaterial||!['segment_material','creation_apply_crops'].includes(tool.function.name))));
+    (segmentMaterial||!['segment','creation_apply_crops'].includes(tool.function.name))));
 }
 
 const queryRoutes={skill:'read_skill',search:'search_references',case:'read_case',template:'read_template',topics:'search_writing_topics',help:'creation_help'};
 const workspaceRoutes={create:'workspace_create',view:'workspace_view',close:'workspace_close'};
 const grouped=(name,routes,description)=>custom(name,description,{oneOf:Object.entries(routes).map(([action,target])=>{const original=engineTools.find(t=>t.function.name===target).function.parameters;return {...original,properties:{action:{const:action},...original.properties},required:['action',...(original.required||[])]};})});
-export const harnessTools=[...engineTools,grouped('knowledge',queryRoutes,'知识与参考查询：action=skill/search/case/template/topics/help；参数随 action 列全，可同轮多次调用。'),grouped('workspace',workspaceRoutes,'管理或查看工作空间：action=create/view/close。id=source 可重看素材总图。')];
-const publicNames=new Set(['creation_apply','creation_inspect','inspect_materials','knowledge','workspace','creation_recipe','creation_plan','creation_undo','creation_finish','creation_preview','segment_material','creation_apply_crops']);
+export const harnessTools=[...engineTools,grouped('knowledge',queryRoutes,'知识与参考查询：action=skill/search/case/template/topics/help；参数随 action 列全，可同轮多次调用。')];
+const publicNames=new Set(['creation_apply','creation_inspect','inspect_materials','knowledge','creation_plan','creation_undo','creation_finish','creation_preview','segment']);
 export function routeModelTool(name,args){const route=name==='knowledge'?queryRoutes:name==='workspace'?workspaceRoutes:null;if(!route)return {name,args};const {action,...rest}=args;if(!route[action])throw Error('未知 '+name+' action');return {name:route[action],args:rest};}
 export function selectHarnessTools(available){return available.filter(t=>publicNames.has(t.function.name)).map(t=>{
+ if(t.function.name==='creation_finish')return {...t,function:{...t.function,description:'看过最新真实预览并完成必要修改后提交作品。只需可选 summary；Scene 版本、预览和独立审查由运行时核验。必须是本轮最后一个调用。',parameters:object({summary:{type:'string',maxLength:1200}})}};
  if(t.function.name!=='creation_apply')return {...t,function:{...t.function,description:publicCanvasText(t.function.description)}};
  const result=structuredClone(t);result.function.description='画布对象批量操作，同一批按顺序原子执行；字段、示例和校验均来自固定上下文中的同一操作定义。支持 '+canvasOperations.map(({name})=>name).join('/')+'。';
- result.function.parameters.properties.operations.items={type:'object',properties:{op:{enum:canvasOperationNames}},required:['op'],additionalProperties:true};return result;
+ result.function.parameters.properties.operations.items=canvasOperationToolSchema();return result;
 });}
 
 export function harnessToolCatalog(available=harnessTools){

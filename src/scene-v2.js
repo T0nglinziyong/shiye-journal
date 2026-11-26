@@ -191,7 +191,7 @@ export function assertSceneEditable(d,id){
 export function sceneGroupMembers(d,id){return sceneLayerEntries(d,{hidden:true}).filter(e=>e.parents.some(g=>g.id===id));}
 export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合',layoutBox,allowReorder=false}={}){
  attachSceneV2(d);
- if(!Array.isArray(ids)||ids.length<2||ids.length>80||new Set(ids).size!==ids.length)throw Error('请选择 2–80 个不同图层进行编组');
+ if(!Array.isArray(ids)||ids.length<1||ids.length>80||new Set(ids).size!==ids.length)throw Error('请选择 1–80 个不同图层进行编组');
  if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||findSceneNode(d,id))throw Error('图层组编号无效或重复');
  const selected=ids.map(key=>scenePath(d.layers,key));
  if(selected.some(path=>!path))throw Error('编组包含不存在的图层');

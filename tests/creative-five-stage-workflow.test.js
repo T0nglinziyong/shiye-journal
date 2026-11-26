@@ -26,6 +26,9 @@ const previewOf=messages=>{
 
 test('direction starts with a plan while later modes remain flexible',()=>{
   const names=stage=>toolsForCreativePhase(harnessTools,stage).map(item=>item.function.name);
+  const planTool=harnessTools.find(item=>item.function.name==='creation_plan');
+  assert.match(planTool.function.description,/简记|构思/);
+  assert.match(phaseGuide('direction'),/一两句 intent 简记/);
   assert.ok(names('direction').includes('creation_apply'));
   assert.ok(names('layout').includes('read_template'));
   assert.ok(names('layout').includes('explore_drafts'));
