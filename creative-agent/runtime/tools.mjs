@@ -1,4 +1,4 @@
-import {canvasOperationNames,publicCanvasText} from './canvas-interface.mjs';
+import {canvasOperationNames,canvasOperations,publicCanvasText} from './canvas-interface.mjs';
 import {titleTool} from './title-tool.mjs';
 import {paperTool} from './paper-tool.mjs';
 import {creationAgentTools} from '../../src/creation-agent-session.js';
@@ -79,7 +79,7 @@ const publicNames=new Set(['creation_apply','creation_inspect','inspect_material
 export function routeModelTool(name,args){const route=name==='knowledge'?queryRoutes:name==='workspace'?workspaceRoutes:null;if(!route)return {name,args};const {action,...rest}=args;if(!route[action])throw Error('未知 '+name+' action');return {name:route[action],args:rest};}
 export function selectHarnessTools(available){return available.filter(t=>publicNames.has(t.function.name)).map(t=>{
  if(t.function.name!=='creation_apply')return {...t,function:{...t.function,description:publicCanvasText(t.function.description)}};
- const result=structuredClone(t);result.function.description='批量提交 8 种对象操作：create/update/copy/delete/group/ungroup/cut/split。创建纸张用 create(kind=paper,size,style.fill,texture,place)，标题和短句用 create(kind=text,content,size,style，可选 effect/layout/runs/backdrop)，圆星点缀用 create(kind=graphic,geometry.kind=ellipse/star,size,style.fill,place)；底色用 update(target=page.left 或 page.right,paperColor)，修改已有对象用 update(target,仅变化字段)。同一批原子执行。';
+ const result=structuredClone(t);result.function.description='画布对象批量操作，同一批按顺序原子执行；字段、示例和校验均来自固定上下文中的同一操作定义。支持 '+canvasOperations.map(({name})=>name).join('/')+'。';
  result.function.parameters.properties.operations.items={type:'object',properties:{op:{enum:canvasOperationNames}},required:['op'],additionalProperties:true};return result;
 });}
 

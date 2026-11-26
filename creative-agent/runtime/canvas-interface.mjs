@@ -154,6 +154,24 @@ export function canvasGuide(){
  return {conventions:{paperEdges:'纸张自身轻微不规则边缘用 style.paperSurface:{kind:"torn"}，创建和修改共用；它不是明显撕口。明显撕边属于裁切：先 create(kind=paper)，再 cut(method=edge,target=纸张ID,edge={style:"torn",edges:["bottom"],depthMm:1,seed:42})；同一 operations 批次按顺序执行，无需多等一轮。切成两片用 split，切口参数仍叫 edge，两片分别摆放。清除加工边用 cut(method=edge,edge={style:"clean"})，保留纸张自身质感。',opacity:'所有对象统一 style.opacity，0 完全透明、1 完全不透明；创建与修改相同，未写保留原值。硫酸纸与透明胶带均通过此字段表达透光，文字保持独立。',shadows:'创作工具不提供阴影；纸层用露边、纹理、透明度体现关系，文字可用描边和字后底形。',create:'新建无 place 进入 tray；组合内默认父组中心。',update:'只写变化字段；未写保持不变。',outputs:'pieces 使用 id/place/order；已有部分未给摆放保留原位。',placement:'place.at+unit 与 referenceAnchor 二选一；anchor 是目标锚点。相对距离用 reference:node:id、referenceAnchor、anchor 和 offset:{value:[x,y],unit:mm}。',batch:'同一轮返回的 tool_calls 按列表顺序逐个执行，等待前一个结束再执行下一个；不是并行执行。每个 creation_apply 内 operations 也按序执行，后项可引用前项 id；单次 apply 原子提交。某个工具失败后继续后续调用，后续仅能引用此前成功创建的对象。knowledge 加载也按调用顺序执行。'},definitions:Object.fromEntries([...used].map(n=>[n,definitions[n]])),operations:canvasOperations};
 }
 
+// Derive the compact model-facing guide from the same operation definitions
+// that validate and lower creation_apply. No second hand-maintained API manual.
+export function compactCanvasGuide(){
+ const full=canvasGuide();
+ const field=(name,schema)=>({name,
+  ...(schema.const!==undefined?{value:schema.const}:{}),
+  ...(schema.enum?{options:schema.enum}:{}),
+  ...(schema.description?{description:schema.description}:{}),
+  ...(schema.$ref?{definition:schema.$ref.split('/')[2]}:{})});
+ const variant=schema=>({required:schema.required||[],fields:Object.entries(schema.properties||{}).map(([name,value])=>field(name,value))});
+ return {
+  conventions:full.conventions,
+  definitions:Object.fromEntries(['Place','Size','Style','TitleStyle','Order','Edge','Region'].filter(name=>full.definitions[name]).map(name=>[name,full.definitions[name]])),
+  operations:canvasOperations.map(({name,summary,example,examples,parameters})=>({name,summary,example,examples,
+   variants:(parameters.oneOf||[parameters]).map(variant)}))
+ };
+}
+
 export function publicCanvasText(value){
  if(typeof value!=='string')return value;
  value=value.replaceAll('creation_paper','creation_apply 中的 create(kind=paper)').replaceAll('creation_title','creation_apply 中的 create(kind=text，可选 effect/layout/runs/backdrop)');

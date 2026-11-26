@@ -10,7 +10,7 @@ export async function loadStyleReferences({root=process.env.SHIYE_CREATIVE_REFER
   const directory=await realpath(root),manifest=JSON.parse(await readFile(resolve(directory,'manifest.json'),'utf8'));
   if(manifest.version!==1||!Array.isArray(manifest.styles)||!Array.isArray(manifest.references)||manifest.references.length>8)throw Error('创作参考清单无效');
   if(!styles.some(style=>manifest.styles.includes(style)))return {parts:[],records:[]};
-  const records=[],parts=[{type:'text',text:'以下是跨案例风格参考，只学习纸层、图文落点、色彩和点缀关系；不能将参考图当作可用素材，也不复制其中的文字或逐物位置。用户本次方向优先，按当前素材灵活组织。'}];
+  const records=[],parts=[{type:'text',text:'以下'+manifest.references.length+'张是创作案例，紧接通用知识供观察。比较每张的底色、主纸与大素材如何形成落点；纸片是深入叠压、对角呼应，还是分开放置并由字群、第三片纸或小素材连接。观察标题与正文落在纸内、纸间和背景的不同位置，以及圆星、胶带、人物怎样压住边缘、平衡重心；双页还看左右页的色彩与构图回应。首次 creation_plan.intent 简述适合本次素材的一种主要关系和一处可变化的次级关系；看过成品预览后再核对是否落实，不逐物临摹。案例图片不是可用素材，原文不能照搬；用户方向优先。'}];
   let total=0,modelBytes=0;
   for(const row of manifest.references){
     if(!/^[a-zA-Z0-9_-]+\.png$/.test(row.file)||!/^sha256:[a-f0-9]{64}$/.test(row.sha256))throw Error('创作参考路径或指纹无效');
@@ -33,7 +33,9 @@ export async function loadStyleReferences({root=process.env.SHIYE_CREATIVE_REFER
 }
 export function attachStyleReferences(state,references){
   if(state&&references.parts.length){
-    state.messages.push({role:'user',content:references.parts});
+    const knowledgeAndTask=state.messages[1];
+    if(Array.isArray(knowledgeAndTask?.content))knowledgeAndTask.content.splice(1,0,...references.parts);
+    else state.messages.push({role:'user',content:references.parts});
     state.styleReferences=references.records;
   }
   return state;

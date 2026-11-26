@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {publicToolData,canvasGuide,canvasOperations,validateCanvasOperations,lowerCanvasOperations} from '../creative-agent/runtime/canvas-interface.mjs';
+import {publicToolData,canvasGuide,compactCanvasGuide,canvasOperations,validateCanvasOperations,lowerCanvasOperations} from '../creative-agent/runtime/canvas-interface.mjs';
 import {availableHarnessTools,selectHarnessTools} from '../creative-agent/runtime/tools.mjs';
 import {createCreationAgentSession} from '../src/creation-agent-session.js';
 import {draft} from '../src/domain.js';
@@ -10,6 +10,18 @@ test('model sees eight operations and ten tools, without duplicate title/paper e
  assert.deepEqual(tools.find(t=>t.function.name==='creation_apply').function.parameters.properties.operations.items.properties.op.enum,canvasOperations.map(x=>x.name));
  assert.ok(JSON.stringify(canvasGuide()).length<60000);
  assert.throws(()=>validateCanvasOperations([{op:'paper.add'}]),/未知/);
+});
+test('the concise prompt contract is generated from the executable operations',()=>{
+ const guide=compactCanvasGuide();
+ assert.deepEqual(guide.operations.map(({name})=>name),canvasOperations.map(({name})=>name));
+ for(const operation of canvasOperations){
+  const shown=guide.operations.find(({name})=>name===operation.name);
+  assert.equal(shown.summary,operation.summary);
+  assert.deepEqual(shown.example,operation.example);
+  assert.deepEqual(shown.examples,operation.examples);
+ }
+ assert.ok(JSON.stringify(guide).length<24000);
+ assert.ok(JSON.stringify(guide).length<JSON.stringify(canvasGuide()).length/2);
 });
 test('advanced text controls and one combined title example are available in the initial guide',()=>{
  const guide=canvasGuide();
