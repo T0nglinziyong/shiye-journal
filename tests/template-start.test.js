@@ -20,14 +20,22 @@ test('manual creation ranks real templates and preserves physical material sizes
   assert.equal(draft.startTemplateID,choices[0].id);
   assert.equal(new Set(draft.items.map(item=>item.assetID)).size,draft.items.length);
   assert.ok(draft.items.every(item=>Number.isFinite(item.x)&&Number.isFinite(item.y)));
+  for(const item of draft.items){
+    const source=materials.find(asset=>asset.id===item.assetID);
+    assert.ok(Math.abs(item.width/draft.canvas.height*draft.physicalPageHeightMM-source.physicalWidthMM)<.01);
+    assert.ok(Math.abs(item.height/draft.canvas.height*draft.physicalPageHeightMM-source.physicalHeightMM)<.01);
+  }
   assert.ok(draft.primitives.length>0);
-  assert.equal(draft.layers[0].type,'group');
+  assert.ok(draft.layers.length>1);
+  assert.ok(draft.layers.some(layer=>layer.type==='material'));
+  await assert.rejects(()=>applyManualTemplate(draft,materials,['photo'],'center-1'),/旧模板已下线匹配/);
 });
 
 test('template element view uses the exact layout passed to the creation tool',()=>{
   const catalog=executableJournalTemplates();
-  assert.equal(catalog.length,78);
-  assert.equal(catalog.filter(template=>template.isCallable).length,59);
+  assert.equal(catalog.length,92);
+  assert.equal(catalog.filter(template=>template.type==='new').length,14);
+  assert.equal(catalog.filter(template=>template.isCallable).length,14);
   assert.ok(catalog.every(template=>!template.exampleImagePath&&!template.exampleIsReference));
   const item=catalog.find(template=>template.id==='center-1');
   const layout=journalTemplateComposition(item);
@@ -35,4 +43,8 @@ test('template element view uses the exact layout passed to the creation tool',(
   assert.strictEqual(layout.elements,item.elements);
   assert.ok(layout.elements.every(element=>element.box.length===4));
   assert.equal(journalTemplateComposition({id:'journal-template:custom',origin:'user'}),null);
+  const current=catalog.find(template=>template.id==='D143');
+  const active=journalTemplateComposition(current);
+  assert.equal(active.type,'new');
+  assert.ok(active.elements.some(element=>element.must.length&&element.prefer.length));
 });

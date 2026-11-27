@@ -55,7 +55,7 @@ export function validateLettering(group){
  // Reparenting/deleting a child is a valid ordinary edit. Reflow, not loading,
  // requires the original title structure to still be intact.
  if(!l.style||typeof l.style!=='object'||Array.isArray(l.style))throw Error('艺术标题默认样式无效');
- const allowed=['fillOpacity','opacity','blendMode','shadow','outline','gradient','color','fontSizePt','fontFamily','fontPreset','fontWeight','textAlign','italic','underline','strikethrough','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm','lineHeight'];
+ const allowed=['fillOpacity','opacity','blendMode','shadow','outline','backing','gradient','color','fontSizePt','fontFamily','fontPreset','fontWeight','textAlign','italic','underline','strikethrough','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm','lineHeight'];
  if(Object.keys(l.style).some(k=>!allowed.includes(k))||l.slots.some(id=>typeof id!=='string'||id.length>192))throw Error('艺术标题默认样式或字位身份无效');
  for(const [key,min,max] of [['fontSizePt',1,400],['fillOpacity',0,1],['opacity',0,1],['letterSpacingMm',-100,100],['paragraphSpacingMm',0,100],['lineSpacingMm',0,100],['curveHeightMm',-80,80],['lineHeight',.1,10]])if(l.style[key]!==undefined&&!(Number.isFinite(l.style[key])&&l.style[key]>=min&&l.style[key]<=max))throw Error('艺术标题默认样式无效：'+key);
  return true;

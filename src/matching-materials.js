@@ -1,4 +1,4 @@
-import {templateMarginalScores} from '../creative-agent/library/matcher.js';
+import {currentTemplateMaterialScores} from '../creative-agent/library/current-templates.js';
 import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 import {classifyJournalMaterial,relevantJournalFamilies} from './journal-case-study.js';
 const purposeKinds={
@@ -153,7 +153,7 @@ export function scoreRecommendationCandidates({assets=[],basket=[],styles=[],pur
  // larger. All candidates retain their full semantic recommendation scores.
  if(pageSize){
   const shortlist=scored.length<=96?scored:[...scored].sort((a,b)=>b.score-a.score||a.asset.id.localeCompare(b.asset.id)).slice(0,96);
-  const templateScores=templateMarginalScores({selected,candidates:shortlist.map(row=>row.asset),paper:pageSize,styles,content:[intent,...purposes]});
+  const templateScores=currentTemplateMaterialScores(shortlist.map(row=>row.asset));
   for(const row of shortlist){
    const fit=templateScores.get(row.asset.id);row.templateFit=fit||null;
    if(!(fit?.utility>0))continue;

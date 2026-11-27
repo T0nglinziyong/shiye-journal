@@ -30,7 +30,7 @@ export function sameMaterialCutoutAndSize(exported,current){
    craftDigest([a.processingRecord,a.sourceSilhouette,a.orientation])===
    craftDigest([b.processingRecord,b.sourceSilhouette,b.orientation]);
 }
-const semanticFields=['kindDetail','secondaryRoles','contentCategories','layoutFits','contentTags','themeTags','styleTags','colorTags','materialTags','moodTags','description'];
+const semanticFields=['kindDetail','secondaryRoles','contentCategories','layoutFits','contentTags','themeTags','styleTags','colorTags','materialTags','moodTags','description','templateUseNotes'];
 const semanticMetadata=value=>Object.fromEntries(semanticFields.filter(key=>value[key]!==undefined).map(key=>[key,structuredClone(value[key])]));
 export function materialSourceSnapshot(asset){
  return {assetID:asset.id,sourceRevision:assetSourceRevision(asset),descriptor:assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,

@@ -9,7 +9,7 @@ const words=text=>String(text||'').toLocaleLowerCase().match(/[\p{Script=Han}]{2
 export function presetJournalTemplates(){
   return journalAbstractTemplates.map(item=>{
     const family=families.get(item.caseId);
-    return {...item,origin:'preset',styles:[...family.styles],purposes:[...family.purposes],
+    return {...item,origin:'preset',type:'old',styles:[...family.styles],purposes:[...family.purposes],
       tags:unique([family.title,...family.styles,...family.purposes,...family.materialWords,...words(item.title),...words(item.structure).filter(word=>word.length<=6)]),
       exampleImage:family.image,exampleTitle:family.title};
   });
@@ -21,7 +21,7 @@ export function normalizeUserTemplate(value){
   if(!title||!structure)throw Error('请填写模板名称和结构说明');
   const tags=unique(Array.isArray(value.tags)?value.tags:[]).slice(0,24),styles=unique(Array.isArray(value.styles)?value.styles:[]).slice(0,8),purposes=unique(Array.isArray(value.purposes)?value.purposes:[]).slice(0,8);
   if(!tags.length)throw Error('请至少填写一个检索标签');
-  return {id:value.id,origin:'user',title,structure,tags,styles,purposes,caseId:null,
+  return {id:value.id,origin:'user',type:'mine',title,structure,tags,styles,purposes,caseId:null,
     templateBlobId:value.templateBlobId||null,exampleBlobId:value.exampleBlobId||null,
     createdAt:value.createdAt||new Date().toISOString(),updatedAt:value.updatedAt||new Date().toISOString()};
 }

@@ -1,9 +1,8 @@
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import manifest from '../../creative-agent/library/illustrations/manifest.json' with {type:'json'};
-import {templateCatalog,rankTemplates,scoreTemplate,templateEnabled} from '../../creative-agent/library/matcher.js';
-import {compileTemplate} from '../../creative-agent/library/compiler.js';
-import {templateFixture,isTextSlot,isGraphicElement} from '../../creative-agent/library/template-elements.js';
+import {templateCatalog} from '../../creative-agent/library/matcher.js';
+import {listCurrentTemplates,currentTemplate,rankCurrentTemplates,compileCurrentTemplate} from '../../creative-agent/library/current-templates.js';
 import {compileTechnique,techniqueCatalog} from '../../creative-agent/library/techniques.js';
 import digitalCaseCatalog from '../../creative-agent/library/digital-cases.json' with {type:'json'};
 import xhsCaseCatalog from '../../creative-agent/library/xhs-cases.json' with {type:'json'};
@@ -11,7 +10,8 @@ import {assetFromSourceSnapshot} from '../../src/material-anatomy.js';
 import {inspectCreationDocument} from '../../src/creation-inspection.js';
 const imageCache=new Map();
 const digitalJournalCases=[...xhsCaseCatalog.cases,...digitalCaseCatalog.cases];
-export const libraryVersion=createHash('sha256').update(JSON.stringify([manifest,templateCatalog,techniqueCatalog,digitalCaseCatalog,xhsCaseCatalog])).digest('hex');
+export const libraryVersion=createHash('sha256').update(JSON.stringify([manifest,templateCatalog,
+ listCurrentTemplates().map(({id,elements})=>[id,elements.length]),techniqueCatalog,digitalCaseCatalog,xhsCaseCatalog])).digest('hex');
 export async function recipeImages(ids){
  const result=[];
  for(const id of ids){
@@ -36,7 +36,8 @@ export function libraryContext(document,reference='page'){
 export function matchLibraryTemplates(document,{aliases,reference='page',limit=5}={}){
  const context=libraryContext(document,reference);
  if(aliases){if(new Set(aliases).size!==aliases.length||aliases.some(a=>!context.materials.some(m=>m.alias===a)))throw Error('素材已放置或不在本次授权范围');context.materials=context.materials.filter(m=>aliases.includes(m.alias));}
- return rankTemplates({...context,materials:context.materials.map(material=>({alias:material.alias,physicalWidthMM:material.physicalWidthMM,physicalHeightMM:material.physicalHeightMM})),limit}).map(row=>({...row,reference,paper:context.paper}));
+ return rankCurrentTemplates({materials:context.materials,pageMode:document.page.pageMode,
+  paper:context.paper,limit}).map(({template,plan,...row})=>({...row,reference,paper:context.paper}));
 }
 const normalized=value=>String(value||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
 const similar=(a,b)=>normalized(a).includes(normalized(b))||normalized(b).includes(normalized(a));
@@ -53,14 +54,19 @@ function relevance(query,fields){
 export function searchLibraryReferences(document,{query='',kind='all',styles=[],content=[],reference='page',limit=6,includeTemplates=true}={}){
  const context=libraryContext(document,reference),results=[];
  if(!['all','templates','techniques','cases'].includes(kind))throw Error('未知参考类型');
- if(includeTemplates&&['all','templates'].includes(kind))for(const template of templateCatalog.templates.filter(templateEnabled)){
+ const rankedCurrent=includeTemplates&&['all','templates'].includes(kind)?
+  rankCurrentTemplates({materials:context.materials,pageMode:document.page.pageMode,limit:14}):[];
+ if(includeTemplates&&['all','templates'].includes(kind))for(const template of listCurrentTemplates().filter(t=>t.pageMode===document.page.pageMode)){
   if(styles.length&&!styles.some(style=>template.styles.some(value=>normalized(value).includes(normalized(style))||normalized(style).includes(normalized(value)))))continue;
-  if(content.length&&!content.some(term=>template.content.some(value=>normalized(value).includes(normalized(term))||normalized(term).includes(normalized(value)))))continue;
-  const source=templateCatalog.sources.find(source=>source.id===template.sourceId);
-  const match=relevance(query,[['title',[template.title],35],['style',template.styles,25],['content',template.content,20],['family',[template.family],10],['source',[source?.title,source?.author],7]]);
+  if(content.length&&!content.some(term=>template.purposes.some(value=>normalized(value).includes(normalized(term))||normalized(term).includes(normalized(value)))))continue;
+  const match=relevance(query,[['title',[template.title],35],['style',template.styles,25],['content',template.purposes,20],['structure',[template.structure],10]]);
   if(query&&!match.hits.length&&match.overlap<.25)continue;
-  const fit=scoreTemplate(template,context.materials.map(material=>({alias:material.alias,physicalWidthMM:material.physicalWidthMM,physicalHeightMM:material.physicalHeightMM})),context.paper,{styles:context.styles,content}),score=Math.round(match.score+fit.score*.25);
-  results.push({kind:'template',id:template.id,title:template.title,score,why:{matched:match.hits,materialFit:Math.round(fit.score),paperAspect:Math.round(fit.components.aspect*100)},styles:template.styles,content:template.content,source:{id:source?.id,title:source?.title,author:source?.author,url:source?.url},readWith:{tool:'read_template',id:template.id}});
+  const fit=rankedCurrent.find(row=>row.id===template.id);
+  const score=Math.round(match.score+(fit?.score||0)*.25);
+  results.push({kind:'template',id:template.id,title:template.title,score,
+    why:{matched:match.hits,materialFit:Math.round(fit?.score||0)},styles:template.styles,
+    content:template.purposes,source:{id:template.id,title:'量测模板'},
+    readWith:{tool:'read_template',id:template.id}});
  }
  if(['all','techniques'].includes(kind))for(const method of techniqueCatalog.methods){
   if(styles.length||content.length)continue;
@@ -106,13 +112,12 @@ export function matchJournalCases(document,{limit=3}={}){
  return searchLibraryReferences(document,{kind:'cases',limit}).results;
 }
 export function templateDetails(id){
+ const active=currentTemplate(id);
+ if(active)return {id:active.id,title:active.title,available:true,styles:active.styles,
+  source:null,slots:active.elements.map(({id,role,box,must,prefer,accepts,sizeMm})=>({
+   id,role,box,must,prefer,accepts,sizeMm})),parameters:{},palette:null};
  const template=templateCatalog.templates.find(t=>t.id===id);if(!template)throw Error('未知模板');
- if(!templateEnabled(template))return {id:template.id,title:template.title,available:false,reason:template.usage.reason};
- return {...template,available:true,source:templateCatalog.sources.find(s=>s.id===template.sourceId),
-  example:templateFixture(template),
-  slots:template.elements.map(e=>({id:e.id,role:e.role,box:e.box,rotation:e.rotation||0,input:isTextSlot(e)?'text-or-material-or-group':isGraphicElement(e)?'digital-graphic':'material-or-group',whenUnassigned:e.contentFor?'only-with-content:'+e.contentFor:isGraphicElement(e)?isTextSlot(e)?'writing-guide':'keep-digital-graphic':'blank',omitWith:'omit',...(e.render?.textBox?{textBox:e.render.textBox}:{})})),
-  parameters:{textStyles:'可选 {位置ID:{fontSizePt,fontFamily,textAlign,lineHeight}}；字号为当前纸张实际 pt，不再随纸张重复缩放，仍受区域大小限制',colors:'可选模板 palette 名称到 HEX 的覆盖，只改变数字图形和文字',omit:'可选省略的元素 ID 数组；可删除数字底卡、书写线或指定位置',id:'新组合 ID',reference:'page/page.left/page.right',aliases:'自动匹配的素材范围，或显式绑定的授权子集',bindings:'省略此参数才自动匹配；提供数组时只放指定位置，未绑定素材位置留空；[] 表示不放任何素材。格式 [{slotId,alias}] 或 [{slotId,node}]；node 可复用已有标题组，实体保持原尺寸，不裁切成示意图形状',title:'可选标题，只放 primaryTitle 指定位置；该位置已占用或省略时报告未放置，不挤进编号、引号或日期。其他标题用 texts 指定',texts:'可选 {文字位置ID:完整文字}；正文替换书写引导线。文字随纸张比例调整，有限缩字号；report.textLayout/warnings 返回溢出。不要把 example.texts 当用户内容'},
-  tool:{name:'creation_recipe',arguments:{kind:'template',recipeId:id,transactionId:'unique-id',baseSceneRevision:'当前版本',parameters:{id:'layout',reference:'page'}}}};
+ return {id:template.id,title:template.title,available:false,reason:'旧模板已下线匹配，仍可在模板库查看'};
 }
 export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
  if(kind==='technique'){
@@ -120,13 +125,15 @@ export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
   return compileTechnique({methodId:recipeId,parameters,materials});
  }
  if(kind!=='template')throw Error('未知配方类型');
+ if(currentTemplate(recipeId)){
+  const context=libraryContext(document,parameters.reference||'page');
+  if(currentTemplate(recipeId).pageMode!==document.page.pageMode)throw Error('模板与单页／双页模式不一致');
+  return compileCurrentTemplate({templateId:recipeId,assets:context.materials,
+   bindings:Object.fromEntries((parameters.bindings||[]).map(({slotId,alias})=>[slotId,alias])),
+   slotValues:Object.fromEntries((parameters.bindings||[]).map(({slotId})=>[slotId,{fit:'none'}])),
+   texts:parameters.texts||{},palette:parameters.colors||{}});
+ }
  const template=templateCatalog.templates.find(t=>t.id===recipeId);
- if(template&&!templateEnabled(template))throw Error('模板暂未启用：'+template.usage.reason);
- for(const key of Object.keys(parameters))if(!['id','reference','aliases','bindings','title','texts','textStyles','colors','omit'].includes(key))throw Error('模板不支持参数：'+key);
- const context=libraryContext(document,parameters.reference);
- if(parameters.aliases){if(!Array.isArray(parameters.aliases)||new Set(parameters.aliases).size!==parameters.aliases.length||parameters.aliases.some(a=>!context.materials.some(m=>m.alias===a)))throw Error('素材已放置或不在本次授权范围');context.materials=context.materials.filter(m=>parameters.aliases.includes(m.alias));}
- if(parameters.bindings!==undefined){if(!Array.isArray(parameters.bindings)||parameters.bindings.length>50)throw Error('绑定格式无效');for(const b of parameters.bindings)if(!b||Object.keys(b).some(k=>!['slotId','alias','node'].includes(k)))throw Error('绑定参数无效');}
- if(parameters.title!==undefined&&(typeof parameters.title!=='string'||parameters.title.length>500))throw Error('标题格式无效');
- if(parameters.texts!==undefined&&(!parameters.texts||Array.isArray(parameters.texts)||typeof parameters.texts!=='object'||Object.values(parameters.texts).some(t=>typeof t!=='string'||t.length>1500)))throw Error('文字位置格式无效');
- return compileTemplate({...context,...parameters,templateId:recipeId});
+ if(template)throw Error('旧模板已下线匹配，仍可在模板库查看');
+ throw Error('未知模板');
 }

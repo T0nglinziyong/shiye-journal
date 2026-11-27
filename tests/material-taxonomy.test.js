@@ -50,6 +50,20 @@ test('AI description is factual metadata and a user edit cannot be overwritten',
   edited.description);
  assert.equal(applyAIClassification(base,{...suggestion,descriptionConfidence:.4}).description,undefined);
 });
+test('template substitution notes use the existing asset record and respect user edits',()=>{
+ const base={...initialMaterialClassification({kind:'paper'}),title:'格纹纸'};
+ const ai={modelVersion:'deepseek-flash',kind:{id:'paper',confidence:.9},
+  role:{id:'background',confidence:.9},templateUseNotes:'连续格纹可裁切；左侧留白可写字。',
+  templateUseNotesConfidence:.88};
+ const analyzed=applyAIClassification(base,ai);
+ assert.equal(analyzed.templateUseNotes,ai.templateUseNotes);
+ assert.equal(analyzed.templateUseNotesEvidence.source,'ai');
+ const edited={...analyzed,templateUseNotes:'完整保留格纹。',
+  templateUseNotesEvidence:{source:'user',confidence:1}};
+ assert.equal(applyAIClassification(edited,ai).templateUseNotes,'完整保留格纹。');
+ assert.equal(applyAIClassification(base,{...ai,templateUseNotesConfidence:.4}).templateUseNotes,undefined);
+ assert.equal(applyAIClassification(analyzed,{...ai,templateUseNotes:''}).templateUseNotes,'');
+});
 test('AI descriptions directly describe the material without scene prefaces or transitions',()=>{
  const base={...initialMaterialClassification({kind:'sticker'}),title:'花朵贴纸'};
  const suggestion={modelVersion:'deepseek-flash',kind:{id:'sticker',confidence:.9},

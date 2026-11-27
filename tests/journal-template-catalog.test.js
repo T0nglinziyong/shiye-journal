@@ -47,16 +47,12 @@ test('manual template indexes participate in AI selection and guide without pret
   assert.match(journalAbstractTemplateGuide(chosen),/用户导入模板，有配对案例/);
 });
 
-test('AI reference bundle includes both uploaded template and paired case, separate from physical materials',async()=>{
+test('AI template selection uses only measured new templates',async()=>{
   const custom=normalizeUserTemplate({id:USER_TEMPLATE_PREFIX+'paired',title:'茶饮票根轴',structure:'主图、票根与文字沿阅读轴错列。',tags:['茶饮','票根','路线'],styles:['旅行票据'],purposes:['旅途记录'],templateBlobId:'diagram',exampleBlobId:'finished'});
-  const originalFetch=globalThis.fetch,originalReader=globalThis.FileReader;
-  globalThis.fetch=async()=>({ok:true,blob:async()=>new Blob([new Uint8Array([137,80,78,71,1])],{type:'image/png'})});
-  globalThis.FileReader=class{readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result=`data:${blob.type};base64,${Buffer.from(bytes).toString('base64')}`;this.onload?.();});}};
-  try{
-    const db={previewBlob:async id=>new Blob([id],{type:id==='finished'?'image/jpeg':'image/png'})};
-    const result=await loadJournalTemplateReferences({context:{styles:['旅行票据'],purposes:['旅途记录'],materials:[{title:'茶饮票根',tags:['路线']}]},userTemplates:[custom],db,encodeReference:async()=>new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32])});
-    assert.ok(result.selectedTemplates.some(entry=>entry.id===custom.id));
-    assert.deepEqual(result.referenceImages.filter(entry=>entry.id.startsWith(custom.id)).map(entry=>entry.kind),['template','case']);
-    assert.ok(result.referenceImages.every(entry=>entry.bytes.length>0&&entry.url.startsWith('data:image/webp;')&&entry.extension==='webp'));
-  }finally{globalThis.fetch=originalFetch;globalThis.FileReader=originalReader;}
+  const result=await loadJournalTemplateReferences({context:{pageMode:'spread',
+    styles:['旅行票据'],purposes:['旅途记录'],materials:[{title:'茶饮票根',tags:['路线']}]},
+    userTemplates:[custom],includeImages:false});
+  assert.equal(result.selectedTemplates.length,3);
+  assert.ok(result.selectedTemplates.every(entry=>entry.type==='new'&&entry.pageMode==='spread'));
+  assert.ok(result.selectedTemplates.every(entry=>entry.id!==custom.id));
 });

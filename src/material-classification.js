@@ -22,7 +22,10 @@ export function validateMaterialClassification(record){
     record.secondaryRoles.some(role=>!isMaterialRole(role)||role===record.role)||
     !Array.isArray(record.contentCategories)||record.contentCategories.some(id=>!isContentCategory(id))||
     !Array.isArray(record.layoutFits)||record.layoutFits.some(id=>!isLayoutFit(id))||
-    TAG_FIELDS.some(key=>!validTags(record[key])))throw Error('素材分类或标签不符合当前字典');
+    TAG_FIELDS.some(key=>!validTags(record[key]))||
+    (record.templateUseNotes!==undefined&&
+      (typeof record.templateUseNotes!=='string'||record.templateUseNotes.length>300)))
+    throw Error('素材分类或标签不符合当前字典');
   return record;
 }
 export function initialMaterialClassification({kind='other',role='focal',tags=[]}={}){
@@ -101,6 +104,15 @@ export function applyAIClassification(old,result,{minConfidence=.7,allowMigratio
     result.descriptionConfidence<=1&&old.descriptionEvidence?.source!=='user'){
     next.description=description;
     next.descriptionEvidence={source:'ai',confidence:result.descriptionConfidence,modelVersion:result.modelVersion};
+  }
+  if(typeof result.templateUseNotes==='string'&&result.templateUseNotes.length<=300&&
+    old.templateUseNotesEvidence?.source!=='user'){
+    const note=result.templateUseNotes.trim(),confidence=result.templateUseNotesConfidence;
+    if(!note||Number.isFinite(confidence)&&confidence>=minConfidence&&confidence<=1){
+      next.templateUseNotes=note;
+      next.templateUseNotesEvidence={source:'ai',confidence:note?confidence:0,
+        modelVersion:result.modelVersion};
+    }
   }
   next.categoryEvidence=categoryEvidence;next.tagEvidence=tagEvidence;
   next.autoOrganized=true;

@@ -169,6 +169,19 @@
 .journal-template-element.role-background{background:#d7e2d6a8;border-color:#8ca58a}
 .journal-template-element.role-accent,.journal-template-element.role-decoration,.journal-template-element.role-marker,.journal-template-element.role-connector,.journal-template-element.role-divider{background:#eeaa91bb;border-color:#c57962;color:#743b30}
 .journal-template-elements-caption{position:absolute;bottom:5px;left:0;right:0;color:#708173;font-size:11px;text-align:center}
+.journal-template-element:is(button){padding:2px;cursor:pointer;font-family:inherit}
+.journal-template-element.selected{outline:2px solid #294f67;outline-offset:1px}
+.journal-template-detail .journal-template-elements-view{display:flex;flex-direction:column;align-items:center;gap:10px;min-height:380px;height:auto;padding-bottom:28px}
+.journal-template-detail .journal-template-elements-page{width:100%;height:auto;min-height:320px}
+.journal-template-slot-inspector{width:100%;padding:2px 4px 20px;color:#42534b;font-size:12px;text-align:left}
+.journal-template-slot-list{display:flex;gap:5px;overflow-x:auto;padding:4px 0 8px}
+.journal-template-slot-list button{flex:none;border:1px solid #c4d2c7;border-radius:12px;background:#fbfcf8;padding:5px 8px;color:#40564a;font-size:11px}
+.journal-template-slot-list button.selected{background:#d9e9dc;border-color:#638c71}
+.journal-template-slot-conditions{border-top:1px solid #e0e7df;padding:9px 2px 0;line-height:1.55}
+.journal-template-slot-conditions p{margin:5px 0}
+.journal-template-card .journal-template-elements-view{padding:5px;height:100%;min-height:0;overflow:hidden}
+.journal-template-card .journal-template-elements-page{width:100%;height:100%;box-shadow:none}
+.journal-template-card .journal-template-elements-caption{display:none}
 @media(max-width:680px){.journal-template-detail-card.detail-page{padding:8px 0 90px}.journal-template-detail-card .detail-columns{display:grid;grid-template-columns:1fr;gap:16px}.journal-template-preview{max-width:none}.journal-template-detail-card .detail-copy{padding:0 2px}.journal-template-preview .journal-template-switch .btn{font-size:12px}}
 
 .matching-page .match-direction,

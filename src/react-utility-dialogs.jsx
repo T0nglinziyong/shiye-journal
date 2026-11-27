@@ -105,9 +105,12 @@ export function ManualLayoutDialog({choices,source,onClose,onChoose}){
   const choose=async id=>{if(busy)return;setBusy(true);setError('');try{await onChoose(id);onClose();}catch(cause){setError('创建草稿失败：'+cause.message);setBusy(false);}};
   return <Dialog title="从模板开始" onClose={onClose} closeId="manual-layout-cancel" className="manual-layout-dialog">
     <h2>从模板开始</h2>
-    <p>根据素材尺寸、作用与纸张比例推荐。预览包含模板底形和装饰；虚线素材位与文字位留空。</p>
+    <p>根据素材真实尺寸、视觉作用与单页／双页结构推荐新模板。模板会生成可编辑纸张、文字和点缀。</p>
     <div className="manual-layout-choices">{choices.map((item,index)=><button type="button" key={item.id} disabled={busy} className="manual-layout-choice" data-manual-template={item.id} onClick={()=>void choose(item.id)}>
-      {item.template?<span className="manual-template-preview" aria-hidden="true">{item.template.elements.filter(slot=>isTextSlot(slot)||item.assignments.some(row=>row.slotId===slot.id)||item.emptySlots.includes(slot.id)||slot.render?.kind==='graphic'&&(!slot.contentFor||item.assignments.some(row=>row.slotId===slot.contentFor))).map(slot=>{
+      {item.template?.type==='new'?<span className="manual-template-preview" aria-hidden="true" style={{aspectRatio:item.template.aspect}}>
+        {item.template.elements.map(slot=><span key={slot.id} className={`manual-template-slot ${item.assignments.some(row=>row.slotId===slot.id)?'filled':'missing'}`}
+          style={{left:`${slot.box[0]*100}%`,top:`${slot.box[1]*100}%`,width:`${slot.box[2]*100}%`,height:`${slot.box[3]*100}%`}}/>)}</span>:
+      item.template?<span className="manual-template-preview" aria-hidden="true">{item.template.elements.filter(slot=>isTextSlot(slot)||item.assignments.some(row=>row.slotId===slot.id)||item.emptySlots.includes(slot.id)||slot.render?.kind==='graphic'&&(!slot.contentFor||item.assignments.some(row=>row.slotId===slot.contentFor))).map(slot=>{
         const assigned=item.assignments.find(row=>row.slotId===slot.id);
         const asset=item.selected.find(row=>row.id===assigned?.alias);
         const graphic=slot.render?.kind==='graphic';

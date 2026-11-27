@@ -17,7 +17,7 @@ const contracts={
  creation_apply:object({protocolVersion:{const:2},transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:{type:'string',pattern:'^sha256:[a-f0-9]{64}$'},operations:{type:'array',description:'每项必须有 op。创建节点用 id，修改已有节点用 target；其余字段按 creation_help 的精确命令合同。一次先提交几项有共同构图目的的操作，后续可继续提交。',minItems:1,maxItems:200,items:{type:'object',properties:{op:{type:'string',enum:creationOperationSpecs.map(spec=>spec.name)}},required:['op'],additionalProperties:true}}},['protocolVersion','transactionId','baseSceneRevision','operations']),
  creation_help:object({topics,full:{type:'boolean'}}),
  creation_guide:object({topics}),
- creation_inspect:object({ids:topics,full:{type:'boolean'}}),
+ creation_inspect:object({ids:topics,full:{type:'boolean'},textLines:{type:'boolean',description:'可选；对指定文字返回每行的字形可见边界（页面毫米），便于将细荧光笔贴在字行下方。'}}),
  inspect_materials:object({keys:{...topics,minItems:1}},['keys']),
  creation_finish:object({sceneRevision:{type:'string',pattern:'^sha256:[a-f0-9]{64}$'},summary:{type:'string',maxLength:1200}},['sceneRevision'])
 };
@@ -25,7 +25,7 @@ const descriptions={
  creation_apply:'一次原子提交统一 Command；初次构图与局部修改都用它。创建用 id，修改已有对象用 target；新增或更新节点的位置写 place，布局调整用 layout 系列命令。先合批几项有共同目的的操作，再继续编辑；复杂操作用 creation_help 查询。失败整批不生效，同 transactionId 重试不重复添加。',
  creation_help:'按需查看操作或公共参数合同；topics 为空返回能力目录。不要猜参数或一次阅读全部 Schema。',
  creation_guide:'按需查看共用创作方法或风格专题；topics 为空列出目录。',
- creation_inspect:'读取当前 Scene 版本、世界毫米位置、图层及高级参数；ids 可限定对象，full 可读取完整原生字段。',
+ creation_inspect:'读取当前 Scene 版本、世界毫米位置、图层及高级参数；ids 可限定对象，full 可读取完整原生字段；textLines 可返回文字逐行字形边界以对齐荧光笔等细节。',
  inspect_materials:'查看素材别名或已放置裁片的真实局部图片与尺寸；只读。',
  creation_finish:'请求交付当前 Scene；必须是本轮最后调用且前序调用全部成功。系统校验并真实渲染后才完成。'
 };
