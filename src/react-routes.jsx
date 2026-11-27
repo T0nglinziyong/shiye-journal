@@ -49,7 +49,7 @@ import {presetJournalTemplates,templateIndexText} from './journal-template-catal
 import {executableJournalTemplates,journalTemplateComposition} from './journal-template-composition.js';
 import {journalTemplateImageURL,saveJournalUserTemplate} from './journal-template-data.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
-import {loadJournalPresetPanel} from './journal-preset-images.js';
+import {loadJournalPresetPanel,loadJournalTemplateCase} from './journal-preset-images.js';
 import {ImportCandidateDialog} from './react-import-candidate-dialog.jsx';
 import {SettingsDiagnosticsDialog} from './react-ai-diagnostics.jsx';
 import {ReactSelectionTray} from './react-selection-tray.jsx';
@@ -270,11 +270,10 @@ export function RecentlyDeletedPage({kind,state,source,localCover,loadLocalCover
 const splitTemplateTags=value=>[...new Set(String(value||'').split(/[,，、\n]/)
   .map(part=>part.trim()).filter(Boolean))];
 
+const journalTemplateHasCase=item=>!!(item?.exampleBlobId||item?.exampleImagePath||
+  item?.examplePresetPath||item?.exampleSourceNumbers?.length);
+
 function JournalTemplateVisual({item,side='template',db,accountId,detail=false}){
-  if(item.type==='new'&&side==='template')return detail?<JournalTemplateElements
-    composition={journalTemplateComposition(item)} interactive={false}/>:
-    <div className="card-image"><JournalTemplateElements
-      composition={journalTemplateComposition(item)} interactive={false}/></div>;
   const host=useRef(null);
   const [visible,setVisible]=useState(detail);
   const [attempt,setAttempt]=useState(0);
@@ -296,9 +295,11 @@ function JournalTemplateVisual({item,side='template',db,accountId,detail=false})
     if(staticPath){setURL(staticPath);setError('');return;}
     const id=side==='case'?item.exampleBlobId:item.templateBlobId;
     const panel=journalTemplatePanel(item,side);
-    if(!id&&!panel){setError('图片暂不可用');return;}
+    const presetPath=side==='case'?item.examplePresetPath:null;
+    if(!id&&!panel&&!presetPath){setError('图片暂不可用');return;}
     setURL('');setError('');
     void (id?journalTemplateImageURL(db,accountId,id,detail?null:480):
+      presetPath?loadJournalTemplateCase(presetPath,{accountId}):
       loadJournalPresetPanel(panel,{accountId,edge:detail?null:480}))
       .then(result=>{if(!result)throw Error('图片暂不可用');if(active)setURL(result);})
       .catch(issue=>{if(active)setError(issue.message||'图片暂不可用');});
@@ -317,11 +318,15 @@ function JournalTemplateVisual({item,side='template',db,accountId,detail=false})
 }
 
 const templateRoleName={focal:'主视觉',secondary:'辅助图',background:'底纸',information:'信息区',
-  accent:'装饰',decoration:'图形装饰',material:'素材位',marker:'标记',connector:'连接',divider:'分隔',title:'标题',text:'正文'};
+  accent:'装饰',decoration:'图形装饰',material:'素材位',marker:'标记',connector:'连接',divider:'分隔',title:'标题',text:'正文',
+  paper:'纸张',photo:'照片',figure:'异形主体',tape:'胶带',strip:'纸条',circle:'圆形点缀',graphic:'图形',number:'数字',
+  'backing-paper':'底层纸张','generated-graphic':'图形装饰','writing-card':'书写卡','printed-card':'印刷卡'};
 const templateKindName={photo:'照片',sticker:'贴纸',paper:'纸张',card:'卡片',ticket:'票据',
-  note:'便签',tape:'胶带',stamp:'印章',text:'文字',decoration:'装饰'};
+  note:'便签',tape:'胶带',stamp:'印章',text:'文字',decoration:'装饰',figure:'异形主体',
+  'plain-paper':'纯色纸','pattern-paper':'花纹纸','writing-card':'书写卡','printed-card':'印刷卡',
+  'date-card':'日期卡','support-card':'衬卡',accent:'点缀',strip:'纸条',clip:'夹子'};
 function JournalTemplateElements({composition,interactive=true}){
-  const [activeID,setActiveID]=useState(null);
+  const [activeID,setActiveID]=useState(()=>composition.elements[0]?.id??null);
   const active=composition.elements.find(element=>element.id===activeID);
   return <div className="journal-template-detail-image journal-template-elements-view"
     data-tool-template-id={composition.toolTemplateId}>
@@ -430,11 +435,11 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
     else if(listScroll.current!==null){window.scrollTo(0,listScroll.current);listScroll.current=null;}
   },[selectedID]);
   const choose=item=>{listScroll.current=window.scrollY;setSelectedID(item.id);viewState.templateID=item.id;
-    const first=item.type==='new'?'elements':'template';setSide(first);viewState.templateSide=first;};
+    setSide('template');viewState.templateSide='template';};
   const found=catalog.filter(item=>{
     const query=filters.query.trim().toLocaleLowerCase();
     const typeOK=filters.type==='all'||filters.type===item.type;
-    const hasCase=!!(item.exampleBlobId||item.exampleImagePath||item.exampleSourceNumbers?.length);
+    const hasCase=journalTemplateHasCase(item);
     const statusOK=filters.status==='all'||filters.status==='with-case'&&hasCase||
       filters.status==='without-case'&&!hasCase;
     return typeOK&&statusOK&&(!query||templateIndexText(item).includes(query));
@@ -455,7 +460,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
     ['排序顺序',order==='asc'?'↑':'↓',order,[['desc','降序'],['asc','升序']],
       value=>change({sort:basis+'-'+value})]
   ];
-  const available=selected&&!!(selected.exampleBlobId||selected.exampleImagePath||selected.exampleSourceNumbers?.length);
+  const available=journalTemplateHasCase(selected);
   const composition=journalTemplateComposition(selected);
   const activeSide=(side==='case'&&!available)||(side==='elements'&&!composition)?'template':side;
   const showCase=activeSide==='case';
@@ -510,7 +515,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
           <JournalTemplateVisual item={item} db={db} accountId={state.accountId}/>
           <div className="card-body"><h3>{item.title}</h3>
             <p>{item.type==='new'?'新模板':item.type==='mine'?'我的模板':'旧模板'}{' · '}
-              {item.exampleIsReference?'有案例参考':item.exampleBlobId||item.exampleImagePath||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p>
+              {item.exampleIsReference?'有案例参考':journalTemplateHasCase(item)?'有对应案例':'暂无案例'}</p>
             <div className="journal-template-tags">{item.tags.slice(0,3).map(tag=><span
               className="chip" key={tag}>{tag}</span>)}</div></div>
         </button>):<p className="empty">没有匹配的模板，试试其他标签。</p>}</>}
