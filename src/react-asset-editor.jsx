@@ -15,7 +15,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const previewRef=useRef(null),[previewSize,setPreviewSize]=useState({width:0,height:0});
   const sourceImage=useRef(null),[sourceSize,setSourceSize]=useState(null);
   const [sourceLoaded,setSourceLoaded]=useState(0);
-  const [form,setForm]=useState({title:asset.title,description:asset.description||'',kind:asset.kind,kindDetail:asset.kindDetail||'',
+  const [form,setForm]=useState({title:asset.title,description:asset.description||'',
+    templateUseNotes:asset.templateUseNotes||'',kind:asset.kind,kindDetail:asset.kindDetail||'',
     role:asset.role,secondaryRoles:asset.secondaryRoles||[],contentCategories:asset.contentCategories||[],
     layoutFits:asset.layoutFits||[],width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
     rotation:asset.processingRecord?.displayRotationDegrees??0,
@@ -163,6 +164,9 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           {field('名称','title')}
           <label>详细描述<textarea id="asset-description" rows="3" maxLength="500"
             value={form.description} onChange={event=>set('description',event.target.value)}/></label>
+          <label>替换与裁切说明<textarea id="asset-template-use-notes" rows="3" maxLength="300"
+            placeholder="例如：人物轮廓应完整保留；右侧有留白可写字；背景为连续纹样，可裁切。"
+            value={form.templateUseNotes} onChange={event=>set('templateUseNotes',event.target.value)}/></label>
           {select('素材类型','kind',materialKinds)}
           {select('具体类型','kindDetail',[['','待细分'],...materialKindDetails.filter(([, ,parent])=>parent===form.kind)])}
           {multiple('画面作用','roles',materialRoles)}

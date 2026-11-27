@@ -25,6 +25,7 @@ function currentEffects(node,s){
  const outline=node.type==='text'?node.textOutline:node.graphicOutline;
  return {
   ...(outline?{outline:{color:outline.color,widthMm:outline.width/s,offsetMm:[outline.offsetX/s,outline.offsetY/s]}}:{}),
+  ...(node.type==='text'&&node.textBacking?{backing:{kind:node.textBacking.kind,color:node.textBacking.color,paddingMm:node.textBacking.padding/s}}:{}),
   ...((node.type==='text'?node.textGradient:node.graphicGradient)?{gradient:structuredClone(node.type==='text'?node.textGradient:node.graphicGradient)}:{}),
   ...(node.shadow?{shadow:{color:node.shadow.color,offsetMm:[node.shadow.offsetX/s,node.shadow.offsetY/s],blurMm:node.shadow.blur/s}}:{}),
   ...(node.paperSurface?{paperSurface:Object.fromEntries(Object.entries(node.paperSurface).filter(([key])=>key!=='unitScale'))}:{})
@@ -58,7 +59,7 @@ export function expandCreationUpdate(page,id,change){
  }
  if(change.style){
   const existing=currentEffects(node,s);out.style={...change.style};
-  for(const key of ['outline','gradient','shadow','paperSurface'])if(change.style[key]&&existing[key])out.style[key]=merge(existing[key],change.style[key]);
+  for(const key of ['outline','backing','gradient','shadow','paperSurface'])if(change.style[key]&&existing[key])out.style[key]=merge(existing[key],change.style[key]);
  }
  if(change.geometry&&!change.geometry.kind){
   if(node.type!=='shape'||node.svgPaths)throw Error('省略 geometry.kind 只适用于当前预设图形');

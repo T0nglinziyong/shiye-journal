@@ -15,7 +15,7 @@ export function styleFor(type,style,page,node={}){
  if(!style)return {};
  const s=sceneScale(page),mapping={opacity:'opacity',blendMode:'blendMode',shadow:'shadow'};
  if(type==='material')mapping.flipHorizontal='isFlippedHorizontally';
- if(type==='text')Object.assign(mapping,{outline:'textOutline',gradient:'textGradient',fillOpacity:'fillOpacity',color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
+ if(type==='text')Object.assign(mapping,{outline:'textOutline',backing:'textBacking',gradient:'textGradient',fillOpacity:'fillOpacity',color:'color',fontSizePt:'fontSize',widthScale:'textWidthScale',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
  if(['shape','ink'].includes(type))Object.assign(mapping,{outline:'graphicOutline',gradient:'graphicGradient'});
  if(type==='shape')Object.assign(mapping,{paperSurface:'paperSurface',fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{stroke:'color',strokeWidthMm:'width',penStyle:'penStyle'});
@@ -25,7 +25,7 @@ export function styleFor(type,style,page,node={}){
  if(type==='text'&&Object.hasOwn(style,'fontPreset')&&!Object.hasOwn(style,'fontFamily'))result.fontName=null;
  for(const [key,value] of Object.entries(style)){
   if(type==='ink'&&(key==='stroke'&&value===null||key==='strokeWidthMm'&&!(value>0)))throw Error('笔迹需要非空 stroke 和正 strokeWidthMm');
-  result[mapping[key]]=key==='paperSurface'?(value===null?null:{intensity:.45,seed:17,...structuredClone(value),unitScale:s}):key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
+  result[mapping[key]]=key==='paperSurface'?(value===null?null:{intensity:.45,seed:17,...structuredClone(value),unitScale:s}):key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='backing'?(value===null?null:{kind:value.kind,color:value.color,padding:value.paddingMm*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':
    key==='lineHeight'?value*(style.fontSizePt===undefined?(node.fontSize||12*25.4/72*s):style.fontSizePt*25.4/72*s):
    ['strokeWidthMm','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'].includes(key)?value*s:
    key==='shadow'?(value===null?null:{offsetX:value.offsetMm[0]*s,offsetY:value.offsetMm[1]*s,blur:value.blurMm*s,color:value.color}):value;

@@ -53,6 +53,16 @@ test('generated paper splits and remains independently editable after serializat
  assert.deepEqual(node('a').vectorMask,mask);assert.equal(node('b').fill,'#CADCE5');
  assert.deepEqual(JSON.parse(JSON.stringify(session.draft.layers)),session.draft.layers);
 });
+test('paper and material torn edges accept omitted seeds through the same command schema',async()=>{
+ const {apply,node}=await fixture();
+ await apply([
+  {op:'paper.add',id:'generated',size:{width:40,height:50,unit:'mm'},style:{fill:'#EDEBE4'},edge:{style:'torn',edges:['bottom']},place:position},
+  {op:'material.add',id:'source',asset:'m1',place:position},
+  {op:'material.edge',target:'source',edge:{style:'torn',edges:['top']}}
+ ]);
+ assert.ok(node('generated'));
+ assert.ok(node('source').materialSteps.some(step=>step.op==='edge'));
+});
 test('split angle and position are deterministic in local millimetres',()=>{
  for(const angle of [0,30,90,-45,180]){
   const [a,b]=splitLineGeometry({through:[.5,.5],unit:'ratio',rotationDeg:angle,edge:{style:'torn',seed:5}},80,100);

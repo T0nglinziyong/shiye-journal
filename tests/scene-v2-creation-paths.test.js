@@ -17,7 +17,8 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   const [choice]=manualTemplateChoices(manual,assets,['paper']);
   assert.ok(choice);
   assert.equal((await applyManualTemplate(manual,assets,['paper'],choice.id)).placed,1);
-  assert.equal(manual.layers.length,1);
+  assert.ok(manual.layers.length>1);
+  assert.ok(manual.layers.some(node=>node.type==='material'&&node.assetID==='paper'));
   const project={drafts:[structuredClone(manual)]},expected=structuredClone(project.drafts[0]);
   const generated=applyToolCalls([{name:'upsert_text',arguments:{items:[{key:'story',
     content:'一页故事',x:.5,y:.8,width:.45,font_size:24}]}}],
@@ -26,21 +27,21 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   commitAIDraft(project,{targetDraftID:manual.id,expectedDraft:expected,
     generatedDraft:generated.draft,newDraftID:'candidate'});
   const saved=attachSceneV2(project.drafts[0]);
-  assert.deepEqual(saved.layers.map(node=>node.type),['group','text']);
-  assert.ok(saved.layers[0].children.some(node=>node.type==='material'&&node.assetID==='paper'));
+  assert.equal(saved.layers.length,manual.layers.length+1);
+  assert.ok(saved.layers.some(node=>node.type==='material'&&node.assetID==='paper'));
 
-  const text=saved.layers.find(node=>node.type==='text');
+  const text=saved.layers.find(node=>node.type==='text'&&node.content==='一页故事');
   const bridge=createFabricSceneBridge(fabric);
   const projected=await bridge.fromNode(text);
   projected.set({text:'一页故事，继续编辑'});
   bridge.applyObject(testPage(text),projected,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(text.content,'一页故事，继续编辑');
-  assert.ok(saved.layers[0].children.some(node=>node.type==='material'&&node.assetID==='paper'));
+  assert.ok(saved.layers.some(node=>node.type==='material'&&node.assetID==='paper'));
   assert.equal(validateSceneExtensions(saved),true);
   const serialized=JSON.parse(JSON.stringify(saved));
   assert.equal(serialized.sceneVersion,2);
-  assert.equal(serialized.layers.length,2);
+  assert.equal(serialized.layers.length,manual.layers.length+1);
   for(const old of ['items','textBlocks','primitives','strokes','layerGroups'])
     assert.equal(Object.hasOwn(serialized,old),false,`${old} must not become parallel saved state`);
-  assert.equal(attachSceneV2(serialized).textBlocks[0].content,'一页故事，继续编辑');
+  assert.ok(attachSceneV2(serialized).textBlocks.some(block=>block.content==='一页故事，继续编辑'));
 });

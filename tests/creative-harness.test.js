@@ -11,6 +11,7 @@ import {createCreativeHarness,initialHarnessState,canonicalToolRevision} from '.
 import {loadCreationSkills} from '../creative-agent/runtime/skills.mjs';
 import {JournalCheckpointSaver,fileCheckpointJournal} from '../creative-agent/runtime/checkpoints.mjs';
 import {searchLibraryReferences,matchLibraryTemplates,templateDetails} from '../creative-agent/runtime/library.mjs';
+import {listCurrentTemplates} from '../creative-agent/library/current-templates.js';
 import {createDeepSeekCreativeModel} from '../creative-agent/runtime/deepseek.mjs';
 import {isManagedUnchanged} from '../src/craft-fingerprint.js';
 
@@ -230,7 +231,7 @@ test('rich layered spreads rank a layered reference above sparse diary cases',as
   assert.ok(cases.every(item=>item.why.pageMode==='spread'));
 });
 
-test('wrong source labels do not change the creative case and template shortlist',async()=>{
+test('template matching uses material metadata while keeping old templates out of the shortlist',async()=>{
   const asset={id:'sample',title:'同一素材',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:55};
   const original=await createCreationDocument({draft:draft({mode:'spread'}),assets:[asset],aliases:{m1:asset.id}});
   const misleading=structuredClone(original);
@@ -238,7 +239,10 @@ test('wrong source labels do not change the creative case and template shortlist
   const cases=document=>searchLibraryReferences(document,{kind:'cases',limit:5}).results.map(({id,score})=>({id,score}));
   assert.deepEqual(cases(original),cases(misleading));
   const templates=document=>matchLibraryTemplates(document,{limit:5}).map(({id,score})=>({id,score}));
-  assert.deepEqual(templates(original),templates(misleading));
+  const allowed=new Set(listCurrentTemplates().map(item=>item.id));
+  assert.ok(templates(original).every(item=>allowed.has(item.id)));
+  assert.ok(templates(misleading).every(item=>allowed.has(item.id)));
+  assert.notDeepEqual(templates(original),templates(misleading));
 });
 
 test('model stage declarations do not require previous stages to pass',async t=>{

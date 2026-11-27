@@ -271,6 +271,10 @@ const splitTemplateTags=value=>[...new Set(String(value||'').split(/[,，、\n]/
   .map(part=>part.trim()).filter(Boolean))];
 
 function JournalTemplateVisual({item,side='template',db,accountId,detail=false}){
+  if(item.type==='new'&&side==='template')return detail?<JournalTemplateElements
+    composition={journalTemplateComposition(item)} interactive={false}/>:
+    <div className="card-image"><JournalTemplateElements
+      composition={journalTemplateComposition(item)} interactive={false}/></div>;
   const host=useRef(null);
   const [visible,setVisible]=useState(detail);
   const [attempt,setAttempt]=useState(0);
@@ -316,7 +320,9 @@ const templateRoleName={focal:'主视觉',secondary:'辅助图',background:'底�
   accent:'装饰',decoration:'图形装饰',material:'素材位',marker:'标记',connector:'连接',divider:'分隔',title:'标题',text:'正文'};
 const templateKindName={photo:'照片',sticker:'贴纸',paper:'纸张',card:'卡片',ticket:'票据',
   note:'便签',tape:'胶带',stamp:'印章',text:'文字',decoration:'装饰'};
-function JournalTemplateElements({composition}){
+function JournalTemplateElements({composition,interactive=true}){
+  const [activeID,setActiveID]=useState(null);
+  const active=composition.elements.find(element=>element.id===activeID);
   return <div className="journal-template-detail-image journal-template-elements-view"
     data-tool-template-id={composition.toolTemplateId}>
     <div className="journal-template-elements-page" style={{aspectRatio:composition.aspect}}>
@@ -325,12 +331,27 @@ function JournalTemplateElements({composition}){
         const accepts=(element.accepts||[]).map(kind=>templateKindName[kind]||kind);
         const label=element.role==='material'||element.role==='focal'||element.role==='accent'?
           `${role}${accepts.length?` · ${accepts.slice(0,2).join('/')}`:''}`:role;
-        return <div key={element.id} className={`journal-template-element role-${element.role}`}
+        const Element=interactive&&composition.type==='new'?'button':'div';
+        return <Element key={element.id} type={Element==='button'?'button':undefined}
+          className={`journal-template-element role-${element.role}${activeID===element.id?' selected':''}`}
           data-slot-id={element.id} title={`${role} · ${element.id}${accepts.length?` · 可放${accepts.join('、')}`:''}`}
+          aria-label={Element==='button'?`${element.id}，${role}，查看替换条件`:undefined}
+          onClick={Element==='button'?()=>setActiveID(element.id):undefined}
           style={{left:`${x*100}%`,top:`${y*100}%`,width:`${w*100}%`,height:`${h*100}%`,zIndex:index+1}}>
-          {w*h>.025?<span>{label}</span>:w*h>.014?<span>{role}</span>:null}</div>;
+          {w*h>.025?<span>{label}</span>:w*h>.014?<span>{role}</span>:null}</Element>;
       })}
-    </div><span className="journal-template-elements-caption">工具 {composition.toolTemplateId} · {composition.elements.length} 个元素</span>
+    </div>{interactive&&composition.type==='new'?<div className="journal-template-slot-inspector">
+      <div className="journal-template-slot-list" aria-label="模板对象">
+        {composition.elements.map(element=><button type="button" key={element.id}
+          className={activeID===element.id?'selected':''}
+          onClick={()=>setActiveID(element.id)}>{element.id}</button>)}
+      </div>
+      {active?<div className="journal-template-slot-conditions"><strong>{active.id} · {templateRoleName[active.role]||active.role}</strong>
+        <p><b>必须满足</b>：{active.must?.join('；')||'保持此位置的对象作用与实物尺寸'}</p>
+        <p><b>建议满足</b>：{active.prefer?.join('；')||'与相邻对象配色、叠放呼应'}</p>
+      </div>:<p>点击画面对象或下方名称，查看可替代素材的条件。</p>}
+    </div>:null}
+    <span className="journal-template-elements-caption">{composition.toolTemplateId} · {composition.elements.length} 个元素</span>
   </div>;
 }
 
@@ -390,14 +411,15 @@ function DetailBackButton({children,onClick,...props}){
 export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
   const [filters,setFilters]=useState(()=>({query:'',status:'all',sort:'default-asc',
     ...(viewState.templateFilters||{}),
-    type:viewState.templateFilters?.type==='preset'?'tool':viewState.templateFilters?.type||'tool'}));
+    type:['new','old','mine','all'].includes(viewState.templateFilters?.type)?viewState.templateFilters.type:'new'}));
   const [selectedID,setSelectedID]=useState(viewState.templateID||null);
   const [side,setSide]=useState(viewState.templateSide||'template');
   const [importOpen,setImportOpen]=useState(false);
   const listScroll=useRef(null);
   const [,forceRefresh]=useState(0);
   const accountID=state.accountId;
-  const catalog=[...executableJournalTemplates(),...presetJournalTemplates().map(item=>({...item,origin:'reference'})),...(state.userTemplates||[])];
+  const catalog=[...executableJournalTemplates(),...presetJournalTemplates().map(item=>({...item,origin:'reference',type:'old'})),
+    ...(state.userTemplates||[]).map(item=>({...item,type:'mine'}))];
   const selected=catalog.find(item=>item.id===selectedID);
   const change=next=>{
     const value={...filters,...next};setFilters(value);viewState.templateFilters=value;
@@ -408,12 +430,10 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
     else if(listScroll.current!==null){window.scrollTo(0,listScroll.current);listScroll.current=null;}
   },[selectedID]);
   const choose=item=>{listScroll.current=window.scrollY;setSelectedID(item.id);viewState.templateID=item.id;
-    setSide('template');viewState.templateSide='template';};
+    const first=item.type==='new'?'elements':'template';setSide(first);viewState.templateSide=first;};
   const found=catalog.filter(item=>{
     const query=filters.query.trim().toLocaleLowerCase();
-    const typeOK=filters.type==='all'||filters.type==='tool'&&item.origin==='preset'||
-      filters.type==='reference'&&item.origin==='reference'||
-      filters.type==='user'&&item.origin==='user';
+    const typeOK=filters.type==='all'||filters.type===item.type;
     const hasCase=!!(item.exampleBlobId||item.exampleImagePath||item.exampleSourceNumbers?.length);
     const statusOK=filters.status==='all'||filters.status==='with-case'&&hasCase||
       filters.status==='without-case'&&!hasCase;
@@ -426,7 +446,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
   const basis=filters.sort.startsWith('name')?'name':'default';
   const order=filters.sort.endsWith('asc')?'asc':'desc';
   const controls=[
-    ['类型','▦',filters.type,[['tool','排版模板'],['reference','参考案例'],['user','我的模板'],['all','全部类型']],
+    ['类型','▦',filters.type,[['new','新模板'],['old','旧模板'],['mine','我的模板'],['all','全部类型']],
       value=>change({type:value})],
     ['状态','☷',filters.status,[['all','全部状态'],['with-case','有对应案例'],
       ['without-case','暂无案例']],value=>change({status:value})],
@@ -449,13 +469,13 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
       <div className="four-filter-controls">{controls.map(([heading,glyph,value,options,update])=><ReactFilterMenu
         key={heading} heading={heading} glyph={glyph} value={value} options={options}
         toggle={heading==='排序顺序'} onChange={update}/>)}</div>
-      <span className="catalog-total">{found.length} 个{filters.type==='reference'?'参考案例':'模板'}</span>
+      <span className="catalog-total">{found.length} 个模板</span>
     </div></div>:null}
     <div className={`grid works-grid journal-template-grid ${selected?'journal-template-detail':''}`}>
       {selected?<article className="journal-template-detail-card detail-page">
         <div className="detail-topline"><DetailBackButton data-template-back onClick={()=>{
           setSelectedID(null);viewState.templateID=null;
-        }}>返回模板</DetailBackButton><span className="detail-category">{selected.origin==='preset'?'排版模板':selected.origin==='reference'?'参考案例':'我的模板'}</span></div>
+        }}>返回模板</DetailBackButton><span className="detail-category">{selected.type==='new'?'新模板':selected.type==='mine'?'我的模板':'旧模板'}</span></div>
         <section className="detail-columns"><div className="journal-template-preview">
         <div className="journal-template-switch" role="tablist" aria-label="模板展示方式">
           <button type="button" className={`btn ${activeSide==='template'?'primary':''}`}
@@ -474,7 +494,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
             side={showCase?'case':'template'} db={db} accountId={state.accountId} detail/>}
         </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
           <h1>{selected.title}</h1><p className="detail-description">{selected.structure}</p>
-          <div className="detail-facts"><div><small>模板类型</small><span>{selected.origin==='preset'?(selected.isCallable?'可编辑模板':'暂缓使用'):selected.origin==='reference'?'视觉参考':'自定义模板'}</span></div>
+          <div className="detail-facts"><div><small>模板类型</small><span>{selected.type==='new'?'新模板':selected.type==='mine'?'我的模板':'旧模板'}</span></div>
           <div><small>元素</small><span>{composition?`${composition.elements.length} 个位置`:'尚未定义'}</span></div>
           <div><small>适用风格</small><span>{selected.styles?.join('、')||'自由'}</span></div>
           <div><small>适用内容</small><span>{selected.purposes?.join('、')||'不限'}</span></div></div>
@@ -489,7 +509,7 @@ export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
           onClick={()=>choose(item)}>
           <JournalTemplateVisual item={item} db={db} accountId={state.accountId}/>
           <div className="card-body"><h3>{item.title}</h3>
-            <p>{item.origin==='preset'?(item.isCallable?'可编辑模板':'暂缓使用'):item.origin==='reference'?'参考案例':'我的模板'}{' · '}
+            <p>{item.type==='new'?'新模板':item.type==='mine'?'我的模板':'旧模板'}{' · '}
               {item.exampleIsReference?'有案例参考':item.exampleBlobId||item.exampleImagePath||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p>
             <div className="journal-template-tags">{item.tags.slice(0,3).map(tag=><span
               className="chip" key={tag}>{tag}</span>)}</div></div>

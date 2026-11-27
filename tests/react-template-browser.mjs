@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
+import {installUiCloudBase} from './fixtures/ui-cloudbase-harness.mjs';
+import {project} from '../src/domain.js';
 
+const work=project('模板库验收作品');
+work.isDraft=false;
+work.coverStaticPath='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"/>';
+work.coverBaselineUpdatedAt=work.updatedAt;
 const browser=await browserHarness('shiye-react-template',
-  process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173');
+  process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173',async({command})=>{
+    await command('Page.addScriptToEvaluateOnNewDocument',
+      {source:`(${installUiCloudBase.toString()})(window,{projects:${JSON.stringify([work])}});`});
+  });
 const {click,evaluate,wait,sleep,command,errors}=browser;
 try{
   await wait('.series-grid');
@@ -13,6 +22,11 @@ try{
   assert.ok(Math.abs(templateCover.height-workCover.height)<2,JSON.stringify({workCover,templateCover}));
   const presetSize=await evaluate('(()=>{const card=document.querySelector(".journal-template-card");return {cover:card.querySelector(".card-image").getBoundingClientRect().height,card:card.getBoundingClientRect().height}})()');
   assert.ok(Math.abs(presetSize.cover-workCover.height)<2&&Math.abs(presetSize.card-workCover.cardHeight)<8,JSON.stringify({workCover,presetSize}));
+  await click('[data-template-id="D143"]','.journal-template-detail-card');
+  assert.ok(await evaluate('document.querySelector(".detail-category").textContent==="新模板"'));
+  await click('.journal-template-element[data-slot-id]','.journal-template-slot-conditions');
+  assert.ok(await evaluate('document.querySelector(".journal-template-slot-conditions").textContent.includes("必须满足")'));
+  await click('[data-template-back]','.journal-template-card');
   await click('[data-template-import]','[data-template-save]');
   await evaluate(`(()=>{
     const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/NwAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));
@@ -31,6 +45,8 @@ try{
   assert.equal(await evaluate('!!document.querySelector("[data-template-side=case]")'),false);
   assert.equal(await evaluate('!!document.querySelector(".journal-template-filters")'),false);
   await click('[data-template-back]','.journal-template-card');
+  await click('[data-filter-heading="类型"]','.swift-popover');
+  await evaluate('[...document.querySelectorAll(".swift-popover [role=menuitemradio]")].find(button=>button.textContent==="旧模板").click()');
   await evaluate('window.scrollTo(0,500);document.querySelector("[data-template-id=center-1]").click()');
   await wait('.journal-template-detail-card');
   assert.equal(await evaluate('window.scrollY'),0);
@@ -50,7 +66,7 @@ try{
   await click('[data-template-back]','.journal-template-card');
   await click('[data-filter-heading="类型"]','.swift-popover');
   assert.ok(await evaluate('!!document.querySelector(".swift-popover .popover-content")'));
-  await evaluate('[...document.querySelectorAll(".swift-popover [role=menuitemradio]")].find(button=>button.textContent==="参考案例").click()');
+  await evaluate('[...document.querySelectorAll(".swift-popover [role=menuitemradio]")].find(button=>button.textContent==="旧模板").click()');
   assert.ok(await evaluate('!!document.querySelector("[data-template-id=centered-writing-sheet]")'));
   await click('[data-template-id="centered-writing-sheet"]','.journal-template-detail-card');
   assert.ok(await evaluate('!!document.querySelector("[data-template-side=case]")'));

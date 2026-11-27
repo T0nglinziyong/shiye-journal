@@ -8,6 +8,8 @@ export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
   if(typeof values.description==='string'&&values.description.trim().length>500)
     throw Error('素材描述不能超过 500 字');
+  if(typeof values.templateUseNotes==='string'&&values.templateUseNotes.trim().length>300)
+    throw Error('替换与裁切说明不能超过 300 字');
   if(!isMaterialKind(values.kind)||!isMaterialRole(values.role))
     throw Error('素材类型或画面作用不在预设范围内');
   const dimension=value=>{if(value==='')return null;const n=Number(value);if(!Number.isFinite(n)||n<=0)throw Error('实物宽高必须是正数或留空');return n;};
@@ -26,6 +28,10 @@ export function assetEditorValue(old,values) {
   if(typeof values.description==='string'&&values.description.trim()!==(old.description||'')){
     next.description=values.description.trim();
     next.descriptionEvidence={source:'user',confidence:1};
+  }
+  if(typeof values.templateUseNotes==='string'&&values.templateUseNotes.trim()!==(old.templateUseNotes||'')){
+    next.templateUseNotes=values.templateUseNotes.trim();
+    next.templateUseNotesEvidence={source:'user',confidence:1};
   }
   const previousAngle=Number(old.processingRecord?.displayRotationDegrees)||0;
   const angle=values.rotation===undefined?previousAngle:values.rotation===''?NaN:Number(values.rotation);

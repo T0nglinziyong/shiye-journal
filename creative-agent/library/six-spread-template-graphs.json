@@ -1,0 +1,1649 @@
+{
+  "source": {
+    "note": "A6per手帐配色思路2.0➡️",
+    "author": "不是鸭鸭",
+    "url": "https://www.xiaohongshu.com/explore/6ae29df20000000033010256",
+    "localVideo": "手帐教程资料库/2026-11-23/双页配色-不是鸭鸭/tutorial.mp4",
+    "measurement": "按未裁剪视频帧逐页测量可见区域，坐标 [左, 上, 右, 下] 独立归一化至 0-100。原帧见验收归档/运行记录/双页六模板解析-2026-11-27/未裁剪原帧。装订环、孔洞、桌面和视频字幕不属于模板。"
+  },
+  "templates": [
+    {
+      "id": "S01-苹果绿白",
+      "pages": {
+        "left": "#F3F3EA",
+        "right": "#71923C"
+      },
+      "logic": "左页整页横线、青苹果大图与上下两张蓝色便签；右页方形黄绿纸压在小黑图下，正文写在绿色页面中央，果篮落在下方浅纸上。",
+      "nodes": [
+        [
+          "L-lines",
+          "left",
+          "ruled-background",
+          [
+            0,
+            0,
+            100,
+            100
+          ],
+          1
+        ],
+        [
+          "L-apple-photo",
+          "left",
+          "large-scene-photo",
+          [
+            0,
+            20,
+            100,
+            83
+          ],
+          2
+        ],
+        [
+          "L-blue-heading",
+          "left",
+          "small-heading-card",
+          [
+            5,
+            15,
+            52,
+            28
+          ],
+          3
+        ],
+        [
+          "L-writing",
+          "left",
+          "body-on-photo",
+          [
+            11,
+            41,
+            98,
+            72
+          ],
+          4
+        ],
+        [
+          "L-date",
+          "left",
+          "date-card",
+          [
+            62,
+            78,
+            89,
+            89
+          ],
+          5
+        ],
+        [
+          "R-lime-back",
+          "right",
+          "support-card",
+          [
+            13,
+            10,
+            55,
+            36
+          ],
+          1
+        ],
+        [
+          "R-black-photo",
+          "right",
+          "small-scene-photo",
+          [
+            29,
+            14,
+            80,
+            33
+          ],
+          2
+        ],
+        [
+          "R-writing",
+          "right",
+          "body-on-background",
+          [
+            14,
+            37,
+            83,
+            55
+          ],
+          3
+        ],
+        [
+          "R-pale-card",
+          "right",
+          "torn-writing-card",
+          [
+            25,
+            66,
+            94,
+            92
+          ],
+          4
+        ],
+        [
+          "R-fruit-basket",
+          "right",
+          "irregular-subject",
+          [
+            38,
+            56,
+            90,
+            84
+          ],
+          5
+        ],
+        [
+          "R-starburst",
+          "right",
+          "edge-accent",
+          [
+            77,
+            79,
+            99,
+            88
+          ],
+          6
+        ],
+        [
+          "L-photo-caption",
+          "left",
+          "body-on-photo",
+          [
+            6,
+            68,
+            55,
+            81
+          ],
+          4
+        ],
+        [
+          "R-paper-caption",
+          "right",
+          "body-on-card",
+          [
+            29,
+            84,
+            75,
+            91
+          ],
+          6
+        ]
+      ],
+      "occlusion": [
+        [
+          "R-black-photo",
+          "R-lime-back"
+        ],
+        [
+          "R-fruit-basket",
+          "R-pale-card"
+        ],
+        [
+          "R-starburst",
+          "R-fruit-basket"
+        ],
+        [
+          "R-paper-caption",
+          "R-fruit-basket"
+        ]
+      ],
+      "replaceable": {
+        "L-apple-photo": [
+          "large-fruit-photo",
+          "large-life-photo"
+        ],
+        "R-black-photo": [
+          "small-scene-photo",
+          "dark-graphic-card"
+        ],
+        "R-fruit-basket": [
+          "fruit-cutout",
+          "food-cutout"
+        ],
+        "R-pale-card": [
+          "light-paper",
+          "torn-paper"
+        ]
+      },
+      "nodeStyles": {
+        "R-lime-back": {
+          "fill": "#B5CF21"
+        },
+        "R-starburst": {
+          "fill": "#6CA832"
+        }
+      }
+    },
+    {
+      "id": "S02-青黄面包",
+      "pages": {
+        "left": "#72D9D1",
+        "right": "#F1E622"
+      },
+      "logic": "左页上中部用撕开轮廓的大幅食物图，左下留给大日期；右页一块偏左的青色写字卡与右下果篮构成斜向联系，青色跨页复现。",
+      "nodes": [
+        [
+          "L-dark-backing",
+          "left",
+          "support-paper",
+          [
+            0,
+            27,
+            44,
+            70
+          ],
+          0
+        ],
+        [
+          "L-bread-photo",
+          "left",
+          "large-irregular-photo",
+          [
+            1,
+            17,
+            98,
+            70
+          ],
+          1
+        ],
+        [
+          "L-heading-strip",
+          "left",
+          "micro-heading",
+          [
+            1,
+            17,
+            48,
+            24
+          ],
+          2
+        ],
+        [
+          "L-oval-accent",
+          "left",
+          "edge-accent",
+          [
+            8,
+            22,
+            34,
+            28
+          ],
+          3
+        ],
+        [
+          "L-writing",
+          "left",
+          "body-on-photo",
+          [
+            17,
+            35,
+            87,
+            62
+          ],
+          4
+        ],
+        [
+          "L-date",
+          "left",
+          "large-date-badge",
+          [
+            3,
+            61,
+            41,
+            85
+          ],
+          5
+        ],
+        [
+          "L-lower-writing",
+          "left",
+          "body-on-background",
+          [
+            53,
+            73,
+            97,
+            89
+          ],
+          6
+        ],
+        [
+          "R-cyan-card",
+          "right",
+          "translucent-paper",
+          [
+            21,
+            18,
+            95,
+            65
+          ],
+          2
+        ],
+        [
+          "R-english",
+          "right",
+          "micro-typography",
+          [
+            14,
+            23,
+            69,
+            29
+          ],
+          3
+        ],
+        [
+          "R-writing",
+          "right",
+          "body-on-card",
+          [
+            31,
+            29,
+            88,
+            48
+          ],
+          4
+        ],
+        [
+          "R-fruit-basket",
+          "right",
+          "irregular-subject",
+          [
+            38,
+            51,
+            91,
+            71
+          ],
+          5
+        ],
+        [
+          "R-vellum-lower",
+          "right",
+          "translucent-paper",
+          [
+            7,
+            31,
+            78,
+            83
+          ],
+          1
+        ],
+        [
+          "R-dot-upper",
+          "right",
+          "edge-accent",
+          [
+            7,
+            27,
+            13,
+            33
+          ],
+          7
+        ],
+        [
+          "R-dot-mid",
+          "right",
+          "edge-accent",
+          [
+            91,
+            47,
+            97,
+            53
+          ],
+          7
+        ],
+        [
+          "R-dot-lower",
+          "right",
+          "edge-accent",
+          [
+            70,
+            70,
+            77,
+            77
+          ],
+          7
+        ],
+        [
+          "L-oval-star",
+          "left",
+          "edge-accent",
+          [
+            18,
+            23,
+            27,
+            30
+          ],
+          4
+        ],
+        [
+          "R-lower-writing",
+          "right",
+          "body-on-background",
+          [
+            8,
+            49,
+            43,
+            83
+          ],
+          4
+        ]
+      ],
+      "occlusion": [
+        [
+          "L-writing",
+          "L-bread-photo"
+        ],
+        [
+          "L-date",
+          "L-bread-photo"
+        ],
+        [
+          "R-fruit-basket",
+          "R-cyan-card"
+        ],
+        [
+          "R-dots",
+          "R-cyan-card"
+        ],
+        [
+          "R-cyan-card",
+          "R-vellum-lower"
+        ],
+        [
+          "R-dot-upper",
+          "R-cyan-card"
+        ],
+        [
+          "R-dot-mid",
+          "R-cyan-card"
+        ],
+        [
+          "R-dot-lower",
+          "R-cyan-card"
+        ],
+        [
+          "L-bread-photo",
+          "L-dark-backing"
+        ]
+      ],
+      "replaceable": {
+        "L-bread-photo": [
+          "large-food-photo",
+          "clustered-food-cutout"
+        ],
+        "L-date": [
+          "date-sticker",
+          "editable-number-and-outline"
+        ],
+        "R-cyan-card": [
+          "paper",
+          "translucent-paper"
+        ],
+        "R-fruit-basket": [
+          "food-cutout",
+          "fruit-cutout"
+        ]
+      },
+      "nodeStyles": {
+        "L-oval-accent": {
+          "fill": "#102856",
+          "kind": "ellipse"
+        },
+        "L-oval-star": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "R-cyan-card": {
+          "fill": "#73D3D6",
+          "translucency": 0.04
+        },
+        "R-vellum-lower": {
+          "fill": "#F1F0C8",
+          "translucency": 0.12
+        },
+        "R-dot-upper": {
+          "fill": "#E15428"
+        },
+        "R-dot-mid": {
+          "fill": "#E15428"
+        },
+        "R-dot-lower": {
+          "fill": "#E15428"
+        }
+      }
+    },
+    {
+      "id": "S03-棕蓝爱心",
+      "pages": {
+        "left": "#704A31",
+        "right": "#A8D8E8"
+      },
+      "logic": "左页以黑白心形主体和横向白蕾丝形成强焦点，文字直接写在棕底；右页棕卡、浅色字纸、上方插画按层叠关系排列，深棕在右页重复。",
+      "nodes": [
+        [
+          "L-upper-writing",
+          "left",
+          "body-on-background",
+          [
+            16,
+            12,
+            91,
+            28
+          ],
+          1
+        ],
+        [
+          "L-heart-photo",
+          "left",
+          "irregular-photo",
+          [
+            9,
+            24,
+            66,
+            77
+          ],
+          2
+        ],
+        [
+          "L-lace",
+          "left",
+          "horizontal-lace",
+          [
+            0,
+            40,
+            100,
+            59
+          ],
+          3
+        ],
+        [
+          "L-date",
+          "left",
+          "date-card",
+          [
+            56,
+            31,
+            81,
+            42
+          ],
+          4
+        ],
+        [
+          "L-lower-writing",
+          "left",
+          "body-on-background",
+          [
+            18,
+            77,
+            89,
+            91
+          ],
+          5
+        ],
+        [
+          "R-brown-back",
+          "right",
+          "backing-paper",
+          [
+            8,
+            14,
+            54,
+            67
+          ],
+          1
+        ],
+        [
+          "R-translucent-card",
+          "right",
+          "translucent-paper",
+          [
+            11,
+            29,
+            82,
+            87
+          ],
+          2
+        ],
+        [
+          "R-cake-illustration",
+          "right",
+          "square-scene-card",
+          [
+            38,
+            6,
+            91,
+            36
+          ],
+          3
+        ],
+        [
+          "R-writing",
+          "right",
+          "body-on-card",
+          [
+            17,
+            39,
+            78,
+            65
+          ],
+          4
+        ],
+        [
+          "R-lower-writing",
+          "right",
+          "body-on-card",
+          [
+            12,
+            72,
+            81,
+            86
+          ],
+          5
+        ],
+        [
+          "R-star-top",
+          "right",
+          "edge-accent",
+          [
+            27,
+            27,
+            34,
+            34
+          ],
+          7
+        ],
+        [
+          "R-star-right",
+          "right",
+          "edge-accent",
+          [
+            81,
+            45,
+            88,
+            52
+          ],
+          7
+        ],
+        [
+          "R-star-left",
+          "right",
+          "edge-accent",
+          [
+            9,
+            49,
+            16,
+            56
+          ],
+          7
+        ]
+      ],
+      "occlusion": [
+        [
+          "L-lace",
+          "L-heart-photo"
+        ],
+        [
+          "L-date",
+          "L-lace"
+        ],
+        [
+          "R-translucent-card",
+          "R-brown-back"
+        ],
+        [
+          "R-cake-illustration",
+          "R-translucent-card"
+        ],
+        [
+          "R-star-top",
+          "R-translucent-card"
+        ],
+        [
+          "R-star-right",
+          "R-translucent-card"
+        ],
+        [
+          "R-star-left",
+          "R-translucent-card"
+        ]
+      ],
+      "replaceable": {
+        "L-heart-photo": [
+          "heart-shaped-photo",
+          "masked-photo"
+        ],
+        "L-lace": [
+          "lace-tape",
+          "generated-lace"
+        ],
+        "R-cake-illustration": [
+          "food-card",
+          "illustration-card"
+        ],
+        "R-translucent-card": [
+          "translucent-paper",
+          "light-paper"
+        ]
+      },
+      "nodeStyles": {
+        "R-translucent-card": {
+          "fill": "#D6D3D0",
+          "translucency": 0.38
+        },
+        "R-star-top": {
+          "fill": "#D8F6DD",
+          "kind": "star"
+        },
+        "R-star-right": {
+          "fill": "#1F2D35",
+          "kind": "star"
+        },
+        "R-star-left": {
+          "fill": "#1F2D35",
+          "kind": "star"
+        },
+        "R-brown-back": {
+          "fill": "#9D9091"
+        },
+        "L-lace": {
+          "fill": "#F7F4EB",
+          "translucency": 0.15
+        }
+      }
+    },
+    {
+      "id": "S04-粉黑百合",
+      "pages": {
+        "left": "#EF7597",
+        "right": "#343B40"
+      },
+      "logic": "左页上方写字纸与下方小幅花图两块相隔；右页上方半透明灰蓝底纸托住白色字纸，大百合从下方跨过底纸和右页边缘，形成与左页小花图的大小对照。",
+      "nodes": [
+        [
+          "L-pink-translucent",
+          "left",
+          "translucent-paper",
+          [
+            30,
+            21,
+            80,
+            60
+          ],
+          1
+        ],
+        [
+          "L-writing-card",
+          "left",
+          "light-writing-card",
+          [
+            8,
+            13,
+            63,
+            57
+          ],
+          2
+        ],
+        [
+          "L-upper-writing",
+          "left",
+          "body-on-card",
+          [
+            14,
+            23,
+            74,
+            49
+          ],
+          3
+        ],
+        [
+          "L-small-note",
+          "left",
+          "pattern-note",
+          [
+            17,
+            52,
+            37,
+            59
+          ],
+          4
+        ],
+        [
+          "L-mid-writing",
+          "left",
+          "body-on-background",
+          [
+            7,
+            60,
+            87,
+            69
+          ],
+          4
+        ],
+        [
+          "L-dark-back",
+          "left",
+          "support-paper",
+          [
+            40,
+            75,
+            88,
+            96
+          ],
+          5
+        ],
+        [
+          "L-flower-photo",
+          "left",
+          "small-scene-photo",
+          [
+            24,
+            71,
+            76,
+            91
+          ],
+          6
+        ],
+        [
+          "R-gray-back",
+          "right",
+          "translucent-backing-paper",
+          [
+            8,
+            10,
+            70,
+            59
+          ],
+          1
+        ],
+        [
+          "R-writing-card",
+          "right",
+          "light-writing-card",
+          [
+            22,
+            15,
+            95,
+            48
+          ],
+          2
+        ],
+        [
+          "R-upper-writing",
+          "right",
+          "body-on-card",
+          [
+            22,
+            19,
+            90,
+            44
+          ],
+          3
+        ],
+        [
+          "R-blue-label",
+          "right",
+          "small-heading-card",
+          [
+            43,
+            45,
+            79,
+            52
+          ],
+          4
+        ],
+        [
+          "R-lily",
+          "right",
+          "large-irregular-flower",
+          [
+            3,
+            44,
+            75,
+            99
+          ],
+          5
+        ],
+        [
+          "R-edge-writing",
+          "right",
+          "body-on-background",
+          [
+            69,
+            57,
+            96,
+            83
+          ],
+          6
+        ],
+        [
+          "R-bottom-writing",
+          "right",
+          "body-on-background",
+          [
+            69,
+            82,
+            97,
+            96
+          ],
+          7
+        ]
+      ],
+      "occlusion": [
+        [
+          "L-writing-card",
+          "L-pink-translucent"
+        ],
+        [
+          "L-flower-photo",
+          "L-dark-back"
+        ],
+        [
+          "R-writing-card",
+          "R-gray-back"
+        ],
+        [
+          "R-blue-label",
+          "R-writing-card"
+        ],
+        [
+          "R-blue-label",
+          "R-lily"
+        ],
+        [
+          "R-lily",
+          "R-gray-back"
+        ],
+        [
+          "R-lily",
+          "R-writing-card"
+        ],
+        [
+          "L-small-note",
+          "L-writing-card"
+        ]
+      ],
+      "replaceable": {
+        "L-flower-photo": [
+          "small-floral-photo",
+          "small-monochrome-photo"
+        ],
+        "R-lily": [
+          "large-flower-cutout",
+          "large-irregular-subject"
+        ],
+        "R-gray-back": [
+          "translucent-paper",
+          "muted-backing-paper"
+        ]
+      },
+      "nodeStyles": {
+        "L-pink-translucent": {
+          "fill": "#E4A8BB",
+          "translucency": 0.55
+        },
+        "R-gray-back": {
+          "fill": "#9DAEBB",
+          "translucency": 0.22
+        },
+        "L-dark-back": {
+          "fill": "#242529"
+        },
+        "R-blue-label": {
+          "fill": "#4568AF"
+        },
+        "R-lily": {
+          "fill": "#F29ABD",
+          "kind": "flower"
+        }
+      }
+    },
+    {
+      "id": "S05-灰黄甜点",
+      "pages": {
+        "left": "#A69D7F",
+        "right": "#D9DA23"
+      },
+      "logic": "左页纵向窄格纹连接上方花瓶小卡与下方动物小卡；右页上方两张小标签、中央甜点照片和下方手写段落。白色横带在甜点照片下层，负责隔开高饱和黄底。",
+      "nodes": [
+        [
+          "L-grid-strip",
+          "left",
+          "vertical-connector",
+          [
+            10,
+            0,
+            28,
+            100
+          ],
+          1
+        ],
+        [
+          "L-vase-card",
+          "left",
+          "small-scene-card",
+          [
+            3,
+            16,
+            56,
+            45
+          ],
+          2
+        ],
+        [
+          "L-vase-note",
+          "left",
+          "pattern-note",
+          [
+            44,
+            30,
+            59,
+            39
+          ],
+          3
+        ],
+        [
+          "L-date",
+          "left",
+          "large-date-text",
+          [
+            59,
+            23,
+            89,
+            31
+          ],
+          3
+        ],
+        [
+          "L-writing",
+          "left",
+          "body-on-background",
+          [
+            31,
+            47,
+            83,
+            67
+          ],
+          4
+        ],
+        [
+          "L-elephant-card",
+          "left",
+          "small-scene-card",
+          [
+            27,
+            74,
+            87,
+            93
+          ],
+          5
+        ],
+        [
+          "L-elephant-note",
+          "left",
+          "body-on-background",
+          [
+            8,
+            89,
+            41,
+            95
+          ],
+          6
+        ],
+        [
+          "R-top-card",
+          "right",
+          "small-heading-card",
+          [
+            39,
+            10,
+            80,
+            27
+          ],
+          1
+        ],
+        [
+          "R-green-sticker",
+          "right",
+          "pattern-note",
+          [
+            64,
+            24,
+            90,
+            38
+          ],
+          2
+        ],
+        [
+          "R-upper-writing",
+          "right",
+          "body-on-background",
+          [
+            7,
+            29,
+            60,
+            41
+          ],
+          3
+        ],
+        [
+          "R-white-band",
+          "right",
+          "support-paper",
+          [
+            0,
+            48,
+            100,
+            63
+          ],
+          4
+        ],
+        [
+          "R-dessert-photo",
+          "right",
+          "scene-photo",
+          [
+            19,
+            43,
+            94,
+            70
+          ],
+          5
+        ],
+        [
+          "R-label",
+          "right",
+          "pattern-note",
+          [
+            9,
+            60,
+            29,
+            66
+          ],
+          6
+        ],
+        [
+          "R-lower-writing",
+          "right",
+          "body-on-background",
+          [
+            17,
+            72,
+            91,
+            90
+          ],
+          7
+        ],
+        [
+          "L-star-1",
+          "left",
+          "edge-accent",
+          [
+            12,
+            5,
+            16,
+            9
+          ],
+          7
+        ],
+        [
+          "L-star-2",
+          "left",
+          "edge-accent",
+          [
+            22,
+            15,
+            26,
+            19
+          ],
+          7
+        ],
+        [
+          "L-star-3",
+          "left",
+          "edge-accent",
+          [
+            11,
+            45,
+            15,
+            49
+          ],
+          7
+        ],
+        [
+          "L-star-4",
+          "left",
+          "edge-accent",
+          [
+            25,
+            53,
+            29,
+            57
+          ],
+          7
+        ],
+        [
+          "L-star-5",
+          "left",
+          "edge-accent",
+          [
+            10,
+            65,
+            14,
+            69
+          ],
+          7
+        ],
+        [
+          "L-star-6",
+          "left",
+          "edge-accent",
+          [
+            3,
+            73,
+            7,
+            77
+          ],
+          7
+        ]
+      ],
+      "occlusion": [
+        [
+          "L-vase-card",
+          "L-grid-strip"
+        ],
+        [
+          "L-elephant-card",
+          "L-grid-strip"
+        ],
+        [
+          "R-top-card",
+          "R-upper-writing"
+        ],
+        [
+          "R-green-sticker",
+          "R-top-card"
+        ],
+        [
+          "R-dessert-photo",
+          "R-white-band"
+        ],
+        [
+          "R-label",
+          "R-dessert-photo"
+        ]
+      ],
+      "replaceable": {
+        "L-vase-card": [
+          "small-object-photo",
+          "small-illustration-card"
+        ],
+        "L-elephant-card": [
+          "small-animal-card",
+          "small-object-card"
+        ],
+        "R-dessert-photo": [
+          "food-photo",
+          "large-scene-photo"
+        ],
+        "R-white-band": [
+          "light-paper",
+          "translucent-paper"
+        ]
+      },
+      "nodeStyles": {
+        "L-star-1": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "L-star-2": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "L-star-3": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "L-star-4": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "L-star-5": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "L-star-6": {
+          "fill": "#FFFFFF",
+          "kind": "star"
+        },
+        "R-white-band": {
+          "fill": "#F8F7EB",
+          "translucency": 0.06
+        },
+        "L-elephant-note": {
+          "fill": "#B0A788"
+        }
+      }
+    },
+    {
+      "id": "S06-白粉果实",
+      "pages": {
+        "left": "#F3F3EE",
+        "right": "#DF5C70"
+      },
+      "logic": "左页数字与一张大的水果拼贴构成主区，图像下方留独立文字空间；右页上方方形食物卡和下方大白色横向字纸相隔，中间直接在粉底写字。蕾丝在上方照片下层，红花压在下方字纸边缘。",
+      "nodes": [
+        [
+          "L-number",
+          "left",
+          "large-date-text",
+          [
+            8,
+            17,
+            35,
+            27
+          ],
+          1
+        ],
+        [
+          "L-upper-writing",
+          "left",
+          "body-on-background",
+          [
+            44,
+            16,
+            91,
+            29
+          ],
+          2
+        ],
+        [
+          "L-fruit-photo",
+          "left",
+          "large-scene-photo",
+          [
+            3,
+            27,
+            76,
+            74
+          ],
+          3
+        ],
+        [
+          "L-vellum-overlay",
+          "left",
+          "translucent-paper",
+          [
+            26,
+            54,
+            96,
+            75
+          ],
+          4
+        ],
+        [
+          "L-medallion",
+          "left",
+          "irregular-label",
+          [
+            50,
+            37,
+            83,
+            48
+          ],
+          5
+        ],
+        [
+          "L-flower",
+          "left",
+          "small-irregular-flower",
+          [
+            4,
+            64,
+            46,
+            75
+          ],
+          6
+        ],
+        [
+          "L-lower-writing",
+          "left",
+          "body-on-background",
+          [
+            19,
+            77,
+            86,
+            87
+          ],
+          7
+        ],
+        [
+          "R-lace",
+          "right",
+          "horizontal-lace",
+          [
+            29,
+            18,
+            95,
+            37
+          ],
+          1
+        ],
+        [
+          "R-fig-card",
+          "right",
+          "square-scene-card",
+          [
+            37,
+            12,
+            88,
+            42
+          ],
+          2
+        ],
+        [
+          "R-black-label",
+          "right",
+          "small-heading-card",
+          [
+            13,
+            34,
+            35,
+            41
+          ],
+          3
+        ],
+        [
+          "R-black-label-2",
+          "right",
+          "micro-label",
+          [
+            34,
+            35,
+            52,
+            41
+          ],
+          3
+        ],
+        [
+          "R-mid-writing",
+          "right",
+          "body-on-background",
+          [
+            16,
+            42,
+            53,
+            55
+          ],
+          4
+        ],
+        [
+          "R-mid-number",
+          "right",
+          "large-date-text",
+          [
+            56,
+            44,
+            98,
+            55
+          ],
+          4
+        ],
+        [
+          "R-lower-paper",
+          "right",
+          "large-writing-card",
+          [
+            12,
+            62,
+            97,
+            92
+          ],
+          5
+        ],
+        [
+          "R-lower-writing",
+          "right",
+          "body-on-card",
+          [
+            24,
+            67,
+            84,
+            77
+          ],
+          6
+        ],
+        [
+          "R-flower",
+          "right",
+          "small-irregular-flower",
+          [
+            13,
+            76,
+            34,
+            89
+          ],
+          7
+        ],
+        [
+          "R-record-label",
+          "right",
+          "small-heading-card",
+          [
+            25,
+            89,
+            52,
+            94
+          ],
+          8
+        ],
+        [
+          "R-order-label",
+          "right",
+          "micro-label",
+          [
+            74,
+            61,
+            97,
+            65
+          ],
+          9
+        ]
+      ],
+      "occlusion": [
+        [
+          "L-vellum-overlay",
+          "L-fruit-photo"
+        ],
+        [
+          "L-medallion",
+          "L-vellum-overlay"
+        ],
+        [
+          "L-flower",
+          "L-vellum-overlay"
+        ],
+        [
+          "R-fig-card",
+          "R-lace"
+        ],
+        [
+          "R-black-label",
+          "R-fig-card"
+        ],
+        [
+          "R-flower",
+          "R-lower-paper"
+        ],
+        [
+          "R-record-label",
+          "R-lower-paper"
+        ],
+        [
+          "R-order-label",
+          "R-lower-paper"
+        ],
+        [
+          "R-black-label-2",
+          "R-fig-card"
+        ]
+      ],
+      "replaceable": {
+        "L-fruit-photo": [
+          "fruit-photo",
+          "food-photo",
+          "life-photo"
+        ],
+        "R-fig-card": [
+          "square-food-card",
+          "small-scene-card"
+        ],
+        "R-lower-paper": [
+          "light-writing-paper",
+          "ruled-paper"
+        ],
+        "R-flower": [
+          "flower-cutout",
+          "small-irregular-accent"
+        ]
+      },
+      "nodeStyles": {
+        "L-vellum-overlay": {
+          "fill": "#E8E3D8",
+          "translucency": 0.55
+        },
+        "R-lace": {
+          "fill": "#F8F3E8",
+          "translucency": 0.22
+        },
+        "R-black-label": {
+          "fill": "#252525"
+        },
+        "R-black-label-2": {
+          "fill": "#F1EEE5"
+        },
+        "R-record-label": {
+          "fill": "#F5F2EA"
+        },
+        "R-order-label": {
+          "fill": "#2D2828"
+        },
+        "R-flower": {
+          "fill": "#B7373F",
+          "kind": "flower"
+        },
+        "L-flower": {
+          "fill": "#DDABC2",
+          "kind": "flower"
+        }
+      }
+    }
+  ],
+  "globalRules": {
+    "binding": "不生成装订环、孔洞、画册背景或中缝白条；双页各自完整着色。",
+    "materials": "真实用户素材保留物理毫米大小；匹配槽位时先检查尺寸范围与主体完整性。只对背景纸、图案纸等可重复或可安全裁切对象使用裁切/蒙版；人物、花朵、果实等不规则主体优先完整保留。",
+    "text": "手写正文为可编辑文字；内容可替换，文字块位置和承载空间须保持。",
+    "layering": "同页 z 仅表示起始层级；occlusion 中 [前,后] 是必须满足的可见遮挡关系。"
+  }
+}

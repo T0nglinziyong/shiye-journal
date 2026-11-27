@@ -18,14 +18,18 @@ export function validateEffectValues(outline,gradient,label='文字'){
  return true;
 }
 export function validateTextEffects(node){
+ if(node.type==='text'&&node.textWidthScale!==undefined&&!finite(node.textWidthScale,.3,2))throw Error('文字宽度比例须为 0.3–2');
  if(node.type==='text'&&node.fillOpacity!==undefined&&!finite(node.fillOpacity,0,1))throw Error('文字填充透明度须为 0–1');
+ if(node.textBacking!==undefined&&node.textBacking!==null){
+  const b=node.textBacking;
+  if(node.type!=='text'||!b||b.kind!=='closed'||!validColor(b.color)||!finite(b.padding,0,100)||Object.keys(b).some(k=>!['kind','color','padding'].includes(k)))throw Error('文字闭合底片参数无效');
+ }
  if((node.textOutline||node.textGradient)&&node.type!=='text')throw Error('文字效果只用于 text');
  validateEffectValues(node.textOutline,node.textGradient);return node;
 }
 export function textEffectInsets(node){
- const o=node.textOutline;if(!o)return {left:0,right:0,top:0,bottom:0};
- const half=o.width/2;
- return {left:Math.max(0,half-o.offsetX),right:Math.max(0,half+o.offsetX),top:Math.max(0,half-o.offsetY),bottom:Math.max(0,half+o.offsetY)};
+ const o=node.textOutline,half=o?.width/2||0,p=node.textBacking?.padding||0;
+ return {left:Math.max(p,half-(o?.offsetX||0)),right:Math.max(p,half+(o?.offsetX||0)),top:Math.max(p,half-(o?.offsetY||0)),bottom:Math.max(p,half+(o?.offsetY||0))};
 }
 export function textContentWidth(node){const p=textEffectInsets(node);return Math.max(.01,node.width-p.left-p.right);}
 export function textFillStyle(ctx,node,height=node.height,bounds={x:-node.width/2,y:-height/2,width:node.width,height}){
@@ -40,7 +44,7 @@ export function paintTextGlyphs(ctx,node,text,x,y){
  if((node.fillOpacity??1)>0){ctx.save();try{ctx.globalAlpha*=node.fillOpacity??1;ctx.fillText(text,x,y);}finally{ctx.restore();}}
 }
 // Font/geometry scaling must scale physical outline offsets exactly once.
-export function scaleTextEffects(node,factor){if(node.textOutline)node.textOutline={...node.textOutline,width:node.textOutline.width*factor,offsetX:node.textOutline.offsetX*factor,offsetY:node.textOutline.offsetY*factor};}
+export function scaleTextEffects(node,factor){if(node.textOutline)node.textOutline={...node.textOutline,width:node.textOutline.width*factor,offsetX:node.textOutline.offsetX*factor,offsetY:node.textOutline.offsetY*factor};if(node.textBacking)node.textBacking={...node.textBacking,padding:node.textBacking.padding*factor};}
 
 // Public effects use physical millimetres; provider tools and Command style
 // share this shape and the same styleFor conversion (never raw Scene units).

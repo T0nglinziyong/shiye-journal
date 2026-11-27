@@ -1,7 +1,7 @@
 import {offlinePreviewBytes,OFFLINE_REFERENCE_EDGE,previewImageFormat} from './offline-preview.js';
 import {mapOfflineExportLimited} from './offline-export-assets.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
-import {selectJournalAbstractTemplates} from './journal-abstract-templates.js';
+import {rankCurrentTemplates} from '../creative-agent/library/current-templates.js';
 import {journalPresetReference} from './journal-preset-images.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
 
@@ -11,7 +11,8 @@ const preparedBundles=new Map();
 
 export function selectJournalTemplateBundle(context,userTemplates=[]){
   const selectedCases=selectJournalReferenceCases(context);
-  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{...context,userTemplates});
+  const selectedTemplates=rankCurrentTemplates({materials:context.materials||[],
+    pageMode:context.pageMode,limit:3}).map(row=>row.template);
   return {selectedCases,selectedTemplates};
 }
 export async function loadJournalTemplateReferences({context,userTemplates=[],db,includeImages=true,encodeReference=offlinePreviewBytes}){

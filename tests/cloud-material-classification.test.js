@@ -17,6 +17,7 @@ test('classification prompt uses physical form, current multi-select roles and l
  assert.match(prompt,/point\.free=自由摆放/);
  assert.match(prompt,/整片以纯色、纹理或重复花纹为主且无明确书写功能的是纸张/);
  assert.match(prompt,/descriptionConfidence/);
+ assert.match(prompt,/templateUseNotesConfidence/);
  assert.match(prompt,/浅粉色花朵居中/);
  assert.doesNotMatch(prompt,/orientation\.deltaDegrees/);
  assert.doesNotMatch(prompt,/版面适配.*page=页面铺底/);
@@ -38,7 +39,8 @@ test('cloud classification reads account-owned images and commits a user-safe re
    assert.deepEqual(payload.messages[0].content.filter(part=>part.type==='image_url').map(part=>part.image_url.detail),['low','low']);
    assert.match(payload.messages[0].content[0].text,/paper\.patterned=花纹纸/);
    return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({
-    title:'布片',titleConfidence:.99,description:'画面中有一张方形纸片，纸片上有浅色格纹。',descriptionConfidence:.91,kind:{id:'paper',confidence:.99},
+    title:'布片',titleConfidence:.99,description:'画面中有一张方形纸片，纸片上有浅色格纹。',descriptionConfidence:.91,
+    templateUseNotes:'完整格纹主体，边缘无书写留白。',templateUseNotesConfidence:.9,kind:{id:'paper',confidence:.99},
     kindDetail:{id:'paper.textured',confidence:.99},role:{id:'accent',confidence:.95},
     contentTags:[{value:'布纹',confidence:.96}],materialTags:[{value:'布料',confidence:.4}],
     orientation:{deltaDegrees:90,confidence:.9}
@@ -70,6 +72,7 @@ test('cloud classification reads account-owned images and commits a user-safe re
  assert.equal(committed.reviewStatus,'ready');
  assert.equal(committed.description,'一张方形纸片，纸片上有浅色格纹。');
  assert.equal(committed.descriptionEvidence.source,'ai');
+ assert.equal(committed.templateUseNotes,'完整格纹主体，边缘无书写留白。');
  assert.deepEqual(committed.contentTags,['布纹']);assert.deepEqual(committed.materialTags,[]);
  assert.equal(Object.hasOwn(result,'orientation'),false);
  assert.equal(committed.processingRecord?.displayRotationDegrees,undefined);

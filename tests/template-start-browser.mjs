@@ -35,7 +35,7 @@ try{
   }
   await b.click('[data-act="create-from-basket"]','.manual-layout-dialog');
   const choice=await b.evaluate(`(()=>{const node=[...document.querySelectorAll('[data-manual-template]')].find(item=>item.dataset.manualTemplate&&!['stage'].includes(item.dataset.manualTemplate));return node&&{id:node.dataset.manualTemplate,slots:node.querySelectorAll('.manual-template-slot').length,graphics:node.querySelectorAll('.manual-template-slot.graphic').length,text:node.textContent}})()`);
-  assert.ok(choice?.slots>0&&choice.graphics>0,JSON.stringify(choice));
+  assert.ok(choice?.slots>0&&/^(D14|D15|D16|S0|XHS-)/.test(choice.id),JSON.stringify(choice));
   assert.match(choice.text,/匹配.*空位/);
   try{await b.click(`[data-manual-template="${choice.id}"]`,'#canvas-page');}
   catch(error){throw Error(error.message+' '+JSON.stringify({dialog:await b.evaluate('document.querySelector(".manual-layout-dialog")?.textContent'),errors:b.errors}));}

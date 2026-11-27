@@ -6,6 +6,7 @@
 | --- | --- |
 | 后台 AI 创作 | [创作 Harness](CREATIVE_HARNESS.md)、[Agent 代码入口](../creative-agent/README.md) |
 | 方法、模板与 Skill | [可执行方法库](CREATION_LIBRARY.md)、[活跃 Skill](../creative-agent/skills/README.md) |
+| 模板制作与复现 | [模板制作与验收规范](TEMPLATE_CREATION_WORKFLOW.md) |
 | Scene 与命令 | [命令分类](command-taxonomy.md)、[共享编辑内核](shared-editor-kernel.md)、[Scene 数据](scene-v2-unified-architecture.md) |
 | 素材识别 | [识别研究集成](recognition-research-integration.md)、[素材分类](MATERIAL_TAXONOMY_V2.md) |
 | 存储与同步 | [云端直连](cloudbase-direct-access.md)、[备份恢复](cloud-backup-runbook.md)、[资源版本](CREATION_RESOURCES.md) |

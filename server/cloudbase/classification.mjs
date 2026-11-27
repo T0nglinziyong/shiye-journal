@@ -25,9 +25,10 @@ export function materialClassificationPrompt(original){
     `内容类别（可多选；无具体内容与其他内容不并列）：${choices(contentCategories)}。版面适配（可多选，只选具体适配项）：${choices(layoutFits)}。\n`+
     `开放标签分组：${choices(tagGroups)}。有明确证据的分组写 1–5 个简短且具体的词，尽量覆盖内容、主题、风格、色彩和氛围；没有证据的分组留空。内容标签可同时写具体对象及其上位词，主题和风格分别描述场景与表现方式；不要在不同组重复同一词，不要把类型、尺寸、透明度、文件来源或未证实的材质写成标签。\n`+
     `分类字段用 {"id":"上列 ID","confidence":0到1}，多选字段用此对象的数组，标签字段用 {"value":"词","confidence":0到1} 的数组。缺少证据填 null 或 []，不要编造 ID。title 用“可见内容＋实物类型”写简短中文名；不确定时用中性名称。description 用一到两句简洁中文直接描述主体、色彩、图案和构图，不重复标题，不猜测看不出的材质、背胶或用途；模糊的小图案只写轮廓或装饰画，不猜具体人物或物种。以素材本身开头，例如“浅粉色花朵居中，花瓣边缘有白色描线。”不要写“画面中”“图中”“照片里”“这是一张”“可以看到”“整体来看”，不要用“此外”“同时”“并且”等衔接词。\n`+
-    `JSON 格式：{"title":"花朵贴纸","titleConfidence":0.9,"description":"浅粉色花朵居中，花瓣边缘有白色描线。","descriptionConfidence":0.9,"kind":{"id":"sticker","confidence":0.9},"kindDetail":{"id":"sticker.subject","confidence":0.8},"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],"colorTags":[],"materialTags":[],"moodTags":[],"tags":[]}。\n`+
+    `另写 templateUseNotes（最多 100 字）：只记录从图中可见、会影响模板替换的条件，例如完整主体轮廓、印字区域是否应保留、可书写留白的位置、图案是否连续可裁切、透明度和外形。看不清就填空字符串，不凭空推断材质或可裁切性；它不是模板位置说明。给出 templateUseNotesConfidence。已有类型、画面作用、版面适配和标签仍分别填写，不在此重复。\n`+
+    `JSON 格式：{"title":"花朵贴纸","titleConfidence":0.9,"description":"浅粉色花朵居中，花瓣边缘有白色描线。","descriptionConfidence":0.9,"templateUseNotes":"花朵轮廓应完整保留，周围无书写留白。","templateUseNotesConfidence":0.85,"kind":{"id":"sticker","confidence":0.9},"kindDetail":{"id":"sticker.subject","confidence":0.8},"role":{"id":"accent","confidence":0.8},"secondaryRoles":[],"contentCategories":[],"layoutFits":[],"contentTags":[],"themeTags":[],"styleTags":[],"colorTags":[],"materialTags":[],"moodTags":[],"tags":[]}。\n`+
     `已知元数据（只作辅助，不优先于图像）：${JSON.stringify(metadata)}\n`+
-    `只输出分类、标题、详细描述和标签。`;
+    `只输出上述 JSON 字段，不附加解释。`;
 }
 export function createCloudMaterialClassifier({envId,env=process.env,fetcher=fetch,commit}={}){
   const gateway=cloudBaseGateway(envId);
