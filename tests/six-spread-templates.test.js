@@ -169,3 +169,18 @@ test('a matched photo keeps its complete contour and card text remains above wri
  assert.ok(compiled.operations.some(op=>op.op==='material.add'&&op.id==='L-heart-photo'));
  assert.ok(!compiled.operations.some(op=>op.op==='layer.mask'&&op.target==='L-heart-photo'));
 });
+
+test('replacing a text-bearing label does not silently remove its text',()=>{
+ const printed={id:'printed',alias:'printed',title:'印刷卡',visualRoles:['printed-card'],
+  physicalWidthMM:17.1,physicalHeightMM:10.26,writableAreaRatio:0,canWriteOn:false};
+ const templateId='S06-白粉果实',slot='R-black-label-2';
+ const rejected=matchSixSpreadMaterials(templateId,[printed],{overrides:{[slot]:'printed'}});
+ assert.equal(rejected.assignments.find(item=>item.slot===slot)?.asset,null);
+ const writable={...printed,id:'writable',alias:'writable',title:'可书写印刷卡',
+  writableAreaRatio:.8,canWriteOn:true};
+ const matched=matchSixSpreadMaterials(templateId,[writable],{overrides:{[slot]:'writable'}});
+ assert.equal(matched.assignments.find(item=>item.slot===slot)?.asset,'writable');
+ const operations=compileSixSpreadTemplate({templateId,assets:[writable],plan:matched}).operations;
+ assert.ok(operations.some(op=>op.op==='text.add'&&op.id===`${slot}-text`));
+ assert.ok(operations.some(op=>op.op==='layer.stack'&&op.target===`${slot}-text`&&op.reference===slot));
+});

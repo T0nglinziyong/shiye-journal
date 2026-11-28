@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {itemFromAsset,project} from '../src/domain.js';
 import {manualTemplateChoices,applyManualTemplate} from '../src/template-start.js';
+import {paperColorFor} from '../src/paper-colors.js';
 import {executableJournalTemplates,journalTemplateComposition} from '../src/journal-template-composition.js';
 
 test('manual creation ranks real templates and preserves physical material sizes',async()=>{
   const draft=project('版式',{mode:'spread',ratio:'a4'}).drafts[0];
+  const requestedPage={height:draft.physicalPageHeightMM,width:draft.canvas.width,ratio:draft.pageRatio};
   const materials=[
     {id:'photo',title:'旅行照片',kind:'photo',physicalWidthMM:45,physicalHeightMM:60,tags:['旅行']},
     {id:'paper',title:'文字纸片',kind:'paper',physicalWidthMM:65,physicalHeightMM:45}
@@ -16,6 +18,9 @@ test('manual creation ranks real templates and preserves physical material sizes
   assert.ok(choices[0].assignments.every(row=>materials.some(asset=>asset.id===row.alias)));
   draft.items=[itemFromAsset(materials[0],draft,120,160,1,true)];
   const result=await applyManualTemplate(draft,materials,['photo','paper'],choices[0].id);
+  assert.equal(draft.physicalPageHeightMM,requestedPage.height);
+  assert.equal(draft.canvas.width,requestedPage.width);
+  assert.equal(draft.pageRatio,requestedPage.ratio);
   assert.equal(result.placed,draft.items.length);
   assert.equal(draft.startTemplateID,choices[0].id);
   assert.equal(new Set(draft.items.map(item=>item.assetID)).size,draft.items.length);
@@ -57,4 +62,20 @@ test('manual template initial draft parks an unfit final-required material',asyn
  assert.equal(result.placed,0);
  assert.equal(result.remaining,1);
  assert.ok(draft.layers.some(layer=>layer.assetID==='tiny'&&layer.isParked));
+});
+
+test('manual template keeps its generated page colors alongside the layers',async()=>{
+ const single=project('单页底色',{mode:'single',ratio:'a4'}).drafts[0];
+ await applyManualTemplate(single,[],[],'D153');
+ assert.equal(single.paperColor,'#82DCF5');
+ assert.ok(single.layers.some(layer=>layer.type==='text'));
+
+ const spread=project('双页底色',{mode:'spread',ratio:'a4'}).drafts[0];
+ await applyManualTemplate(spread,[],[],'S04-粉黑百合');
+ assert.equal(paperColorFor(spread,'left'),'#EF7597');
+ assert.equal(paperColorFor(spread,'right'),'#343B40');
+ assert.ok(spread.layers.some(layer=>layer.type==='text'));
+ await applyManualTemplate(spread,[],[],'XHS-海岛排版');
+ assert.equal(paperColorFor(spread,'left'),'#F8F8EE');
+ assert.equal(paperColorFor(spread,'right'),'#F8F8EE');
 });

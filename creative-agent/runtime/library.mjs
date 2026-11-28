@@ -136,7 +136,10 @@ export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
  if(currentTemplate(recipeId)){
   const context=libraryContext(document,parameters.reference||'page');
   if(currentTemplate(recipeId).pageMode!==document.page.pageMode)throw Error('模板与单页／双页模式不一致');
+  const pageHeight=document.page.physicalPageHeightMM;
+  const pageWidth=document.page.canvas.width/document.page.canvas.height*pageHeight;
   return compileCurrentTemplate({templateId:recipeId,assets:context.materials,
+   pageMm:[pageWidth,pageHeight],
    mustUse:requiredAliases(document,context.materials),
    bindings:Object.fromEntries((parameters.bindings||[]).map(({slotId,alias})=>[slotId,alias])),
    slotValues:Object.fromEntries((parameters.bindings||[]).map(({slotId})=>[slotId,{fit:'none'}])),

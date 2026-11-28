@@ -1,5 +1,6 @@
 import React,{useLayoutEffect,useRef} from 'react';
 import {boundedCanvasViewport,fingerNavigatesCanvas,isIPadPointerDevice,MAX_CANVAS_ZOOM} from './canvas-control-behavior.js';
+import {paperBackgroundCSS} from './paper-colors.js';
 
 // Constrain the proposed transform before painting it. No out-of-bounds frame
 // or delayed correction is ever sent to CSS, including during a pinch.
@@ -186,5 +187,5 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
   useLayoutEffect(()=>{controller.current?.zoom(zoom);},[zoom]);
   useLayoutEffect(()=>{if(resetSignal)controller.current?.reset();},[resetSignal]);
   return <div ref={pageRef} id="canvas-page" className={`canvas-page ${draft.paperPattern}`}
-    style={{width,height,backgroundColor:draft.paperColor,flex:'0 0 auto',flexShrink:0}}>{children}</div>;
+    style={{width,height,background:paperBackgroundCSS(draft),flex:'0 0 auto',flexShrink:0}}>{children}</div>;
 }
