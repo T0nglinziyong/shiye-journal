@@ -7,6 +7,11 @@ import {executableJournalTemplates,journalTemplateComposition} from '../src/jour
 import {removeEditableScene} from '../src/scene-structure-edit.js';
 import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
 import {standbyMaterialRows} from '../src/material-standby.js';
+import {createCreationDocument} from '../src/creation-document.js';
+import {inspectCreationDocument} from '../src/creation-inspection.js';
+import {loadOfflineCanvas} from '../src/offline-node-preview.mjs';
+import {resolveD146Graph,D146_PAGE_MM,D146_REFERENCE_PX} from '../creative-agent/library/d146-template-graph.js';
+import {templatePageFit} from '../creative-agent/library/template-page-fit.js';
 
 test('manual creation ranks real templates and preserves physical material sizes',async()=>{
   const draft=project('版式',{mode:'spread',ratio:'a4'}).drafts[0];
@@ -159,4 +164,54 @@ test('cross-mode templates scale layout but keep every real input at its calibra
    assert.equal(item.manualVisualResize,undefined);
   }
  }
+});
+
+test('D146 counts real placed sources and aligns numeral ink to its measured card slots',async()=>{
+ const draft=project('数字卡片',{mode:'single',ratio:'a5'}).drafts[0];
+ draft.physicalPageHeightMM=157;
+ draft.canvas.width=draft.canvas.height*110/157;
+ const assets=[
+  {id:'dark1',title:'深蓝素色纸',kind:'paper',physicalWidthMM:66,physicalHeightMM:70,mainColor:'#171D2A'},
+  {id:'dark2',title:'深灰素色纸',kind:'paper',physicalWidthMM:75,physicalHeightMM:58,mainColor:'#171D2A'},
+  {id:'yellow',title:'黄色素色纸',kind:'paper',physicalWidthMM:60,physicalHeightMM:40,mainColor:'#F0C51E'}
+ ];
+ const choice=manualTemplateChoices(draft,assets,assets.map(asset=>asset.id)).find(row=>row.id==='D146');
+ assert.ok(choice);
+ assert.match(choice.reason,/已用 3 件素材/);
+ const inkCanvas=await loadOfflineCanvas();
+ const result=await applyManualTemplate(draft,assets,assets.map(asset=>asset.id),'D146',{choice,inkCanvas});
+ assert.equal(result.placed,3);
+ assert.deepEqual(new Set(draft.layers.filter(layer=>layer.type==='material'&&!layer.isParked).map(layer=>layer.assetID)),
+  new Set(assets.map(asset=>asset.id)));
+ assert.ok(draft.layers.filter(layer=>layer.isParked).every(layer=>
+  assets.some(asset=>asset.id===layer.assetID)),'cropped source offcuts may remain in the tray');
+ const document=await createCreationDocument({draft,assets,aliases:Object.fromEntries(assets.map(asset=>[asset.id,asset.id]))});
+ const ids=['top-one','top-four','bottom-one'];
+ const rows=inspectCreationDocument(document,{ids,textLines:true,
+  textContext:inkCanvas.createCanvas(1,1).getContext('2d'),textCanvasFactory:inkCanvas.createCanvas}).layers;
+ const byId=Object.fromEntries(rows.map(row=>[row.id,row]));
+ const fit=templatePageFit(D146_PAGE_MM,[110,157],'single'),graph=resolveD146Graph();
+ for(const id of ids){
+  const box=graph.boxes[id],ink=byId[id].textLines.lines[0].inkBoundsMm;
+  const target=[fit.offsetX+(box[0]+box[2])/2*D146_PAGE_MM[0]/D146_REFERENCE_PX[0]*fit.scale,
+   fit.offsetY+(box[1]+box[3])/2*D146_PAGE_MM[1]/D146_REFERENCE_PX[1]*fit.scale];
+  assert.ok(Math.abs((ink[0]+ink[2])/2-target[0])<2,`${id} horizontal ink alignment`);
+  assert.ok(Math.abs((ink[1]+ink[3])/2-target[1])<2,`${id} vertical ink alignment`);
+ }
+});
+
+test('D146 numeral ink alignment follows a differently sized user page',async()=>{
+ const draft=project('缩放数字卡片',{mode:'single',ratio:'a5'}).drafts[0];
+ const paperWidth=draft.canvas.width/draft.canvas.height*draft.physicalPageHeightMM;
+ const canvas=await loadOfflineCanvas();
+ await applyManualTemplate(draft,[],[],'D146',{inkCanvas:canvas});
+ const document=await createCreationDocument({draft,assets:[],aliases:{}});
+ const id='bottom-one',row=inspectCreationDocument(document,{ids:[id],textLines:true,
+  textContext:canvas.createCanvas(1,1).getContext('2d'),textCanvasFactory:canvas.createCanvas}).layers[0];
+ const box=resolveD146Graph().boxes[id],fit=templatePageFit(D146_PAGE_MM,[paperWidth,draft.physicalPageHeightMM],'single');
+ const target=[fit.offsetX+(box[0]+box[2])/2*D146_PAGE_MM[0]/D146_REFERENCE_PX[0]*fit.scale,
+  fit.offsetY+(box[1]+box[3])/2*D146_PAGE_MM[1]/D146_REFERENCE_PX[1]*fit.scale];
+ const ink=row.textLines.lines[0].inkBoundsMm;
+ assert.ok(Math.abs((ink[0]+ink[2])/2-target[0])<2);
+ assert.ok(Math.abs((ink[1]+ink[3])/2-target[1])<2);
 });

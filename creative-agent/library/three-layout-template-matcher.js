@@ -1,6 +1,7 @@
 import {layoutSpreads,LAYOUT_LEAF_MM} from './three-layout-spreads.js';
 import {solveTemplateAssignments} from './unified-template-matcher.js';
 import {withoutSplitAssignments,applyTemplateSplitPlan} from './template-split-compiler.js';
+import {visibleCropRegion} from './template-crop-region.js';
 export {LAYOUT_LEAF_MM} from './three-layout-spreads.js';
 
 const templates=new Map(layoutSpreads.map(t=>[t.id,t]));
@@ -50,8 +51,9 @@ function candidate(asset,slot){
  const [w,h]=rectMm(slot[3]),aw=Number(asset.physicalWidthMM),ah=Number(asset.physicalHeightMM);
  if(!(aw>0&&ah>0)||aw>LAYOUT_LEAF_MM[0]||ah>LAYOUT_LEAF_MM[1])return null;
  const rw=aw/w,rh=ah/h,kind=slot[2];
+ const canCrop=kind==='paper'&&asset.preservation==='repeatable';
  if(kind==='paper'&&Number(asset.writableAreaRatio??0)<.45&&!asset.visualRoles?.includes('pattern-paper'))return null;
- if(kind==='paper'&&(rw<.75||rw>1.25||rh<.75||rh>1.25))return null;
+ if(kind==='paper'&&(rw<.75||rw>(canCrop?1.6:1.25)||rh<.75||rh>(canCrop?1.6:1.25)))return null;
  if(kind==='strip'){
   // A tape-like asset can be turned across an edge while preserving native size.
   const long=Math.max(aw,ah),short=Math.min(aw,ah);
@@ -66,8 +68,12 @@ function candidate(asset,slot){
   if(rw<.35||rw>2.1||rh<.35||rh>2.1)return null;
  }else if(rw<.72||rw>1.3||rh<.72||rh>1.3)return null;
  const [x,y]=centerMm(slot[3]),bounds=asset.visualBoundsRatio||[0,0,1,1];
- const at=kind==='photo'?[round(x),round(y)]:[round(x-(bounds[0]+bounds[2]-1)*aw/2),round(y-(bounds[1]+bounds[3]-1)*ah/2)];
- const visibleWidth=kind==='photo'?w:aw,visibleHeight=kind==='photo'?h:ah;
+ const possibleRegion=canCrop?visibleCropRegion(asset,w,h):null;
+ const paperRegion=possibleRegion&&possibleRegion.box[2]>=w-.001&&possibleRegion.box[3]>=h-.001&&
+  (aw*(bounds[2]-bounds[0])>w*1.08||ah*(bounds[3]-bounds[1])>h*1.08)?possibleRegion:null;
+ const at=kind==='photo'||paperRegion?[round(x),round(y)]:[round(x-(bounds[0]+bounds[2]-1)*aw/2),round(y-(bounds[1]+bounds[3]-1)*ah/2)];
+ const visibleWidth=kind==='photo'?w:paperRegion?paperRegion.box[2]:aw,
+  visibleHeight=kind==='photo'?h:paperRegion?paperRegion.box[3]:ah;
  if(at[0]-visibleWidth/2 < -2||at[0]+visibleWidth/2>LAYOUT_LEAF_MM[0]+2||at[1]-visibleHeight/2 < -2||at[1]+visibleHeight/2>LAYOUT_LEAF_MM[1]+2)return null;
  const fit=Math.exp(-.5*(Math.abs(Math.log(rw))+Math.abs(Math.log(rh))));
  const crop=kind==='photo'?[round(Math.max(0,(1-w/aw)/2)),round(Math.max(0,(1-h/ah)/2)),round(Math.min(1,w/aw)),round(Math.min(1,h/ah))]:null;
@@ -75,7 +81,9 @@ function candidate(asset,slot){
  const motif=slot[5]?.motif,title=String(asset.title||'');
  const motifFit=motif==='coffee-cup'&&/咖啡|杯|饮|圆形/.test(title)?1:motif==='doodle-animal'&&/猫|熊|动物|蝴蝶|人物/.test(title)?1:motif==='teddy-bear'&&/熊|猫|动物|玩偶/.test(title)?1:motif==='milk-bottle'&&/奶|瓶|饮/.test(title)?1:motif==='doodle-ghost-pair'&&/猫|熊|动物|人物/.test(title)?1:0;
  const motifSubjectMatch=!motif?null:motif==='coffee-cup'?/咖啡|杯|饮/.test(title):motif==='doodle-animal'||motif==='teddy-bear'||motif==='doodle-ghost-pair'?/猫|熊|动物|人物/.test(title):motif==='milk-bottle'?/奶|瓶|饮/.test(title):false;
- return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&(ah>aw)!==(h>w)?90:0,...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),subjectMatch,motifFit,motifSubjectMatch,score:round(THREE_SCORE.size*fit+THREE_SCORE.role*(1-match*.2)+THREE_SCORE.photoRole*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+THREE_SCORE.subject*(subjectMatch?1:0)+THREE_SCORE.motif*motifFit+(kind==='sticker'&&asset.visualRoles?.includes('figure') ? .15 : 0))};
+ return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&(ah>aw)!==(h>w)?90:0,
+  ...(paperRegion?{method:'crop',cropRegion:paperRegion}:{}),...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),
+  subjectMatch,motifFit,motifSubjectMatch,score:round(THREE_SCORE.size*fit+THREE_SCORE.role*(1-match*.2)+THREE_SCORE.photoRole*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+THREE_SCORE.subject*(subjectMatch?1:0)+THREE_SCORE.motif*motifFit+(kind==='sticker'&&asset.visualRoles?.includes('figure') ? .15 : 0))};
 }
 export function scoreThreeLayoutSlot(templateId,slotId,asset){
  const template=templates.get(templateId);
@@ -89,21 +97,22 @@ export function describeThreeSlotMatch(templateId,slotId){
  const template=templates.get(templateId);if(!template)throw new RangeError(templateId);
  const slot=template.slots.find(item=>item[0]===slotId);if(!slot)throw new RangeError(`未知槽位：${slotId}`);
  const kind=slot[2],acceptedRoles=rolesFor(slot),[w,h]=rectMm(slot[3]);
- const range=kind==='photo'?[.98,2.15]:kind==='paper'?[.75,1.25]:kind==='sticker'?[.35,2.1]:[.72,1.3];
+ const range=kind==='photo'?[.98,2.15]:kind==='paper'?[.75,1.6]:kind==='sticker'?[.35,2.1]:[.72,1.3];
  const gates=acceptedRoles.length?[{field:'visualRoles',rule:'containsOneOf',value:acceptedRoles},
   {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:LAYOUT_LEAF_MM}]:[];
  if(kind==='strip')gates.push({field:'longSideRatio',rule:'range',value:[.45,1.6]},
   {field:'shortSideRatio',rule:'range',value:[.45,2]});
- else if(acceptedRoles.length)gates.push({field:'sizeRatio',rule:'range',value:range});
+ else if(acceptedRoles.length)gates.push({field:'sizeRatio',rule:'range',value:range,...(kind==='paper'?{when:'preservation is repeatable'}:{})});
+ if(kind==='paper')gates.push({field:'sizeRatio',rule:'range',value:[.75,1.25],when:'preservation is not repeatable'});
  if(kind==='paper')gates.push({field:'writableAreaRatio',rule:'atLeast',value:.45,exception:'pattern-paper'});
  if(kind==='strip')gates.push({field:'lengthToWidthRatio',rule:'atLeast',value:3});
  return {targetMm:[round(w),round(h)],acceptedRoles,gates,
   score:{...THREE_SCORE,rolePriority:'1 - roleIndex × 0.2',sizeFit:'exp(-0.5 × (|ln(widthRatio)| + |ln(heightRatio)|))'},
-  fallback:{method:'generated'},cropPolicy:kind==='photo'?'centered-mask':'complete',
+  fallback:{method:'generated'},cropPolicy:kind==='photo'?'centered-mask':kind==='paper'?'repeatable-only':'never',
   automaticPaper:kind==='paper'};
 }
 export function listThreeLayoutSpreads(){return [...templates.keys()];}
-export function describeThreeLayoutSpread(id){const t=templates.get(id);if(!t)throw new RangeError(id);return structuredClone({...t,leafMm:LAYOUT_LEAF_MM,slots:t.slots.map(s=>({id:s[0],page:s[1],role:s[2],box:s[3],targetMm:rectMm(s[3]).map(round),z:s[4],style:s[5]||{},acceptedMaterialRoles:rolesFor(s),defaultInput:['photo','sticker','paper','strip'].includes(s[2])?'generated':s[2]==='body'||s[2]==='title'||s[2]==='micro'||s[2]==='date'||s[2]==='word'?'editable-text':'generated-graphic'}))});}
+export function describeThreeLayoutSpread(id){const t=templates.get(id);if(!t)throw new RangeError(id);return structuredClone({...t,leafMm:LAYOUT_LEAF_MM,slots:t.slots.map(s=>({id:s[0],page:s[1],role:s[2],box:s[3],targetMm:rectMm(s[3]).map(round),z:s[4],style:s[5]||{},acceptedMaterialRoles:rolesFor(s),cropPolicy:s[2]==='paper'?'repeatable-only':s[2]==='photo'?'centered-mask':'never',defaultInput:['photo','sticker','paper','strip'].includes(s[2])?'generated':s[2]==='body'||s[2]==='title'||s[2]==='micro'||s[2]==='date'||s[2]==='word'?'editable-text':'generated-graphic'}))});}
 export function matchThreeLayoutSpread(id,assets,{bindings={},mustUse=[],pages}={}){
  const t=templates.get(id);if(!t)throw new RangeError(id);
  const slots=t.slots.filter(s=>rolesFor(s).length&&(!pages||pages.includes(s[1]))).map(node=>{const [slotId,page,role,box]=node;
@@ -140,7 +149,9 @@ export function compileThreeLayoutSpread({templateId,assets=[],plan,texts={},pal
   if(asset){
    if(role==='photo'&&choice.subjectMatch===false)warnings.push(`${id}: ${asset.title||choice.asset} 的内容与参考图的${special.subject}照片不匹配`);
    if(role==='sticker'&&special.motif&&choice.motifSubjectMatch===false)warnings.push(`${id}: ${asset.title||choice.asset} 只是尺寸或形状代位，与参考贴纸的${special.motif}主题不匹配`);
-   operations.push({op:'material.add',id,asset:sourceId(asset),place:{...place,at:choice.at,...(choice.rotationDeg?{rotationDeg:choice.rotationDeg}:{})}});
+   if(choice.method==='crop'&&choice.cropRegion)operations.push({op:'material.split',asset:sourceId(asset),
+    pieces:[{id,region:choice.cropRegion,place:{...place,at:choice.at}}],keepRemainder:true});
+   else operations.push({op:'material.add',id,asset:sourceId(asset),place:{...place,at:choice.at,...(choice.rotationDeg?{rotationDeg:choice.rotationDeg}:{})}});
    if(choice.crop&&choice.crop.some((v,i)=>Math.abs(v-[0,0,1,1][i])>.005))operations.push({op:'layer.mask',target:id,mode:'replace',region:{shape:'rect',space:'local',unit:'ratio',box:choice.crop}});
    continue;
   }

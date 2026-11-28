@@ -30,12 +30,17 @@ const sourceCanSplit=asset=>asset.kind==='paper'&&['repeatable','splittable'].in
 function sourceRegions(asset,a,b){
  const W=Number(asset.physicalWidthMM),H=Number(asset.physicalHeightMM);
  const [aw,ah]=a.sizeMm,[bw,bh]=b.sizeMm,regions=[];
+ const input=asset.visualBoundsRatio;
+ const bounds=Array.isArray(input)&&input.length===4&&input.every(Number.isFinite)&&
+  input[0]>=0&&input[1]>=0&&input[2]<=1&&input[3]<=1&&input[2]>input[0]&&input[3]>input[1]
+  ?input:[0,0,1,1];
+ const x0=bounds[0]*W,y0=bounds[1]*H,visibleW=(bounds[2]-bounds[0])*W,visibleH=(bounds[3]-bounds[1])*H;
  // Each rectangle has its exact target physical dimensions. Area alone is
  // insufficient: the two rectangles must actually pack inside the source.
- if(aw+bw<=W+.001&&Math.max(ah,bh)<=H+.001)regions.push([
-  [0,0,aw/W,ah/H],[aw/W,0,bw/W,bh/H]]);
- if(ah+bh<=H+.001&&Math.max(aw,bw)<=W+.001)regions.push([
-  [0,0,aw/W,ah/H],[0,ah/H,bw/W,bh/H]]);
+ if(aw+bw<=visibleW+.001&&Math.max(ah,bh)<=visibleH+.001)regions.push([
+  [x0/W,y0/H,aw/W,ah/H],[(x0+aw)/W,y0/H,bw/W,bh/H]]);
+ if(ah+bh<=visibleH+.001&&Math.max(aw,bw)<=visibleW+.001)regions.push([
+  [x0/W,y0/H,aw/W,ah/H],[x0/W,(y0+ah)/H,bw/W,bh/H]]);
  return regions;
 }
 function relationIncrement(slot,choice,previous,slotsById,assetsById){

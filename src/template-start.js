@@ -1,5 +1,7 @@
 import {attachSceneV2} from './scene-v2.js';
 import {currentTemplate,listCurrentTemplates,rankCurrentTemplates,compileCurrentTemplate,materialTemplateProfile} from '../creative-agent/library/current-templates.js';
+import {resolveD146Graph,D146_PAGE_MM,D146_REFERENCE_PX} from '../creative-agent/library/d146-template-graph.js';
+import {templatePageFit} from '../creative-agent/library/template-page-fit.js';
 
 const paperOf=draft=>({width:draft.canvas.width/draft.canvas.height*draft.physicalPageHeightMM,
   height:draft.physicalPageHeightMM});
@@ -86,13 +88,20 @@ function rankManualChoices(draft,selected,mustUse){
 
 export function manualTemplateChoices(draft,assets,basket,{requiredAssetIDs=[]}={}){
  const selected=selectedAssets(assets,basket),paper=paperOf(draft);
- const ranked=rankManualChoices(draft,selected,requiredAliases(selected,requiredAssetIDs));
- return ranked.map(match=>({...match,selected,paper,missing:match.emptySlots,
-  description:match.description||match.template.structure,
-  reason:`${match.mode==='leaf'?'双页取单页 · ':match.mode==='pair'?'双单页组合 · ':''}匹配 ${Math.max(0,Math.round(match.score))} 分 · 已用 ${match.plan.used.length} 件素材 · 默认对象 ${match.emptySlots.length} 处`}));
+ const mustUse=requiredAliases(selected,requiredAssetIDs),ranked=rankManualChoices(draft,selected,mustUse);
+ return ranked.map(match=>{
+  const operations=match.mode==='leaf'?leafOperations(match,selected,mustUse,paper):
+   match.mode==='pair'?pairOperations(match,selected,mustUse,paper):compiledFor(match,selected,mustUse,[paper.width,paper.height]);
+  const used=usedInOperations(operations.flat());
+  return {...match,selected,paper,missing:match.emptySlots,realizedUsed:used,
+   description:match.description||match.template.structure,
+   reason:`${match.mode==='leaf'?'双页取单页 · ':match.mode==='pair'?'双单页组合 · ':''}匹配 ${Math.max(0,Math.round(match.score))} 分 · 已用 ${used.length} 件素材 · 默认对象 ${match.emptySlots.length} 处`};
+ });
 }
 
 function withoutTray(operations){return operations.filter(op=>!(op.op==='material.add'&&op.place?.surface==='tray'));}
+const usedInOperations=operations=>[...new Set(operations.flatMap(op=>
+ (op.op==='material.add'&&op.place?.surface!=='tray')||op.op==='material.split'?[op.asset]:[]).filter(Boolean))];
 function parkUnused(selected,used){
  const usedSet=new Set(used);
  return selected.map(materialTemplateProfile).filter(asset=>asset.alias&&asset.usage!=='calibration-only'&&!usedSet.has(asset.alias))
@@ -101,21 +110,21 @@ function parkUnused(selected,used){
 }
 function compiledFor(match,selected,mustUse,pageMm){
  return compileCurrentTemplate({templateId:match.id,assets:selected,plan:match.plan,mustUse,pageMm,
-  bindings:Object.fromEntries(match.assignments.map(({slotId,alias})=>[slotId,alias])),
-  slotValues:Object.fromEntries(match.assignments.map(({slotId})=>[slotId,{fit:'none'}]))}).operations;
+  bindings:Object.fromEntries(match.assignments.map(({slotId,alias})=>[slotId,alias]))}).operations;
 }
 function leafOperations(choice,selected,mustUse,paper){
  const ops=withoutTray(compiledFor({...choice,id:choice.sourceId},selected,mustUse,[paper.width*2,paper.height]));
  const pageRef=`page.${choice.side}`;
  const kept=new Set(ops.filter(op=>op.id&&op.place?.reference===pageRef).map(op=>op.id));
- return [...ops.filter(op=>op.op==='page.update'&&op.page===pageRef||
+ const keptOps=ops.filter(op=>op.op==='page.update'&&op.page===pageRef||
    op.place?.reference===pageRef||op.target&&kept.has(op.target)&&(!op.reference||kept.has(op.reference)))
   .map(op=>{
    const next=structuredClone(op);
    if(next.op==='page.update')delete next.page;
    if(next.place?.reference===pageRef)next.place.reference='page';
    return next;
-  }),...parkUnused(selected,choice.plan.used)];
+  });
+ return [...keptOps,...parkUnused(selected,usedInOperations(keptOps))];
 }
 function pairOperations(choice,selected,mustUse,paper){
  const batches=[[],[]];
@@ -135,11 +144,11 @@ function pairOperations(choice,selected,mustUse,paper){
    batches[index].push(next);
   }
  }
- batches[1].push(...parkUnused(selected,choice.plan.used));
+ batches[1].push(...parkUnused(selected,usedInOperations(batches.flat())));
  return batches;
 }
 
-export async function applyManualTemplate(draft,assets,basket,templateID,{requiredAssetIDs=[],choice}={}){
+export async function applyManualTemplate(draft,assets,basket,templateID,{requiredAssetIDs=[],choice,inkCanvas}={}){
  const template=currentTemplate(templateID);
  if(!template&&!templateID?.startsWith('leaf:')&&!templateID?.startsWith('pair:'))
   throw Error('旧模板已下线匹配，请选择新模板');
@@ -170,6 +179,30 @@ export async function applyManualTemplate(draft,assets,basket,templateID,{requir
   result={...applied,changed:result.changed||applied.changed};
  }
  if(!result.changed)throw Error('模板未能生成可编辑画面');
+ // D146's large numerals sit on cards. Their visible ink, rather than the
+ // editable text frame, is the measured relationship that must be aligned.
+ if(templateID==='D146'){
+  const canvas=inkCanvas|| (globalThis.document?.createElement?{
+   createCanvas:(width,height)=>{const element=globalThis.document.createElement('canvas');
+    element.width=width;element.height=height;return element;}
+  }:null);
+  if(canvas){
+   const {prepareJournalFont}=await import('./journal-fonts.js');
+   const {alignTemplateInkToBoxes}=await import('../creative-agent/library/refine-measured-template.js');
+   const ids=['top-one','top-four','bottom-one'];
+   await Promise.all(result.document.page.layers.filter(layer=>ids.includes(layer.id)).map(prepareJournalFont));
+   const fit=templatePageFit(D146_PAGE_MM,[paper.width,paper.height],'single');
+   const graph=resolveD146Graph();
+   const boxes=Object.fromEntries(ids.map(id=>{
+    const [x0,y0,x1,y1]=graph.boxes[id];
+    return [id,[fit.offsetX+x0*D146_PAGE_MM[0]/D146_REFERENCE_PX[0]*fit.scale,
+     fit.offsetY+y0*D146_PAGE_MM[1]/D146_REFERENCE_PX[1]*fit.scale,
+     fit.offsetX+x1*D146_PAGE_MM[0]/D146_REFERENCE_PX[0]*fit.scale,
+     fit.offsetY+y1*D146_PAGE_MM[1]/D146_REFERENCE_PX[1]*fit.scale]];
+   }));
+   result.document=alignTemplateInkToBoxes(result.document,boxes,selected,canvas).document;
+  }
+ }
  const finishedPage=result.document.page;
  draft.layers=finishedPage.layers;
  draft.paperColor=finishedPage.paperColor;
@@ -177,6 +210,7 @@ export async function applyManualTemplate(draft,assets,basket,templateID,{requir
  else delete draft.paperColors;
  attachSceneV2(draft);
  draft.startTemplateID=templateID;
- return {placed:match.plan.used.length,remaining:selected.length-match.plan.used.length,
+ const placed=new Set(draft.layers.filter(layer=>layer.type==='material'&&!layer.isParked).map(layer=>layer.assetID));
+ return {placed:placed.size,remaining:selected.length-placed.size,
   missing:match.emptySlots.length,template:match.title};
 }

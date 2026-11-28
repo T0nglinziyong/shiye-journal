@@ -47,6 +47,8 @@ export const creativePresetAssets=Object.freeze(definitions.map(({key,width,heig
 })));
 
 export const isCreativePreset=asset=>asset?.isCreativePreset===true;
+const creativePresetIDs=new Set(creativePresetAssets.map(asset=>asset.id));
+export const isCreativePresetID=id=>creativePresetIDs.has(id);
 export function withCreativePresetAssets(assets=[]){
   const ids=new Set(assets.map(asset=>asset.id));
   return [...assets,...creativePresetAssets.filter(asset=>!ids.has(asset.id))];

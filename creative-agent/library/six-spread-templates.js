@@ -2,6 +2,7 @@ import graphs from './six-spread-template-graphs.json' with {type:'json'};
 import {describeSpreadSlot} from './six-spread-slot-catalog.js';
 import {solveTemplateAssignments} from './unified-template-matcher.js';
 import {withoutSplitAssignments,applyTemplateSplitPlan} from './template-split-compiler.js';
+import {visibleCropRegion,visibleSourceBoundsMm} from './template-crop-region.js';
 
 // A6per's photographed leaf is approximately 0.55 wide per unit height.
 // Personal (95 × 171 mm) is the closest supported insert. The source video
@@ -101,10 +102,12 @@ const fit=(asset,node,slot)=>{
  if(!(w>0&&h>0)||w>SPREAD_LEAF_MM[0]+4||h>SPREAD_LEAF_MM[1]+4)return null;
  const ratioW=w/tw,ratioH=h/th;
  const paper=/paper|card|note/.test(node[2])&&!photoRoles.test(node[2]);
+ const canCrop=paper&&asset.preservation==='repeatable';
  const accent=slot.role==='edge-accent';
  const figure=asset.visualRoles?.includes('figure')&&!paper;
  if(ratioW<(paper ? .72 : figure ? .28 : accent ? .7 : .42)||ratioH<(paper ? .72 : figure ? .28 : accent ? .7 : .42)||
-  ratioW>(paper?1.35:figure?2.1:accent?1.45:1.75)||ratioH>(paper?1.35:figure?2.1:accent?1.45:1.75))return null;
+  ratioW>(paper?(canCrop?1.6:1.35):figure?2.1:accent?1.45:1.75)||
+  ratioH>(paper?(canCrop?1.6:1.35):figure?2.1:accent?1.45:1.75))return null;
  // Large photographs establish a page's weight. A postage-sized original
  // cannot fill their structural slot without forbidden upscaling.
  if(/^(?:large-scene-photo|large-irregular-photo)$/.test(node[2])&&(ratioW<.65||ratioH<.6))return null;
@@ -121,6 +124,7 @@ const isTextNode=node=>/^(?:body-|micro-typography|micro-heading|large-date-text
 const hasCardText=node=>/^(?:small-heading-card|date-card|large-date-badge|micro-label|pattern-note)$/.test(node[2]);
 const candidate=(asset,node,template)=>{
  const slot=describeSpreadSlot(template.id,node),f=fit(asset,node,slot);if(!f)return null;
+ const paper=/paper|card|note/.test(node[2])&&!photoRoles.test(node[2]);
  const roles=slot.acceptedMaterialRoles,matched=roles.findIndex(r=>asset.visualRoles?.includes(r));
  if(matched<0)return null;
  // A card carrying its own headline is not an empty writing surface. User
@@ -136,7 +140,14 @@ const candidate=(asset,node,template)=>{
  const semantic=(subject?.test(title)?.24:0)+(/bread/.test(key)&&/面包|吐司/.test(title)?.12:0)+(/dessert|cake/.test(key)&&/甜品|蛋糕/.test(title)?.14:0)+(/flower|lily/.test(key)&&/花/.test(title)?.12:0)-(/irregular-subject/.test(node[2])&&asset.visualRoles?.includes('printed-card') ? .16 : 0);
  const whole=asset.preservation==='whole'&&/flower|subject/.test(node[2])?.09:0;
  const subjectBonus=asset.visualRoles?.includes('figure')&&/flower|subject|accent/.test(node[2]) ? .15 : 0;
- return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole+subjectBonus),method:'complete',overlayText:hasCardText(node)};
+ const [targetWidth,targetHeight]=mm(node[3]);
+ const [vx0,vy0,vx1,vy1]=paper?visibleSourceBoundsMm(asset):[0,0,0,0];
+ const cropRegion=paper&&asset.preservation==='repeatable'&&vx1-vx0>=targetWidth&&vy1-vy0>=targetHeight&&
+  (vx1-vx0>targetWidth*1.08||vy1-vy0>targetHeight*1.08)
+  ?visibleCropRegion(asset,targetWidth,targetHeight):null;
+ return {asset:alias(asset),at:cropRegion?center(node[3]):f.at,sourceMm:f.size,
+  score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole+subjectBonus),
+  method:cropRegion?'crop':'complete',...(cropRegion?{cropRegion}:{}),overlayText:hasCardText(node)};
 };
 
 export function scoreSixSpreadSlot(templateId,slotId,asset){
@@ -157,10 +168,11 @@ export function describeSixSlotMatch(templateId,slotId){
  const paper=/paper|card|note/.test(node[2])&&!photoRoles.test(node[2]);
  const accent=slot.role==='edge-accent';
  const irregular=/flower|subject|accent/.test(node[2]);
- const min=paper?.72:accent?.7:.42,max=paper?1.35:accent?1.45:1.75;
+ const min=paper?.72:accent?.7:.42,max=paper?1.6:accent?1.45:1.75;
  const gates=slot.acceptedMaterialRoles.length?[{field:'visualRoles',rule:'containsOneOf',value:slot.acceptedMaterialRoles},
   {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:[SPREAD_LEAF_MM[0]+4,SPREAD_LEAF_MM[1]+4]},
-  {field:'sizeRatio',rule:'range',value:[min,max],...(irregular?{when:'visualRoles excludes figure'}:{})}]:[];
+  {field:'sizeRatio',rule:'range',value:[min,max],...(paper?{when:'preservation is repeatable'}:irregular?{when:'visualRoles excludes figure'}:{})}]:[];
+ if(paper)gates.push({field:'sizeRatio',rule:'range',value:[min,1.35],when:'preservation is not repeatable'});
  if(irregular)gates.push({field:'sizeRatio',rule:'range',value:[.28,2.1],when:'visualRoles includes figure'});
  if(/^(?:large-scene-photo|large-irregular-photo)$/.test(node[2]))gates.push({field:'sizeRatio',rule:'minimum',value:[.65,.6]});
  if(/writing-card|date-card|small-heading-card|pattern-note/.test(node[2]))gates.push({field:'writableAreaRatio',rule:'atLeast',value:.6,exception:'canWriteOn=true'});
@@ -168,7 +180,7 @@ export function describeSixSlotMatch(templateId,slotId){
  if(/(?:flower|subject)$/.test(node[2]))gates.push({field:'visualRoles',rule:'containsOneOf',value:['figure','photo']});
  return {targetMm:[round(w),round(h)],acceptedRoles:slot.acceptedMaterialRoles,gates,
   score:{...SIX_SCORE,rolePriority:'1 - roleIndex × 0.18',sizeFit:'exp(-0.5 × (|ln(widthRatio)| + |ln(heightRatio)|))',semanticBonus:'0–0.62'},
-  fallback:{method:'generated',score:SIX_SCORE.defaultScore},cropPolicy:'complete'};
+  fallback:{method:'generated',score:SIX_SCORE.defaultScore},cropPolicy:paper?'repeatable-only':'never'};
 }
 
 function addVectorLace(operations,id,page,box){
@@ -255,7 +267,9 @@ export function compileSixSpreadTemplate({templateId,assets=[],plan,texts={},pal
    continue;
   }
   if(selected){
-   operations.push({op:'material.add',id,asset:choice.asset,place:{...place,at:choice.at}});
+   if(choice.method==='crop'&&choice.cropRegion)operations.push({op:'material.split',asset:choice.asset,
+    pieces:[{id,region:choice.cropRegion,place:{...place,at:choice.at}}],keepRemainder:true});
+   else operations.push({op:'material.add',id,asset:choice.asset,place:{...place,at:choice.at}});
    // A photographed heart or dessert is not a crop instruction. Keep the
    // user's source intact unless a future slot explicitly asks for a mask.
    if(choice.overlayText)addCardText(operations,template,node,texts,visual.fill||colorFor(template,node));

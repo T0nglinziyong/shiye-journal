@@ -16,6 +16,7 @@ import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {hiddenAssetCopy,referencedAssetIDsInProjects} from './asset-retention.js';
 import {sceneMaterialIDs,sceneMaterialBlobIDs} from './scene-material-references.js';
+import {isCreativePresetID} from './creative-presets.js';
 import {createCloudBaseStorage} from './cloudbase-storage.js';
 import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
@@ -1211,7 +1212,8 @@ async function verifyNewProjectSources(operations){
     const remote=await cloudRecord('projects',op.item.id);
     const old=new Set(remote?(Array.isArray(remote.sceneAssetIDs)
       ?remote.sceneAssetIDs:sceneMaterialIDs(remote.projectDocumentPath?await cloudProjectDocument(remote):remote)):[]);
-    for(const id of current)if(!old.has(id)&&!assetPuts.has(id))needed.add(id);
+    // Bundled presets have stable local IDs and static images, not account asset rows.
+    for(const id of current)if(!old.has(id)&&!assetPuts.has(id)&&!isCreativePresetID(id))needed.add(id);
   }
   if(!needed.size)return;
   const ids=[...needed],found=new Set();

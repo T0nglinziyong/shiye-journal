@@ -1,4 +1,5 @@
 import {resolveD146Graph} from './d146-template-graph.js';
+import {visibleCropRegion} from './template-crop-region.js';
 
 // Measured from the finished D146 page (630 × 900) and normalized to 110 × 157 mm.
 // These coordinates are the template's composition, independent of source art.
@@ -47,11 +48,15 @@ export function compileMeasuredD146({assets=[],bindings={},texts={},palette={},l
   if(w<=bw&&h<=bh){addMaterial(ops,used,a,nodeId,b,options.rotationDeg||0);return;}
   const printed=/card|text|letter|number|数字|字|人物|person|girl|photo/i.test(name(a));
   const fit=v.fit??'auto';
-  if(fit==='none'||(fit==='auto'&&printed)){
+  if(fit==='none'){
+   addMaterial(ops,used,a,nodeId,b,options.rotationDeg||0);
+   return;
+  }
+  if(fit==='auto'&&printed){
    warnings.push(`${nodeId} 的 ${id(a)} 超过目标区间，保留素材并使用默认纸张`);
    ops.push(paper(nodeId,b,slotValues[nodeId]?.color??defaultColor,options));return;
   }
-  const cw=Math.min(w,bw),ch=Math.min(h,bh),region={shape:'rect',space:'source',unit:'mm',box:[(w-cw)/2,(h-ch)/2,cw,ch]};
+  const region=visibleCropRegion(a,bw,bh);
   if(fit==='mask'){
    addMaterial(ops,used,a,nodeId,b,options.rotationDeg||0);
    ops.push({op:'layer.mask',target:nodeId,region,mode:'intersect'});
