@@ -1,4 +1,6 @@
 import {layoutSpreads,LAYOUT_LEAF_MM} from './three-layout-spreads.js';
+import {solveTemplateAssignments} from './unified-template-matcher.js';
+import {withoutSplitAssignments,applyTemplateSplitPlan} from './template-split-compiler.js';
 export {LAYOUT_LEAF_MM} from './three-layout-spreads.js';
 
 const templates=new Map(layoutSpreads.map(t=>[t.id,t]));
@@ -40,6 +42,7 @@ function assetSubjects(asset){
  if(/拼贴|文具|纸品|胶片/.test(title))result.push('stationery');
  return result;
 }
+const THREE_SCORE=Object.freeze({size:.55,role:.2,photoRole:.1,subject:.3,motif:.28,minimum:.48});
 function candidate(asset,slot){
  const accepted=rolesFor(slot),match=accepted.findIndex(r=>asset.visualRoles?.includes(r));
  if(match<0)return null;
@@ -52,7 +55,8 @@ function candidate(asset,slot){
  if(kind==='strip'){
   // A tape-like asset can be turned across an edge while preserving native size.
   const long=Math.max(aw,ah),short=Math.min(aw,ah);
-  if(long/short<3||long/w<.45||long/w>1.6||short/h<.45||short/h>2)return null;
+  const targetLong=Math.max(w,h),targetShort=Math.min(w,h);
+  if(long/short<3||long/targetLong<.45||long/targetLong>1.6||short/targetShort<.45||short/targetShort>2)return null;
  }else if(kind==='photo'){
   // The source material keeps its native millimetre dimensions. A larger
   // photograph can fill a measured picture slot through a centred display
@@ -71,22 +75,49 @@ function candidate(asset,slot){
  const motif=slot[5]?.motif,title=String(asset.title||'');
  const motifFit=motif==='coffee-cup'&&/咖啡|杯|饮|圆形/.test(title)?1:motif==='doodle-animal'&&/猫|熊|动物|蝴蝶|人物/.test(title)?1:motif==='teddy-bear'&&/熊|猫|动物|玩偶/.test(title)?1:motif==='milk-bottle'&&/奶|瓶|饮/.test(title)?1:motif==='doodle-ghost-pair'&&/猫|熊|动物|人物/.test(title)?1:0;
  const motifSubjectMatch=!motif?null:motif==='coffee-cup'?/咖啡|杯|饮/.test(title):motif==='doodle-animal'||motif==='teddy-bear'||motif==='doodle-ghost-pair'?/猫|熊|动物|人物/.test(title):motif==='milk-bottle'?/奶|瓶|饮/.test(title):false;
- return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&ah>aw?90:0,...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),subjectMatch,motifFit,motifSubjectMatch,score:round(.55*fit+.2*(1-match*.2)+.1*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+.3*(subjectMatch?1:0)+.28*motifFit)};
+ return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&(ah>aw)!==(h>w)?90:0,...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),subjectMatch,motifFit,motifSubjectMatch,score:round(THREE_SCORE.size*fit+THREE_SCORE.role*(1-match*.2)+THREE_SCORE.photoRole*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+THREE_SCORE.subject*(subjectMatch?1:0)+THREE_SCORE.motif*motifFit)};
+}
+export function scoreThreeLayoutSlot(templateId,slotId,asset){
+ const template=templates.get(templateId);
+ if(!template)throw new RangeError(templateId);
+ const slot=template.slots.find(item=>item[0]===slotId);
+ if(!slot||!rolesFor(slot).length)return null;
+ const result=candidate(asset,slot);
+ return result&&result.score>=THREE_SCORE.minimum?result:null;
+}
+export function describeThreeSlotMatch(templateId,slotId){
+ const template=templates.get(templateId);if(!template)throw new RangeError(templateId);
+ const slot=template.slots.find(item=>item[0]===slotId);if(!slot)throw new RangeError(`未知槽位：${slotId}`);
+ const kind=slot[2],acceptedRoles=rolesFor(slot),[w,h]=rectMm(slot[3]);
+ const range=kind==='photo'?[.98,2.15]:kind==='paper'?[.75,1.25]:kind==='sticker'?[.5,1.8]:[.72,1.3];
+ const gates=acceptedRoles.length?[{field:'visualRoles',rule:'containsOneOf',value:acceptedRoles},
+  {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:LAYOUT_LEAF_MM}]:[];
+ if(kind==='strip')gates.push({field:'longSideRatio',rule:'range',value:[.45,1.6]},
+  {field:'shortSideRatio',rule:'range',value:[.45,2]});
+ else if(acceptedRoles.length)gates.push({field:'sizeRatio',rule:'range',value:range});
+ if(kind==='paper')gates.push({field:'writableAreaRatio',rule:'atLeast',value:.45,exception:'pattern-paper'});
+ if(kind==='sticker')gates.push({field:'kind',rule:'equals',value:'sticker'});
+ if(kind==='strip')gates.push({field:'lengthToWidthRatio',rule:'atLeast',value:3});
+ return {targetMm:[round(w),round(h)],acceptedRoles,gates,
+  score:{...THREE_SCORE,rolePriority:'1 - roleIndex × 0.2',sizeFit:'exp(-0.5 × (|ln(widthRatio)| + |ln(heightRatio)|))'},
+  fallback:{method:'generated'},cropPolicy:kind==='photo'?'centered-mask':'complete',
+  automaticPaper:kind==='paper'};
 }
 export function listThreeLayoutSpreads(){return [...templates.keys()];}
 export function describeThreeLayoutSpread(id){const t=templates.get(id);if(!t)throw new RangeError(id);return structuredClone({...t,leafMm:LAYOUT_LEAF_MM,slots:t.slots.map(s=>({id:s[0],page:s[1],role:s[2],box:s[3],targetMm:rectMm(s[3]).map(round),z:s[4],style:s[5]||{},acceptedMaterialRoles:rolesFor(s),defaultInput:['photo','sticker','paper','strip'].includes(s[2])?'generated':s[2]==='body'||s[2]==='title'||s[2]==='micro'||s[2]==='date'||s[2]==='word'?'editable-text':'generated-graphic'}))});}
-export function matchThreeLayoutSpread(id,assets,{bindings={}}={}){
+export function matchThreeLayoutSpread(id,assets,{bindings={},mustUse=[]}={}){
  const t=templates.get(id);if(!t)throw new RangeError(id);
- const slots=t.slots.filter(s=>rolesFor(s).length),used=new Set(),assignments=[];
- // The large photographs establish the composition; assign them before accents.
- const priority={photo:0,paper:1,strip:2,sticker:3};
- for(const slot of [...slots].sort((a,b)=>priority[a[2]]-priority[b[2]]||rectMm(b[3])[0]*rectMm(b[3])[1]-rectMm(a[3])[0]*rectMm(a[3])[1])){
-  if(slot[2]==='paper'&&!bindings[slot[0]]){assignments.push({slot:slot[0],asset:null,method:'generated'});continue;}
-  const choice=assets.filter(a=>a.usage!=='calibration-only'&&!used.has(sourceId(a))&&(!bindings[slot[0]]||sourceId(a)===bindings[slot[0]])).map(a=>candidate(a,slot)).filter(Boolean).sort((a,b)=>b.score-a.score)[0];
-  if(choice&&choice.score>=.48){used.add(choice.asset);assignments.push({slot:slot[0],...choice});}
-  else assignments.push({slot:slot[0],asset:null,method:'generated'});
- }
- return {templateId:id,assignments,used:[...used],missingPhotos:t.slots.filter(s=>s[2]==='photo'&&!assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0]),missingStickers:t.slots.filter(s=>s[2]==='sticker'&&s[5]?.motif&&!assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0])};
+ const slots=t.slots.filter(s=>rolesFor(s).length).map(node=>{const [slotId,page,role,box]=node;
+  return {id:slotId,page,role,box:[box[0]/100,box[1]/100,(box[2]-box[0])/100,(box[3]-box[1])/100],
+   sizeMm:rectMm(box).map(round),weight:role==='photo'?1.4:role==='paper'?1.1:1,
+   preferredColor:node[5]?.fill||null,
+   splitKind:role==='paper'?'paper':null,node};});
+ const result=solveTemplateAssignments({templateId:id,slots,assets:assets.filter(a=>a.usage!=='calibration-only'),bindings,mustUse,
+  defaultScore:.38,normalizeScore:value=>Math.max(0,Math.min(1,value/1.25)),scoreCandidate:(asset,slot)=>{
+   const fit=candidate(asset,slot.node);return fit&&fit.score>=THREE_SCORE.minimum?fit:null;
+  }});
+ return {...result,missingPhotos:t.slots.filter(s=>s[2]==='photo'&&!result.assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0]),
+  missingStickers:t.slots.filter(s=>s[2]==='sticker'&&s[5]?.motif&&!result.assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0])};
 }
 function addText(operations,t,slot,content){
  const [id,page,role,box,,special={}]=slot,[w,h]=rectMm(box);
@@ -98,6 +129,8 @@ function addText(operations,t,slot,content){
 }
 export function compileThreeLayoutSpread({templateId,assets=[],plan,texts={},palette={}}={}){
  const t=templates.get(templateId);if(!t)throw new RangeError(templateId);
+ if(plan?.splitGroups?.length)return applyTemplateSplitPlan(compileThreeLayoutSpread({templateId,assets,
+  plan:withoutSplitAssignments(plan),texts,palette}),plan);
  const matched=plan||matchThreeLayoutSpread(templateId,assets),choices=new Map(matched.assignments.map(a=>[a.slot,a]));
  const operations=[{op:'page.update',page:'page.left',paperColor:palette.left||t.pages.left},{op:'page.update',page:'page.right',paperColor:palette.right||t.pages.right}];
  const warnings=[],base=copy[templateId];

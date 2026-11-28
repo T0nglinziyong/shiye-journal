@@ -1,5 +1,7 @@
 import graphs from './six-spread-template-graphs.json' with {type:'json'};
 import {describeSpreadSlot} from './six-spread-slot-catalog.js';
+import {solveTemplateAssignments} from './unified-template-matcher.js';
+import {withoutSplitAssignments,applyTemplateSplitPlan} from './template-split-compiler.js';
 
 // A6per's photographed leaf is approximately 0.55 wide per unit height.
 // Personal (95 × 171 mm) is the closest supported insert. The source video
@@ -12,6 +14,7 @@ const center=([x0,y0,x1,y1])=>[(x0+x1)*.475,(y0+y1)*.855];
 const round=x=>Math.round(x*100)/100;
 const alias=a=>a.alias||a.id;
 const photoRoles=/^(?:large-scene-photo|small-scene-photo|large-irregular-photo|irregular-photo|scene-photo|small-scene-card|square-scene-card|large-irregular-flower|small-irregular-flower|irregular-subject)$/;
+const SIX_SCORE=Object.freeze({size:.48,role:.4,minimum:.55,defaultScore:.22,wholeSubjectBonus:.09});
 const accentRoles=/accent|stars|dots|starburst|medallion|oval/;
 const paperRoles=/^(?:ruled-background|support-card|backing-paper|writing-card|light-writing-card|torn-writing-card|translucent-paper|translucent-backing-paper|light-paper|large-writing-card|small-heading-card|date-card|large-date-badge|micro-label|pattern-note|small-scene-card|square-scene-card|vertical-connector|horizontal-lace|support-paper)$/;
 const defaultText={
@@ -129,8 +132,39 @@ const candidate=(asset,node,template)=>{
  if(/lace/.test(key)&&!/蕾丝|花边|镂空|网纱|胶带/.test(title))return null;
  const semantic=(subject?.test(title)?.24:0)+(/bread/.test(key)&&/面包|吐司/.test(title)?.12:0)+(/dessert|cake/.test(key)&&/甜品|蛋糕/.test(title)?.14:0)+(/flower|lily/.test(key)&&/花/.test(title)?.12:0)-(/irregular-subject/.test(node[2])&&asset.visualRoles?.includes('printed-card') ? .16 : 0);
  const whole=asset.preservation==='whole'&&/flower|subject/.test(node[2])?.09:0;
- return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(.48*f.sizeScore+.4*(1-matched*.18)+semantic+whole),method:'complete',overlayText:hasCardText(node)&&asset.visualRoles?.some(r=>['writing-card','plain-paper'].includes(r))};
+ return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole),method:'complete',overlayText:hasCardText(node)&&asset.visualRoles?.some(r=>['writing-card','plain-paper'].includes(r))};
 };
+
+export function scoreSixSpreadSlot(templateId,slotId,asset){
+ const template=byId.get(templateId);
+ if(!template)throw new RangeError(`未知双页模板：${templateId}`);
+ const node=template.nodes.find(item=>item[0]===slotId);
+ if(!node||!isMaterialSlot(template,node))return null;
+ const result=candidate(asset,node,template);
+ return result&&result.score>=SIX_SCORE.minimum?result:null;
+}
+
+export function describeSixSlotMatch(templateId,slotId){
+ const template=byId.get(templateId);
+ if(!template)throw new RangeError(`未知双页模板：${templateId}`);
+ const node=template.nodes.find(item=>item[0]===slotId);
+ if(!node)throw new RangeError(`未知槽位：${slotId}`);
+ const slot=describeSpreadSlot(templateId,node),[w,h]=mm(node[3]);
+ const paper=/paper|card|note/.test(node[2])&&!photoRoles.test(node[2]);
+ const accent=slot.role==='edge-accent';
+ const min=paper?.72:accent?.7:.42,max=paper?1.35:accent?1.45:1.75;
+ const gates=slot.acceptedMaterialRoles.length?[{field:'visualRoles',rule:'containsOneOf',value:slot.acceptedMaterialRoles},
+  {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:[SPREAD_LEAF_MM[0]+4,SPREAD_LEAF_MM[1]+4]},
+  {field:'sizeRatio',rule:'range',value:[min,max]}]:[];
+ if(/^(?:large-scene-photo|large-irregular-photo)$/.test(node[2]))gates.push({field:'sizeRatio',rule:'minimum',value:[.65,.6]});
+ if(/writing-card|date-card|small-heading-card|pattern-note/.test(node[2]))gates.push({field:'writableAreaRatio',rule:'atLeast',value:.6,exception:'canWriteOn=true'});
+ if(/lace/.test(slotId))gates.push({field:'title',rule:'matches',value:'蕾丝|花边|镂空|网纱|胶带'});
+ if(slot.role==='edge-accent')gates.push({field:'wholeSubject',rule:'excludesTitle',value:'人物|蝴蝶'});
+ if(/(?:flower|subject)$/.test(node[2]))gates.push({field:'visualRoles',rule:'containsOneOf',value:['figure','photo']});
+ return {targetMm:[round(w),round(h)],acceptedRoles:slot.acceptedMaterialRoles,gates,
+  score:{...SIX_SCORE,rolePriority:'1 - roleIndex × 0.18',sizeFit:'exp(-0.5 × (|ln(widthRatio)| + |ln(heightRatio)|))',semanticBonus:'0–0.62'},
+  fallback:{method:'generated',score:SIX_SCORE.defaultScore},cropPolicy:'complete'};
+}
 
 function addVectorLace(operations,id,page,box){
  const [width,height]=mm(box),[x,y]=center(box),reference=`page.${page}`;
@@ -155,26 +189,25 @@ export function describeSixSpreadTemplate(templateId){
   below:template.occlusion.filter(([,back])=>back===node[0]).map(([front])=>front)
  }))});
 }
-export function matchSixSpreadMaterials(templateId,profiles,{overrides={},calibrationMode=false}={}){
+export function matchSixSpreadMaterials(templateId,profiles,{overrides={},calibrationMode=false,mustUse=[]}={}){
  const template=byId.get(templateId);if(!template)throw new RangeError(`未知双页模板：${templateId}`);
  // Reference/case art belongs to offline template calibration only. It cannot
  // silently enter a user's draft through automatic matching or a binding.
  const available=profiles.filter(p=>calibrationMode||p.usage!=='calibration-only');
- const slots=template.nodes.filter(node=>isMaterialSlot(template,node));
- let beam=[{score:0,used:[],assignments:[]}];
- for(const node of slots){
-  const requested=overrides[node[0]];
-  const choices=available.filter(p=>!requested||alias(p)===requested).map(p=>candidate(p,node,template)).filter(c=>c&&c.score>=.55).sort((a,b)=>b.score-a.score).slice(0,10);
-  const generated={slot:node[0],asset:null,method:'generated',score:0.22,reason:requested?'指定素材尺寸或角色不适合槽位':'没有尺寸与角色都适合的素材'};
-  beam=beam.flatMap(state=>[generated,...choices.filter(c=>!state.used.includes(c.asset)).map(c=>({slot:node[0],...c}))].map(choice=>({
-   score:state.score+choice.score,used:choice.asset?[...state.used,choice.asset]:state.used,
-   assignments:[...state.assignments,choice]
-  }))).sort((a,b)=>b.score-a.score||b.used.length-a.used.length).slice(0,64);
- }
- const best=beam[0],critical=slots.filter(node=>photoRoles.test(node[2])&&
+ const nodes=template.nodes.filter(node=>isMaterialSlot(template,node));
+ const slots=nodes.map(node=>{const [id,page,role,box]=node,[w,h]=mm(box);
+  return {id,role,page,box:[box[0]/100,box[1]/100,(box[2]-box[0])/100,(box[3]-box[1])/100],
+   sizeMm:[round(w),round(h)],weight:photoRoles.test(role)?1.4:/backing|support/.test(role)?1.2:1,
+   preferredColor:template.nodeStyles?.[id]?.fill||colorFor(template,node),
+   splitKind:/paper|card|note/.test(role)&&!photoRoles.test(role)&&!/(?:date|label|heading|lace|translucent)/.test(role)&&!/sticker|label|badge/.test(id)?'paper':null,node};});
+ const result=solveTemplateAssignments({templateId,slots,assets:available,bindings:overrides,mustUse,
+  defaultScore:.35,normalizeScore:value=>Math.max(0,Math.min(1,value/1.25)),scoreCandidate:(asset,slot)=>{
+   const fit=candidate(asset,slot.node,template);return fit&&fit.score>=SIX_SCORE.minimum?fit:null;
+  }});
+ const critical=nodes.filter(node=>photoRoles.test(node[2])&&
   node[2]!=='small-irregular-flower'&&!(templateId==='S06-白粉果实'&&['L-flower','R-flower'].includes(node[0]))),
-  missingCritical=critical.filter(node=>!best.assignments.find(a=>a.slot===node[0])?.asset).map(node=>node[0]);
- return {templateId,assignments:best.assignments,used:best.used,unused:profiles.map(alias).filter(id=>!best.used.includes(id)),score:round(best.score/Math.max(1,slots.length)),compatible:missingCritical.length===0,missingCritical};
+  missingCritical=critical.filter(node=>!result.assignments.find(a=>a.slot===node[0])?.asset).map(node=>node[0]);
+ return {...result,unused:profiles.map(alias).filter(id=>!result.used.includes(id)),compatible:missingCritical.length===0,missingCritical};
 }
 export function selectSixSpreadTemplate(profiles){
  const plans=listSixSpreadTemplates().map(templateId=>matchSixSpreadMaterials(templateId,profiles));
@@ -186,6 +219,8 @@ export function selectSixSpreadTemplate(profiles){
 }
 export function compileSixSpreadTemplate({templateId,assets=[],plan,texts={},palette={},calibrationMode=false}={}){
  const template=byId.get(templateId);if(!template)throw new RangeError(`未知双页模板：${templateId}`);
+ if(plan?.splitGroups?.length)return applyTemplateSplitPlan(compileSixSpreadTemplate({templateId,assets,
+  plan:withoutSplitAssignments(plan),texts,palette,calibrationMode}),plan);
  const matched=plan||matchSixSpreadMaterials(templateId,assets,{calibrationMode}),choices=new Map(matched.assignments.map(a=>[a.slot,a]));
  if(!calibrationMode&&matched.used.some(id=>assets.find(a=>alias(a)===id)?.usage==='calibration-only'))throw new Error('校准案例素材不能用于用户作品');
  const operations=[{op:'page.update',page:'page.left',paperColor:palette.left||template.pages.left},{op:'page.update',page:'page.right',paperColor:palette.right||template.pages.right}],warnings=[];

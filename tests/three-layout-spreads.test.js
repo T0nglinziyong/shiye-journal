@@ -53,15 +53,14 @@ test('四张尺寸适合的真实照片填满四个图片槽位，字素和贴�
  assert.ok(compiled.report.warnings.some(w=>w.includes('内容与参考图')&&w.includes('不匹配')),'仅尺寸合适不能冒充内容复现通过');
 });
 
-test('替换素材保留实体尺寸；不合适时生成纸而不把题字卡误作背景',()=>{
+test('替换素材保留实体尺寸；可书写纸可自动匹配，缺素材位置仍生成默认对象',()=>{
  const assets=[
   {id:'photo1',alias:'p1',physicalWidthMM:48,physicalHeightMM:64,visualRoles:['photo'],title:'咖啡照片'},
   {id:'card1',alias:'c1',physicalWidthMM:55,physicalHeightMM:65,visualRoles:['writing-card'],writableAreaRatio:.9,title:'空白便签'}
  ];
  const id='XHS-满满当当',plan=matchThreeLayoutSpread(id,assets),compiled=compileThreeLayoutSpread({templateId:id,assets,plan});
  assert.ok(compiled.operations.some(o=>o.op==='material.add'&&o.asset==='p1'));
- assert.ok(compiled.operations.some(o=>o.op==='paper.add'&&o.id==='L-upper-note'));
- assert.ok(!compiled.operations.some(o=>o.op==='material.add'&&o.asset==='c1'));
+ assert.ok(compiled.operations.some(o=>o.op==='material.add'&&o.id==='L-upper-note'&&o.asset==='c1'));
  assert.ok(compiled.operations.filter(o=>o.op==='material.add').every(o=>!('size' in o)));
  assert.ok(compiled.report.warnings.some(w=>w.includes('缺少')));
  assert.deepEqual(compileTemplateDraft({templateId:id,assets}).operations,compiled.operations);

@@ -37,15 +37,20 @@ try{
   })()`);
   await click('[data-template-side="case"]','.journal-template-detail-image img[alt*="真实案例"]');
   assert.ok(await evaluate('document.querySelector(".journal-template-detail-image img").alt.includes("真实案例")'));
-  await click('[data-template-side="elements"]','.journal-template-slot-conditions');
-  await click('.journal-template-element[data-slot-id]','.journal-template-slot-conditions');
-  assert.ok(await evaluate('document.querySelector(".journal-template-slot-conditions").textContent.includes("必须满足")'));
-  assert.ok(await evaluate('document.querySelector(".journal-template-slot-conditions").textContent.includes("默认对象")'));
-  assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-elements-view"),details=document.querySelector(".journal-template-slot-conditions");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
+  await click('[data-template-side="template"]','.journal-template-basic');
+  assert.ok(await evaluate('!!document.querySelector(".journal-template-basic-stage img")'));
+  assert.equal(await evaluate('!!document.querySelector(".journal-template-basic-inspector")'),false);
+  await click('.journal-template-basic-hit[data-slot-id="dark-stripe"]','.journal-template-basic-inspector');
+  assert.equal(await evaluate('document.querySelector("[data-inspected-slot]").dataset.inspectedSlot'),'dark-stripe');
+  assert.ok(await evaluate('document.querySelector(".journal-template-basic-inspector").textContent.includes("替换条件")'));
+  assert.ok(await evaluate('document.querySelector(".journal-template-basic-inspector").textContent.includes("按得分从高到低排列")'));
+  assert.ok(await evaluate('document.querySelector(".journal-template-basic-inspector").textContent.includes("评分方式")'));
+  assert.ok(await evaluate('document.querySelector(".journal-template-basic-operations").textContent.includes("material.add")'));
+  assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-detail-card"),details=document.querySelector(".journal-template-basic-inspector");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
   for(const [width,height] of [[390,844],[768,1024],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),`New template detail overflow at ${width}×${height}`);
-    assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-elements-view"),details=document.querySelector(".journal-template-slot-conditions");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
+    assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-detail-card"),details=document.querySelector(".journal-template-basic-inspector");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
   }
   await click('[data-template-back]','.journal-template-card');
   await click('[data-template-import]','[data-template-save]');
@@ -62,7 +67,7 @@ try{
   await click('[data-template-save]');
   await wait('.journal-template-detail-card');
   assert.ok(await evaluate('document.querySelector(".journal-template-detail-card h1").textContent.includes("React 模板导入验收")'));
-  assert.ok(await evaluate('document.querySelector("[data-template-side=elements]").disabled'));
+  assert.equal(await evaluate('!!document.querySelector(".journal-template-basic-inspector")'),false);
   assert.equal(await evaluate('!!document.querySelector("[data-template-side=case]")'),false);
   assert.equal(await evaluate('!!document.querySelector(".journal-template-filters")'),false);
   await click('[data-template-back]','.journal-template-card');
@@ -73,9 +78,8 @@ try{
   assert.equal(await evaluate('window.scrollY'),0);
   assert.ok(await evaluate('document.querySelector("[data-template-back] svg path")?.getAttribute("d")==="m15 18-6-6 6-6"'));
   assert.equal(await evaluate('!!document.querySelector("[data-template-side=case]")'),false);
-  await click('[data-template-side="elements"]','.journal-template-elements-view');
-  assert.equal(await evaluate('document.querySelector(".journal-template-elements-view").dataset.toolTemplateId'),'center-1');
-  assert.ok(await evaluate('document.querySelectorAll(".journal-template-element[data-slot-id]").length>10'));
+  assert.ok(await evaluate('!!document.querySelector(".journal-template-detail-image img")'));
+  assert.equal(await evaluate('!!document.querySelector(".journal-template-basic-inspector")'),false);
   await evaluate('window.scrollTo(0,500)');
   await click('[data-route="matching"]','.match-recommendations');
   await click('[data-route="works"]','.journal-template-detail-card');

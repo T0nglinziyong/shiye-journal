@@ -103,10 +103,10 @@ try {
     await wait('.journal-template-card');
     await capture('templates',width,height);
     const templateLayout=await evaluate('(()=>{const f=document.querySelector(".filters[data-template-filters]"),s=f.querySelector(".shiye-search"),buttons=f.querySelector(".four-filter-controls"),count=f.querySelector(":scope > span:not(.shiye-search)"),r=f.getBoundingClientRect(),b=buttons.getBoundingClientRect(),t=count.getBoundingClientRect();return {count:document.querySelectorAll(".journal-template-card").length,search:s.querySelector("input")?.getBoundingClientRect().width,controlsInside:b.left>=r.left-1&&b.right<=r.right+1,countInside:t.left>=r.left-1&&t.right<=r.right+1,controlsOverflow:buttons.scrollWidth>buttons.clientWidth+1};})()');
-    assert.ok(templateLayout.count===78&&templateLayout.search>80&&templateLayout.controlsInside&&templateLayout.countInside&&!templateLayout.controlsOverflow,'Template filters overflow or lose the search: '+JSON.stringify(templateLayout));
+    assert.ok(templateLayout.count===14&&templateLayout.search>80&&templateLayout.controlsInside&&templateLayout.countInside&&!templateLayout.controlsOverflow,'Template filters overflow or lose the search: '+JSON.stringify(templateLayout));
     await click('.journal-template-card','.journal-template-detail-image');
-    await click('[data-template-side="elements"]','.journal-template-elements-view');
-    assert.ok(await evaluate('document.querySelectorAll(".journal-template-elements-view [data-slot-id]").length>0'));
+    assert.ok(await evaluate('document.querySelectorAll(".journal-template-basic [data-slot-id]").length>0'));
+    await click('.journal-template-basic [data-slot-id]','.journal-template-basic-inspector');
     await click('[data-template-back]','.journal-template-grid');
     await click('.swift-tabs button:nth-child(3)','.works-grid');
     await evaluate('document.querySelector(".card[data-act=open-project]").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true}))');await click('#project-meta-preview','.project-preview-cover');await capture('work-preview',width,height);
