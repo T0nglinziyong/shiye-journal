@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "pattern-ground",
+      "file": "pattern-ground.png",
+      "caption": "图案块面提供局部承托，主体沿边缘聚集；上半页通过短标题和少量线条呼应。",
+      "author": "周末鱼块",
+      "title": "手帐tips｜一些胶带的基础用法",
+      "sourceURL": "https://www.xiaohongshu.com/explore/6958fc7b000000001e02d288",
+      "observation": "正文（标签）与全部10张原图，2026-11-20",
+      "sha256": "74b482c84fa19266dc2de064eb27c50f9ad4d6db384a771abd46840f36ff7d61",
+      "reviewed": true
+    },
+    {
+      "id": "paper-doodle",
+      "file": "paper-doodle.png",
+      "caption": "图案裁片与轮廓线相互补充：矩形片配盘子线条形成蛋糕。学习材料转义，不把作者作品当成本次素材。",
+      "author": "周末鱼块",
+      "title": "手帐tips｜一些胶带的基础用法",
+      "sourceURL": "https://www.xiaohongshu.com/explore/6958fc7b000000001e02d288",
+      "observation": "正文（标签）与全部10张原图，2026-11-20",
+      "sha256": "a469dd9d5ba7000e30537da92b03f14ff8768cc7cef35f3ee20b36850753e9c8",
+      "reviewed": true
+    }
+  ]
+}

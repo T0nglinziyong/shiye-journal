@@ -1,0 +1,39 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-vector-add",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "vector.add",
+      "id": "triangle",
+      "viewBox": [
+        0,
+        0,
+        10,
+        10
+      ],
+      "paths": [
+        {
+          "d": "M 0 10 L 5 0 L 10 10 Z",
+          "style": {
+            "fill": "#A8BCD5"
+          }
+        }
+      ],
+      "place": {
+        "reference": "page",
+        "at": [
+          20,
+          20
+        ],
+        "unit": "mm",
+        "anchor": "center"
+      },
+      "size": {
+        "width": 10,
+        "height": 10,
+        "unit": "mm"
+      }
+    }
+  ]
+}

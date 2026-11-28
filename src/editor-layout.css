@@ -1,0 +1,6 @@
+.layout-controls h4{margin:.5rem 0 0}
+.layout-controls input[type=range]{width:100%;min-height:44px;accent-color:#56694c}
+.layout-range-hints{display:flex;justify-content:space-between;color:#778071;font-size:.8rem;font-weight:normal}
+.layout-choices{display:flex;gap:6px;flex-wrap:wrap}
+.layout-choices button{flex:1;min-height:44px;white-space:nowrap}
+.layout-choices button[aria-pressed=true]{background:#e2e9db;border-color:#637759;color:#32492e}

@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-text-update",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "text.update",
+      "target": "caption",
+      "style": {
+        "fontSizePt": 12
+      }
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+import {canvasOperations,canvasOperationToolSchema,publicCanvasText} from './canvas-interface.mjs';
+import {titleTool} from './title-tool.mjs';
+import {paperTool} from './paper-tool.mjs';
+import {creationAgentTools} from '../../src/creation-agent-session.js';
+import {creativePhases} from './phases.mjs';
+import {creationCommonDefinitions} from '../../src/creation-command-spec.js';
+
+const inlineDefinition=value=>Array.isArray(value)?value.map(inlineDefinition):value&&typeof value==='object'?value.$ref?inlineDefinition(creationCommonDefinitions[value.$ref.split('/').at(-1)]):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,inlineDefinition(item)])):value;
+
+const object=(properties,required=[])=>({type:'object',additionalProperties:false,properties,required});
+const string={type:'string',minLength:1,maxLength:2000};
+const custom=(name,description,parameters)=>({type:'function',function:{name,description,parameters}});
+const sceneRevision={type:'string',pattern:'^sha256:[a-f0-9]{64}$'};
+const decisionField={type:'string',minLength:1,maxLength:400};
+// Bind the short revision to the model turn's observed Scene, never to an
+// unrelated newer document. The transaction layer still receives a full hash.
+export const turnBoundEditTools=new Set(['creation_apply','creation_paper','creation_title','creation_recipe','creation_apply_crops']);
+function turnBoundTool(tool){
+  if(!turnBoundEditTools.has(tool.function.name))return tool;
+  const parameters=tool.function.parameters;
+  return {...tool,function:{...tool.function,parameters:{...parameters,
+    required:parameters.required.filter(key=>key!=='protocolVersion'),
+    properties:{...parameters.properties,
+      ...(parameters.properties.protocolVersion?{protocolVersion:{type:'integer',const:2,description:'可省略；运行时固定使用协议 2。'}}:{}),
+      baseSceneRevision:{type:'string',pattern:'^(current|sha256:[a-f0-9]{64})$',description:'通常填 current，绑定本轮模型看到的 Scene；也可提供准确完整哈希。同轮多个编辑自动按顺序执行，旧版本仍拒绝。'}
+    }}}};
+}
+const engineTools=[...creationAgentTools.filter(t=>!['inspect_materials','creation_finish'].includes(t.function.name)).map(tool=>tool.function.name==='creation_apply'?{
+  ...tool,function:{...tool.function,parameters:{...tool.function.parameters,$schema:'https://json-schema.org/draft/2020-12/schema',properties:{...tool.function.parameters.properties,decision:decisionField,
+    operations:{...tool.function.parameters.properties.operations,items:{...tool.function.parameters.properties.operations.items,properties:{...tool.function.parameters.properties.operations.items.properties,
+      region:{...inlineDefinition(creationCommonDefinitions.Region),description:'material.cut 的裁切区域：rect/ellipse.box=[x,y,width,height]；edge 指边条。space=local 使用当前裁片坐标，unit=mm 或 ratio。mode=keep 保留区域，remove 移除区域；keepRemainder=true 时同时给 resultId。基础裁切可与 material.add、移动和改层序同轮调用。'},
+      geometry:{type:'object',description:'圆用 {kind:"ellipse"}，五角星用 {kind:"star",options:{points:5}}。尺寸在 size，填色在 style.fill。',properties:{kind:{type:'string'},options:{type:'object',properties:{points:{type:'integer',description:'仅 star 的角数；例如 5。'}},additionalProperties:true},points:{type:'array',description:'仅手绘 stroke 的轨迹点 [{x,y,pressure}]，同时填写 geometry.unit:"mm"；星角数放 options.points。'}},additionalProperties:true}
+    }}}
+  }}}
+}:tool.function.name==='creation_help'?{...tool,function:{...tool.function,description:'查询已前置的操作/公共参数合同，供诊断重查；所有工具从第一轮可用，不需要先查询才能调用。'}}:tool),
+  paperTool,
+  titleTool,
+  custom('segment','AI 智能分割已放置的实体素材对象，原对象变成可编辑组合，返回组与成员 ID。extract 用 0–1 比例 xyxy box 提取指定对象；foreground 自动去背景并可保留多个前景主体；detect_all 检测多个独立对象并组织子组。主体保留原位，剩余区域保存在组内并隐藏；所有来源区域仍可编辑，不会复制实体素材。用 update 独立摆放组内成员。',{
+    oneOf:[
+      object({method:{const:'extract'},target:string,box:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}},['method','target','box']),
+      object({method:{const:'foreground'},target:string},['method','target']),
+      object({method:{const:'detect_all'},target:string},['method','target'])
+    ]}),
+  custom('creation_apply_crops','把已查看的分割提议批量应用到对应来源的已放置素材。与普通编辑一样原子校验、保留真实来源。',object({transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:sceneRevision,cuts:{type:'array',minItems:1,maxItems:12,items:object({proposalId:string,target:string,mode:{enum:['keep','remove']},resultId:string,keepRemainder:{type:'boolean'}},['proposalId','target','mode'])},decision:decisionField},['transactionId','baseSceneRevision','cuts'])),
+  custom('read_skill','分层读取教程：overview 是专题判断与目录；methods 每次给最多 8 个简要用法；detail 给方法参数和示意图，detail 必须带 methodId，可直接跳到 detail；variant 只在 detail 使用。重复读取会恢复准确参数与当前版本示例。',object({name:{type:'string',pattern:'^[a-z0-9-]{1,64}$'},level:{enum:['overview','methods','detail']},methodId:{type:'string',maxLength:80},variant:{type:'string',maxLength:40},page:{type:'integer',minimum:0,maximum:20}},['name'])),
+  custom('search_references','检索模板、技巧和电子手帐案例；仅借鉴构图、配色和对象关系。',object({query:{type:'string',maxLength:160},kind:{enum:['all','templates','techniques','cases']},styles:{type:'array',maxItems:6,items:string},content:{type:'array',maxItems:6,items:string},reference:{enum:['page','page.left','page.right']},limit:{type:'integer',minimum:1,maximum:8}})),
+  custom('read_template','读取一个匹配模板的元素位置和角色，仅用于构图参考；不要机械套用或引入示例图片。',object({id:string},['id'])),
+  custom('search_writing_topics','按素材或指定词从 365 个手帐话题中找可写切口；仅返回少量题目，不把题库塞进上下文。',object({query:{type:'string',maxLength:100},limit:{type:'integer',minimum:1,maximum:8},exclude:{type:'array',maxItems:20,items:{type:'integer',minimum:1,maximum:365}}})),
+  custom('read_case','查看创作者案例的构图、配色、对象关系与制作顺序；仅借鉴方法，不把案例图像当作素材。',object({id:{type:'string',maxLength:80}},['id'])),
+  custom('creation_recipe','按 read_skill 返回的 methodId 执行技巧，创建可编辑组合；with 可合批执行另一个技巧。parameters 中位置统一用 place、尺寸用 size、文字用 content、外观用 style，方法专有字段按详情填写，kind 可省略，修改后自动预览。',object({kind:{enum:['technique']},methodId:{type:'string',maxLength:80},transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:sceneRevision,parameters:{type:'object',maxProperties:24,additionalProperties:true},with:{type:'array',minItems:1,maxItems:2,items:object({methodId:{type:'string',maxLength:80},parameters:{type:'object',maxProperties:24,additionalProperties:true}},['methodId','parameters'])},decision:decisionField},['methodId','transactionId','baseSceneRevision','parameters'])),
+  custom('creation_plan','记录落实用户方向的可修改构思，不改写用户的主题、风格、疏密或文字要求。首次编辑前必须记录；通常只填 intent 一两句，说明本轮准备验证的主次和空间关系，即可同轮合批试摆；这不是整份成品的逐件施工清单，文字区域待主块试摆后再具体安排。其他字段及子字段均可选，仅需长期保留时才填，避免在各字段重复同一段计划。methods.id 是构思名称，执行配方才需要 read_skill 返回的准确 methodId。',object({intent:string,methods:{type:'array',maxItems:3,items:object({id:string,purpose:string},['id'])},themeEvidence:object({supportedBy:{type:'array',maxItems:8,items:string},conflicts:{type:'array',maxItems:8,items:string},response:string}),palette:object({source:string,main:string,secondary:string,accent:string,relationship:{enum:['echo','contrast','tonal']},distribution:string}),composition:object({visualAnchors:string,layout:string,connector:string,layering:string,writingSpace:string}),writingZones:{type:'array',maxItems:16,items:object({role:{enum:['title','body','heading','annotation']},surface:{...string,description:'写面说明，例如原页、素材内部、数字纸，或跨原页与纸边；这是构思，不是图层 surface 参数。'},anchor:string,capacity:{enum:['short','medium','long']},legibility:string,flowGroup:string,sequence:{type:'integer',minimum:1,maximum:16}})},steps:{type:'array',minItems:1,maxItems:8,items:object({task:string,status:{enum:['pending','in_progress','completed']}})}},['intent'])),
+  custom('creation_phase','可选地声明当前工作重点；由模型自主选择，不触发阶段门槛或额外审查，通常直接在回复首行说明即可。',object({phase:{enum:creativePhases},reason:decisionField,assessment:object({observations:string,issues:{type:'array',maxItems:8,items:string},adjustments:string},['observations','issues'])},['phase','reason','assessment'])),
+  custom('explore_drafts','需要比较明显不同的布局方向或连续修订仍不满意时，后台并行生成 2–3 个独立可编辑草稿并返回真实截图；只探索，不修改主作品。',object({goals:{type:'array',minItems:2,maxItems:3,items:{type:'string',minLength:8,maxLength:180}}},['goals'])),
+  custom('select_draft','看过所有草稿截图后，选择一个方案作为主 Scene；必须说明选它的理由，随后自动渲染并重新审查。',object({id:{type:'string',pattern:'^draft_[0-9]+_[1-3]$'},decision:decisionField},['id','decision'])),
+  custom('inspect_materials','按需查看总图中看不清的真实素材；每次最多返回 3 张，避免重复发送整批图像。',object({keys:{type:'array',minItems:1,maxItems:8,items:{type:'string'}}},['keys'])),
+  custom('workspace_create','开启一个独立试摆空间；之后所有创作 Command 都用 place.surface 指定该空间 ID。',object({id:{type:'string',pattern:'^[a-z][a-z0-9_-]{0,31}$'},title:{type:'string',minLength:1,maxLength:40}},['id','title'])),
+  custom('workspace_close','关闭已清空的试摆空间。',object({id:{type:'string',pattern:'^[a-z][a-z0-9_-]{0,31}$'}},['id'])),
+  custom('workspace_view','按需重看工作空间；id=source 可重看全部授权素材编号总图。未变化空间不会自动重复发送。',object({id:{type:'string',pattern:'^[a-z][a-z0-9_-]{0,31}$'}},['id'])),
+  custom('creation_undo','撤回最近一次成功的编辑批次，恢复之前的可编辑 Scene；随后自动重绘纸面和暂放区。',object({})),
+  custom('creation_finish','看过最新自动预览且没有待修缺陷后提交成品，后台绑定该预览并独立审查。填写 review:{observations,issues:[]} 即可，summary 可选；不必抄写 pngHash 或 sceneRevision，顶层不接收这两个字段。必须是本轮最后调用。有待修问题先修改，不调用完成。可选美化建议写 review.observations 或 review.nextStep，不写 issues。',object({summary:{type:'string',maxLength:1200},review:object({observations:{...string,description:'基于当前图像的观察，可包含不影响交付的建议。'},strengths:{type:'array',maxItems:6,items:string},issues:{type:'array',maxItems:0,items:string,description:'完成时必须为空；存在待修缺陷应先修改并查看新预览。'},nextStep:{...string,description:'可选后续建议，不表示交付前仍有问题。'},pngHash:{...string,description:'通常省略，后台绑定最新预览；显式提供时必须与当前预览一致。'},sceneRevision:{...string,description:'通常省略，后台绑定最新 Scene；显式提供时必须与当前预览一致。'}},['observations','issues'])})),
+  custom('creation_preview','渲染当前可编辑 Scene，返回真实预览和版本，用于检查构图。',object({})),
+  custom('creation_review','看过当前真实预览后先评价构图、素材关系、文字可读性和任务方向；有问题时同轮可继续修改。',object({pngHash:string,sceneRevision:string,approved:{type:'boolean'},observations:string,strengths:{type:'array',maxItems:6,items:string},issues:{type:'array',maxItems:12,items:string},nextStep:string},['pngHash','sceneRevision','approved','observations','issues']))
+].map(turnBoundTool);
+
+// Discovery changes the model's reading surface, never its permissions or the
+// executable contract. A learned tool stays visible across phases/checkpoints.
+const groups=[
+  {purpose:'参考案例、模板与写作选题',names:['read_case','read_template','search_writing_topics']},
+  {purpose:'AI 智能分割实体素材为可编辑组合',names:['segment']},
+  {purpose:'额外记录阶段检查或画面意见',names:['creation_phase','creation_review']},
+];
+
+export function availableHarnessTools({segmentMaterial}={}){
+  return selectHarnessTools(harnessTools.filter(tool=>!['creation_guide','explore_drafts','select_draft'].includes(tool.function.name)&&
+    (segmentMaterial||!['segment','creation_apply_crops'].includes(tool.function.name))));
+}
+
+const queryRoutes={skill:'read_skill',search:'search_references',case:'read_case',template:'read_template',topics:'search_writing_topics',help:'creation_help'};
+const workspaceRoutes={create:'workspace_create',view:'workspace_view',close:'workspace_close'};
+const grouped=(name,routes,description)=>custom(name,description,{oneOf:Object.entries(routes).map(([action,target])=>{const original=engineTools.find(t=>t.function.name===target).function.parameters;return {...original,properties:{action:{const:action},...original.properties},required:['action',...(original.required||[])]};})});
+export const harnessTools=[...engineTools,grouped('knowledge',queryRoutes,'知识与参考查询：action=skill/search/case/template/topics/help；参数随 action 列全，可同轮多次调用。')];
+const publicNames=new Set(['creation_apply','creation_inspect','inspect_materials','knowledge','creation_plan','creation_undo','creation_finish','creation_preview','segment']);
+export function routeModelTool(name,args){const route=name==='knowledge'?queryRoutes:name==='workspace'?workspaceRoutes:null;if(!route)return {name,args};const {action,...rest}=args;if(!route[action])throw Error('未知 '+name+' action');return {name:route[action],args:rest};}
+export function selectHarnessTools(available){return available.filter(t=>publicNames.has(t.function.name)).map(t=>{
+ if(t.function.name==='creation_finish')return {...t,function:{...t.function,description:'看过最新真实预览并完成必要修改后提交作品。只需可选 summary；Scene 版本、预览和独立审查由运行时核验。必须是本轮最后一个调用。',parameters:object({summary:{type:'string',maxLength:1200}})}};
+ if(t.function.name!=='creation_apply')return {...t,function:{...t.function,description:publicCanvasText(t.function.description)}};
+ const result=structuredClone(t);result.function.description='画布对象批量操作，同一批按顺序原子执行；字段、示例和校验均来自固定上下文中的同一操作定义。支持 '+canvasOperations.map(({name})=>name).join('/')+'。';
+ result.function.parameters.properties.operations.items=canvasOperationToolSchema();return result;
+});}
+
+export function harnessToolCatalog(available=harnessTools){
+  const names=new Set(available.map(tool=>tool.function.name));
+  return groups.map(({purpose,names:members})=>({purpose,tools:members.filter(name=>names.has(name))}))
+    .filter(group=>group.tools.length);
+}
+
+export function discoverHarnessTools(available,previous=[],requested=[],data){
+  const allowed=new Set(available.map(tool=>tool.function.name));
+  const learned=new Set(previous.filter(name=>allowed.has(name)));
+  for(const name of requested)if(allowed.has(name))learned.add(name);
+  // Reference results carry exact readWith routes. Expose those tools on the
+  // next turn without requiring a separate discovery call for each result.
+  const visit=value=>{
+    if(!value||typeof value!=='object')return;
+    const name=value.readWith?.tool;
+    if(allowed.has(name))learned.add(name);
+    for(const child of Object.values(value))if(child&&typeof child==='object')visit(child);
+  };
+  visit(data);
+  return [...learned];
+}

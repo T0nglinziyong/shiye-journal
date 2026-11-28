@@ -1,0 +1,19 @@
+[Unit]
+Description=拾页计算服务器
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/linziyong/Desktop/拾页项目/shiye-cover-fix
+EnvironmentFile=/home/linziyong/.config/shiye-compute/worker.env
+ExecStart=/home/linziyong/.nvm/versions/node/v24.18.0/bin/node /home/linziyong/Desktop/拾页项目/shiye-cover-fix/compute-server/worker.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

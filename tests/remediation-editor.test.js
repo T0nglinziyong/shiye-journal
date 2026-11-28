@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Window} from 'happy-dom';
 import {reconcileCanvasText} from '../src/canvas-text-content.js';
-import {ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from '../src/editor-history-scope.js';
+import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from '../src/editor-history-scope.js';
+import {draft as newDraft} from '../src/domain.js';
 
 test('R-01/R-04: paragraph content has one owner after 20 local refreshes',()=>{
   const document=new Window().document;
@@ -55,27 +56,28 @@ test('R-02: a selected paragraph keeps its text range through a markup refresh',
   assert.equal(node.querySelectorAll('[data-text-content]').length,1);
 });
 
-test('E-01: undo snapshots cannot cross project or draft identity',()=>{
-  const first={id:'draft-A',textBlocks:[{content:'A'}]};
-  const second={id:'draft-B',textBlocks:[{content:'B'}]};
-  const state={activeProject:{id:'project-A'},activeDraft:'draft-A',undo:[],redo:[]};
-  resetEditorHistory(state);
-  state.undo.push(structuredClone(first));
-  state.activeProject={id:'project-B'};
-  state.activeDraft='draft-B';
-  assert.equal(takeEditorHistoryStep(state,'undo','redo',second),null);
-  assert.deepEqual(state.undo,[]);
-  assert.equal(state.editorHistoryScope,'browser:project-B:draft-B');
-  state.undo.push(structuredClone(first));
-  assert.equal(takeEditorHistoryStep(state,'undo','redo',second),null);
-  assert.deepEqual(state.undo,[]);
-  state.undo.push(structuredClone(second));
-  const restored=takeEditorHistoryStep(state,'undo','redo',second);
-  assert.equal(restored.id,'draft-B');
-  assert.equal(state.redo[0].id,'draft-B');
-  state.activeDraft='draft-C';
-  ensureEditorHistory(state);
-  assert.deepEqual(state.redo,[]);
+test('E-01: undo transactions cannot cross project or draft identity',()=>{
+ const first=newDraft(),second=newDraft();first.id='draft-A';second.id='draft-B';
+ const state={activeProject:{id:'project-A'},activeDraft:'draft-A',undo:[],redo:[]};
+ resetEditorHistory(state);
+ checkpointEditorHistory(state,first);
+ first.paperColor='#445566';
+ state.activeProject={id:'project-B'};
+ state.activeDraft='draft-B';
+ assert.equal(takeEditorHistoryStep(state,'undo','redo',second),null);
+ assert.deepEqual(state.undo,[]);
+ assert.equal(state.editorHistoryScope,'browser:project-B:draft-B');
+ state.undo.push({kind:'scene-pending-v2',draftID:'draft-A',before:first});
+ assert.equal(takeEditorHistoryStep(state,'undo','redo',second),null);
+ assert.deepEqual(state.undo,[]);
+ checkpointEditorHistory(state,second);
+ second.paperColor='#abcdef';
+ const restored=takeEditorHistoryStep(state,'undo','redo',second);
+ assert.equal(restored.id,'draft-B');
+ assert.equal(restored.paperColor,'#fcfaf0');
+ assert.equal(state.redo[0].draftID,'draft-B');
+ state.activeDraft='draft-C';ensureEditorHistory(state);
+ assert.deepEqual(state.redo,[]);
 });
 
 test('E-01: same project and draft IDs cannot carry undo across accounts',()=>{

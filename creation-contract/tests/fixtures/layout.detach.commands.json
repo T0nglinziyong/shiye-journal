@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layout-detach",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layout.detach",
+      "target": "caption"
+    }
+  ]
+}

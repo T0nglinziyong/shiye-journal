@@ -1,0 +1,1693 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shiye:commands:2",
+  "title": "Unified Commands protocol v2 candidate; runtime capability gating required",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "transactionId",
+    "baseSceneRevision",
+    "operations"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 2
+    },
+    "transactionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,96}$"
+    },
+    "baseSceneRevision": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/Operation"
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+    },
+    "Reference": {
+      "type": "string",
+      "pattern": "^(page|page\\.left|page\\.right|parent|node:[A-Za-z][A-Za-z0-9._-]*|region:[A-Za-z][A-Za-z0-9._-]*)$"
+    },
+    "Anchor": {
+      "enum": [
+        "top-left",
+        "top-center",
+        "top-right",
+        "middle-left",
+        "center",
+        "middle-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right"
+      ]
+    },
+    "Vec2": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "PositiveVec2": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "Color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+    },
+    "Offset": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "unit": {
+          "enum": [
+            "mm",
+            "ratio"
+          ]
+        },
+        "space": {
+          "enum": [
+            "reference",
+            "page",
+            "parent"
+          ],
+          "default": "reference"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "additionalProperties": false
+    },
+    "Place": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/Reference"
+        },
+        "at": {
+          "$ref": "#/$defs/Vec2"
+        },
+        "unit": {
+          "enum": [
+            "mm",
+            "ratio"
+          ]
+        },
+        "referenceAnchor": {
+          "$ref": "#/$defs/Anchor"
+        },
+        "anchor": {
+          "$ref": "#/$defs/Anchor",
+          "default": "center"
+        },
+        "offset": {
+          "$ref": "#/$defs/Offset"
+        },
+        "rotationDeg": {
+          "type": "number"
+        },
+        "rotationSpace": {
+          "enum": [
+            "parent",
+            "page",
+            "reference"
+          ],
+          "default": "parent"
+        },
+        "axes": {
+          "enum": [
+            "reference",
+            "page"
+          ],
+          "default": "reference"
+        },
+        "referenceBounds": {
+          "enum": [
+            "layout",
+            "visible"
+          ],
+          "default": "layout"
+        },
+        "targetBounds": {
+          "enum": [
+            "layout",
+            "visible"
+          ],
+          "default": "layout"
+        },
+        "behavior": {
+          "enum": [
+            "once",
+            "linked"
+          ],
+          "default": "once"
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "at",
+            "unit"
+          ],
+          "not": {
+            "required": [
+              "referenceAnchor"
+            ]
+          }
+        },
+        {
+          "required": [
+            "referenceAnchor"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "at"
+                ]
+              },
+              {
+                "required": [
+                  "unit"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "Size": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/Reference"
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "enum": [
+            "mm",
+            "ratio"
+          ]
+        },
+        "aspect": {
+          "enum": [
+            "preserve",
+            "free"
+          ],
+          "default": "preserve"
+        }
+      },
+      "required": [
+        "unit"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "width"
+          ]
+        },
+        {
+          "required": [
+            "height"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unit": {
+                "const": "ratio"
+              }
+            },
+            "required": [
+              "unit"
+            ]
+          },
+          "then": {
+            "required": [
+              "reference"
+            ]
+          }
+        }
+      ]
+    },
+    "Style": {
+      "type": "object",
+      "properties": {
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply"
+          ]
+        },
+        "color": {
+          "$ref": "#/$defs/Color"
+        },
+        "fill": {
+          "$ref": "#/$defs/Color"
+        },
+        "stroke": {
+          "$ref": "#/$defs/Color"
+        },
+        "strokeWidthMm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fontSizePt": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fontWeight": {
+          "enum": [
+            "normal",
+            "bold"
+          ]
+        },
+        "textAlign": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "lineHeight": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "letterSpacingMm": {
+          "type": "number"
+        },
+        "penStyle": {
+          "enum": [
+            "pen",
+            "ballpoint",
+            "brush",
+            "marker"
+          ]
+        },
+        "shadow": {
+          "type": "object",
+          "properties": {
+            "offsetMm": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "blurMm": {
+              "type": "number",
+              "minimum": 0
+            },
+            "color": {
+              "$ref": "#/$defs/Color"
+            }
+          },
+          "required": [
+            "offsetMm",
+            "blurMm",
+            "color"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "Region": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "enum": [
+                "rect",
+                "ellipse"
+              ]
+            },
+            "space": {
+              "enum": [
+                "source",
+                "local"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "mm",
+                "ratio"
+              ]
+            },
+            "box": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ],
+              "items": false,
+              "minItems": 4,
+              "maxItems": 4
+            }
+          },
+          "required": [
+            "shape",
+            "space",
+            "unit",
+            "box"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "const": "polygon"
+            },
+            "space": {
+              "enum": [
+                "source",
+                "local"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "mm",
+                "ratio"
+              ]
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "minItems": 3,
+              "maxItems": 2048
+            }
+          },
+          "required": [
+            "shape",
+            "space",
+            "unit",
+            "points"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "const": "path"
+            },
+            "space": {
+              "enum": [
+                "source",
+                "local"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "mm",
+                "ratio"
+              ]
+            },
+            "d": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fillRule": {
+              "enum": [
+                "nonzero",
+                "evenodd"
+              ]
+            }
+          },
+          "required": [
+            "shape",
+            "space",
+            "unit",
+            "d"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Order": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "before": {
+              "$ref": "#/$defs/Id"
+            }
+          },
+          "required": [
+            "before"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "$ref": "#/$defs/Id"
+            }
+          },
+          "required": [
+            "after"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edge": {
+              "enum": [
+                "front",
+                "back"
+              ]
+            }
+          },
+          "required": [
+            "edge"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "LayoutBox": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "const": "mm"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "unit"
+      ],
+      "additionalProperties": false
+    },
+    "Edge": {
+      "type": "object",
+      "properties": {
+        "style": {
+          "enum": [
+            "clean",
+            "torn"
+          ]
+        },
+        "roughness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "style"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "style": {
+                "const": "torn"
+              }
+            },
+            "required": [
+              "style"
+            ]
+          },
+          "then": {
+            "required": [
+              "seed"
+            ]
+          }
+        }
+      ]
+    },
+    "Matrix2D": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "LayoutRule": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "enum": [
+            "horizontal",
+            "vertical",
+            "grid"
+          ]
+        },
+        "gapMm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end"
+          ]
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "behavior": {
+          "enum": [
+            "once",
+            "linked"
+          ]
+        }
+      },
+      "required": [
+        "direction",
+        "gapMm"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "direction": {
+                "const": "grid"
+              }
+            },
+            "required": [
+              "direction"
+            ]
+          },
+          "then": {
+            "required": [
+              "columns"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "columns"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Op_material_add": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.add"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "asset": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "asset",
+        "place"
+      ],
+      "additionalProperties": false
+    },
+    "Op_text_add": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "text.add"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "content",
+        "place",
+        "size"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "properties": {
+            "size": {
+              "required": [
+                "width"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Op_text_update": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "text.update"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "op",
+        "target"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "place"
+          ]
+        },
+        {
+          "required": [
+            "size"
+          ]
+        },
+        {
+          "required": [
+            "style"
+          ]
+        },
+        {
+          "required": [
+            "order"
+          ]
+        },
+        {
+          "required": [
+            "content"
+          ]
+        }
+      ]
+    },
+    "Op_shape_add": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "shape.add"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "kind": {
+          "enum": [
+            "rect",
+            "ellipse",
+            "line"
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "kind",
+        "place",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "Op_vector_add": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "vector.add"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "d": {
+                "type": "string",
+                "minLength": 1
+              },
+              "fillRule": {
+                "enum": [
+                  "nonzero",
+                  "evenodd"
+                ]
+              },
+              "style": {
+                "$ref": "#/$defs/Style"
+              }
+            },
+            "required": [
+              "d"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 512
+        },
+        "viewBox": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "paths",
+        "viewBox",
+        "place",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "Op_ink_add": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "ink.add"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 10000
+        },
+        "unit": {
+          "const": "mm"
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "points",
+        "unit",
+        "place",
+        "style"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "properties": {
+            "style": {
+              "required": [
+                "strokeWidthMm",
+                "color"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Op_layer_place": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layer.place"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "place"
+      ],
+      "additionalProperties": false
+    },
+    "Op_layer_update": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layer.update"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "size": {
+          "$ref": "#/$defs/Size"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "op",
+        "target"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "place"
+          ]
+        },
+        {
+          "required": [
+            "size"
+          ]
+        },
+        {
+          "required": [
+            "style"
+          ]
+        },
+        {
+          "required": [
+            "order"
+          ]
+        }
+      ]
+    },
+    "Op_layer_reparent": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layer.reparent"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Id"
+            },
+            {
+              "const": null
+            }
+          ]
+        },
+        "preserveWorld": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "parent"
+      ],
+      "additionalProperties": false
+    },
+    "Op_layer_reorder": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layer.reorder"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "order"
+      ],
+      "additionalProperties": false
+    },
+    "Op_layer_delete": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layer.delete"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "cascade": {
+          "type": "boolean"
+        },
+        "dependentLinks": {
+          "enum": [
+            "reject",
+            "detach"
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "Op_group_create": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "group.create"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 2,
+          "maxItems": 200
+        },
+        "layoutBox": {
+          "$ref": "#/$defs/LayoutBox"
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "targets"
+      ],
+      "additionalProperties": false
+    },
+    "Op_group_compose": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "group.compose"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        "layoutBox": {
+          "$ref": "#/$defs/LayoutBox"
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "children",
+        "place"
+      ],
+      "additionalProperties": false
+    },
+    "Op_group_ungroup": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "group.ungroup"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "dependentLinks": {
+          "enum": [
+            "reject",
+            "detach"
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_crop": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.crop"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        },
+        "keepRemainder": {
+          "type": "boolean"
+        },
+        "resultId": {
+          "$ref": "#/$defs/Id"
+        },
+        "edge": {
+          "$ref": "#/$defs/Edge"
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "region"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_window": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.window"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        },
+        "keepRemainder": {
+          "type": "boolean"
+        },
+        "resultId": {
+          "$ref": "#/$defs/Id"
+        },
+        "edge": {
+          "$ref": "#/$defs/Edge"
+        },
+        "cutoutId": {
+          "$ref": "#/$defs/Id"
+        },
+        "windowId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "region",
+        "windowId"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_split": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.split"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "pieces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/Id"
+              },
+              "region": {
+                "$ref": "#/$defs/Region"
+              },
+              "place": {
+                "$ref": "#/$defs/Place"
+              }
+            },
+            "required": [
+              "id",
+              "region"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 64
+        },
+        "keepRemainder": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "pieces"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_mask": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.mask"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        },
+        "mode": {
+          "enum": [
+            "intersect",
+            "subtract",
+            "replace"
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "region"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_weave": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.weave"
+        },
+        "strip": {
+          "$ref": "#/$defs/Id"
+        },
+        "through": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "$ref": "#/$defs/Id"
+              },
+              "window": {
+                "$ref": "#/$defs/Id"
+              },
+              "sideAfter": {
+                "enum": [
+                  "front",
+                  "back"
+                ]
+              }
+            },
+            "required": [
+              "target",
+              "window",
+              "sideAfter"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "op",
+        "strip",
+        "through"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_tape": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.tape"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "place": {
+          "$ref": "#/$defs/Place"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "asset": {
+          "$ref": "#/$defs/Id"
+        },
+        "lengthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "id",
+        "asset",
+        "lengthMm",
+        "place"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_edge": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.edge"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        },
+        "edge": {
+          "$ref": "#/$defs/Edge"
+        }
+      },
+      "required": [
+        "op",
+        "target",
+        "edge"
+      ],
+      "additionalProperties": false
+    },
+    "Op_material_decision": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "material.decision"
+        },
+        "asset": {
+          "$ref": "#/$defs/Id"
+        },
+        "choice": {
+          "enum": [
+            "intact",
+            "crafted",
+            "omitted"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "op",
+        "asset",
+        "choice",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "Op_layout_arrange": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layout.arrange"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 2,
+          "maxItems": 200
+        },
+        "rule": {
+          "$ref": "#/$defs/LayoutRule"
+        },
+        "container": {
+          "$ref": "#/$defs/Reference"
+        }
+      },
+      "required": [
+        "op",
+        "targets",
+        "rule",
+        "container"
+      ],
+      "additionalProperties": false
+    },
+    "Op_layout_detach": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "layout.detach"
+        },
+        "target": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "op",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "Op_page_update": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "const": "page.update"
+        },
+        "paperColor": {
+          "$ref": "#/$defs/Color"
+        },
+        "physicalSizeMm": {
+          "$ref": "#/$defs/PositiveVec2"
+        },
+        "mode": {
+          "enum": [
+            "single",
+            "spread"
+          ]
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "paperColor"
+          ]
+        },
+        {
+          "required": [
+            "physicalSizeMm"
+          ]
+        },
+        {
+          "required": [
+            "mode"
+          ]
+        }
+      ]
+    },
+    "Operation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Op_material_add"
+        },
+        {
+          "$ref": "#/$defs/Op_text_add"
+        },
+        {
+          "$ref": "#/$defs/Op_text_update"
+        },
+        {
+          "$ref": "#/$defs/Op_shape_add"
+        },
+        {
+          "$ref": "#/$defs/Op_vector_add"
+        },
+        {
+          "$ref": "#/$defs/Op_ink_add"
+        },
+        {
+          "$ref": "#/$defs/Op_layer_place"
+        },
+        {
+          "$ref": "#/$defs/Op_layer_update"
+        },
+        {
+          "$ref": "#/$defs/Op_layer_reparent"
+        },
+        {
+          "$ref": "#/$defs/Op_layer_reorder"
+        },
+        {
+          "$ref": "#/$defs/Op_layer_delete"
+        },
+        {
+          "$ref": "#/$defs/Op_group_create"
+        },
+        {
+          "$ref": "#/$defs/Op_group_compose"
+        },
+        {
+          "$ref": "#/$defs/Op_group_ungroup"
+        },
+        {
+          "$ref": "#/$defs/Op_material_crop"
+        },
+        {
+          "$ref": "#/$defs/Op_material_window"
+        },
+        {
+          "$ref": "#/$defs/Op_material_split"
+        },
+        {
+          "$ref": "#/$defs/Op_material_mask"
+        },
+        {
+          "$ref": "#/$defs/Op_material_weave"
+        },
+        {
+          "$ref": "#/$defs/Op_material_tape"
+        },
+        {
+          "$ref": "#/$defs/Op_material_edge"
+        },
+        {
+          "$ref": "#/$defs/Op_material_decision"
+        },
+        {
+          "$ref": "#/$defs/Op_layout_arrange"
+        },
+        {
+          "$ref": "#/$defs/Op_layout_detach"
+        },
+        {
+          "$ref": "#/$defs/Op_page_update"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,618 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {draft} from '../src/domain.js';
+import {createCreationDocument} from '../src/creation-document.js';
+import {creationSceneRevision,applyCreationTransaction} from '../src/creation-transaction.js';
+import {templateCatalog,rankTemplates,scoreTemplate,templateMarginalScores,maximumAssignment,materialSlots} from '../creative-agent/library/matcher.js';
+import {compileTemplate} from '../creative-agent/library/compiler.js';
+import {templateFixture,isGraphicElement} from '../creative-agent/library/template-elements.js';
+import {techniqueCatalog,compileTechnique,describeTechnique} from '../creative-agent/library/techniques.js';
+import {exampleMaterials,techniqueExample} from '../creative-agent/library/examples.js';
+import {worldBox} from '../src/scene-spatial.js';
+const document=assets=>createCreationDocument({draft:draft({ratio:'a5'}),assets,aliases:Object.fromEntries(assets.map(a=>[a.alias,a.id]))});
+const apply=(doc,operations,assets)=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:'library-test',baseSceneRevision:creationSceneRevision(doc),operations},assets);
+
+test('at least fifty independently sourced, reviewed diagrams have usable typed elements',()=>{
+ assert.ok(templateCatalog.templates.length>=50);const panels=new Set();
+ for(const t of templateCatalog.templates){assert.equal(t.reviewed,true);assert.ok(templateCatalog.sources.some(s=>s.id===t.sourceId));assert.ok(t.elements.length>2);assert.ok(materialSlots(t).length);assert.ok(t.aspect>0);panels.add(t.sourcePanel.sha256);
+  for(const e of t.elements){assert.equal(e.box.length,4);assert.ok(e.box.every(Number.isFinite));assert.ok(e.box[2]>0&&e.box[3]>0);assert.ok(isGraphicElement(e)?e.render.geometry.kind:e.accepts.length);if(e.render?.textBox)assert.ok(e.render.textBox.every(Number.isFinite)&&e.render.textBox[2]>0&&e.render.textBox[3]>0,t.id+'/'+e.id+' writing bounds');}}
+ assert.equal(panels.size,templateCatalog.templates.length);
+});
+test('optimal assignment beats a greedy slot choice and permits omission',()=>{
+ assert.deepEqual(maximumAssignment([[.9,.8,.34,.34],[.85,.2,.34,.34]]),[1,0]);
+ assert.equal(maximumAssignment([[.2,.34]])[0],1);
+});
+test('matching distinguishes absolute paper ratios and material-to-material ratios',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='single-04'),paper={width:148,height:210};
+ const assets=materialSlots(t).map((s,i)=>({id:'m'+i,kind:s.accepts[0],role:s.role,physicalWidthMM:s.box[2]*148,physicalHeightMM:s.box[3]*210}));
+ const exact=scoreTemplate(t,assets,paper),large=scoreTemplate(t,assets,{width:296,height:420});assert.ok(exact.score>large.score+10);assert.ok(Math.abs(exact.components.relationships-1)<1e-10);
+ const uneven=assets.map((a,i)=>i?{...a,physicalWidthMM:a.physicalWidthMM*2}:a);assert.ok(scoreTemplate(t,uneven,paper).components.relationships<1);
+});
+test('adding a missing compatible material improves the same template, duplicate oversize does not',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='single-04'),slots=materialSlots(t),paper={width:148,height:210};
+ const make=(s,id)=>({id,kind:s.accepts[0],role:s.role,physicalWidthMM:s.box[2]*148,physicalHeightMM:s.box[3]*210});
+ const selected=[make(slots[0],'m1')],good=make(slots[1],'good'),bad={...good,id:'bad',physicalWidthMM:1000};
+ const scores=templateMarginalScores({selected,candidates:[good,bad],paper,templates:[t]});assert.ok(scores.get('good').utility>scores.get('bad').utility);assert.equal(scores.get('good').templateId,t.id);
+});
+test('correct type and style cannot force an oversized material into a small slot',()=>{
+ const t={id:'size-first',title:'尺寸优先',family:'test',aspect:1,styles:['复古'],elements:[{id:'e1',role:'focal',box:[.4,.4,.2,.2],accepts:['sticker'],styles:['复古']}]};
+ const material={id:'large',kind:'sticker',role:'focal',styleTags:['复古'],physicalWidthMM:80,physicalHeightMM:80};
+ const result=scoreTemplate(t,[material],{width:100,height:100});
+ assert.deepEqual(result.assignments,[]);assert.deepEqual(result.unused,['large']);
+});
+for(const template of templateCatalog.templates)test('template compiles through real transaction: '+template.id,async()=>{
+ const assets=materialSlots(template).slice(0,5).map((s,i)=>({id:'test-'+i,alias:'m'+i,title:'模板验收素材',kind:'paper',physicalWidthMM:s.box[2]*148,physicalHeightMM:s.box[3]*210,supply:{quantity:1}}));
+ const doc=await document(assets),result=compileTemplate({templateId:template.id,id:'layout',paper:{width:148,height:210},materials:assets,title:'今天的小记'});
+ const done=apply(doc,result.operations,assets);assert.equal(done.changed,true);assert.ok(result.report.used.length);
+ const mats=result.operations[0].children.filter(o=>o.op==='material.add');assert.ok(mats.every(m=>!('size' in m)));assert.equal(new Set(mats.map(m=>m.asset)).size,mats.length);
+});
+for(const method of techniqueCatalog.methods)test('technique transaction is executable: '+method.id,async()=>{
+ const {parameters,before}=techniqueExample(method),doc=await document(exampleMaterials),compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
+ const result=apply(doc,[...before,...compiled.operations],exampleMaterials);assert.equal(result.changed,true);assert.equal(describeTechnique(method.id).illustration?.id,method.illustration?.id);
+ if(!compiled.report.groupId)return;
+ const page=result.document.page,group=page.layers.find(node=>node.id===compiled.report.groupId),box=worldBox(page,group.id),angle=box.rotation*Math.PI/180;
+ const pageHalfX=(Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h)/2;
+ const pageHalfY=(Math.abs(Math.sin(angle))*box.w+Math.abs(Math.cos(angle))*box.h)/2;
+ assert.ok(box.cx-pageHalfX>=-.25&&box.cx+pageHalfX<=page.canvas.width+.25,method.id+' page width');
+ assert.ok(box.cy-pageHalfY>=-.25&&box.cy+pageHalfY<=page.canvas.height+.25,method.id+' page height');
+ for(const child of group.children){
+  const cb=worldBox(page,child.id),relative=(cb.rotation-box.rotation)*Math.PI/180;
+  const x=(cb.cx-box.cx)*Math.cos(angle)+(cb.cy-box.cy)*Math.sin(angle);
+  const y=-(cb.cx-box.cx)*Math.sin(angle)+(cb.cy-box.cy)*Math.cos(angle);
+  const dx=(Math.abs(Math.cos(relative))*cb.w+Math.abs(Math.sin(relative))*cb.h)/2;
+  const dy=(Math.abs(Math.sin(relative))*cb.w+Math.abs(Math.cos(relative))*cb.h)/2;
+  assert.ok(x-dx>=-box.w/2-.5&&x+dx<=box.w/2+.5,method.id+'/'+child.id+' group width');
+  assert.ok(y-dy>=-box.h/2-.5&&y+dy<=box.h/2+.5,method.id+'/'+child.id+' group height');
+ }
+});
+test('paper layer role is explicit and can be reordered after insertion',async()=>{
+ const step=(doc,id,operations)=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:id,baseSceneRevision:creationSceneRevision(doc),operations},exampleMaterials).document;
+ const first=step(await document(exampleMaterials),'subject-tx',[{op:'material.add',id:'subject',asset:'m1',place:{reference:'page',at:[72,90],unit:'mm'}}]);
+ const underlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-base',widthMm:70,heightMm:92,at:[72,90],layerRole:'underlay'}});
+ assert.deepEqual(underlay.operations[0].order,{edge:'back'});
+ const result=step(first,'underlay-tx',underlay.operations);
+ const ordered=result.page.layers.slice().sort((a,b)=>a.zIndex-b.zIndex);
+ assert.equal(ordered[0].id,'paper-base');
+ assert.equal(ordered[1].type,'material');
+ const unspecific=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-free',widthMm:30,heightMm:30,at:[72,90]}});
+ assert.equal(unspecific.operations[0].order,undefined);
+ const overlay=compileTechnique({methodId:'paper-color-card',parameters:{id:'paper-front',widthMm:30,heightMm:30,at:[72,90],layerRole:'overlay'}});
+ assert.deepEqual(overlay.operations[0].order,{edge:'front'});
+ const layered=step(result,'overlay-tx',overlay.operations);
+ const top=layered.page.layers.slice().sort((a,b)=>a.zIndex-b.zIndex).at(-1);
+ assert.equal(top.id,'paper-front');
+ assert.throws(()=>compileTechnique({methodId:'paper-color-card',parameters:{id:'bad-paper',widthMm:30,heightMm:30,at:[72,90],layerRole:'middle'}}),/图层角色/);
+});
+test('plain paper strips do not inherit punched holes from the recipe',()=>{
+ const paper=techniqueCatalog.methods.find(method=>method.id==='paper-color-card');
+ assert.equal(paper.defaults.holeCount,0);
+ assert.equal(paper.defaults.holeSide,'none');
+ assert.doesNotThrow(()=>compileTechnique({methodId:'paper-color-card',parameters:{id:'plain-strip',widthMm:12,heightMm:80,at:[72,90]}}));
+});
+test('basic tools keep executable examples without illustration assets',()=>{
+ const basicRecipes=new Set(['graphic','relate','tear','window','split','weave','write']);
+ const basicPatterns=new Set(['pattern-dots','pattern-stripes','pattern-grid','pattern-scallop']);
+ for(const method of techniqueCatalog.methods.filter(method=>basicRecipes.has(method.recipe)||basicPatterns.has(method.id))){
+  const detail=describeTechnique(method.id);
+  assert.equal(detail.illustration,undefined,method.id);
+  assert.ok(detail.tool.arguments.parameters.id,method.id);
+  assert.ok(compileTechnique({methodId:method.id,parameters:detail.tool.arguments.parameters,materials:exampleMaterials}).operations.length,method.id);
+ }
+});
+test('missing slots remain empty; unknown source and repeated material are rejected',()=>{
+ const t=templateCatalog.templates[0],paper={width:148,height:210},s=materialSlots(t);
+ const empty=compileTemplate({templateId:t.id,id:'g',paper,materials:[]});
+ assert.deepEqual(empty.report.used,[]);
+ assert.ok(empty.operations[0].children.every(n=>n.op==='graphic.add'));
+ assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[],omit:t.elements.filter(isGraphicElement).map(e=>e.id)}),/没有可放置/);
+ assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[],bindings:[{slotId:s[0].id,alias:'secret'}]}),/授权/);
+ assert.throws(()=>compileTemplate({templateId:t.id,id:'g',paper,materials:[{alias:'m1'}],bindings:[{slotId:s[0].id,alias:'m1'},{slotId:s[1].id,alias:'m1'}]}),/重复/);
+});
+test('long titles retain their full content and unsupported parameters are explicit errors',async()=>{
+ const text='很长的标题需要根据可用空间分行而不能丢掉后半段'.repeat(3),compiled=compileTechnique({methodId:'title-art',parameters:{variant:'stack',id:'long',text,widthMm:44}});
+ assert.equal(compiled.operations[0].children.find(o=>o.op==='text.add').content,text);assert.ok(compiled.report.heightMm>38);
+ const doc=await document([]);assert.equal(apply(doc,compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'x',text:'你好',dangerous:1}}),/不支持/);
+});
+test('wide dotted titles stay within the scene command limit and gap shadows remain editable',async()=>{
+ const dotted=compileTechnique({methodId:'title-art',parameters:{variant:'script-dots',id:'dots',text:'Little by little',at:[72,88],widthMm:120,fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:2}}});
+ assert.ok(dotted.operations[0].children.length<100);
+ assert.equal(apply(await document([]),dotted.operations,[]).changed,true);
+ const gap=compileTechnique({methodId:'title-art',parameters:{variant:'gap-shadow',id:'gap',text:'去看春天',colors:['#244D47','#D39368','#FFFDF6']}}).operations[0].children.find(op=>op.op==='text.add');
+ assert.equal(gap.style.fontFamily,'BaiLuBangBang');
+ assert.deepEqual(gap.style.outline,{color:'#FFFDF6',widthMm:.3,offsetMm:[0,0]});
+ assert.deepEqual(gap.style.shadow,{color:'#D39368',offsetMm:[1.5,1.5],blurMm:0});
+});
+test('tape title follows actual wrapped lines and remains an editable digital group',async()=>{
+ const content='今天沿着河岸慢慢走，看见了很久没有留意的颜色';
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'tape',id:'tape-title',text:content,widthMm:35,fontFamily:'HongLeiZhuoShu',pattern:'grid',tapeOpacity:.48}});
+ const children=compiled.operations[0].children,text=children.find(o=>o.op==='text.add'&&o.content===content);
+ const tapes=children.filter(o=>/^tape-title-tape\d+$/.test(o.id));
+ assert.ok(tapes.length>1,'wrapped lines need separate tape strips');
+ assert.equal(text.style.fontFamily,'HongLeiZhuoShu');
+ assert.ok(tapes.every(o=>o.geometry.kind==='path'&&o.style.fillOpacity===.48));
+ assert.ok(children.indexOf(text)>children.indexOf(tapes.at(-1)),'text is above tape');
+ assert.ok(children.every(o=>o.op!=='material.add'),'digital tape does not consume real materials');
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'tape',id:'invalid-tape',text:'短题',tapeOpacity:1}}),/透明度/);
+});
+test('six video lettering methods remain editable and expose their distinct constructions',async()=>{
+ const ids=[['title-art','cross-shadow'],['title-art','scattered-round'],['title-art','scattered-round-triangle'],['title-art','number-route'],['title-art','script-dots'],['title-art','paper-lettering']];
+ for(const [id,variant] of ids){
+  const parameters=describeTechnique(id,{variant}).tool.arguments.parameters;
+  const compiled=compileTechnique({methodId:id,parameters}),children=compiled.operations[0].children;
+  assert.equal(children.filter(o=>o.op==='text.add'&&o.content!==parameters.caption).map(o=>o.content).join(''),parameters.text,id+' editable main text');
+  assert.ok(children.some(o=>o.op==='graphic.add'),id+' editable visual construction');
+  assert.equal(apply(await document([]),compiled.operations,[]).changed,true,id);
+ }
+ const cross=compileTechnique({methodId:'title-art',parameters:{variant:'cross-shadow',id:'cross',text:'秋日来信',caption:'AUTUMN',widthMm:75}}).operations[0].children;
+ assert.ok(cross.findIndex(o=>o.content==='AUTUMN')>cross.findIndex(o=>o.content==='秋日来信'));
+ assert.ok(cross.some(o=>o.op==='graphic.add'&&o.style.fillOpacity===.82));
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'cross-shadow',id:'x',text:'秋日'}}),/caption/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'cross-shadow',id:'x',text:'秋日',caption:'A very long line of explanatory words that cannot fit',widthMm:36}}),/小字过长/);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'number-route',id:'x',text:'2026'}}),/runs/);
+});
+test('title backdrops adapt to line width, remain behind text, and accept controlled visual variants',async()=>{
+ const compile=(id,text,backdrop)=>compileTechnique({methodId:'title-art',parameters:{variant:'paper-lettering',id,text,widthMm:45,backdrop}});
+ const opts={kind:'paper',color:'#345948',pattern:'grid',patternColor:'#E7C98A',paddingMm:4,densityMm:4,opacity:.9};
+ const short=compile('short','春',opts),long=compile('long','春日去公园走一走',opts);
+ const a=short.operations[0].children,b=long.operations[0].children;
+ assert.ok(a.find(o=>o.id==='short-backdrop0').size.width<b.find(o=>o.id==='long-backdrop0').size.width);
+ assert.ok(b.filter(o=>o.id.startsWith('long-backdrop')&&!o.id.includes('pattern')).length>1,'wrapped text has multiple paper pieces');
+ assert.ok(b.findIndex(o=>o.op==='text.add')>b.findIndex(o=>o.id==='long-backdrop0'));
+ assert.equal(b.find(o=>o.content==='春日去公园走一走').style.color,'#FFF8EB');
+ assert.equal(apply(await document([]),long.operations,[]).changed,true);
+ const dots=compileTechnique({methodId:'title-art',parameters:{variant:'script-dots',id:'dots',text:'Slow days',backdrop:{kind:'dots',densityMm:3,diameterMm:7,patternColor:'#E8B943'}}}).operations[0].children;
+ const dotShapes=dots.filter(o=>o.op==='graphic.add'&&o.id.startsWith('dots-backdrop-'));
+ assert.ok(dotShapes.length>=4);
+ assert.ok(dotShapes.every(o=>o.geometry.kind==='ellipse'));
+ assert.ok(dotShapes.every(o=>o.size.width<=25*25.4/72*.42+.01),'filled dots stay small relative to the title');
+ for(let i=0;i<dotShapes.length;i++)for(let j=i+1;j<dotShapes.length;j++){
+  const a=dotShapes[i],b=dotShapes[j],ac=[a.place.at[0]+a.size.width/2,a.place.at[1]+a.size.height/2],bc=[b.place.at[0]+b.size.width/2,b.place.at[1]+b.size.height/2];
+  assert.ok(Math.hypot(ac[0]-bc[0],ac[1]-bc[1])>(a.size.width+b.size.width)/2+.4,'background dots should not touch');
+ }
+ assert.ok(dots.findIndex(o=>o.op==='text.add')>dots.indexOf(dotShapes.at(-1)));
+ const word=dots.find(o=>o.op==='text.add'&&o.content==='Slow days');
+ assert.ok(dotShapes.some(o=>o.place.at[0]>word.place.at[0]&&o.place.at[0]<word.place.at[0]+word.size.width-10),'large circles overlap the word instead of forming an outer border');
+ for(const kind of ['band','brush','oval']){
+  const variant=compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'back-'+kind,text:'晴天',backdrop:{kind,color:'#DBB66C',opacity:.7,paddingMm:5}}});
+  const shape=variant.operations[0].children.find(o=>o.id==='back-'+kind+'-backdrop0');
+  assert.equal(shape.geometry.kind,kind==='brush'?'path':kind==='oval'?'ellipse':'rect');
+  assert.equal(shape.style.fillOpacity,.7);
+  assert.equal(apply(await document([]),variant.operations,[]).changed,true,kind);
+ }
+ assert.throws(()=>compile('bad','春',{kind:'paper',densityMm:.5}),/纹样间距/);
+});
+test('tutorial backgrounds and ornaments stay editable with both supplied handwriting fonts',async()=>{
+ for(const [font,text,backdrop,ornament] of [
+  ['BaiLuBangBang','喜欢这样的日子',{kind:'brush',paddingMm:7,color:'#E9AF76',pattern:'dots',patternColor:'#F6D9AF'},{kind:'spark',scaleMm:5.5,color:'#315D55'}],
+  ['WoAiWanWeiWei','把风留在纸上',{kind:'paper',paddingMm:7,color:'#42665F',pattern:'stripes',patternColor:'#D9B67C',densityMm:3},{kind:'leaf',scaleMm:6,color:'#D9B67C'}]
+ ]){
+  const id='font-'+font,compiled=compileTechnique({methodId:'title-art',parameters:{variant:'label',id,text,widthMm:115,fontFamily:font,backdrop,ornament,style:font==='WoAiWanWeiWei'?{color:'#FFF8EB'}:{}}});
+  const children=compiled.operations[0].children,main=children.find(op=>op.op==='text.add'&&op.content===text);
+  assert.equal(main.style.fontFamily,font);
+  assert.ok(children.findIndex(op=>op.id===id+'-backdrop0')<children.indexOf(main));
+  assert.ok(children.some(op=>op.id===id+'-ornament0'&&op.geometry.kind==='path'));
+  assert.ok(children.some(op=>op.id===id+'-ornament1'),'small echo remains a separate editable vector');
+  assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ }
+ const dotted=compileTechnique({methodId:'title-art',parameters:{variant:'script-dots',id:'organic',text:'ordinary day',fontFamily:'WoAiWanWeiWei',backdrop:{kind:'dots',densityMm:3}}}).operations[0].children;
+ assert.ok(dotted.some(op=>op.id==='organic-backdrop-0-0'));
+ assert.ok(!dotted.some(op=>op.id.startsWith('organic-ornament')),'the video circle treatment does not add unrelated side decorations');
+ const squares=compileTechnique({methodId:'title-art',parameters:{variant:'label-blocks',id:'blocks',text:'今天很开心',fontFamily:'BaiLuBangBang',}}).operations[0].children;
+ assert.ok(squares.some(op=>op.id==='blocks-backdrop-0-0'&&op.geometry.kind==='rect'));
+ assert.ok(squares.findIndex(op=>op.id==='blocks-backdrop-0-0')<squares.findIndex(op=>op.op==='text.add'));
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-art',parameters:{variant:'label-blocks',id:'blocks',text:'今天很开心',}}).operations,[]).changed,true);
+ const tutorial=compileTechnique({methodId:'title-art',parameters:{variant:'phrases-outline-ring',id:'tutorial',text:'喜欢薄荷',fontFamily:'BaiLuBangBang',runs:[{text:'喜欢',backdrop:{kind:'squares',strokeOnly:true,strokeWidthMm:.8,diameterMm:11,patternColor:'#2869A5'}},{text:'薄荷',breakBefore:true,offsetMm:[13,0],backdrop:{kind:'ring',diameterMm:17,patternColor:'#D08371'}}]}});
+ const framed=tutorial.operations[0].children,frames=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-0-')),rings=framed.filter(op=>op.id?.startsWith('tutorial-backdrop-1-ring'));
+ assert.equal(frames.length,4,'the first phrase has four outlined squares');
+ assert.ok(frames.every(op=>op.geometry.kind==='rect'&&op.style.fill===null&&op.style.stroke==='#2869A5'));
+ assert.equal(rings.length,2,'the second phrase has two loose circles');
+ assert.ok(rings.every(op=>op.geometry.kind==='ellipse'&&op.style.fill===null&&op.style.stroke==='#D08371'));
+ assert.ok(framed.indexOf(frames[0])<framed.findIndex(op=>op.op==='text.add'));
+ assert.ok(framed.indexOf(rings[0])<framed.findIndex(op=>op.op==='text.add'));
+ assert.equal(apply(await document([]),tutorial.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'bad',text:'春',ornament:{kind:'flower',scaleMm:12}}}),/点缀尺寸/);
+});
+test('composed title keeps glyph, paint, and separated underlay layers independently editable',async()=>{
+ const id='composed',parameters={id,text:'2026听歌',fontFamily:'BaiLuBangBang',fontSizePt:31,widthMm:90,colors:['#233C64','#E5BC51','#FFFDF6'],glyph:{strokes:[{index:4,kind:'hotdog',box:[.38,.12,.18,.7]},{index:5,kind:'triangle',box:[.32,.17,.18,.65]}],numberShadow:{color:'#E5BC51',indices:[0,1,2,3]}},backgrounds:[{kind:'dots',color:'#E5BC51',diameterMm:2.3,gapMm:3},{kind:'squares',color:'#E5BC51',diameterMm:2.3,gapMm:3.2},{kind:'enclosure',color:'#E5BC51'}],accents:[{kind:'notes',placement:'upper-right',color:'#38869A',count:2}],style:{color:'#233C64',outline:{color:'#FFFDF6',widthMm:.22},shadow:{color:'#9AA7B4',offsetMm:[.7,.8],blurMm:0}}};
+ const compiled=compileTechnique({methodId:'title-art',parameters:{...parameters,variant:'composed'}}),children=compiled.operations[0].children;
+ assert.ok(children.every(op=>op.op!=='material.add'));
+ assert.equal(children.filter(op=>op.op==='text.add').map(op=>op.content).join(''),parameters.text);
+ assert.equal(children.filter(op=>op.op==='layer.mask').length,2);
+ assert.equal(children.filter(op=>op.id?.includes('-path-')&&op.style?.fill==='#E5BC51').length>=4,true,'number shadows are editable paths');
+ assert.ok(children.some(op=>op.geometry?.kind==='path'&&op.style?.stroke==='#E5BC51'),'enclosing line is a separate pen path');
+ const letters=children.filter(op=>op.op==='text.add');assert.ok(letters.every(op=>op.style.outline&&op.style.shadow),'native text effects are retained');
+ for(const kind of ['ellipse','rect']){
+  const dots=children.filter(op=>op.id?.includes('-'+kind+'-')&&op.geometry?.kind===kind);
+  assert.ok(dots.length>=2);
+  assert.ok(new Set(dots.map(op=>op.size.width.toFixed(2))).size>1,'backing marks should vary in size');
+  assert.ok(new Set(dots.map(op=>op.place.at[1].toFixed(2))).size>1,'backing marks should sit at irregular heights');
+  for(let i=0;i<dots.length;i++)for(let j=i+1;j<dots.length;j++){
+   const a=dots[i],b=dots[j],distance=Math.hypot(a.place.at[0]-b.place.at[0],a.place.at[1]-b.place.at[1]);
+   assert.ok(distance>Math.max(a.size.width,b.size.width)+.7,'small backing marks must stay separate');
+  }
+ }
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'composed',...parameters,id:'bad',glyph:{strokes:[{index:99,kind:'hotdog',box:[.3,.1,.2,.7]}]}}}),/笔画替换/);
+});
+test('split title inserts real middle text between two masked editable halves',async()=>{
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'composed',id:'split-title',text:'人生的意义',fontFamily:'BaiLuBangBang',widthMm:100,colors:['#C63B85','#ED7A82','#FFFDF6'],glyph:{split:{middleText:'RENSHENG DE YIYI',gapMm:3,waveMm:1.3}},style:{shadow:{color:'#ED7A82',offsetMm:[.6,.7],blurMm:0}}}}),children=compiled.operations[0].children;
+ assert.equal(children.filter(op=>op.op==='text.add'&&!op.id.includes('-middle-')).length,10);
+ assert.equal(children.filter(op=>op.op==='layer.mask').length,10);
+ const chinese=children.filter(op=>op.op==='text.add'&&!op.id.includes('-middle-'));
+ assert.ok(chinese.every(op=>op.style.fontSizePt>28),'the split Chinese glyphs should be visibly taller than the base lettering');
+ assert.ok(chinese[1].place.at[1]-chinese[0].place.at[1]>4,'upper and lower parts need room for the English line');
+ const middle=children.filter(op=>op.op==='text.add'&&op.id.includes('-middle-'));
+ assert.equal(middle.map(op=>op.content).join(''),'RENSHENGDEYIYI');
+ assert.equal(middle[0].place.at[0],5);
+ assert.ok(middle.at(-1).place.at[0]>middle[0].place.at[0]+40,'英文字行须跨过中文标题的右端');
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+});
+test('title backdrops mix scattered dots and squares with page-wide line and hash patterns',async()=>{
+ const parameters={id:'mixed-marks',text:'手帐日记',fontSizePt:32,widthMm:100,backgrounds:[{kind:'mixed',diameterMm:2.9,gapMm:2.6,colors:['#E5B941','#82B8AC','#EF8E69']},{kind:'lines',count:4,color:'#9BB8AA'},{kind:'hashes',count:3,color:'#E8B18D'}]};
+ const children=compileTechnique({methodId:'title-art',parameters:{...parameters,variant:'composed'}}).operations[0].children;
+ const marks=children.filter(op=>op.op==='graphic.add');
+ assert.deepEqual(new Set(marks.map(op=>op.geometry.kind)),new Set(['ellipse','rect','path']));
+ assert.ok(marks.filter(op=>op.geometry.kind==='path'&&op.size.width>40).length>=10,'line and hash patterns should span the entire title');
+ const scattered=marks.filter(op=>['ellipse','rect'].includes(op.geometry.kind));
+ assert.ok(new Set(scattered.map(op=>op.size.width.toFixed(1))).size>=4,'small mark sizes should visibly vary');
+ assert.ok(new Set(scattered.map(op=>op.place.at[1].toFixed(1))).size>=4,'small marks should not form a regular baseline');
+ assert.ok(children.every(op=>op.op!=='material.add'));
+ assert.equal(apply(await document([]),compileTechnique({methodId:'title-art',parameters:{...parameters,variant:'composed'}}).operations,[]).changed,true);
+});
+test('composed lettering also works as smaller second and third level headings',async()=>{
+ const contract=describeTechnique('title-art',{variant:'composed',includeFontSuggestions:false});
+ assert.deepEqual(Object.keys(contract.parameters),['id','reference','at','rotationDeg','variant','text','fontFamily','fontSizePt','widthMm','heightMm','colors','style','glyph','letterStyles','backgrounds','accents']);
+ const second=compileTechnique({methodId:'title-art',parameters:{variant:'composed',id:'heading-two',text:'今日片段',fontSizePt:20,widthMm:52,backgrounds:[{kind:'lines',count:3,color:'#B7C7BC',opacity:.45}]}});
+ const third=compileTechnique({methodId:'title-art',parameters:{variant:'composed',id:'heading-three',text:'天气记录',fontSizePt:14,widthMm:42,backgrounds:[{kind:'dots',diameterMm:1.5,gapMm:3,color:'#DDAA78'}]}});
+ assert.ok(second.report.heightMm>third.report.heightMm);
+ assert.ok(second.operations[0].children.some(op=>op.geometry?.kind==='path'));
+ assert.ok(third.operations[0].children.some(op=>op.geometry?.kind==='ellipse'));
+ assert.ok(second.operations[0].children.every(op=>op.op!=='material.add'));
+ assert.ok(third.operations[0].children.every(op=>op.op!=='material.add'));
+ assert.equal(apply(await document([]),second.operations,[]).changed,true);
+ assert.equal(apply(await document([]),third.operations,[]).changed,true);
+});
+test('postmark lesson renders a circular editable label, with caption outside the ring',()=>{
+ const result=compileTechnique({methodId:'title-art',parameters:{variant:'vintage-postmark',id:'seal',text:'旅途',caption:'小记'}});
+ const children=result.operations[0].children,ring=children.find(op=>op.op==='graphic.add'),label=children.find(op=>op.op==='text.add'&&op.content==='旅途'),caption=children.find(op=>op.op==='text.add'&&op.content==='小记');
+ assert.equal(ring.geometry.kind,'ellipse');assert.equal(ring.size.width,ring.size.height);
+ assert.equal(label.style.textAlign,'center');assert.ok(label.place.at[1]>ring.size.height*.2);
+ assert.ok(caption.place.at[1]>ring.size.height);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'vintage-postmark',id:'seal',text:'这一行长到放不进圆里',widthMm:18}}),/超出圆形范围/);
+});
+test('graphic lesson examples show their focal objects and route requires real waypoints',()=>{
+ const route=describeTechnique('graphic-route');
+ assert.equal(route.parameters.waypoints.required,true);
+ assert.equal(route.example.prepare.filter(op=>op.op==='material.add').length,2);
+ assert.equal(route.tool.arguments.parameters.waypoints.length,2);
+ assert.throws(()=>compileTechnique({methodId:'graphic-route',parameters:{id:'route'}}),/需要两个以上真实焦点/);
+ assert.throws(()=>compileTechnique({methodId:'graphic-route',parameters:{id:'route',waypoints:[[.2,.2],[1.2,.8]]}}),/区域内比例坐标/);
+ for(const [id,variant] of [['graphic-loop'],['graphic-loop','corner'],['graphic-loop','rays']])assert.ok(describeTechnique(id,{variant}).example.prepare.length,`${id}:${variant||''} missing focal example`);
+});
+test('photo-specific examples use photographs for every material slot',()=>{
+ for(const method of techniqueCatalog.methods.filter(m=>m.id.startsWith('photo-')&&['materials','film'].includes(m.recipe))){
+  const aliases=techniqueExample(method).parameters.aliases;
+  assert.ok(aliases.length>=2,method.id);
+  for(const alias of aliases)assert.equal(exampleMaterials.find(asset=>asset.alias===alias)?.kind,'photo',method.id+'/'+alias);
+ }
+});
+test('real accent example uses small physical items around a protected focal photo',()=>{
+ const method=techniqueCatalog.methods.find(m=>m.id==='accent-materials'),example=techniqueExample(method);
+ assert.equal(example.before.find(op=>op.id==='photo')?.asset,'m1');
+ assert.deepEqual(example.parameters.aliases.map(alias=>exampleMaterials.find(asset=>asset.alias===alias)?.kind),['sticker','ticket']);
+ const compiled=compileTechnique({methodId:method.id,parameters:example.parameters,materials:exampleMaterials});
+ assert.deepEqual(compiled.report.skipped,[]);
+ assert.deepEqual(compiled.operations[0].children.map(op=>op.asset),example.parameters.aliases);
+ assert.ok(example.parameters.aliases.every(alias=>exampleMaterials.find(asset=>asset.alias===alias).physicalWidthMM<exampleMaterials[0].physicalWidthMM));
+});
+test('bubble lesson creates editable text inside the frame and rejects overflow',()=>{
+ const info=describeTechnique('graphic-bubble');
+ assert.equal(info.parameters.text.required,true);
+ assert.equal(info.example.prepare[0].asset,'m1');
+ const compiled=compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble',text:'这里的光'}});
+ assert.deepEqual(compiled.operations[0].children.map(op=>op.op),['graphic.add','text.add']);
+ assert.equal(compiled.operations[0].children[1].content,'这里的光');
+ assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble'}}),/需要短文字/);
+ assert.throws(()=>compileTechnique({methodId:'graphic-bubble',parameters:{id:'bubble',text:'这段批注长到不可能放进很小的气泡主体内',widthMm:20,heightMm:12}}),/超出框内可写区域/);
+ assert.throws(()=>describeTechnique('graphic-arch'),/未知教程方法/);
+});
+test('timeline connector ends at the first and last event, with no tail for a single event',()=>{
+ const operations=compileTechnique({methodId:'record-checklist',parameters:{id:'time',variant:'timeline',items:['早晨','午后','夜晚']}}).operations[0].children;
+ const circles=operations.filter(op=>op.op==='graphic.add'&&op.geometry.kind==='ellipse');
+ const line=operations.find(op=>op.op==='graphic.add'&&op.geometry.kind==='rect'&&op.size.width===.25);
+ assert.equal(circles.length,3);assert.ok(line);
+ assert.equal(line.place.at[1]-line.size.height/2,circles[0].place.at[1]);
+ assert.equal(line.place.at[1]+line.size.height/2,circles.at(-1).place.at[1]);
+ const single=compileTechnique({methodId:'record-checklist',parameters:{id:'one',variant:'timeline',items:['唯一事件']}}).operations[0].children;
+ assert.ok(!single.some(op=>op.op==='graphic.add'&&op.geometry.kind==='rect'&&op.size.width===.25));
+});
+test('template ranking is deterministic and does not mutate real material dimensions',()=>{
+ const input=structuredClone(exampleMaterials),args={materials:input,paper:{width:148,height:210},limit:5};
+ assert.deepEqual(rankTemplates(args),rankTemplates(args));assert.deepEqual(input,exampleMaterials);
+});
+
+test('an existing editable title group can occupy a template slot without rasterization',async()=>{
+ const assets=exampleMaterials.slice(0,2);let doc=await document(assets);
+ doc=apply(doc,compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'heading',text:'好天气'}}).operations,assets).document;
+ const template=templateCatalog.templates.find(t=>t.id==='center-1'),slot=materialSlots(template)[0],heading=template.elements.find(e=>e.role==='title');
+ const compiled=compileTemplate({templateId:template.id,id:'page-group',paper:{width:148,height:210},materials:assets,bindings:[{slotId:slot.id,alias:'m1'},{slotId:heading.id,node:'heading'}],nodes:[{id:'heading'}]});
+ const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'compose-title',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},assets).document;
+ const group=result.page.layers.find(n=>n.id==='page-group');assert.ok(group.children.some(n=>n.id==='heading'&&n.type==='group'));
+});
+test('taxonomy and open semantic tags remain available in frozen matching sources',async()=>{
+ const asset={...exampleMaterials[0],styleTags:['手绘'],contentTags:['咖啡杯'],contentCategories:['food']};
+ const doc=await document([asset]);assert.deepEqual(doc.source.sourceSnapshots[0].styleTags,['手绘']);
+});
+
+test('a title group replaces a template writing guide and retains editable text and foreground order',async()=>{
+ let doc=await document([]);
+ doc=apply(doc,compileTechnique({methodId:'title-art',parameters:{variant:'gap-shadow',id:'heading',text:'留住片刻'}}).operations,[]).document;
+ const t=templateCatalog.templates.find(t=>t.id==='cream6-08');
+ const compiled=compileTemplate({templateId:t.id,id:'spread',paper:{width:240,height:149},bindings:[{slotId:'headline',node:'heading'}],nodes:[{id:'heading'}],texts:{'middle-writing':'留一点时间，慢慢看。'}});
+ const result=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'place-heading',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},[]).document;
+ const group=result.page.layers.find(n=>n.id==='spread');
+ assert.deepEqual(group.children.map(n=>n.id),['heading','spread-middle-writing']);
+ const heading=group.children.find(n=>n.id==='heading');
+ assert.equal(heading.children.find(n=>n.type==='text').content,'留住片刻');
+ assert.ok(!group.children.some(n=>n.id==='spread-headline'));
+ assert.ok(compiled.report.renderedElements.includes('headline'));
+});
+
+test('every method exposes a complete example and distinct construction/review guidance',async()=>{
+ for(const method of techniqueCatalog.methods){
+  const info=describeTechnique(method.id);
+  assert.ok(info.lesson.principle.length>12,method.id);assert.ok(info.lesson.steps.length>=2,method.id);assert.ok(info.lesson.check.length>=2,method.id);
+  const materials=info.example.materials,doc=await document(materials);
+  const compiled=compileTechnique({methodId:method.id,parameters:info.tool.arguments.parameters,materials});
+  assert.equal(apply(doc,[...info.example.prepare,...compiled.operations],materials).changed,true,method.id);
+ }
+});
+test('phrase composition preserves the supplied text, meaningful grouping and physical font sizes',async()=>{
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'phrases',id:'phrase',text:'把日常收好',fontSizePt:20,widthMm:36,runs:[{text:'把',role:'secondary'},{text:'日常',role:'primary'},{text:'收好',breakBefore:true}]}});
+ const texts=compiled.operations[0].children.filter(o=>o.op==='text.add');assert.equal(texts.map(t=>t.content).join(''),'把日常收好');
+ assert.ok(texts[1].style.fontSizePt>texts[0].style.fontSizePt);assert.equal(texts[2].style.fontSizePt,20);
+ assert.ok(texts[2].place.at[1]>texts[1].place.at[1]);assert.ok(texts.every(t=>!t.place.rotationDeg));
+ assert.equal(apply(await document([]),compiled.operations,[]).changed,true);
+ assert.throws(()=>compileTechnique({methodId:'title-art',parameters:{variant:'phrases',id:'bad',text:'完整标题',runs:[{text:'标题'}]}}),/拼接/);
+});
+test('short Chinese staggered title runs retain enough width to read as words',()=>{
+ const compiled=compileTechnique({methodId:'title-art',parameters:{variant:'stack-stagger',id:'staggered',text:'去拾一束星光',runs:[{text:'去拾'},{text:'一束'},{text:'星光'}]}});
+ const words=compiled.operations[0].children.filter(operation=>operation.op==='text.add');
+ assert.deepEqual(words.map(word=>word.content),['去拾','一束','星光']);
+ assert.ok(words.every(word=>word.size.width>=20));
+});
+test('lettering recipes expose and preserve different bundled fonts',async()=>{
+ const detail=describeTechnique('title-art',{variant:'phrases'});
+ assert.ok(detail.parameters.fontFamily.suggestedFonts.some(font=>font.family==='HongLeiZhuoShu'));
+ assert.ok(detail.parameters.captionFontFamily.suggestedFonts.some(font=>font.family==='Xiaolai'));
+ const title=compileTechnique({methodId:'title-art',parameters:{variant:'phrases',id:'font-title',text:'收集日常',caption:'周末手记',fontFamily:'HongLeiZhuoShu',captionFontFamily:'Xiaolai',runs:[{text:'收集',fontFamily:'FontQu Smile'},{text:'日常',role:'primary'}]}});
+ const titleTexts=title.operations[0].children.filter(op=>op.op==='text.add');
+ assert.deepEqual(titleTexts.map(op=>op.style.fontFamily),['FontQu Smile','HongLeiZhuoShu','Xiaolai']);
+ const applied=apply(await document([]),title.operations,[]);
+ assert.equal(applied.changed,true);
+ for(const [id,family] of titleTexts.map(op=>[op.id,op.style.fontFamily]))assert.equal(applied.document.page.layers[0].children.find(node=>node.id===id)?.fontName,family);
+ for(const [methodId,parameters,family] of [
+  ['record-checklist',{id:'font-record',items:['一段日记'],fontFamily:'Sophora'},'Sophora'],
+  ['graphic-bubble',{id:'font-bubble',text:'旁注',fontFamily:'Otsutome'},'Otsutome']
+ ]){
+  const compiled=compileTechnique({methodId,parameters,materials:exampleMaterials});
+  assert.ok(compiled.operations[0].children.filter(op=>op.op==='text.add').every(op=>op.style.fontFamily===family),methodId);
+ }
+ const written=compileTechnique({methodId:'record-on-material',parameters:{id:'font-write',target:'note',box:[.1,.1,.8,.6],text:'落笔',fontFamily:'Ma Shan Zheng'}});
+ assert.equal(written.operations[0].style.fontFamily,'Ma Shan Zheng');
+});
+test('long captions and record entries stay inside their reported editable groups',async()=>{
+ const cases=[
+  ...[undefined,'timeline','columns'].map(variant=>({methodId:'record-checklist',parameters:{id:'record-'+(variant||'list'),...(variant?{variant}:{}),items:['今天收集了很多文字，需要按实际宽度换行。'.repeat(3),'A long note about the photos saved this afternoon. '.repeat(2)],fontSizePt:14,gapMm:2}}))
+ ];
+ for(const {methodId,parameters} of cases){
+  const compiled=compileTechnique({methodId,parameters,materials:exampleMaterials});
+  const doc=await document(exampleMaterials),done=apply(doc,compiled.operations,exampleMaterials).document;
+  const group=done.page.layers.find(n=>n.id===parameters.id),scale=done.page.canvas.height/done.page.physicalPageHeightMM;
+  const ends=[];
+  for(const command of compiled.operations[0].children.filter(n=>n.op==='text.add')){
+   const node=group.children.find(n=>n.id===command.id);
+   const end=command.place.at[1]+node.height/scale;ends.push(end);
+   assert.ok(end<=compiled.report.heightMm+.01,methodId+'/'+command.id);
+  }
+  assert.ok(compiled.report.heightMm-Math.max(...ends)<=parameters.gapMm+.01,methodId+' should not reserve unused rows');
+ }
+});
+test('tape recipes show physical attachment and keep rotated strips inside the selectable group',async()=>{
+ const method=techniqueCatalog.methods.find(m=>m.id==='tape-fix'),detail=describeTechnique(method.id,{variant:'corners'}),example={before:detail.example.prepare,parameters:detail.tool.arguments.parameters};
+ assert.ok(example.before.some(op=>op.asset==='m3'));
+ assert.ok(describeTechnique(method.id).parameters.segments.description.includes('局部摆放'));
+ for(const parameters of [{id:'tapes',variant:'corners',aliases:['m4']},{...example.parameters,id:'tapes'},{...example.parameters,id:'tapes',rotationDeg:30}]){
+  const compiled=compileTechnique({methodId:method.id,parameters,materials:exampleMaterials});
+  const done=apply(await document(exampleMaterials),compiled.operations,exampleMaterials).document,group=worldBox(done.page,'tapes');
+  const strips=compiled.operations[0].children.filter(op=>op.op==='material.tape');assert.equal(strips.length,2);
+  for(const strip of strips){
+   const box=worldBox(done.page,strip.id),angle=(box.rotation-group.rotation)*Math.PI/180,groupAngle=group.rotation*Math.PI/180;
+   const offsetX=box.cx-group.cx,offsetY=box.cy-group.cy;
+   const localX=offsetX*Math.cos(groupAngle)+offsetY*Math.sin(groupAngle);
+   const localY=-offsetX*Math.sin(groupAngle)+offsetY*Math.cos(groupAngle);
+   const dx=(Math.abs(Math.cos(angle))*box.w+Math.abs(Math.sin(angle))*box.h)/2;
+   const dy=(Math.abs(Math.sin(angle))*box.w+Math.abs(Math.cos(angle))*box.h)/2;
+   assert.ok(localX-dx>=-group.w/2-.01&&localX+dx<=group.w/2+.01);
+   assert.ok(localY-dy>=-group.h/2-.01&&localY+dy<=group.h/2+.01);
+  }
+ }
+ const moved=compileTechnique({methodId:method.id,parameters:{id:'moved',variant:'corners',aliases:['m4'],segments:[{at:[5,5]},{at:[60,32]}]},materials:exampleMaterials});
+ assert.deepEqual(moved.operations[0].children.map(op=>op.place.rotationDeg),[-35,145]);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',variant:'corners',aliases:['m4'],segments:[{at:[5,5]}]},materials:exampleMaterials}),/段数/);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',variant:'corners',aliases:['m4'],segments:[{at:[5,5]},{at:[80,5]}]},materials:exampleMaterials}),/位置/);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{id:'bad',variant:'corners',aliases:['m4'],lengthMm:1},materials:exampleMaterials}),/至少/);
+});
+test('three-point color echo has three distinct visible default colors',()=>{
+ const children=compileTechnique({methodId:'color-echo',parameters:{id:'echo'}}).operations[0].children;
+ assert.equal(children.length,3);
+ assert.equal(new Set(children.map(op=>op.style.fill)).size,3);
+ assert.ok(children.every(op=>op.style.fill!=='#F1E8D5'));
+});
+for(const t of templateCatalog.templates.filter(t=>t.reconstruction))test('fully specified template reconstructs every analyzed element in declared stacking order: '+t.id,async()=>{
+ const fixture=templateFixture(t);
+ const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;
+ const doc=await createCreationDocument({draft:page,assets:fixture.materials,aliases:Object.fromEntries(fixture.materials.map(a=>[a.alias,a.id]))});
+ const compiled=compileTemplate({...fixture,templateId:t.id,id:'full'}),done=apply(doc,compiled.operations,fixture.materials).document;
+ assert.deepEqual(compiled.report.missingElements,[]);
+ assert.deepEqual(done.page.layers[0].children.map(n=>n.creativePieceID||n.id),t.elements.map(e=>'full-'+e.id));
+ assert.equal(done.page.layers[0].children.length,t.reconstruction.sourceElementCount);
+ assert.deepEqual(compiled.operations[0].children.filter(o=>o.op==='material.add').map(o=>o.asset),fixture.bindings.map(b=>b.alias));
+ assert.ok(compiled.operations[0].children.filter(o=>o.op==='material.add').every(o=>o.size===undefined));
+ if(t.elements.find(e=>e.id==='e7')?.render?.style.fillOpacity===0)assert.equal(done.page.layers[0].children.find(n=>n.id==='full-e7').fillOpacity,0);
+});
+test('template palette and omissions are explicit, preserve input assets, and cannot create fake material placeholders',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t),before=structuredClone(fixture.materials);
+ const compiled=compileTemplate({templateId:t.id,id:'partial',paper:fixture.paper,materials:fixture.materials.slice(0,1),colors:{orange:'#123456'},omit:['dot-top','e2']});
+ assert.ok(compiled.report.missingElements.includes('e2'));assert.ok(compiled.report.missingElements.includes('dot-top'));
+ assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-date-card'),undefined);
+ assert.equal(compiled.report.slots.find(s=>s.slotId==='date-card').reason,'content-missing');
+ assert.equal(compiled.operations[0].children.find(n=>n.id==='partial-small-tab').style.fill,'#123456');
+ assert.deepEqual(fixture.materials,before);assert.equal(compiled.operations[0].children.filter(n=>n.op==='material.add').length,1);
+ assert.equal(apply(await document(fixture.materials),compiled.operations,fixture.materials).changed,true);
+ assert.throws(()=>compileTemplate({...fixture,templateId:t.id,id:'bad',colors:{orange:'red'}}),/配色/);
+ assert.throws(()=>compileTemplate({...fixture,templateId:t.id,id:'bad',omit:['unknown']}),/省略/);
+ assert.throws(()=>compileTemplate({...fixture,templateId:t.id,id:'bad',bindings:[{slotId:'dot-top',alias:'m1'}]}),/位置/);
+});
+test('an existing title keeps the template stacking position rather than always becoming the top layer',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='center-1'),fixture=templateFixture(t);let doc=await document(fixture.materials);
+ doc=apply(doc,compileTechnique({methodId:'title-art',parameters:{variant:'label',id:'heading',text:'日常'}}).operations,fixture.materials).document;
+ delete fixture.texts.e7;
+ const compiled=compileTemplate({...fixture,templateId:t.id,id:'joined',bindings:[...fixture.bindings,{slotId:'e7',node:'heading'}],nodes:[{id:'heading'}]});
+ const done=applyCreationTransaction(doc,{protocolVersion:2,transactionId:'join-template',baseSceneRevision:creationSceneRevision(doc),operations:compiled.operations},fixture.materials).document;
+ assert.deepEqual(done.page.layers.find(n=>n.id==='joined').children.map(n=>n.creativePieceID||n.id),t.elements.map(e=>e.id==='e7'?'heading':'joined-'+e.id));
+});
+
+test('writing regions replace the guide paths with supplied text in the same editable layer',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='moon-03'),fixture=templateFixture(t),slot=t.elements.find(e=>e.role==='text'&&isGraphicElement(e));
+ const guide=compileTemplate({...fixture,templateId:t.id,id:'guide'});
+ assert.equal(guide.operations[0].children.find(c=>c.id==='guide-'+slot.id).op,'graphic.add');
+ const content='在这里写下今天的两件小事。',result=compileTemplate({...fixture,templateId:t.id,id:'written',texts:{...fixture.texts,[slot.id]:content}});
+ const items=result.operations[0].children.filter(c=>c.id==='written-'+slot.id);assert.equal(items.length,1);assert.equal(items[0].op,'text.add');assert.equal(items[0].content,content);assert.equal(items[0].style.fontFamily,'Xiaolai');assert.equal('stroke' in items[0].style,false);
+ assert.deepEqual(items[0].place.at,[slot.render.textBox[0]*fixture.paper.width,slot.render.textBox[1]*fixture.paper.height]);
+ assert.notDeepEqual(items[0].place.at,[slot.box[0]*fixture.paper.width,slot.box[1]*fixture.paper.height]);
+ assert.equal(items[0].place.rotationDeg,32);assert.equal(items[0].size.width,slot.render.textBox[2]*fixture.paper.width);
+ const page=draft({ratio:'a5'});page.physicalPageHeightMM=fixture.paper.height;page.canvas.width=page.canvas.height*fixture.paper.width/fixture.paper.height;
+ const doc=await createCreationDocument({draft:page,assets:fixture.materials,aliases:Object.fromEntries(fixture.materials.map(a=>[a.alias,a.id]))});
+ const done=apply(doc,result.operations,fixture.materials).document;assert.equal(done.page.layers[0].children.find(n=>n.id==='written-'+slot.id).content,content);
+});
+
+test('writing on a material follows translation and rotation, and does not alter the source or drop long text',async()=>{
+ const method=techniqueCatalog.methods.find(m=>m.id==='record-on-material'),example=techniqueExample(method),materials=exampleMaterials;
+ const text='完整正文不能为了塞进便签而裁掉。'.repeat(4);
+ const recipe=compileTechnique({methodId:method.id,parameters:{...example.parameters,text},materials});
+ let doc=apply(await document(materials),[...example.before,...recipe.operations],materials).document;
+ let revision=0;const edit=operations=>applyCreationTransaction(doc,{protocolVersion:2,transactionId:'writing-'+(++revision),baseSceneRevision:creationSceneRevision(doc),operations},materials).document;
+ const originalSource=structuredClone(doc.source),before=worldBox(doc.page,'demo'),paperBefore=worldBox(doc.page,'note');
+ doc=edit([{op:'layer.update',target:'note',place:{reference:'page',at:[90,100],unit:'mm',rotationDeg:-8}}]);
+ const after=worldBox(doc.page,'demo'),paperAfter=worldBox(doc.page,'note');
+ assert.ok(Math.abs((after.cx-before.cx)-(paperAfter.cx-paperBefore.cx))<1e-6);
+ assert.ok(Math.abs((after.cy-before.cy)-(paperAfter.cy-paperBefore.cy))<1e-6);
+ assert.equal(doc.page.layers.find(n=>n.id==='demo').content,text);assert.deepEqual(doc.source,originalSource);
+ doc=edit([{op:'layer.update',target:'note',place:{reference:'page',at:[90,100],unit:'mm',rotationDeg:28}}]);
+ assert.equal(doc.page.layers.find(n=>n.id==='demo').rotation,28);
+ assert.throws(()=>compileTechnique({methodId:method.id,parameters:{...example.parameters,box:[.8,.1,.4,.5]},materials}),/可写区域/);
+});
+
+test('optional title backing follows actual supplied content and explicit omission',async()=>{
+ const base={templateId:'ac-01',id:'optional',paper:{width:148,height:190},texts:{'heading-one':'片刻'}};
+ const present=compileTemplate(base).operations[0].children;
+ assert.ok(present.some(n=>n.id==='optional-heading-one-ground'));
+ assert.ok(!present.some(n=>n.id==='optional-middle-caption-ground'));
+ const omitted=compileTemplate({...base,omit:['heading-one']}).operations[0].children;
+ assert.ok(!omitted.some(n=>n.id==='optional-heading-one-ground'));
+ const defaultTitle=compileTemplate({templateId:'ac-01',id:'default-title',paper:base.paper,title:'沿途'}).operations[0].children;
+ assert.ok(defaultTitle.some(n=>n.id==='default-title-heading-one-ground'));
+ const bound=compileTemplate({templateId:'ac-01',id:'bound-title',paper:base.paper,nodes:[{id:'existing-title'}],bindings:[{slotId:'heading-one',node:'existing-title'}]});
+ assert.ok(bound.operations[0].children.some(n=>n.id==='bound-title-heading-one-ground'));
+});
+
+test('text replacing a rotated writing guide stays inside its backing at both paper sizes',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='ac-11');
+ for(const width of [148,210]){
+  const paper={width,height:width/t.aspect};
+  const page=draft({ratio:'a5'});page.physicalPageHeightMM=paper.height;page.canvas.width=page.canvas.height*paper.width/paper.height;
+  const doc=await createCreationDocument({draft:page,assets:[],aliases:{}});
+  const compiled=compileTemplate({templateId:t.id,id:'rotated-writing',paper,texts:{'slanted-writing':'留住片刻\n慢慢记下'}});
+  const done=apply(doc,compiled.operations,[]).document;
+  const text=worldBox(done.page,'rotated-writing-slanted-writing'),backing=worldBox(done.page,'rotated-writing-slanted-writing-ground');
+  assert.equal(text.rotation,backing.rotation);
+  const a=-backing.rotation*Math.PI/180,dx=text.cx-backing.cx,dy=text.cy-backing.cy;
+  const localX=dx*Math.cos(a)-dy*Math.sin(a),localY=dx*Math.sin(a)+dy*Math.cos(a);
+  assert.ok(localX-text.w/2>=-backing.w/2-1e-6,'left text inset survives rotation');
+  assert.ok(localX+text.w/2<=backing.w/2+1e-6,'right text inset survives rotation');
+  assert.ok(localY-text.h/2>=-backing.h/2-1e-6,'top text inset survives rotation');
+  assert.ok(localY+text.h/2<=backing.h/2+1e-6,'short paragraph fits the backing');
+ }
+});
+
+test('standalone angled titles keep their authored page anchor outside the circle',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='moon-04'),fixture=templateFixture(t),slot=t.elements.find(e=>e.id==='heading');
+ const result=compileTemplate({...fixture,templateId:t.id,id:'circle-heading'});
+ const title=result.operations[0].children.find(e=>e.id==='circle-heading-heading');
+ assert.deepEqual(title.place.at,[slot.box[0]*fixture.paper.width,slot.box[1]*fixture.paper.height]);
+ assert.equal(title.place.rotationDeg,-28);
+});
+
+test('explicit empty and partial bindings never silently auto-fill other material positions',async()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='center-1'),f=templateFixture(t),slot=materialSlots(t)[0];
+ const empty=compileTemplate({...f,templateId:t.id,id:'empty',bindings:[],texts:{}});
+ assert.equal(empty.report.assignmentMode,'explicit');assert.deepEqual(empty.report.used,[]);
+ assert.ok(empty.report.slots.filter(s=>s.status==='material').length===0);
+ const single=compileTemplate({...f,templateId:t.id,id:'chosen',bindings:[{slotId:slot.id,alias:f.materials[0].alias}],texts:{}});
+ const doc=apply(await document(f.materials),single.operations,f.materials).document;
+ const group=doc.page.layers.find(n=>n.id==='chosen');
+ assert.equal(group.children.filter(n=>n.assetID).length,1);
+ assert.equal(single.report.slots.find(s=>s.slotId===slot.id).source,f.materials[0].alias);
+ const blank=single.report.slots.find(s=>s.slotId===materialSlots(t)[1].id);assert.equal(blank.status,'blank');assert.equal(blank.reason,'unassigned');
+ assert.throws(()=>compileTemplate({...f,templateId:t.id,id:'conflict',bindings:[{slotId:'e7',alias:f.materials[0].alias}]}),/同时/);
+});
+
+test('digital writing regions can keep guides, accept text, or be omitted without substitute cards',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='ac-04'),f=templateFixture(t),slot=t.elements.find(e=>e.role==='text'&&isGraphicElement(e));
+ const args={...f,templateId:t.id,id:'choices',bindings:[],texts:{}};
+ assert.equal(compileTemplate(args).report.slots.find(s=>s.slotId===slot.id).status,'writing-guide');
+ assert.equal(compileTemplate({...args,texts:{[slot.id]:'一段短记'}}).report.slots.find(s=>s.slotId===slot.id).status,'text');
+ assert.equal(compileTemplate({...args,omit:[slot.id]}).report.slots.find(s=>s.slotId===slot.id).reason,'omitted');
+});
+
+test('all authored sample text fits its declared region and typography scales with paper',()=>{
+ for(const t of templateCatalog.templates){
+  const f=templateFixture(t),normal=compileTemplate({...f,templateId:t.id,id:'fit'});
+  assert.deepEqual(normal.report.warnings,[],t.id+' text overflows');
+ }
+ const t=templateCatalog.templates.find(t=>t.id==='ac-04'),f=templateFixture(t);
+ const small=compileTemplate({...f,templateId:t.id,id:'small'}),large=compileTemplate({...f,templateId:t.id,id:'large',paper:{width:f.paper.width*1.5,height:f.paper.height*1.5}});
+ const a=small.operations[0].children.find(x=>x.op==='text.add'),b=large.operations[0].children.find(x=>x.id===a.id.replace('small-','large-'));
+ assert.ok(Math.abs(b.style.fontSizePt/a.style.fontSizePt-1.5)<.001);
+});
+
+test('overlong text is preserved and reported instead of silently clipped or shrunk into unreadable type',()=>{
+ const t=templateCatalog.templates.find(t=>t.id==='ac-04'),slot=t.elements.find(e=>e.role==='title'),text='这段文字需要重新安排区域。'.repeat(80);
+ const r=compileTemplate({templateId:t.id,id:'overflow',paper:{width:148,height:210},bindings:[],texts:{[slot.id]:text}});
+ assert.equal(r.operations[0].children.find(o=>o.id==='overflow-'+slot.id).content,text);
+ assert.ok(r.report.warnings.some(w=>w.slotId===slot.id));
+ assert.ok(r.report.textLayout.find(w=>w.slotId===slot.id).fontSizePt>=6);
+});
+
+test('the generic title uses the declared main heading, never punctuation, numbers or dates',()=>{
+ for(const [templateId,slotId] of [['ac-04','page-heading'],['ac-33','heading'],['moon-02','heading'],['center-3','card-title']]){
+  const result=compileTemplate({templateId,id:'main',paper:{width:148,height:210},bindings:[],title:'春日小记'});
+  const texts=result.operations[0].children.filter(n=>n.op==='text.add');
+  assert.deepEqual(texts.map(n=>[n.id,n.content]),[['main-'+slotId,'春日小记']]);
+ }
+ const r=compileTemplate({templateId:'ac-04',id:'occupied',paper:{width:148,height:210},bindings:[],title:'不要挤进引号',texts:{'page-heading':'已有标题'}});
+ assert.equal(r.operations[0].children.filter(n=>n.op==='text.add').length,1);
+ assert.ok(r.report.warnings.some(w=>w.reason.includes('title 未放置')));
+});
+
+test('per-position typography is explicit physical type and validates unknown slots and style values',()=>{
+ const args={templateId:'ac-04',id:'style',paper:{width:210,height:297},bindings:[],texts:{'upper-writing':'两行文字\n清楚可读'},textStyles:{'upper-writing':{fontSizePt:12,textAlign:'center',lineHeight:1.5}}};
+ const r=compileTemplate(args),text=r.operations[0].children.find(x=>x.id==='style-upper-writing');
+ assert.equal(text.style.fontSizePt,12);assert.equal(text.style.textAlign,'center');
+ assert.throws(()=>compileTemplate({...args,textStyles:{missing:{fontSizePt:12}}}),/位置/);
+ assert.throws(()=>compileTemplate({...args,textStyles:{'upper-writing':{fontSizePt:0}}}),/样式值/);
+ assert.throws(()=>compileTemplate({...args,textStyles:{'upper-writing':{fill:'red'}}}),/样式参数/);
+});

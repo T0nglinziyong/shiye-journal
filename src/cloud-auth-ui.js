@@ -1,64 +1,272 @@
-import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
+import {cloudEnabled,cloudClient,prepareCloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup} from './store.js';
-import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache} from './cloud-store.js';
-import {openAdminView} from './admin-view.js';
-import {openAccountManagement} from './account-management.js';
+import {checkAccountResetEpoch} from './account-reset-epoch.js';
+import {eraseSiteAppData} from './account-data-wipe.js';
+import {cloudApiRequest} from './cloud-api-origin.js';
+import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,
+  cloudSetResetCleanupPending,cloudCloseCacheBeforeRemoteReset} from './cloud-store.js';
+import {renderLoginGate,clearLoginGate} from './react-cloud-auth.jsx';
+import {updateShell} from './react-shell.jsx';
+import {passwordIdentifier,requestLoginOtp,verifyLoginOtp,configuredOAuthProviders} from './cloud-auth-methods.js';
+import {foregroundIsIdle,foregroundRecentlyActive} from './foreground-idle.js';
 
-const emailForLogin=value=>{const name=value.trim().toLowerCase();return name==='lrx'?'lrx@shiyejournal.vip':/^[a-z][a-z0-9_]{2,31}$/.test(name)?name+'@accounts.shiyejournal.invalid':name;};
-
-function changePasswordDialog(client){
-  const backdrop=document.createElement('div');backdrop.className='cloud-admin-backdrop';
-  const panel=document.createElement('section');panel.className='cloud-password-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','修改密码');
-  panel.innerHTML='<h2>修改密码</h2><form><label>当前密码<input name="old" type="password" autocomplete="current-password" required></label><label>新密码（至少 12 位）<input name="next" type="password" autocomplete="new-password" minlength="12" required></label><label>确认新密码<input name="confirm" type="password" autocomplete="new-password" minlength="12" required></label><p role="status"></p><div class="cloud-dialog-actions"><button type="button" class="btn" data-cancel>取消</button><button type="submit" class="btn primary">更新密码</button></div></form>';
-  backdrop.append(panel);document.body.append(backdrop);
-  const close=()=>{backdrop.remove();document.removeEventListener('keydown',escape);};
-  const escape=event=>{if(event.key==='Escape')close();};
-  panel.querySelector('[data-cancel]').onclick=close;backdrop.onclick=event=>{if(event.target===backdrop)close();};document.addEventListener('keydown',escape);
-  const form=panel.querySelector('form'),status=panel.querySelector('[role=status]');
-  form.onsubmit=async event=>{
-    event.preventDefault();const old=form.elements.old.value,next=form.elements.next.value,confirmation=form.elements.confirm.value;
-    if(next!==confirmation){status.textContent='两次输入的新密码不一致';return;}
-    if(next===old){status.textContent='新密码不能与当前密码相同';return;}
-    const button=form.querySelector('[type=submit]');button.disabled=true;status.textContent='正在核对当前密码…';
-    try{
-      const changed=await client.auth.updateUser({password:next,currentPassword:old});if(changed.error)throw changed.error;
-      form.reset();status.textContent='密码已更新';setTimeout(close,900);
-    }catch(error){status.textContent=error.message||'修改失败，请稍后重试';}finally{button.disabled=false;}
-  };
-  form.elements.old.focus();
-}
+const oauthProviders=configuredOAuthProviders(import.meta.env?.VITE_SHIYE_OAUTH_PROVIDERS);
 
 export async function startCloudSession(onReady){
-  if(!cloudEnabled){await onReady(null);return;}
-  const app=document.querySelector('#app');app.hidden=true;
-  const gate=document.createElement('main');gate.className='cloud-login';
-  gate.innerHTML='<section class="panel"><h1>登录拾页</h1><p>每位用户的资料独立保存在私人云端。账号由管理员创建；登录后本浏览器会保持会话，直到主动退出。</p><form data-login><label>用户名<input name="email" type="text" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary" type="submit">登录</button></form><p role="status"></p></section>';
-  gate.style.cssText='max-width:420px;margin:12vh auto;padding:16px';document.body.append(gate);
-  const client=cloudClient(),status=gate.querySelector('[role=status]'),loginForm=gate.querySelector('[data-login]');
-  loginForm.hidden=true;status.textContent='正在恢复登录…';
-  async function enter(){
-    const user=await requireCloudUser();
-    const {data:account,error}=await client.from('shiye_accounts').select('username,is_admin').eq('user_id',user.id).single();
-    if(error||!account)throw Error('无法读取账号资料');
-    gate.remove();app.hidden=false;await onReady(user);
-    const menuHost=document.createElement('div');menuHost.className='cloud-account';
-    menuHost.innerHTML='<button type="button" class="btn mini" aria-expanded="false" aria-controls="cloud-account-menu">账号</button><div id="cloud-account-menu" class="cloud-account-menu" hidden><small data-account-name></small><button type="button" class="btn" data-create-account hidden>新建账号</button><button type="button" class="btn" data-admin-view hidden>查看其他用户（只读）</button><button type="button" class="btn" data-change-password>修改密码</button><button type="button" class="btn" data-old-backup>导出本机旧资料</button><button type="button" class="btn" data-logout>退出登录</button></div>';
-    menuHost.querySelector('[data-account-name]').textContent=account.username+' · 私人云端资料';
-    const toggle=menuHost.firstElementChild,menu=menuHost.querySelector('.cloud-account-menu');
-    toggle.onclick=()=>{menu.hidden=!menu.hidden;toggle.setAttribute('aria-expanded',String(!menu.hidden));};
-    document.addEventListener('click',event=>{if(!menuHost.contains(event.target)){menu.hidden=true;toggle.setAttribute('aria-expanded','false');}});
-    menuHost.onkeydown=event=>{if(event.key==='Escape'){menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}};
-    menuHost.querySelector('[data-change-password]').onclick=()=>{menu.hidden=true;changePasswordDialog(client);};
-    if(account.is_admin===true){const create=menuHost.querySelector('[data-create-account]');create.hidden=false;create.onclick=()=>{menu.hidden=true;openAccountManagement(client);};const button=menuHost.querySelector('[data-admin-view]');button.hidden=false;button.onclick=async()=>{menu.hidden=true;try{await openAdminView(client,user.id);}catch(error){alert('无法查看其他用户：'+(error.message||'请检查网络'));}};}
-    menuHost.querySelector('[data-logout]').onclick=async()=>{try{const detail={tasks:[]};window.dispatchEvent(new CustomEvent('shiye-flush-before-logout',{detail}));await Promise.all(detail.tasks);}catch{alert('本机暂存失败，修改还在当前页面；请先解决后再退出');return;}let pending;try{pending=await cloudPendingLocalSummary();}catch{alert('无法检查本机待同步资料，请先重试');return;}const count=pending.projects+pending.imports;if(count&&!confirm(`本机还有 ${count} 项待同步修改。退出登录会保留这些原稿；下次用同一账号登录后继续上传。确定退出吗？`))return;try{await cloudClearCache();}catch{alert('本机私人缓存清理失败，请重试退出');return;}let result;try{result=await client.auth.signOut({scope:'local'});}catch(error){cloudResumeCache();alert('退出失败，请检查网络');return;}if(result.error){cloudResumeCache();alert('退出失败，请检查网络');return;}location.reload();};
-    menuHost.querySelector('[data-old-backup]').onclick=async()=>{try{const blob=await createBackup({browserOnly:true}),link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download='拾页本机旧资料.shiyepwa';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){alert('旧资料导出失败：'+error.message);}};
-    document.querySelector('.top-actions').append(menuHost);
-    client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){app.hidden=true;void cloudClearCache().catch(console.warn).finally(()=>location.reload());}});
+  if(!cloudEnabled){
+    document.querySelector('#app').hidden=true;
+    renderLoginGate({visible:false,status:'CloudBase 网站配置缺失；未打开或改写本机私人资料。',onLogin:async()=>{}});
+    return;
   }
-  loginForm.onsubmit=async event=>{
-    event.preventDefault();const button=loginForm.querySelector('[type=submit]');button.disabled=true;status.textContent='正在验证账号…';
-    try{const {error}=await client.auth.signInWithPassword({email:emailForLogin(loginForm.elements.email.value),password:loginForm.elements.password.value});loginForm.elements.password.value='';if(error)throw Error('用户名或密码不正确');await enter();}
-    catch(error){status.textContent=error.message||'登录失败，请检查网络';}finally{button.disabled=false;}
+  const app=document.querySelector('#app');app.hidden=true;
+  try{await prepareCloudClient();}
+  catch(error){
+    renderLoginGate({visible:false,status:error.message||'CloudBase 初始化失败；未打开本机私人资料。',onLogin:async()=>{}});
+    return;
+  }
+  const client=cloudClient();
+  const gate={visible:false,status:'正在恢复登录…',retryReady:false};
+  let otpChallenge=null,resetChallenge=null;
+  let stopResetWatch=()=>{};
+  const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,
+    onLogin:login,onSendOtp:sendOtp,onVerifyOtp:verifyOtp,onResetPassword:resetPassword,
+    onConfirmReset:confirmReset,
+    onOAuth:oauthLogin,onSwitchAccount:switchAccount,oauthProviders,onRetry:retry});};
+  const hasSession=async()=>{
+    let timer;
+    try{return !!(await Promise.race([client.auth.getSession(),new Promise(resolve=>{
+      timer=setTimeout(()=>resolve(null),2500);
+    })]))?.data?.session;}
+    catch{return false;}
+    finally{clearTimeout(timer);}
   };
-  try{await enter();}catch(error){loginForm.hidden=false;status.textContent=error.status===401?'登录后，同一浏览器会自动保持登录，直到主动退出。':error.message;}
+  async function retry(){
+    showGate({visible:false,status:'正在重新核对账号…'});
+    try{await enter();}
+    catch(error){showGate({visible:true,retryReady:true,status:error.message||'连接暂时不可用，请重试'});}
+  }
+  async function switchAccount(){
+    try{
+      const result=await client.auth.signOut();
+      if(result?.error)throw result.error;
+      otpChallenge=null;
+      showGate({visible:true,retryReady:false,status:'已退出当前身份，请使用 CloudBase 账号登录。'});
+    }catch(error){showGate({visible:true,status:error.message||'切换账号失败，请重试'});}
+  }
+  async function login(username,password){
+    showGate({status:'正在验证账号…'});
+    let signedIn=false;
+    try{
+      const {error}=await client.auth.signInWithPassword({...passwordIdentifier(username),password});
+      if(error){
+        if(error.code==='invalid_credentials')throw Error('用户名或密码不正确');
+        throw Error(error.message||'登录服务暂时不可用，请稍后重试');
+      }
+      signedIn=true;
+      await enter();
+    }catch(error){
+      showGate({visible:true,retryReady:signedIn||await hasSession(),
+        status:error.message||'登录失败，请检查网络'});
+    }
+  }
+  async function sendOtp(kind,value){
+    otpChallenge=null;
+    showGate({status:'正在发送验证码…'});
+    try{
+      const verify=await requestLoginOtp(client.auth,kind,value);
+      otpChallenge={kind,value:value.trim(),verify};
+      showGate({status:'验证码已发送，请输入收到的验证码。'});
+      return true;
+    }catch(error){showGate({status:error.message||'验证码发送失败'});return false;}
+  }
+  async function verifyOtp(kind,value,code){
+    showGate({status:'正在验证验证码…'});
+    let signedIn=false;
+    try{
+      if(!otpChallenge||otpChallenge.kind!==kind||otpChallenge.value!==value.trim())
+        throw Error('登录信息已变化，请重新发送验证码');
+      await verifyLoginOtp(otpChallenge.verify,code);
+      otpChallenge=null;signedIn=true;
+      await enter();
+    }catch(error){showGate({visible:true,retryReady:signedIn,
+      status:error.message||'验证码登录失败'});}
+  }
+  async function resetPassword(email){
+    resetChallenge=null;
+    showGate({status:'正在发送密码重置邮件…'});
+    try{
+      const {data,error}=await client.auth.resetPasswordForEmail(email.trim());
+      if(error)throw error;
+      if(typeof data?.updateUser!=='function')throw Error('登录服务未返回密码重置方法');
+      resetChallenge={email:email.trim(),update:data.updateUser};
+      showGate({status:'重置验证码已发送，请输入验证码和新密码。'});
+      return true;
+    }catch(error){showGate({status:error.message||'重置邮件发送失败'});return false;}
+  }
+  async function confirmReset(email,nonce,password){
+    showGate({status:'正在更新密码…'});
+    try{
+      if(!resetChallenge||resetChallenge.email!==email.trim())throw Error('请重新发送重置验证码');
+      const {error}=await resetChallenge.update({nonce:nonce.trim(),password});
+      if(error)throw error;
+      resetChallenge=null;
+      showGate({status:'密码已更新，正在打开资料…'});
+      await enter();
+    }catch(error){showGate({visible:true,status:error.message||'密码重置失败'});}
+  }
+  async function oauthLogin(provider){
+    if(!oauthProviders.some(item=>item.id===provider))return;
+    showGate({status:'正在前往第三方登录…'});
+    try{
+      const {error}=await client.auth.signInWithOAuth({provider,
+        options:{redirectTo:location.origin+location.pathname}});
+      if(error)throw error;
+    }catch(error){showGate({visible:true,status:error.message||'第三方登录暂不可用'});}
+  }
+  showGate({});
+  async function enter(){
+    stopResetWatch();
+    showGate({status:'正在核对账号权限…'});
+    const {user,account}=await requireCloudUser({withAccount:true});
+    const wipeOldLocalData=async()=>{
+      window.dispatchEvent(new Event('shiye-account-reset-detected'));
+      await cloudCloseCacheBeforeRemoteReset();
+      const outcome=await eraseSiteAppData({preserveAuthentication:true});
+      if(outcome.errors.length)throw Error('云端已清空，但本设备还有数据未能删除；请关闭其他拾页标签页并重试：'+
+        outcome.errors.join('；'));
+    };
+    const preflight=()=>checkAccountResetEpoch({
+      client,userId:user.id,storage:localStorage,erase:wipeOldLocalData,
+      onProgress:message=>showGate({status:message})
+    });
+    showGate({status:'正在检查账号资料…'});
+    const initialReset=await preflight();
+    if(initialReset.wiped){location.reload();return;}
+    cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
+    let checkingReset=false;
+    const checkChangedEpoch=async()=>{
+      if(checkingReset)return;
+      checkingReset=true;
+      try{
+        const outcome=await preflight();
+        if(outcome.wiped){location.reload();return;}
+        cloudSetResetCleanupPending(outcome.pending,outcome.resetId);
+      }catch(error){console.warn('跨设备清空核查未完成；旧同步仍已暂停',error?.message);}
+      finally{checkingReset=false;}
+    };
+    window.addEventListener('shiye-account-epoch-changed',checkChangedEpoch);
+    stopResetWatch=()=>window.removeEventListener('shiye-account-epoch-changed',checkChangedEpoch);
+    let shown=false;
+    const showApp=()=>{if(shown)return;shown=true;clearLoginGate();
+      document.querySelector('#auth-root').hidden=true;app.hidden=false;};
+    showGate({status:'正在打开本机资料…'});
+    await onReady(user,{afterAccountReset:!!initialReset.resetId,onFirstView:showApp});
+    showApp();
+    if(initialReset.pending&&initialReset.resetId){
+      const noticeKey='shiye-gc-notice-v1:'+user.id+':'+initialReset.resetId;
+      let previouslyNotified=false;
+      try{previouslyNotified=localStorage.getItem(noticeKey)==='1';}catch{}
+      if(!previouslyNotified){
+        updateShell({resetNotice:{message:'账号已重置，可正常使用。旧图片会在后台逐批回收，不影响新作品。'}});
+        setTimeout(()=>updateShell({resetNotice:null}),6500);
+        try{localStorage.setItem(noticeKey,'1');}catch{}
+      }
+    }
+    // One bounded batch per idle window. The server chooses paths and Storage
+    // RLS rechecks them; no large object scan runs on the browser main thread.
+    const gcStamp='shiye-last-gc-check:'+user.id;
+    const dayMs=24*60*60*1000;
+    let gcBusy=false,gcTimer,gcResetPending=initialReset.pending;
+    let lastGC=0;try{lastGC=Number(localStorage.getItem(gcStamp))||0;}catch{}
+    let nextGCAt=gcResetPending?0:lastGC+dayMs;
+    const queueGC=(delay=3000)=>{
+      if(gcBusy||gcTimer)return;
+      gcTimer=setTimeout(()=>{gcTimer=null;void runGC()},
+        Math.max(delay,nextGCAt-Date.now()));
+    };
+    const runGC=async()=>{
+      if(gcBusy||!foregroundRecentlyActive())return;
+      if(!foregroundIsIdle(1800)){queueGC(10000);return;}
+      gcBusy=true;
+      let retryMs=dayMs;
+      try{
+        const response=await cloudApiRequest('/api/account-gc',{method:'POST',body:'{}'});
+        if(!response.ok)throw Error('云端图片回收服务暂不可用');
+        const result=await response.json();
+        lastGC=Date.now();
+        try{localStorage.setItem(gcStamp,String(lastGC));}catch{}
+        gcResetPending=!result.resetComplete&&gcResetPending;
+        cloudSetResetCleanupPending(gcResetPending,initialReset.resetId);
+        // Continue only when this batch was full. A pending reset alone must
+        // not cause a database request every ten seconds for days.
+        retryMs=result.more?10000:dayMs;
+      }catch(error){retryMs=60000;console.warn('云端图片回收待下次访问重试',error?.message);}
+      finally{gcBusy=false;nextGCAt=Date.now()+retryMs;
+        if(retryMs<dayMs)queueGC(retryMs);}
+    };
+    if(nextGCAt<=Date.now())queueGC(5000);
+    const onActivity=()=>queueGC();
+    window.addEventListener('focus',onActivity);
+    document.addEventListener('visibilitychange',onActivity);
+    for(const event of ['pointerup','keydown','scroll'])
+      document.addEventListener(event,onActivity,{capture:true,passive:true});
+    const onPageHide=()=>{clearTimeout(gcTimer);gcTimer=null;};
+    const stopGC=()=>{
+      clearTimeout(gcTimer);gcTimer=null;
+      window.removeEventListener('focus',onActivity);
+      document.removeEventListener('visibilitychange',onActivity);
+      for(const event of ['pointerup','keydown','scroll'])
+        document.removeEventListener(event,onActivity,true);
+      window.removeEventListener('pageshow',onActivity);
+      window.removeEventListener('pagehide',onPageHide);
+    };
+    window.addEventListener('pageshow',onActivity);
+    // A page restored from Safari's back-forward cache must keep its account
+    // reset listener and resume the GC clock. Only release the pending timer.
+    window.addEventListener('pagehide',onPageHide);
+    const priorStop=stopResetWatch;
+    stopResetWatch=()=>{priorStop();stopGC();};
+    const logout=async()=>{
+      try{
+        const detail={tasks:[]};
+        window.dispatchEvent(new CustomEvent('shiye-flush-before-logout',{detail}));
+        await Promise.all(detail.tasks);
+      }catch{alert('本机暂存失败，修改还在当前页面；请先解决后再退出');return;}
+      let pending;
+      try{pending=await cloudPendingLocalSummary();}
+      catch{alert('无法检查本机待同步资料，请先重试');return;}
+      const count=pending.projects+pending.imports;
+      if(count&&!confirm(`本机还有 ${count} 项待同步修改。退出登录会保留这些原稿；下次用同一账号登录后继续上传。确定退出吗？`))return;
+      try{await cloudClearCache();}
+      catch{alert('本机私人缓存清理失败，请重试退出');return;}
+      let result;
+      try{result=await client.auth.signOut();}
+      catch{cloudResumeCache();alert('退出失败，请检查网络');return;}
+      if(result?.error){cloudResumeCache();alert('退出失败，请检查网络');return;}
+      location.reload();
+    };
+    const backup=async()=>{
+      try{
+        const blob=await createBackup({browserOnly:true}),url=URL.createObjectURL(blob),
+          link=document.createElement('a');
+        link.href=url;link.download='拾页本机旧资料.shiyepwa';link.click();
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
+      }catch(error){alert('旧资料导出失败：'+error.message);}
+    };
+    updateShell({account:{username:account.username,isAdmin:account.is_admin===true,
+      userID:user.id,client,oauthProviders,onLogout:logout,onOldBackup:backup}});
+    client.auth.onAuthStateChange(event=>{
+      if(event==='SIGNED_OUT'){
+        app.hidden=true;void cloudClearCache().catch(console.warn).finally(()=>location.reload());
+      }
+    });
+  }
+  try{await enter();}
+  catch(error){
+    const persisted=await hasSession();
+    showGate({visible:true,retryReady:persisted||error.status!==401,
+      status:error.status===401?(persisted?
+        '登录验证暂时未通过，会话仍在本机；请先重试连接。':
+        '登录会话不存在或已经过期，请重新登录。'):(error.message||'连接暂时不可用，请重试')});
+  }
 }

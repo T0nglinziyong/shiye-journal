@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "illustrations": [
+    {
+      "id": "lettering-cluster",
+      "file": "lettering-cluster.png",
+      "caption": "竖向窄标题与面状字群在页面中的区别；右侧字群整体性更强，但需要注意阅读顺序。",
+      "author": "闹钟为什么赖床",
+      "title": "手帐标题字写法分享",
+      "sourceURL": "https://www.xiaohongshu.com/explore/693e8a11000000001f00a194",
+      "observation": "正文与全部5张原图，2026-11-20",
+      "sha256": "cf215fe7bfc0bb3d5a123c0acab0c6b48a52dcb88e198df0d81aeb57b3639a2d",
+      "reviewed": true
+    }
+  ]
+}

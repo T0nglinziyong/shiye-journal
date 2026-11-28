@@ -1,20 +1,31 @@
 let readyPromise=null;
 
+async function loadRuntime(url){
+  // Emscripten otherwise resolves its split WASM relative to this hashed
+  // worker chunk (or /src/ during development), not the imported OpenCV JS.
+  // Vite then answers that missing path with index.html, yielding a WASM
+  // "expected magic word" error after candidate-box discovery.
+  const runtimeURL=new URL(url,self.location.href);
+  self.Module={locateFile:path=>new URL(path,runtimeURL).href};
+  importScripts(runtimeURL.href);
+  let cv=self.cv;
+  if(cv&&typeof cv.then==='function')cv=await cv;
+  else if(!cv?.Mat){
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(Error('OpenCV browser runtime initialization timeout')),45000);
+      const previous=cv?.onRuntimeInitialized;
+      if(!cv){clearTimeout(timer);reject(Error('OpenCV browser runtime did not expose cv'));return;}
+      cv.onRuntimeInitialized=()=>{clearTimeout(timer);try{previous?.();}catch{}resolve();};
+    });
+  }
+  if(!cv?.Mat)throw Error('OpenCV browser runtime is not ready');
+  return cv;
+}
+
 async function initialize(opencvScriptURL){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
-    importScripts(opencvScriptURL);
-    let cv=self.cv;
-    if(cv&&typeof cv.then==='function')cv=await cv;
-    else if(!cv?.Mat){
-      await new Promise((resolve,reject)=>{
-        const timer=setTimeout(()=>reject(Error('OpenCV browser runtime initialization timeout')),45000);
-        const previous=cv?.onRuntimeInitialized;
-        if(!cv){clearTimeout(timer);reject(Error('OpenCV browser runtime did not expose cv'));return;}
-        cv.onRuntimeInitialized=()=>{clearTimeout(timer);try{previous?.();}catch{}resolve();};
-      });
-    }
-    if(!cv?.Mat)throw Error('OpenCV browser runtime is not ready');
+    const cv=await loadRuntime(opencvScriptURL);
     const {processVision}=await import('./opencv-worker.js');
     self.postMessage({type:'ready'});
     return {cv,processVision};

@@ -2,9 +2,9 @@ name: Verify Shiye
 
 on:
   push:
-    branches: [main, recognition-official-engines]
+    branches: [main, test]
   pull_request:
-    branches: [main]
+    branches: [main, test]
   workflow_dispatch:
 
 permissions:
@@ -12,12 +12,43 @@ permissions:
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  verify:
+  scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    outputs:
+      creative_only: ${{ steps.changed.outputs.creative_only }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: changed
+        name: Detect focused creation changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          set -euo pipefail
+          creative_only=false
+          if [[ "${{ github.event_name }}" == push ]]; then BASE_SHA=$(git rev-parse "$GITHUB_SHA^"); fi
+          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            creative_only=true
+            while IFS= read -r path; do
+              case "$path" in
+                creative-agent/runtime/*|creative-agent/skills/*|src/background-creation-session.js|src/matching-session.js|src/matching-view.css|tests/creative*.test.js|tests/background-creation-session.test.js|tests/matching-session.test.js|tests/creation-skill-illustrations.test.js|tests/journal-writing-topics.test.js|.github/workflows/verify.yml) ;;
+                *) creative_only=false; break ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+          fi
+          echo "creative_only=$creative_only" >> "$GITHUB_OUTPUT"
+
+  creative_only:
+    needs: scope
+    if: needs.scope.outputs.creative_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -27,5 +58,112 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Unit tests and built UI smoke
-        run: npm test && npm run test:ui
+      - run: npm run pretest
+      - name: Creative harness, completion and writing regressions
+        run: node --test --test-force-exit --test-concurrency=2 tests/creative*.test.js tests/background-creation-session.test.js tests/matching-session.test.js tests/creation-library.test.js tests/creation-skill-illustrations.test.js tests/journal-writing-topics.test.js
+
+  unit-and-ui:
+    needs: scope
+    if: needs.scope.outputs.creative_only != 'true'
+    name: checks / ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [unit-a-m, unit-n-z, unit-presentation, ui]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Prepare unit runtime
+        if: matrix.shard != 'ui'
+        run: npm run pretest
+      - name: First half of unit tests
+        if: matrix.shard == 'unit-a-m'
+        run: node --test --test-force-exit --test-concurrency=2 tests/[a-m]*.test.js
+      - name: Second half of unit tests
+        if: matrix.shard == 'unit-n-z'
+        shell: bash
+        run: |
+          files=()
+          for file in tests/[n-z]*.test.js; do
+            if [[ "$file" != tests/presentation-cache*.test.js ]]; then
+              files+=("$file")
+            fi
+          done
+          node --test --test-force-exit --test-concurrency=2 "${files[@]}"
+      - name: Isolated presentation resource and browser-cache contracts
+        if: matrix.shard == 'unit-presentation'
+        run: node --test --test-concurrency=1 tests/presentation-cache*.test.js
+      - name: Built UI and deployment smoke
+        if: matrix.shard == 'ui'
+        run: npm run test:ui
+      - name: Package local box acceptance harness
+        if: github.event_name == 'pull_request' && matrix.shard == 'ui'
+        run: |
+          mkdir -p /tmp/shiye-box-harness/scripts
+          cp -R src /tmp/shiye-box-harness/
+          cp scripts/box-real-case-runner.mjs scripts/segmentation-real-case-runner.mjs /tmp/shiye-box-harness/scripts/
+          cp package.json package-lock.json /tmp/shiye-box-harness/
+          mkdir -p /tmp/shiye-box-harness/node_modules/@techstark
+          cp -R node_modules/@techstark/opencv-js /tmp/shiye-box-harness/node_modules/@techstark/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.event_name == 'pull_request' && matrix.shard == 'ui'
+        with:
+          name: box-discovery-harness
+          path: /tmp/shiye-box-harness/
+          retention-days: 1
+          compression-level: 6
+
+  verify:
+    if: always()
+    needs: [scope, creative_only, unit-and-ui]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the selected verification path
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          CREATIVE_ONLY: ${{ needs.scope.outputs.creative_only }}
+          CREATIVE_RESULT: ${{ needs.creative_only.result }}
+          FULL_RESULT: ${{ needs.unit-and-ui.result }}
+        shell: bash
+        run: |
+          test "$SCOPE_RESULT" = success
+          if [[ "$CREATIVE_ONLY" == true ]]; then
+            test "$CREATIVE_RESULT" = success
+          else
+            test "$FULL_RESULT" = success
+          fi
+
+  deploy-cloudbase-test:
+    name: Deploy CloudBase test
+    needs: verify
+    if: always() && needs.verify.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: cloudbase-test
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: test
+          persist-credentials: false
+      - name: Only release the tested branch head
+        env:
+          TESTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Check deployment contract
+        run: node --test tests/cloudbase-test-release.test.js
+      - name: Release existing CloudBase app and verify public version
+        env:
+          TCB_DEPLOY_SECRET_ID: ${{ secrets.TCB_DEPLOY_SECRET_ID }}
+          TCB_DEPLOY_SECRET_KEY: ${{ secrets.TCB_DEPLOY_SECRET_KEY }}
+        run: node scripts/cloudbase-test-release.mjs

@@ -39,7 +39,7 @@ test('openings cannot escape or overlap the remaining physical cutout',()=>{
 test('AI direct editable page, tool edits and project ZIP preserve slanted windows',async()=>{
   const asset={id:'paper',title:'纸片',kind:'paper',physicalWidthMM:80,physicalHeightMM:100,supply:{quantity:1}};
   const p=project('开窗斜裁');
-  const page={version:3,style:'自由构图',intent:'透明镂空',paper:{color:'#faf8ef',pattern:'plain'},graphics:[],text_blocks:[],items:[{asset:'paper',piece:'cut-paper',unit:0,operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[.1,.1,.8,.8]}},diagonal,windowCut],placement:{x:.5,y:.5,rotation:0,z:1}}]};
+  const page={version:2,style:'自由构图',intent:'透明镂空',paper:{color:'#faf8ef',pattern:'plain'},layers:[{type:'material',id:'cut-paper',asset:'paper',piece:'cut-paper',unit:0,operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[.1,.1,.8,.8]}},diagonal,windowCut],placement:{x:.5,y:.5,rotation:0,z:1}}]};
   let result=applyToolCalls(page,p.drafts[0],[asset],{},{processing:'自由拆解'});assert.equal(result.results[0].ok,true,JSON.stringify(result.results));
   const piece=result.draft.items[0];assert.equal(piece.cropRect.width,.8);assert.equal(piece.materialMask.shape,'compound');assert.equal(piece.materialMask.holes.length,1);
   assert.equal(piece.width,80*.8*result.draft.canvas.height/result.draft.physicalPageHeightMM);
@@ -47,6 +47,6 @@ test('AI direct editable page, tool edits and project ZIP preserve slanted windo
   assert.equal(edited.results[0].ok,true,JSON.stringify(edited.results));assert.equal(edited.draft.items[0].materialMask.holes[0].shape,'ellipse');
   p.drafts[0]=result.draft;const restored=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),[asset]);
   assert.deepEqual(restored.drafts[0].items[0].materialMask,piece.materialMask);
-  const invalid=structuredClone(page);invalid.items[0].operations[2].box=[.8,.8,.3,.3];
+  const invalid=structuredClone(page);invalid.layers[0].operations[2].box=[.8,.8,.3,.3];
   const rejected=applyToolCalls(invalid,draft(),[asset]);assert.equal(rejected.results[0].ok,false);assert.equal(rejected.draft.items.length,0);
 });

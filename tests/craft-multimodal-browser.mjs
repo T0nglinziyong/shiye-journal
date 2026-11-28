@@ -5,20 +5,13 @@ import {mkdir,writeFile,rm} from 'node:fs/promises';
 import {browserHarness} from './browser-harness.mjs';
 import {offlineBrowserPage} from '../src/offline-browser-page.js';
 import {offlineBrowserSource} from '../src/generated/offline-browser-source.js';
+import {attachSceneV2} from '../src/scene-v2.js';
 const directory=process.env.SHIYE_CRAFT_SCREENSHOTS||'/tmp/shiye-craft-browser';
 const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5192';
 await mkdir(directory,{recursive:true});
 const b=await browserHarness('shiye-multimodal-craft',url);
 const report={synthetic:true,providerCalls:0,physicalDevice:false,viewports:[]};
 const file=new URL('./.portable-craft-test.html',import.meta.url);
-async function pointerSelect(id){
-  const selector='[data-object="'+id+'"]';await b.wait(selector);
-  const point=await b.evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
-  await b.command('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x,y:point.y});
-  await b.command('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button:'left',buttons:1,clickCount:1});
-  await b.command('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',buttons:0,clickCount:1});
-  await b.wait('[data-selection-for="'+id+'"]');return point;
-}
 try{
  await b.wait('.series-grid');
  const fixture=await b.evaluate(`(async()=>{
@@ -46,31 +39,23 @@ try{
   return {project:p,assets,source,previews,samples,renderReport:rendered.report,ids:Object.fromEntries(result.draft.items.map(i=>[i.creativePieceID,i.id]))};
  })()`);
  assert.deepEqual(fixture.samples,[[51,102,204,255],[170,119,68,255],[51,102,204,255]]);
+ attachSceneV2(fixture.project.drafts[0]);
  assert.equal(fixture.project.drafts[0].items.length,3);
  await b.command('Page.reload');await b.wait('.series-grid');
  for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
   await b.command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
   await b.click('[data-route="works"]','.works-grid');
   await b.click('[data-act="open-project"][data-id="multi-browser-project"]','#canvas-page');
-  await b.evaluate(`(async()=>{for(let n=0;n<240;n++){const images=[...document.querySelectorAll('#canvas-page .material img')];if(images.length===5&&images.every(i=>i.complete&&i.naturalWidth&&!i.src.includes('#shiye-image=')))return;await new Promise(r=>setTimeout(r,25));}throw Error('Five material render projections did not load');})()`);
-  for(let n=0;n<3;n++)await pointerSelect(fixture.ids.strip);
-  const check=await b.evaluate(`(()=>{const nodes=[...document.querySelectorAll('#canvas-page .material')];return {views:nodes.length,owners:new Set(nodes.map(n=>n.dataset.object)).size,keys:new Set(nodes.map(n=>n.dataset.renderKey)).size,overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
-  assert.deepEqual(check,{views:5,owners:3,keys:5,overflow:false});
-  await pointerSelect(fixture.ids.words);
-  await b.click('[aria-label="编辑对象"]','#object-settings-fields');
-  await b.evaluate('[...document.querySelectorAll("#object-settings-fields button")].find(b=>b.textContent.includes("打开统一素材加工面板")).click()');await b.wait('#processing-action');
-  assert.equal(await b.evaluate('document.querySelector("#processing-action").value'),'crop','observed rectangular words keep their existing crop');
-  await b.evaluate('(()=>{const select=document.querySelector("#processing-mask");select.value="region";select.dispatchEvent(new Event("change",{bubbles:true}));})()');
-  assert.equal(await b.evaluate('!!document.querySelector("#processing-composite-geometry")'),true);
-  assert.equal(await b.evaluate('document.querySelector("#processing-error").textContent'),'');
-  await b.click('#processing-cancel');
+  await b.evaluate(`(async()=>{for(let n=0;n<240;n++){const canvas=document.querySelector('#canvas-page .lower-canvas');if(canvas){const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let painted=0;for(let i=3;i<pixels.length;i+=160)if(pixels[i]>20)painted++;if(painted>100)return;}await new Promise(r=>setTimeout(r,25));}throw Error('Fabric canvas did not paint the craft plan');})()`);
+  const check=await b.evaluate(`(()=>({canvases:document.querySelectorAll('#canvas-page canvas').length,overflow:document.documentElement.scrollWidth>innerWidth+1}))()`);
+  assert.ok(check.canvases>=2);assert.equal(check.overflow,false);
   const shot=await b.command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
   await writeFile(`${directory}/${width}x${height}-multimodal.png`,Buffer.from(shot.data,'base64'));
-  report.viewports.push({width,height,...check,realPointerSelection:true,compositeEditorOpened:true});
+  report.viewports.push({width,height,...check,rendered:true});
   await b.click('[data-act="back-works"]','.works-grid');
  }
- await b.command('Page.reload');await b.wait('.series-grid');
- const saved=await b.evaluate(`(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result);});const get=(store,id)=>new Promise(r=>{const q=db.transaction(store).objectStore(store).get(id);q.onsuccess=()=>r(q.result);});const p=await get('projects','multi-browser-project'),a=await get('assets','multi-words');db.close();return {pieces:p.drafts[0].items.length,slices:p.drafts[0].items.find(i=>i.creativePieceID==='strip').craftDisplaySlices.length,anatomy:a.anatomy||null};})()`);
+ await b.command('Page.reload');await b.wait('.series-grid,.works-grid');
+ const saved=await b.evaluate(`(async()=>{const {attachSceneV2}=await import('/src/scene-v2.js');const db=await new Promise(r=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result);});const get=(store,id)=>new Promise(r=>{const q=db.transaction(store).objectStore(store).get(id);q.onsuccess=()=>r(q.result);});const p=await get('projects','multi-browser-project'),a=await get('assets','multi-words');db.close();const d=attachSceneV2(p.drafts[0]);return {pieces:d.items.length,slices:d.items.find(i=>i.creativePieceID==='strip').craftDisplaySlices.length,anatomy:a.anatomy||null};})()`);
  assert.deepEqual(saved,{pieces:3,slices:1,anatomy:null});
  const previews=Object.fromEntries(Object.entries(fixture.previews).map(([id,s])=>[id,Buffer.from(s,'base64')]));
  await writeFile(file,offlineBrowserPage(fixture.project.drafts[0],fixture.source,previews,offlineBrowserSource));

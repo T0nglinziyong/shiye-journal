@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {toolsForCreativePhase,phaseObservation} from '../creative-agent/runtime/phases.mjs';
+import {evaluateCreativeFrame,attachCreativeReview,summarizeCreativeEvaluation} from '../creative-agent/runtime/quality-evaluation.mjs';
+import {harnessTools} from '../creative-agent/runtime/agent.mjs';
+
+const names=phase=>toolsForCreativePhase(harnessTools,phase).map(tool=>tool.function.name);
+
+test('creative phases never remove editing, reference or review tools',()=>{
+  for(const phase of ['direction','layout','craft','accents','review']){
+    assert.ok(names(phase).includes('creation_apply'));
+    assert.ok(names(phase).includes('read_skill'));
+    assert.ok(names(phase).includes('search_references'));
+    assert.ok(names(phase).includes('creation_finish'));
+  }
+});
+
+test('layout and review keep the full scene available for revision',()=>{
+  const input={capture:{pngHash:'hash'},spaceStatus:{spaces:[],current:{},changed:[]},scene:{sceneRevision:'revision',layers:[{surface:'page',id:'visible'},{surface:'tray',id:'parked'}]},feedback:{required:[]},advisory:{observations:['check'],typography:{},pages:[],materialFrames:[{large:true}]},previousReview:null,remainingSeconds:10};
+  const layout=phaseObservation('layout',input),review=phaseObservation('review',input);
+  assert.equal(layout.scene.layers.length,2);
+  assert.deepEqual(review.scene.layers.map(layer=>layer.id),['visible','parked']);
+  assert.equal(review.advisory.materialFrames,undefined,'redundant geometric frames stay out of automatic observations');
+  assert.deepEqual(review.advisory.observations,['check']);
+  assert.equal(review.remainingSeconds,10);
+});
+
+test('each render has reproducible metrics, pixel comparison and reviews tied to its exact version',()=>{
+  const hash=n=>'sha256:'+String(n).repeat(64);
+  const advisory={layers:{material:1,text:1},pages:[{page:'page',estimatedFrameCoverage:.2}],observations:['check']};
+  const feedback={required:[{present:true},{present:false}],finalValidation:{ok:false,issue:'missing'}};
+  const frame=(n,sample,previous)=>evaluateCreativeFrame({preview:{pngHash:hash(n),sceneRevision:hash(n),artifact:'preview-'+n+'.png',visualSample:Buffer.from(sample).toString('base64')},feedback,advisory,previous,turn:n,phase:'layout'});
+  const first=frame(1,[0,0,0]),second=frame(2,[255,0,0],first);
+  assert.equal(second.pixelChange,.3333);
+  assert.equal(first.metrics.requiredPresent,1);
+  assert.throws(()=>attachCreativeReview([first],{pngHash:hash(2),sceneRevision:hash(2)}),/不在本次评测时间线/);
+  const reviewed=attachCreativeReview([first,second],{pngHash:hash(2),sceneRevision:hash(2),approved:true,observations:'画面清楚',issues:[],turn:2});
+  const result=summarizeCreativeEvaluation(reviewed,{humanReviews:[{pngHash:hash(2),rating:4,note:'人工复核'}]});
+  assert.equal(result.comparison.revisions,2);
+  assert.equal(result.comparison.humanReviewed,1);
+  assert.equal(result.frames[1].modelReview.approved,true);
+  assert.equal(result.frames[1].humanReview.rating,4);
+  assert.equal(result.frames[1].visualSample,undefined);
+  assert.throws(()=>summarizeCreativeEvaluation(reviewed,{humanReviews:[{pngHash:hash(3),rating:5,note:'并未查看'}]}),/已有画面/);
+});
+
+
+test('compact observations retain hierarchy, physical geometry, font size and cut status',()=>{
+ const layer={id:'cut-paper',parent:'group',stackIndex:2,surface:'page',world:{centerMm:[20,30],sizeMm:[15,25],rotationDeg:4},type:'material',asset:'m1',materialMask:{large:'not repeated'}};
+ const out=phaseObservation('layout',{spaceStatus:{},scene:{sceneRevision:'r',layerTree:[{id:'group',children:[{id:'cut-paper'}]}],layers:[layer,{id:'text',type:'text',fontSizePt:11,content:'内容'}]},feedback:{},advisory:{observations:[]}});
+ assert.deepEqual(out.scene.layers[0].world,layer.world);assert.equal(out.scene.layers[0].parent,'group');assert.equal(out.scene.layers[0].stackIndex,2);
+ assert.equal(out.scene.layers[0].cropped,true);assert.equal(out.scene.layers[0].materialMask,undefined);assert.equal(out.scene.layers[1].fontSizePt,11);
+ assert.equal(out.scene.layerTree[0].children[0].id,'cut-paper');
+});

@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {project} from '../src/domain.js';
+import {saveManualArchive,restoreManualArchive,readArchivePayload,compactManualArchiveStore} from '../src/scene-archive.js';
+test('manual archives share identical compressed immutable v2 payloads across many saves',()=>{
+ const p=project('备份实验');
+ p.drafts[0].textBlocks.push({id:'text',content:'记录'.repeat(4000),color:'#334455',fontSize:30,x:40,y:40,width:200,height:300});
+ const id=p.drafts[0].id;
+ for(let i=0;i<25;i++)saveManualArchive(p,{id:'v'+i,date:'2026-10-12T00:00:00Z'});
+ assert.equal(p.manualArchives.length,25);
+ assert.equal(Object.keys(p.manualArchiveStore).length,1);
+ const total=JSON.stringify(p.manualArchives).length+JSON.stringify(p.manualArchiveStore).length;
+ assert.ok(total<JSON.stringify(p.drafts).length*2);
+ p.drafts[0].textBlocks[0].content='现在';
+ const recovered=restoreManualArchive(p,'v0');
+ assert.equal(recovered.activeDraftID,id);
+ assert.equal(recovered.drafts[0].textBlocks[0].content,'记录'.repeat(4000));
+ assert.equal(p.drafts[0].textBlocks[0].content,'现在');
+ const blob=Object.values(p.manualArchiveStore)[0];
+ assert.ok(Array.isArray(readArchivePayload(blob)));
+ assert.throws(()=>readArchivePayload(blob,'sha256:'+'0'.repeat(64)),/指纹/);
+ p.manualArchives=[];compactManualArchiveStore(p);
+ assert.deepEqual(p.manualArchiveStore,{});
+});

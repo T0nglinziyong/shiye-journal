@@ -27,3 +27,5 @@
 .offline-handoff-paste textarea{min-height:94px;max-height:180px}
 .offline-handoff-footnote{margin:1px 0 0;color:#8a9389;font-size:11px;line-height:1.5}
 @media(max-width:600px){#modal:has(.offline-handoff){padding:20px 18px;width:min(100vw - 24px,540px);max-height:min(88dvh,760px)}.offline-handoff{gap:11px}.offline-handoff-intro{font-size:13px}.offline-handoff-alternatives .btn{flex-basis:120px;font-size:13px;padding:8px 9px}}
+
+.cloud-admin-panel.offline-handoff-dialog{width:min(640px,100%);max-height:min(88dvh,850px)}

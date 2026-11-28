@@ -1,0 +1,120 @@
+{
+  "archive": "拾页-GPT创作任务(2)(1).zip",
+  "archiveSha256": "23b7891a12d191b2b30a1c6d08f147adda0a2e4510b8d5f58a25906dccf8eace",
+  "files": [
+    {
+      "path": "START_HERE.md",
+      "bytes": 949,
+      "sha256": "d7e93161b59b65ce130120246b0370914ec520c65ad2d8c6407de62bbe67f8e5"
+    },
+    {
+      "path": "TASK.json",
+      "bytes": 22144,
+      "sha256": "d1c00b87f384db1a9f7b2f8dffe2f1f2286b25ec8e2f60e4d935bdf974a005a9"
+    },
+    {
+      "path": "api/commands.schema.json",
+      "bytes": 478692,
+      "sha256": "b7325bb7f42b505c0e34447aadbd23287dae83d94aec3f60fdebac777379913d"
+    },
+    {
+      "path": "api/scene.schema.json",
+      "bytes": 39843,
+      "sha256": "c533f769403160cc17beae22a8bc1195bb1539f218e64d0bca8f58034206826d"
+    },
+    {
+      "path": "assets/asset_M2IzYTZhOTgtN2FjNi00YTA0LThmZDgtZjYyY2Q2ODE5NGNk.png",
+      "bytes": 259307,
+      "sha256": "e2ce9da7ff4d725fab72e2bc8cdf3fa791b83095a5eaccd3c42e0308103a35c5"
+    },
+    {
+      "path": "assets/asset_MjBhY2FjYWItMWMyOS00OWFjLWEwYTEtNWNjOTBlNDlhY2Nm.png",
+      "bytes": 289937,
+      "sha256": "cd37f4cf9fa27c6d75cc9c515f13bbf16d4e4ecf36f80e6a0f48dcd60939b463"
+    },
+    {
+      "path": "assets/asset_NWQ1YmNhOTUtMmQ1ZC00NDQwLWJiMzEtNzNiODI3YzMxNTc2.png",
+      "bytes": 237895,
+      "sha256": "b1e8648958761cd8d95dacba445abd6337395ee35fecfb84c06da532bec4915c"
+    },
+    {
+      "path": "assets/asset_NzI3MmIxNGItYjU1NC00MGE4LTk0OGMtNmUzOGZmNTE2ZGFm.png",
+      "bytes": 272660,
+      "sha256": "c5bce710cd9646b352cf430c95a7a69fdf1da075483f3b56c91feab39d4c32eb"
+    },
+    {
+      "path": "assets/asset_YjZlMzcyYTMtZTgyMi00ZDE2LWFlNDctNjNmMDEyMGY0Y2Iz.png",
+      "bytes": 82490,
+      "sha256": "2224975e601a497042a0902b770b9e8cd11fe7141f326d6745d1cf673ce47eb7"
+    },
+    {
+      "path": "assets/asset_YmQ3NjlhMWItYzYzZS00MTdlLWE1YTYtZTRjMjA0OTJhMDY4.png",
+      "bytes": 119026,
+      "sha256": "dbdb892392f5b1b03ee10b0f89a3b17fc801d1b5aa382117b67f816b1f06beec"
+    },
+    {
+      "path": "assets/asset_ZTNhMDQ3MTMtNTA1OC00N2JiLTgyODktODQ0ZDRmY2E5MzIx.png",
+      "bytes": 311125,
+      "sha256": "74153740f637ab4462fe27f0075b99df8483fac128a9c965186c25028e4ef5ce"
+    },
+    {
+      "path": "assets/asset_ZmQyMjU4NzUtMzQ0NC00ODZjLWJiNDUtOWQ2ZGNhOGUyNjlh.png",
+      "bytes": 31932,
+      "sha256": "c92231ae245c92b5cca42ec9aaba133e6b7f8616165f6203dc9c4b3114d76c53"
+    },
+    {
+      "path": "assets/manifest.json",
+      "bytes": 14904,
+      "sha256": "102bc18355e851c65288f82ed0181eadbda4d37ebace8952c03306ad3cae5b9b"
+    },
+    {
+      "path": "assets/overview.jpg",
+      "bytes": 283613,
+      "sha256": "9694bed7dc16314b452d5f5d761bb2c7ab6fb3fa6a09bbf8422bc3f5ca910eaa"
+    },
+    {
+      "path": "design/GUIDE.md",
+      "bytes": 10526,
+      "sha256": "bbb64e5c96b1750dfdb8898869bd0c2057366e8f01359203df315ab1f1446f9b"
+    },
+    {
+      "path": "design/RECIPES.md",
+      "bytes": 6447,
+      "sha256": "44e2635048fbadcd8c0ada9565a4c1c4536fcf2c41560c92f7b9667597a84192"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 16282,
+      "sha256": "98279685cd299e9a3dd07594057d7bcb306020fb4ef08eb62159353282d6619c"
+    },
+    {
+      "path": "package.json",
+      "bytes": 125,
+      "sha256": "96fd5d08966109d5430bffb42b9fb2cf2e0e5633daa57d2ae20b0d0172b99c69"
+    },
+    {
+      "path": "runtime/glyphs.cjs",
+      "bytes": 280463,
+      "sha256": "47ffb68b17a2ddcf12e8800e6ab765698b36cb34d9a1e61f770096766b913f4e"
+    },
+    {
+      "path": "runtime/shiye.cjs",
+      "bytes": 377779,
+      "sha256": "e8133361b373ae3a111e84c2b77320e96faffd7055fa4f096ba2af0dba732797"
+    },
+    {
+      "path": "scene.json",
+      "bytes": 17543,
+      "sha256": "e06df49a36fed374f5eea7b3b349775021bdbd08b8d06adf5646a86af9fcd8a3"
+    },
+    {
+      "path": "work/commands.json",
+      "bytes": 183,
+      "sha256": "cf3f4531ef249dd0feef27eab9bc2fde41d0b6d37ffab38c48e94cd71f418dc9"
+    }
+  ],
+  "notes": [
+    "Actual ZIP inspected in this response.",
+    "No repository changes or renderer end-to-end tests claimed."
+  ]
+}

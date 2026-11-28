@@ -1,0 +1,20 @@
+.sam-region-overlay{position:absolute;z-index:5;max-width:none!important;max-height:none!important;pointer-events:none}
+.sam-region-overlay.interactive{pointer-events:auto;touch-action:manipulation;cursor:pointer}
+.import-preparation-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;min-width:0}
+.import-preparation-heading h3{min-width:0;margin:8px 0!important}
+.import-view-actions,.import-view-switch{display:flex;align-items:center;gap:5px}
+.import-view-actions button{min-height:34px;padding:6px 10px;border:1px solid #dbe2d6;border-radius:18px;background:#f5f7f1;color:#52634b;font-size:12px;white-space:nowrap;cursor:pointer}
+.import-view-switch{padding:3px;border:1px solid #dbe2d6;border-radius:20px;background:#f5f7f1}
+.import-view-switch button{border:0;background:transparent;min-height:28px;padding:4px 9px}
+.import-view-switch button.active{background:#52634b;color:#fff;box-shadow:0 1px 4px #303b3220}
+.import-view-actions button:disabled{opacity:.45;cursor:default}
+.import-primary-tools{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px!important}
+.import-primary-tools.import-mode-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
+.import-primary-tools.import-mode-tools:has(> .btn:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
+.import-primary-tools .btn{min-width:0;width:100%;padding:10px 6px!important;white-space:nowrap}
+.import-primary-tools.import-region-tools{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.import-primary-tools .btn.is-muted{background:#e0e5dc!important;border-color:#d5dbd1!important;color:#566358!important;opacity:1;cursor:pointer}
+.import-primary-tools .btn.primary{background:#52634b;border-color:#52634b;color:#fff}
+.import-primary-tools .btn.active{background:#52634b!important;color:#fff!important}
+.import-action-hint{display:block;margin:8px 0 0;color:#52634b;font-size:11px;line-height:1.4}
+@media(max-width:600px){.import-preparation-heading h3{font-size:14px}.import-view-actions button{font-size:11px;padding:5px 7px}.import-view-switch button{padding:4px 6px}.import-primary-tools .btn{font-size:12px!important}}
