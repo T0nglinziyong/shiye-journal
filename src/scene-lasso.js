@@ -99,7 +99,7 @@ export function transformSceneLasso(draft,ids,center,scale,degrees,{to=center,po
     return {id:node.id,values:sceneWorldValues(draft,node.id,values)};
   });
   try{applyScenePatchBatch(draft,changes,{policy,confirmation,linked:'offset'});return true;}catch(error){
-    if(error.code==='EDIT_CONFIRMATION_REQUIRED'||error.code==='EDIT_POLICY_INVALID')throw error;
+    if(['EDIT_CONFIRMATION_REQUIRED','EDIT_POLICY_INVALID','PHYSICAL_SIZE_LOCKED'].includes(error.code))throw error;
     return false;
   }
 }

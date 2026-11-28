@@ -1,7 +1,7 @@
 import {removeEditableScene} from './scene-structure-edit.js';
 import {insertSceneLayer} from './scene-edit-kernel.js';
 import {eraseSceneInk} from './scene-ink-edit.js';
-import {USER_SCENE_POLICY,confirmSceneCapability} from './scene-edit-policy.js';
+import {USER_SCENE_POLICY} from './scene-edit-policy.js';
 import React,{useLayoutEffect,useRef} from 'react';
 import {drawPaper} from './paper-rendering.js';
 import {createFabricSceneBridge} from './fabric-scene-bridge.js';
@@ -442,10 +442,8 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           if(!layoutPreview.active||!gesture?.beforeFrame)return;
           const before=structuredClone(gesture.beforeFrame),next=structuredClone(lassoSelection);
           layoutPreview.update(scratch=>{
-            const materials=next.ids.map(id=>byID(scratch.layers,id)).filter(node=>node?.type==='material');
-            const confirmation=materials.length?confirmSceneCapability(materials,'material.visualResize'):undefined;
             if(!transformSceneLasso(scratch,next.ids,before.center,next.width/before.width,
-              next.angle-before.angle,{to:next.center,policy:USER_SCENE_POLICY,confirmation}))
+              next.angle-before.angle,{to:next.center,policy:USER_SCENE_POLICY}))
               throw Error('所选图层不能修改');
           });
         };
@@ -703,7 +701,8 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             const angle=Math.atan2(next.y-lassoSelection.center.y,next.x-lassoSelection.center.x);
             let degrees=(angle-gesture.lastAngle)*180/Math.PI;
             if(degrees>180)degrees-=360;if(degrees< -180)degrees+=360;
-            const ratio=Math.max(.1,Math.min(10,distance/Math.max(1,gesture.lastDistance)));
+            const hasMaterial=lassoSelection.ids.some(id=>byID(callbacks.current.draft.layers,id)?.type==='material');
+            const ratio=hasMaterial?1:Math.max(.1,Math.min(10,distance/Math.max(1,gesture.lastDistance)));
             if(Math.abs(degrees)>.01||Math.abs(ratio-1)>.001){
               lassoSelection.angle+=degrees;lassoSelection.width*=ratio;lassoSelection.height*=ratio;
               gesture.lastAngle=angle;gesture.lastDistance=distance;gesture.moved=true;
@@ -749,14 +748,11 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
               try{
                 const ratio=lassoSelection.width/finished.beforeFrame.width;
                 const materials=lassoSelection.ids.map(id=>byID(finished.draft.layers,id)).filter(n=>n?.type==='material');
-                let confirmation;
-                if(materials.length&&Math.abs(ratio-1)>1e-6){
-                  if(!globalThis.confirm('改变选中实体素材的显示尺寸？这不改变真实来源尺寸或库存。')){rollbackLasso(finished);return;}
-                  confirmation=confirmSceneCapability(materials,'material.visualResize');
-                }
+                if(materials.length&&Math.abs(ratio-1)>1e-6)
+                  throw Object.assign(Error('真实素材保持原始物理尺寸；可移动、旋转、裁剪或使用蒙版调整构图'),{code:'PHYSICAL_SIZE_LOCKED'});
                 finished.scenePreview.restore();
                 if(!transformSceneLasso(finished.draft,lassoSelection.ids,finished.beforeFrame.center,ratio,
-                  lassoSelection.angle-finished.beforeFrame.angle,{to:lassoSelection.center,policy:USER_SCENE_POLICY,confirmation}))throw Error('所选图层不能修改');
+                  lassoSelection.angle-finished.beforeFrame.angle,{to:lassoSelection.center,policy:USER_SCENE_POLICY}))throw Error('所选图层不能修改');
                 reconcileRef.current?.();
                 callbacks.current.onSelection?.(lassoSelection.ids,frameBounds(lassoSelection));
                 callbacks.current.onChange?.(null,finished.tool);

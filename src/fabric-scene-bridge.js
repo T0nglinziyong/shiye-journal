@@ -3,7 +3,7 @@ import {hasGraphicEffects,graphicPaintFrame,inkEffectSVG} from './graphic-effect
 import {prepareJournalFont} from './journal-fonts.js';
 import {scaleTextEffects} from './text-effects.js';
 import {applyScenePatchBatch} from './scene-edit-kernel.js';
-import {USER_SCENE_POLICY,requireScenePolicy,confirmSceneCapability} from './scene-edit-policy.js';
+import {requireScenePolicy} from './scene-edit-policy.js';
 import {findSceneNode} from './scene-v2.js';
 import {shapeSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
 import {materialMaskGeometry} from './material-mask.js';
@@ -125,6 +125,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
   };
   const containsLocked=nodes=>(nodes||[]).some(child=>child.locked||child.isLocked||
     child.type==='group'&&containsLocked(child.children));
+  const containsMaterial=nodes=>(nodes||[]).some(child=>child.type==='material'||
+    child.type==='group'&&containsMaterial(child.children));
   async function fromNode(node){
     if(!node||node.hidden||node.isHidden||node.isParked||node.parked)return null;
     if(node.vectorMask)validateVectorMask(node.vectorMask);
@@ -157,10 +159,11 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         }
       }
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
-      // Group resizing preserves the dimensions of physical material children.
+      // Groups with physical materials can move and rotate, but cannot scale.
       const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked&&
         !containsLocked(node.children);
-      group.set({selectable:canvasSelectable,evented:canvasSelectable,lockScalingFlip:true});
+      group.set({selectable:canvasSelectable,evented:canvasSelectable,lockScalingFlip:true,
+        lockScalingX:containsMaterial(node.children),lockScalingY:containsMaterial(node.children)});
       configureControls(group);
       return group;
     }
@@ -271,7 +274,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         scaleY:positive(node.height)/(positive(crop.height)*naturalHeight),
         originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),
         flipX:!!node.isFlippedHorizontally,
-        lockSkewingX:true,lockSkewingY:true});
+        lockSkewingX:true,lockSkewingY:true,lockScalingX:true,lockScalingY:true});
       const material=node.materialMask&&maskGeometry(materialMaskGeometry(node.materialMask));
       const vector=node.vectorMask&&maskGeometry(node.vectorMask);
       if(material||vector)object.clipPath=clipPath(material&&vector?
@@ -307,6 +310,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const before=object.sceneGroupPose;
       if(!before)throw Error('组合缺少上一次画布位置');
       const center=object.getCenterPoint(),angle=finite(object.angle),delta=angle-before.angle;
+      if(containsMaterial(node.children)&&
+        (Math.abs(positive(object.scaleX)-1)>1e-6||Math.abs(positive(object.scaleY)-1)>1e-6))
+        throw Object.assign(Error('真实素材保持原始物理尺寸；包含实物的组合只能移动或旋转'),{code:'PHYSICAL_SIZE_LOCKED'});
       if(node.localTransform){
         if(Math.abs(positive(object.scaleX)-1)>1e-6||Math.abs(positive(object.scaleY)-1)>1e-6)
           throw Error('局部组合不能缩放实体素材；请编辑数字子图层');
@@ -393,12 +399,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       // and positioning still run through the SAME kernel used by AI place.
       change.place={reference:'page',unit:'mm',at:[top.x/scale,top.y/scale],anchor:'top-center',rotationDeg:proposal.rotation,rotationSpace:'page'};
     }
-    let confirmation;
-    if(resized.length){
-      if(policy!==USER_SCENE_POLICY||confirm?.({capability:'material.visualResize',targets:resized.map(n=>n.id),message:'改变这些实体素材的显示尺寸？这只调整作品中的视觉大小，不改变真实来源尺寸或库存。'})!==true)throw Object.assign(Error('已取消素材显示尺寸调整'),{code:'EDIT_CONFIRMATION_REQUIRED'});
-      confirmation=confirmSceneCapability(resized,'material.visualResize');
-    }
-    applyScenePatchBatch(page,changes,{policy,confirmation,linked:'offset'});
+    if(resized.length)throw Object.assign(Error('真实素材保持原始物理尺寸；可移动、旋转、裁剪或使用蒙版调整构图'),{code:'PHYSICAL_SIZE_LOCKED'});
+    applyScenePatchBatch(page,changes,{policy,linked:'offset'});
     if(!updatePose)return node; // Scratch-scene preview must not advance the real gesture baseline.
     if(node.type==='group')object.sceneGroupPose={center:object.getCenterPoint(),angle:finite(object.angle)};
     if(node.type==='ink')object.sceneInkMatrix=object.calcTransformMatrix();

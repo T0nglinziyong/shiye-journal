@@ -194,7 +194,7 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   assert.deepEqual(node.children,snapshot);
 });
 
-test('manual group resize scales material appearance without changing its source identity',async()=>{
+test('a group with physical material cannot scale its children',async()=>{
   const image=createCanvas(20,20);image.getContext('2d').fillRect(0,0,20,20);
   const grouped=createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()});
   const node={id:'arrangement',type:'group',children:[
@@ -202,15 +202,15 @@ test('manual group resize scales material appearance without changing its source
     {id:'letter',type:'text',content:'字',x:200,y:120,width:80,height:40,fontSize:20}
   ]};
   const object=await grouped.fromNode(node);
+  assert.equal(object.lockScalingX,true);
+  assert.equal(object.lockScalingY,true);
   object.set({scaleX:1.5,scaleY:1.5});
-  grouped.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
-  assert.equal(node.children[0].width,60);
-  assert.equal(node.children[0].height,45);
-  assert.equal(node.children[0].manualVisualResize,true);
+  assert.throws(()=>grouped.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true}),{code:'PHYSICAL_SIZE_LOCKED'});
+  assert.equal(node.children[0].width,40);
+  assert.equal(node.children[0].height,30);
   assert.equal(node.children[0].assetID,'a');
-  assert.equal(node.children[1].width,120);
-  assert.equal(node.children[1].fontSize,30);
-  assert.ok(node.children[1].x-node.children[0].x>100);
+  assert.equal(node.children[1].width,80);
+  assert.equal(node.children[1].fontSize,20);
 });
 
 test('a group containing a locked child cannot be transformed through Fabric',async()=>{
@@ -225,27 +225,24 @@ test('a group containing a locked child cannot be transformed through Fabric',as
   assert.equal(node.children[0].x,100);
 });
 
-test('Fabric material edge controls resize its Scene placement and keep the source asset unchanged',async()=>{
+test('Fabric material controls rotate without resizing its physical placement',async()=>{
   const image=createCanvas(40,20);
   const node={id:'material-locked-size',type:'material',assetID:'asset-1',x:120,y:100,
     width:200,height:80,rotation:0,opacity:1};
   const object=await createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()}).fromNode(node);
-  assert.equal(object.lockScalingX,false);
-  assert.equal(object.lockScalingY,false);
-  assert.equal(object.controls.ml.visible,true);
-  assert.equal(object.controls.mr.visible,true);
-  assert.equal(object.controls.mt.visible,true);
-  assert.equal(object.controls.mb.visible,true);
+  assert.equal(object.lockScalingX,true);
+  assert.equal(object.lockScalingY,true);
   assert.equal(object.controls.br.visible,true);
-  assert.deepEqual(Object.keys(object.controls).sort(),['br','mb','ml','mr','mt']);
+  assert.deepEqual(Object.keys(object.controls).sort(),['br']);
   const startScale=object.scaleX;
   assert.equal(object.controls.br.actionHandler({},
     {target:object,ex:220,ey:140,theta:0,scaleX:object.scaleX,scaleY:object.scaleY},230,170),true);
-  assert.ok(object.scaleX>startScale&&object.angle>3,
-    'The single bottom-right grip must scale and rotate together');
+  assert.equal(object.scaleX,startScale);
+  assert.ok(object.angle>3);
   bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
-  assert.ok(node.width>200&&node.rotation>3);
-  assert.equal(node.manualVisualResize,true);
+  assert.equal(node.width,200);assert.equal(node.height,80);
+  assert.ok(node.rotation>3);
+  assert.equal(node.manualVisualResize,undefined);
   assert.equal(node.assetID,'asset-1');
 });
 

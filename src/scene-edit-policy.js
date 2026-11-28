@@ -13,7 +13,7 @@ const sourceState=node=>JSON.stringify([node.id,node.assetID,node.sourceBlobId,n
 // The UI calls this ONLY after confirmation. Grants are ephemeral, target-
 // scoped and tied to the current material state. They are never persisted.
 export function confirmSceneCapability(nodes,capability){
- if(!['material.visualResize','material.visualCopy','material.geometry'].includes(capability))throw Error('未知人工确认能力');
+ if(!['material.visualCopy','material.geometry'].includes(capability))throw Error('未知人工确认能力');
  const token=Object.freeze({});
  grants.set(token,{capability,targets:new Map(nodes.filter(n=>n.type==='material').map(n=>[n.id,sourceState(n)]))});
  return token;
@@ -21,9 +21,11 @@ export function confirmSceneCapability(nodes,capability){
 export function assertSceneCapability(policy,capability,nodes,confirmation){
  requireScenePolicy(policy);
  const materials=nodes.filter(node=>node.type==='material');if(!materials.length)return;
+ if(capability==='material.visualResize')
+  throw Object.assign(Error('真实素材保持原始物理尺寸；可移动、旋转、裁剪或使用蒙版调整构图'),{code:'PHYSICAL_SIZE_LOCKED',capability,targets:materials.map(n=>n.id)});
  const grant=grants.get(confirmation);
  if(policy.actor!=='user'||grant?.capability!==capability||materials.some(node=>grant.targets.get(node.id)!==sourceState(node)))
-  throw Object.assign(Error(capability==='material.visualResize'?'改变实体素材的显示尺寸需要本次人工确认；真实来源尺寸不变':capability==='material.visualCopy'?'复制实体素材的视觉参考需要人工确认，不能增加实体库存':'修改素材几何需要本次人工确认'),{code:'EDIT_CONFIRMATION_REQUIRED',capability,targets:materials.map(n=>n.id)});
+  throw Object.assign(Error(capability==='material.visualCopy'?'复制实体素材的视觉参考需要人工确认，不能增加实体库存':'修改素材几何需要本次人工确认'),{code:'EDIT_CONFIRMATION_REQUIRED',capability,targets:materials.map(n=>n.id)});
 }
 export function assertPolicyOwnership(node,policy=AI_SCENE_POLICY){
  requireScenePolicy(policy);if(!policy.takeover)assertManagedWritable(node);return node;

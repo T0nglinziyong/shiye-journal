@@ -35,17 +35,19 @@ try{
  await b.command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,x:start.x+30,y:start.y+15});
  assert.notEqual(await b.evaluate('JSON.stringify(window.__fabricFixture.draft.layers)'),before);
  assert.equal(await b.evaluate('window.__fabricFixture.commits.length'),count+1);
- // Declined visual resizing cannot modify a single saved field or emit commit.
+ // Real material resizing cannot modify a single saved field, even if a
+ // caller supplies the former confirmation callback.
  await b.evaluate(`(()=>{window.__confirmOriginal=window.confirm;window.__confirmCount=0;window.confirm=()=>{window.__confirmCount++;return false;};const c=window.__fabricCanvas,o=c.getObjects().find(n=>n.sceneID==='paper-material');window.__materialBefore=JSON.stringify(window.__fabricFixture.draft.layers.find(n=>n.id==='paper-material'));o.set({scaleX:o.scaleX*1.2});c.fire('object:modified',{target:o});})()`);
  assert.equal(await b.evaluate('JSON.stringify(window.__fabricFixture.draft.layers.find(n=>n.id==="paper-material"))===window.__materialBefore'),true);
  await b.sleep(200);
  await b.evaluate(`(()=>{window.confirm=()=>{window.__confirmCount++;return true;};const c=window.__fabricCanvas,o=c.getObjects().find(n=>n.sceneID==='paper-material');o.set({scaleX:o.scaleX*1.2});c.fire('object:modified',{target:o});window.confirm=window.__confirmOriginal;})()`);
  const resized=await b.evaluate('({node:window.__fabricFixture.draft.layers.find(n=>n.id==="paper-material"),count:window.__confirmCount})');
- assert.equal(resized.node.manualVisualResize,true);assert.equal(resized.node.assetID,'fabric-sample');assert.equal(resized.count,2);
+ assert.equal(JSON.stringify(resized.node),await b.evaluate('window.__materialBefore'));
+ assert.equal(resized.node.assetID,'fabric-sample');assert.equal(resized.count,0);
  for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
   await b.command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
   assert.equal(await b.evaluate('document.querySelectorAll(".upper-canvas").length'),1);
  }
  assert.deepEqual(b.errors,[]);
- console.log('SHARED_EDITOR_KERNEL_BROWSER_PASS: live preview, one commit, input identity, canonical reflow, explicit permission accept/cancel; four viewport simulations');
+ console.log('SHARED_EDITOR_KERNEL_BROWSER_PASS: live preview, one commit, input identity, canonical reflow, immutable physical size; four viewport simulations');
 }finally{await b.close();}

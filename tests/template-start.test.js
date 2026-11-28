@@ -106,3 +106,30 @@ test('spread can combine two singles with independent page colors and unique lay
  assert.ok(paperColorFor(draft,'left'));
  assert.ok(paperColorFor(draft,'right'));
 });
+
+test('cross-mode templates scale layout but keep every real input at its calibrated millimeters',async()=>{
+ const assets=[
+  {id:'photo',title:'旅途照片',kind:'photo',physicalWidthMM:43,physicalHeightMM:58},
+  {id:'paper',title:'纹样纸',kind:'paper',physicalWidthMM:61,physicalHeightMM:44}
+ ];
+ for(const [mode,ratio,choiceMode] of [['single','weeks','leaf'],['spread','a4','pair']]){
+  const draft=project('尺寸验收',{mode,ratio}).drafts[0];
+  const before={canvas:structuredClone(draft.canvas),height:draft.physicalPageHeightMM};
+  const choice=manualTemplateChoices(draft,assets,assets.map(asset=>asset.id))
+    .find(row=>row.mode===choiceMode&&row.plan.used.length);
+  assert.ok(choice,`${choiceMode} should match at least one real source`);
+  await applyManualTemplate(draft,assets,assets.map(asset=>asset.id),choice.id,{choice});
+  assert.deepEqual(draft.canvas,before.canvas);
+  assert.equal(draft.physicalPageHeightMM,before.height);
+  const placed=draft.items.filter(item=>!item.isParked);
+  assert.ok(placed.length>0);
+  for(const item of draft.items){
+   const source=assets.find(asset=>asset.id===item.assetID);
+   assert.ok(source);
+   const mmPerPixel=draft.physicalPageHeightMM/draft.canvas.height;
+   assert.ok(Math.abs(item.width*mmPerPixel-source.physicalWidthMM)<.02,`${choiceMode}: width ${item.assetID}`);
+   assert.ok(Math.abs(item.height*mmPerPixel-source.physicalHeightMM)<.02,`${choiceMode}: height ${item.assetID}`);
+   assert.equal(item.manualVisualResize,undefined);
+  }
+ }
+});
