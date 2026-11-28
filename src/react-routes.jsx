@@ -320,7 +320,10 @@ function JournalTemplateVisual({item,side='template',db,accountId,detail=false})
 const templateRoleName={focal:'主视觉',secondary:'辅助图',background:'底纸',information:'信息区',
   accent:'装饰',decoration:'图形装饰',material:'素材位',marker:'标记',connector:'连接',divider:'分隔',title:'标题',text:'正文',
   paper:'纸张',photo:'照片',figure:'异形主体',tape:'胶带',strip:'纸条',circle:'圆形点缀',graphic:'图形',number:'数字',
-  'backing-paper':'底层纸张','generated-graphic':'图形装饰','writing-card':'书写卡','printed-card':'印刷卡'};
+  'backing-paper':'底层纸张','generated-graphic':'图形装饰','writing-card':'书写卡','printed-card':'印刷卡',
+  'large-scene-photo':'主画面','large-irregular-photo':'主画面','small-scene-photo':'小幅画面',
+  'irregular-photo':'主题画面','scene-photo':'主题画面','small-scene-card':'图像卡片',
+  'square-scene-card':'方形卡片','large-irregular-flower':'异形主体','irregular-subject':'异形主体'};
 const templateKindName={photo:'照片',sticker:'贴纸',paper:'纸张',card:'卡片',ticket:'票据',
   note:'便签',tape:'胶带',stamp:'印章',text:'文字',decoration:'装饰',figure:'异形主体',
   'plain-paper':'纯色纸','pattern-paper':'花纹纸','writing-card':'书写卡','printed-card':'印刷卡',
@@ -352,6 +355,7 @@ function JournalTemplateElements({composition,interactive=true}){
           onClick={()=>setActiveID(element.id)}>{element.id}</button>)}
       </div>
       {active?<div className="journal-template-slot-conditions"><strong>{active.id} · {templateRoleName[active.role]||active.role}</strong>
+        <p><b>默认对象</b>：{active.defaultInput||'按模板生成的可编辑对象'}</p>
         <p><b>必须满足</b>：{active.must?.join('；')||'保持此位置的对象作用与实物尺寸'}</p>
         <p><b>建议满足</b>：{active.prefer?.join('；')||'与相邻对象配色、叠放呼应'}</p>
       </div>:<p>点击画面对象或下方名称，查看可替代素材的条件。</p>}

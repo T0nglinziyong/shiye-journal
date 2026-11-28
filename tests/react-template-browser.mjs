@@ -40,6 +40,7 @@ try{
   await click('[data-template-side="elements"]','.journal-template-slot-conditions');
   await click('.journal-template-element[data-slot-id]','.journal-template-slot-conditions');
   assert.ok(await evaluate('document.querySelector(".journal-template-slot-conditions").textContent.includes("必须满足")'));
+  assert.ok(await evaluate('document.querySelector(".journal-template-slot-conditions").textContent.includes("默认对象")'));
   assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-elements-view"),details=document.querySelector(".journal-template-slot-conditions");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
   for(const [width,height] of [[390,844],[768,1024],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});

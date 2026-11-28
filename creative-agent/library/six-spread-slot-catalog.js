@@ -43,7 +43,7 @@ const purposeById={
  'S03-棕蓝爱心':{'L-heart-photo':'左页中央完整主体，心形只是案例的一种轮廓','L-lace':'跨左页中线的透明花边或胶带','R-translucent-card':'右页连续的大张硫酸纸，文字写在同一纸面','R-cake-illustration':'右上方食物、花、物件或旅行主题方卡','R-star-top':'硫酸纸上缘星形点缀','R-star-right':'硫酸纸右缘星形点缀','R-star-left':'硫酸纸左缘星形点缀'},
  'S04-粉黑百合':{'L-pink-translucent':'左页浅色纸后面透出的粉色硫酸纸','L-writing-card':'左页正文主纸','L-flower-photo':'左页下方花或其他自然图案小卡','R-gray-back':'右页主纸下方露出的灰色硫酸纸','R-writing-card':'右页上方书写主纸','R-lily':'从页心跨到右页下缘的完整不规则主体'},
  'S05-灰黄甜点':{'L-grid-strip':'左页边缘纵向格纹连接带','L-vase-card':'左页上方主题小卡','L-elephant-card':'左页下方主题小卡','R-white-band':'右页中段横向衬底纸','R-dessert-photo':'右页中段的主题画面','R-top-card':'右页上方短标题卡','R-green-sticker':'压住上方标题卡的另一张小卡'},
- 'S06-白粉果实':{'L-number':'左页上方大数字','L-fruit-photo':'左页中央大幅主画面','L-vellum-overlay':'照片上方的半透明写字纸','R-fig-card':'右页上方方形主题卡','R-lower-paper':'右页下方大幅横线书写纸','R-mid-number':'右页中段大数字','R-flower':'压在下方书写纸边缘的小主体'}
+ 'S06-白粉果实':{'L-number':'左页上方大数字','L-fruit-photo':'左页中央大幅主画面','L-vellum-overlay':'主画面上方的半透明写字纸','L-flower':'压在主画面左下角的小幅花图卡','R-fig-card':'右页上方方形主题卡','R-lower-paper':'右页下方大幅横线书写纸','R-mid-number':'右页中段大数字','R-flower':'压在下方书写纸边缘的红色花图卡'}
 };
 
 export function describeSpreadSlot(templateId,node){
@@ -53,6 +53,6 @@ export function describeSpreadSlot(templateId,node){
  return {id,page,role,box,z,purpose:purposeById[templateId]?.[id]||spec.purpose,
   mode:spec.mode,acceptedMaterialRoles:[...spec.roles],
   sourceSize:'用户素材按原始毫米尺寸摆放，不缩放',
-  fallback:spec.mode==='material'?'关键主体不适配时提示换模板或换素材':spec.mode==='text'||spec.mode==='text-or-number'?'可编辑文字':'按模板生成可编辑对象',
+  fallback:spec.mode==='material'?'无合适素材时生成同尺寸可编辑纸卡，保留槽位与遮挡':spec.mode==='text'||spec.mode==='text-or-number'?'可编辑文字':'按模板生成可编辑对象',
   crop:'默认保留完整主体；只有纸张或边饰可按槽位安全裁切'};
 }

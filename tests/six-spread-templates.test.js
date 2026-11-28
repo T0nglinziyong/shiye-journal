@@ -139,6 +139,9 @@ test('spread corrections keep distinct paper layers, edge accents and large nume
  assert.ok(s05.occlusion.some(([front,back])=>front==='R-green-sticker'&&back==='R-top-card'));
  assert.ok(compileTemplateDraft({templateId:s05.id}).operations.find(op=>op.id==='L-star-1').size.width>=5);
  const s06=compileTemplateDraft({templateId:'S06-白粉果实'}).operations;
+ const unmatched=matchSixSpreadMaterials('S06-白粉果实',[]);
+ assert.ok(!unmatched.missingCritical.includes('L-flower')&&!unmatched.missingCritical.includes('R-flower'),
+  'the two small flower-image cards are editable fallback details, not required focal materials');
  const numeral=s06.find(op=>op.op==='text.fit'&&op.target==='R-mid-number');
  assert.ok(numeral.place.at[0]+numeral.size.width<=SPREAD_LEAF_MM[0]);
  assert.ok(numeral.fit.maxFontSizePt>=45);

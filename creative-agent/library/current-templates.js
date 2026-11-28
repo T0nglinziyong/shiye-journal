@@ -22,6 +22,19 @@ const roleNames={photo:'照片',figure:'不规则主体',accent:'装饰点缀',t
  'date-card':'日期卡片','support-card':'底层卡纸','sticker':'贴纸',clip:'夹子'};
 const label=role=>roleNames[role]||role.replaceAll('-',' ');
 const round=n=>Math.round(n*10)/10;
+const defaultForSingle=item=>{
+ if(item.defaultValue?.text!==undefined||item.defaultValue?.value!==undefined)return '可编辑文字';
+ if(item.defaultValue?.color)return '按模板颜色生成的可编辑对象';
+ if(item.id==='stamp-material')return '印章卡上的可编辑文字';
+ if(item.id==='top-clip')return '可编辑夹子图形';
+ return '按模板生成的可编辑对象';
+};
+const defaultForSpread=item=>{
+ if(item.mode==='material'||['photo','sticker'].includes(item.role)&&item.style?.motif)return '同尺寸可编辑纸卡';
+ if(['photo','sticker'].includes(item.role))return item.role==='photo'?'同尺寸可编辑纸卡':'可编辑图形点缀';
+ if(item.defaultInput==='editable-text'||['text','text-or-number'].includes(item.mode))return '可编辑文字';
+ return '按模板生成的可编辑对象';
+};
 const objectCondition=(item,templateId)=>{
  const accepts=item.accepts||item.acceptedMaterialRoles||[];
  const size=item.target?.sizeMm||item.targetMm||null;
@@ -44,6 +57,7 @@ const singleElements=id=>{
    !(o.role==='generated-graphic'&&Math.min(...o.target.sizeMm)<1)).map(o=>{
     const [w,h]=o.target.sizeMm,[cx,cy]=o.target.centerMm;
     return {id:o.id,role:o.role,page:'single',box:[(cx-w/2)/pw,(cy-h/2)/ph,w/pw,h/ph],
+      defaultInput:defaultForSingle(o),
       ...objectCondition(o,id)};
    })};
 };
@@ -52,7 +66,7 @@ const spreadElements=id=>{
  const elements=data.slots.map(s=>{
   const [x0,y0,x1,y1]=s.box;
   return {id:s.id,role:s.role,page:s.page,box:[(s.page==='right'?.5:0)+x0/200,y0/100,
-    (x1-x0)/200,(y1-y0)/100],...objectCondition(s,id)};
+    (x1-x0)/200,(y1-y0)/100],defaultInput:defaultForSpread(s),...objectCondition(s,id)};
  });
  return {pageMm:[data.leafMm[0]*2,data.leafMm[1]],elements};
 };
