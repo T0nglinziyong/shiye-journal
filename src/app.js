@@ -12,6 +12,7 @@ import {commitSceneEditSession} from './scene-edit-session.js';
 import {editMaterialGeometry,restoreMaterialBaseline,replaceEditableMaterial,reshapeEditableTape} from './scene-material-edit.js';
 import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditableScene} from './scene-structure-edit.js';
 import {applySceneNodePatch,applySceneWorldPatch,applyScenePagePatch,insertSceneLayer} from './scene-edit-kernel.js';
+import {paperColorFor} from './paper-colors.js';
 import {USER_SCENE_POLICY,confirmSceneCapability} from './scene-edit-policy.js';
 import {normalizeMatchingDirection} from './matching-directions.js';
 import {matchingCreationProject} from './matching-project.js';
@@ -1119,6 +1120,10 @@ function updateEditorInspector(id,value){
     }
     else return;
   }else if(id==='paper-color'&&color.test(value)){applyScenePagePatch(d,{paperColor:value},{policy:USER_SCENE_POLICY});changed=true;}
+  else if(/^paper-color-(left|right)$/.test(id)&&d.pageMode==='spread'&&color.test(value)){
+    const side=id.endsWith('left')?'left':'right';
+    applyScenePagePatch(d,{paperColors:{left:paperColorFor(d,'left'),right:paperColorFor(d,'right'),[side]:value}},{policy:USER_SCENE_POLICY});changed=true;
+  }
   else if(id==='paper-pattern'&&['plain','grid','lines','dots','columns'].includes(value)){applyScenePagePatch(d,{paperPattern:value},{policy:USER_SCENE_POLICY});changed=true;}
   else if(id==='paper-columns'&&typeof value==='boolean'){applyScenePagePatch(d,{paperColumns:value},{policy:USER_SCENE_POLICY});changed=true;}
   else if(id==='page-ratio'){
@@ -2101,6 +2106,10 @@ async function runAppAction(action,id,value){try{
     }else if(id==='color'&&/^#[0-9a-f]{6}$/i.test(value)){
       if(d.paperColor===value)break;
       checkpoint();applyScenePagePatch(d,{paperColor:value},{policy:USER_SCENE_POLICY});
+    }else if(['color-left','color-right'].includes(id)&&d.pageMode==='spread'&&/^#[0-9a-f]{6}$/i.test(value)){
+      const side=id==='color-left'?'left':'right';
+      if(paperColorFor(d,side)===value)break;
+      checkpoint();applyScenePagePatch(d,{paperColors:{left:paperColorFor(d,'left'),right:paperColorFor(d,'right'),[side]:value}},{policy:USER_SCENE_POLICY});
     }else break;
     saveProject();render();break;
   }

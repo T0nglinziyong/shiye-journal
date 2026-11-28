@@ -12,6 +12,7 @@ import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
 import {showMaterialProcessing} from './material-processing-editor.js';
 import {parseEditableGeometry} from './editable-geometry.js';
 import {bundledExampleRuling} from './paper-rendering.js';
+import {paperColorFor} from './paper-colors.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 import {mountCanvasViewport} from './canvas-viewport.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
@@ -346,7 +347,27 @@ export function mountCanvasEditor(c){
     return openEditorLayerTree(anchor,{draft:d,state,view,checkpoint,saveProject,render,
       toast,uid,asset,imgTag,esc});
   }
-  function paperPicker(anchor){const p=openPopover(anchor,{title:'画布背景',width:260,menu:true});if(isCurrentExampleProject(state.activeProject))p.content.append(button('恢复样例横线纸',()=>{p.close();change(()=>{d.paperPattern='lines';d.paperRuling=structuredClone(bundledExampleRuling);d.drawCenterGutter=false;});}));for(const [id,name] of [['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']]){const b=button(name,()=>{p.close();change(()=>d.paperPattern=id);});b.setAttribute('role','menuitemradio');b.setAttribute('aria-checked',String(d.paperPattern===id));p.content.append(b);}const row=document.createElement('label');row.className='canvas-toggle';row.textContent='纸张颜色';const input=document.createElement('input');input.type='color';input.value=d.paperColor;input.onchange=()=>{p.close();change(()=>d.paperColor=input.value);};row.append(input);p.content.append(row);}
+  function paperPicker(anchor){
+    const p=openPopover(anchor,{title:'画布背景',width:260,menu:true});
+    if(isCurrentExampleProject(state.activeProject))p.content.append(button('恢复样例横线纸',()=>{
+      p.close();change(()=>{d.paperPattern='lines';d.paperRuling=structuredClone(bundledExampleRuling);d.drawCenterGutter=false;});
+    }));
+    for(const [id,name] of [['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']]){
+      const b=button(name,()=>{p.close();change(()=>d.paperPattern=id);});
+      b.setAttribute('role','menuitemradio');b.setAttribute('aria-checked',String(d.paperPattern===id));p.content.append(b);
+    }
+    for(const side of d.pageMode==='spread'?['left','right']:['page']){
+      const row=document.createElement('label');row.className='canvas-toggle';
+      row.textContent=side==='left'?'左页颜色':side==='right'?'右页颜色':'纸张颜色';
+      const input=document.createElement('input');input.type='color';
+      input.value=side==='page'?d.paperColor:paperColorFor(d,side);
+      input.onchange=()=>{p.close();change(()=>{
+        if(side==='page')d.paperColor=input.value;
+        else d.paperColors={left:paperColorFor(d,'left'),right:paperColorFor(d,'right'),[side]:input.value};
+      });};
+      row.append(input);p.content.append(row);
+    }
+  }
   function historyMenu(anchor){const p=openPopover(anchor,{title:'历史记录',width:340,menu:true}),project=state.activeProject;
     const row=(entry,title,activate,remove)=>{const line=document.createElement('div');line.className='canvas-history-row';const open=button(title,()=>{p.close();activate();});line.append(open);const actions=document.createElement('div');const rename=button('重命名',()=>{const name=prompt('历史记录名称',title);if(name===null)return;try{renameHistory(entry,name);saveProject();p.close();historyMenu(anchor);}catch(e){toast(e.message);}});rename.setAttribute('aria-label','重命名 '+title);const del=button('删除',()=>{if(!confirm('删除历史记录「'+title+'」？'))return;try{remove();saveProject();p.close();render();}catch(e){toast(e.message);}});del.setAttribute('aria-label','删除 '+title);actions.append(rename,del);line.append(actions);p.content.append(line);};
     project.drafts.forEach((entry,index)=>row(entry,historyTitle(entry,index),()=>{if(!confirm('是否回到「'+historyTitle(entry,index)+'」？当前修改可通过撤销恢复。'))return;view.endTextEditing?.();const same=state.activeDraft===entry.id;if(same)checkpoint();else{state.undo=[];state.redo=[];}restoreHistoryDraft(project,entry.id);state.activeDraft=entry.id;state.selected=null;state.multiSelected=[];saveProject();render();},()=>{deleteDraft(project,entry.id);state.activeDraft=project.activeDraftID;state.selected=null;state.undo=[];state.redo=[];}));

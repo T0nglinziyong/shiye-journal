@@ -15,6 +15,7 @@ import {mountPieceThumbnail} from './material-piece-thumbnail.js';
 import {sceneLayerEntries} from './scene-v2.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {materialSizeLabel} from './material-size-label.js';
+import {paperColorFor} from './paper-colors.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',tape:'tape',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',tape:'胶带',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -539,8 +540,11 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         onClick={()=>{close();onAction('fabric-paper','columns',draft.paperColumns!==true);}}>
         {draft.paperColumns===true?'✓ ':''}双栏线
       </button>
-      <label className="canvas-toggle">纸张颜色<input type="color" value={draft.paperColor}
-        onChange={event=>{close();onAction('fabric-paper','color',event.target.value);}}/></label>
+      {(draft.pageMode==='spread'?['left','right']:['page']).map(side=><label key={side} className="canvas-toggle">
+        {side==='left'?'左页颜色':side==='right'?'右页颜色':'纸张颜色'}
+        <input type="color" value={side==='page'?draft.paperColor:paperColorFor(draft,side)}
+          onChange={event=>{close();onAction('fabric-paper',side==='page'?'color':`color-${side}`,event.target.value);}}/>
+      </label>)}
     </>:null}
     {menu.kind==='layers'?<LayerTree draft={draft} state={state} materials={materials} onAction={onAction}
       collapsed={collapsedLayers} setCollapsed={setCollapsedLayers}/>:null}

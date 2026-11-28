@@ -2,6 +2,7 @@ import {listTemplateDrafts,compileTemplateDraft} from './template-draft.js';
 import {describeTemplateObjects,matchMaterialsToTemplates} from './adaptive-template-matcher.js';
 import {describeSixSpreadTemplate,matchSixSpreadMaterials} from './six-spread-templates.js';
 import {describeThreeLayoutSpread,matchThreeLayoutSpread} from './three-layout-template-matcher.js';
+import {templatePageFit,matchingProfileOnTemplatePage,fitTemplateOperations} from './template-page-fit.js';
 
 const names={D143:'蓝色分段问答',D146:'数字交错问答',D153:'青灰纸页与人物',D158:'灰蓝双区日记',D162:'上下撕纸拼贴',
  'S01-苹果绿白':'苹果绿与白 · 水果双页','S02-青黄面包':'青黄撞色 · 面包双页','S03-棕蓝爱心':'棕蓝对照 · 爱心双页',
@@ -128,10 +129,12 @@ export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUs
  const profiles=materials.map(materialTemplateProfile).filter(a=>a.alias&&a.physicalWidthMM>0&&a.physicalHeightMM>0);
  const candidates=entries.filter(t=>!pageMode||t.pageMode===pageMode);
  return candidates.map(template=>{
+  const pageFit=paper?templatePageFit(template.pageMm,[paper.width,paper.height],template.pageMode):null;
+  const matchingProfiles=pageFit?profiles.map(asset=>matchingProfileOnTemplatePage(asset,pageFit)):profiles;
   let plan;
-  if(single.has(template.id))plan=matchMaterialsToTemplates(profiles,{templateIds:[template.id],mustUse})[0];
-  else if(six.has(template.id))plan=matchSixSpreadMaterials(template.id,profiles,{mustUse});
-  else plan=matchThreeLayoutSpread(template.id,profiles,{mustUse});
+  if(single.has(template.id))plan=matchMaterialsToTemplates(matchingProfiles,{templateIds:[template.id],mustUse})[0];
+  else if(six.has(template.id))plan=matchSixSpreadMaterials(template.id,matchingProfiles,{mustUse});
+  else plan=matchThreeLayoutSpread(template.id,matchingProfiles,{mustUse});
   const used=plan.used||[],assignments=plan.assignments.filter(a=>a.asset).map(a=>({alias:a.asset,slotId:a.slot}));
   const criticalMissing=(plan.missingCritical||plan.missingPhotos||[]).length;
   const fit=plan.score;
@@ -141,12 +144,19 @@ export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUs
  }).sort((a,b)=>b.score-a.score||b.assignments.length-a.assignments.length||a.id.localeCompare(b.id)).slice(0,limit);
 }
 
-export function compileCurrentTemplate({templateId,assets=[],bindings={},texts={},palette={},slotValues={},plan,mustUse=[]}={}){
+export function compileCurrentTemplate({templateId,assets=[],bindings={},texts={},palette={},slotValues={},plan,mustUse=[],pageMm}={}){
  if(!byId.has(templateId))throw new RangeError(`不是已上线的新模板：${templateId}`);
+ const template=byId.get(templateId);
+ const fit=pageMm?templatePageFit(template.pageMm,pageMm,template.pageMode):null;
  const profiles=assets.map(materialTemplateProfile);
- const matched=plan||(single.has(templateId)?matchMaterialsToTemplates(profiles,{templateIds:[templateId],bindings,mustUse})[0]:
-  six.has(templateId)?matchSixSpreadMaterials(templateId,profiles,{overrides:bindings,mustUse}):matchThreeLayoutSpread(templateId,profiles,{bindings,mustUse}));
- const result=compileTemplateDraft({templateId,assets:profiles,bindings,texts,palette,slotValues,plan:matched});
+ const matchingProfiles=fit?profiles.map(asset=>matchingProfileOnTemplatePage(asset,fit)):profiles;
+ const matched=plan||(single.has(templateId)?matchMaterialsToTemplates(matchingProfiles,{templateIds:[templateId],bindings,mustUse})[0]:
+  six.has(templateId)?matchSixSpreadMaterials(templateId,matchingProfiles,{overrides:bindings,mustUse}):matchThreeLayoutSpread(templateId,matchingProfiles,{bindings,mustUse}));
+ const matchedBindings=Object.fromEntries(matched.assignments.filter(choice=>choice.asset).map(choice=>[choice.slot,choice.asset]));
+ const matchedValues=single.has(templateId)?Object.fromEntries(matched.assignments.map(choice=>[choice.slot,
+  choice.asset?{asset:choice.asset}:{generated:true}])):{};
+ const result=compileTemplateDraft({templateId,assets:profiles,bindings:{...matchedBindings,...bindings},texts,palette,
+  slotValues:{...matchedValues,...slotValues},plan:matched});
  // An initial template draft may leave even a final-required material unused.
  // Keep every unused source as an editable candidate instead of losing it.
  const used=new Set(matched.used||[]);
@@ -155,7 +165,8 @@ export function compileCurrentTemplate({templateId,assets=[],bindings={},texts={
   op:'material.add',id:`template-candidate-${index+1}`,asset:profile.alias,
   place:{reference:'page',at:[.5,.5],unit:'ratio',surface:'tray'}
  }));
- return {...result,operations:[...result.operations,...parked]};
+ const operations=[...result.operations,...parked];
+ return {...result,operations:fit?fitTemplateOperations(operations,fit):operations};
 }
 
 export function currentTemplateMaterialScores(candidates=[]){

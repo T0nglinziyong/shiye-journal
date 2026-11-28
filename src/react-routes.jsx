@@ -30,6 +30,7 @@ import {styleGroups,purposeGroups,matchingContentOptions,matchingIntentPlacehold
 import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
+import {paperBackgroundCSS} from './paper-colors.js';
 import {FabricCutPanel} from './fabric-cut-panel.jsx';
 import {useFloatingPanel} from './use-floating-panel.js';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
@@ -234,7 +235,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,loadLocalCover
           <div className="card-image" data-cover-project-id={kind==='project'?record.id:undefined}>
             {kind==='asset'?<RouteImage asset={record} source={source}/>:<div className="thumb-sheet"
               style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:undefined,
-                background:draft?.paperColor||'#fff'}}>
+                background:draft?paperBackgroundCSS(draft):'#fff'}}>
               {src?<img className="work-reference" src={src} alt={record.title}/>:<SceneCover
                 draft={draft} asset={id=>state.assets.find(item=>item.id===id)} source={source}
                 snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover?.(record)}
@@ -817,7 +818,7 @@ export function WorksPage({state,projects:initialProjects,isUntouchedLegacyExamp
               window.dispatchEvent(new Event('shiye-selection-refresh'));}
             else onAction('open-project',project.id);
           }}>
-          <div className="card-image"><div className="thumb-sheet" style={{width:'75%',background:project.drafts[0]?.paperColor||'#fff'}}>
+          <div className="card-image"><div className="thumb-sheet" style={{width:'75%',background:draft?paperBackgroundCSS(draft):'#fff'}}>
             {staticCover?<img className="work-reference" loading={index<4?'eager':'lazy'} decoding="async"
               src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
             {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority={index<4}
@@ -1062,9 +1063,9 @@ function MatchingVariantCover({variant,session,source}){
     {livePreview||raster||snapshot?<img className="match-raster-preview" src={livePreview||raster||snapshot}
       alt={variant.title+' 构图预览'}/>:<div className="match-cover-fallback"
       style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:'3/4',
-        background:draft?.paperColor||'#fcfaf0'}}>
+        background:draft?paperBackgroundCSS(draft):'#fcfaf0'}}>
       {draft?<div className="thumb-sheet" style={{'--thumb-ratio':draft.canvas.width/draft.canvas.height,
-        background:draft.paperColor||'#fff'}}><span className="work-cover-pending" role="status">正在准备预览…</span></div>:null}
+        background:paperBackgroundCSS(draft)}}><span className="work-cover-pending" role="status">正在准备预览…</span></div>:null}
     </div>}
   </div>;
 }
@@ -1283,7 +1284,10 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
   const check=(id,label,value)=><label className="editor-inspector-check"><input id={id} type="checkbox" checked={!!value}
     onChange={event=>onChange(id,event.target.checked)}/>{label}</label>;
   if(!selected)return <div className="stack">
-    {field('paper-color','纸张颜色',draft.paperColor,'color')}
+    {draft.pageMode==='spread'?<>
+      {field('paper-color-left','左页颜色',draft.paperColors?.left||draft.paperColor,'color')}
+      {field('paper-color-right','右页颜色',draft.paperColors?.right||draft.paperColor,'color')}
+    </>:field('paper-color','纸张颜色',draft.paperColor,'color')}
     <label>背景<select id="paper-pattern" defaultValue={draft.paperPattern}
       onChange={event=>onChange('paper-pattern',event.target.value)}>
       {Object.entries({plain:'纯色',grid:'方格',lines:'横线',dots:'点阵'}).map(([id,name])=>
@@ -1747,7 +1751,7 @@ export function ProjectPreviewPage({project,source,assets,localCover,loadLocalCo
       aria-pressed={!!project.isFavorite} onClick={action('snapshot-favorite')}>{project.isFavorite?'♥':'♡'}</button>:null}
     {button('preview-back','关闭')}
   </div><div className="project-preview-cover"><div className="preview-paper"
-    style={{background:draft.paperColor||'#fff',aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`,
+    style={{background:paperBackgroundCSS(draft),aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`,
       width:`${Math.min(window.innerHeight*.55,500)*draft.canvas.width/draft.canvas.height}px`,
       maxWidth:'90%',height:'auto',maxHeight:'100%'}}>
     {staticCover?<img className="work-reference" loading="eager" fetchPriority="high" decoding="async"

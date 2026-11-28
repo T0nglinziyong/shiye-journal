@@ -32,7 +32,7 @@ export function craftSceneState(draft) {
   sceneVersion:2,
   canvas:draft.canvas,pageMode:draft.pageMode,pageRatio:draft.pageRatio,
   physicalPageHeightMM:draft.physicalPageHeightMM,
-  paperColor:draft.paperColor,paperPattern:draft.paperPattern,paperColumns:draft.paperColumns,
+  paperColor:draft.paperColor,paperColors:draft.paperColors,paperPattern:draft.paperPattern,paperColumns:draft.paperColumns,
   paperRuling:draft.paperRuling,drawCenterGutter:draft.drawCenterGutter,
   style:draft.style,
   layers:draft.layers.map(renderLayer),

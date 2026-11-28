@@ -243,7 +243,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
         installSelectionFramePriority(canvas);
         canvas.selection=false;
         canvas.skipTargetFind=callbacks.current.tool!=='select'||readOnly;
-        const paperKey=current=>JSON.stringify([current.canvas,current.paperColor,
+        const paperKey=current=>JSON.stringify([current.canvas,current.paperColor,current.paperColors,
           current.paperPattern,current.paperColumns,current.paperRuling,current.pageMode,current.drawCenterGutter,current.inactivePageDimmed]);
         let renderedPaperKey='';
         const paintPaper=current=>{

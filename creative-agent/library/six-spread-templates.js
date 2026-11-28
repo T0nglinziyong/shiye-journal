@@ -123,7 +123,9 @@ const candidate=(asset,node,template)=>{
  if(matched<0)return null;
  // A card carrying its own headline is not an empty writing surface. User
  // profiles may explicitly mark a printed card as writable after inspection.
- if((/writing-card|date-card|small-heading-card|pattern-note/.test(node[2]))&&Number(asset.writableAreaRatio??0)<.6&&asset.canWriteOn!==true)return null;
+ // A card carrying template copy must remain writable after replacement;
+ // otherwise its title/date silently disappears when a printed card wins.
+ if((/writing-card/.test(node[2])||hasCardText(node))&&Number(asset.writableAreaRatio??0)<.6&&asset.canWriteOn!==true)return null;
  if(slot.role==='edge-accent'&&asset.preservation==='whole'&&/人物|蝴蝶/.test(asset.title||''))return null;
  if(/(?:flower|subject)$/.test(node[2])&&!asset.visualRoles?.some(r=>['figure','photo'].includes(r)))return null;
  const title=String(asset.title||'');
@@ -132,7 +134,7 @@ const candidate=(asset,node,template)=>{
  if(/lace/.test(key)&&!/蕾丝|花边|镂空|网纱|胶带/.test(title))return null;
  const semantic=(subject?.test(title)?.24:0)+(/bread/.test(key)&&/面包|吐司/.test(title)?.12:0)+(/dessert|cake/.test(key)&&/甜品|蛋糕/.test(title)?.14:0)+(/flower|lily/.test(key)&&/花/.test(title)?.12:0)-(/irregular-subject/.test(node[2])&&asset.visualRoles?.includes('printed-card') ? .16 : 0);
  const whole=asset.preservation==='whole'&&/flower|subject/.test(node[2])?.09:0;
- return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole),method:'complete',overlayText:hasCardText(node)&&asset.visualRoles?.some(r=>['writing-card','plain-paper'].includes(r))};
+ return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole),method:'complete',overlayText:hasCardText(node)};
 };
 
 export function scoreSixSpreadSlot(templateId,slotId,asset){

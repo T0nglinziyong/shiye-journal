@@ -24,7 +24,7 @@ export function creativeScene(d,aliases={}){
  const {sceneRevision:_revision,...view}=inspectCreationDocument({page:d,source:{materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))}});
  return view;
 }
-const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.layers]);
+const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperColors,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.layers]);
 
 export function buildCreativeMessages(o){
  const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='original',textPresentation='mixed',userText='',providedFacts='',styles=[draft.style],pagePurposes=['自由创作'],processing,requiredAssetIDs=[],materialPriority={},includeStructureReference=true}=o;
