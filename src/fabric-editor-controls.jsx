@@ -15,6 +15,7 @@ import {mountPieceThumbnail} from './material-piece-thumbnail.js';
 import {sceneLayerEntries} from './scene-v2.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {materialSizeLabel} from './material-size-label.js';
+import {standbyMaterialRows} from './material-standby.js';
 import {paperColorFor} from './paper-colors.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',tape:'tape',layers:'layers',paper:'paper'};
@@ -157,7 +158,7 @@ export function MaterialPieceImage({asset,item,source}){
   </div>;
 }
 
-function MaterialPicker({draft,materials,series,source,onPick}){
+function MaterialPicker({draft,materials,series,source,onPick,requiredAssetIDs=[]}){
   const [tab,setTab]=useState(draft.items.some(item=>!item.isParked&&
     materials.find(asset=>asset.id===item.assetID)?.kind!=='tape')?'used':'all');
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
@@ -168,15 +169,15 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     (kind==='all'||asset.kind===kind)&&
     (!query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const rows=useMemo(()=>{
-    if(tab==='used'||tab==='standby')return draft.items.filter(item=>
-      !!item.isParked===(tab==='standby')&&
-      (tab!=='used'||byID.get(item.assetID)?.kind!=='tape'))
-      .map(item=>({asset:byID.get(item.assetID),item}))
+    if(tab==='standby')return standbyMaterialRows(draft,materials,requiredAssetIDs)
       .filter(row=>matches(row.asset));
+    if(tab==='used')return draft.items.filter(item=>!item.isParked&&
+      byID.get(item.assetID)?.kind!=='tape')
+      .map(item=>({asset:byID.get(item.assetID),item})).filter(row=>matches(row.asset));
     const list=materials.filter(asset=>!asset.isProjectInternal&&matches(asset));
     list.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
     return list.map(asset=>({asset}));
-  },[tab,draft.items,materials,byID,group,kind,query]);
+  },[tab,draft.items,materials,byID,group,kind,query,requiredAssetIDs]);
   useEffect(()=>setShown(40),[tab,query,group,kind]);
   return <><div className="swift-segments">
     {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button
@@ -477,6 +478,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
     {menu.kind==='material'?<MaterialPicker draft={draft} materials={materials}
       series={state.series||[]} source={source}
+      requiredAssetIDs={state.activeProject?.requiredAssetIDs||[]}
       onPick={(id,itemID)=>choose(itemID?'fabric-unpark':
         materials.find(asset=>asset.id===id)?.kind==='tape'?'fabric-start-tape':'fabric-add-material',
       itemID||id)}/>:null}

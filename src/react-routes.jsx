@@ -1392,6 +1392,12 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>
       <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>
+      <div className="form-grid">
+        {field('inspector-material-width-mm','画布宽度（mm）',Number((item.width*draft.physicalPageHeightMM/draft.canvas.height).toFixed(1)),'number',{min:.1,max:1000,step:.1})}
+        {field('inspector-material-height-mm','画布高度（mm）',Number((item.height*draft.physicalPageHeightMM/draft.canvas.height).toFixed(1)),'number',{min:.1,max:1000,step:.1})}
+      </div>
+      {field('inspector-material-scale','画布缩放（%）',Math.round(item.width/(item.generationBaseline?.width||item.width)*100),'number',{min:10,max:1000,step:1})}
+      <small className="muted">只改变这张作品中的显示大小，不修改素材库尺寸。</small>
       <div className="editor-inspector-geometry"><label>更换素材
         <select aria-label="选择替换素材" value="" onChange={event=>{
           if(event.target.value)onAction('fabric-replace-material',event.target.value);

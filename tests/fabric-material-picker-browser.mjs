@@ -49,6 +49,10 @@ try{
     'The full tall cover needs a large, contained preview: '+JSON.stringify(preview));
   await click('[data-material-id="picker-used"]','.fabric-selected-actions');
   await click('[data-val="material"]','.swift-material-picker');
+  for(let attempt=0;attempt<80;attempt++){
+    if(await evaluate('document.querySelector("[data-material-id=picker-used] img")?.getBoundingClientRect().width>0'))break;
+    await sleep(50);
+  }
   const usedPreview=await evaluate(`(()=>{const card=document.querySelector('[data-material-id="picker-used"]');
     return {image:card.querySelector('.material-piece-image img')?.getBoundingClientRect().toJSON(),
       canvas:!!card.querySelector('.material-piece-thumbnail'),label:card.textContent};})()`);

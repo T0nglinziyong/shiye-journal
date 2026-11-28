@@ -218,7 +218,7 @@ test('real Canvas renders a masked translucent child group in the same world fra
   {op:'group.compose',id:'inner',place:{reference:'parent',at:[.5,.5],unit:'ratio',rotationDeg:-30},layoutBox:{width:40,height:30,unit:'mm'},children:[
    {op:'material.add',id:'paper',asset:'m1',place:{reference:'parent',at:[.5,.5],unit:'ratio'}}]}]}]),[asset]).document;
  const inner=made.page.layers[0].children[0];inner.opacity=.8;inner.vectorMask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[]};
- const red=createCanvas(10,10);red.getContext('2d').fillStyle='#ff0000';red.getContext('2d').fillRect(0,0,10,10);
+ const red=createCanvas(15,10);red.getContext('2d').fillStyle='#ff0000';red.getContext('2d').fillRect(0,0,15,10);
  const {canvas}=await renderSceneCanvas(made.page,{createCanvas:()=>createCanvas(1,1),loadMaterialImage:()=>red,loadShapeImage:loadImage,waitForFonts:false});
  const s=made.page.canvas.height/made.page.physicalPageHeightMM;
  const center=inspectCreationDocument(made).layers.find(n=>n.alias==='paper').world.centerMm;

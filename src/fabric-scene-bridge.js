@@ -13,6 +13,7 @@ import {smoothInkSVG} from './ink-path-geometry.js';
 import {pressureInkPath} from './pressure-ink.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {paintTapeStrip} from './tape-strip.js';
+import {materialImageBox} from './material-paint.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
 import {assertRigidMatrix,multiplyMatrix,rigidMatrix,transformPoint,matrixAngle} from './scene-spatial.js';
 
@@ -144,6 +145,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         group.setCoords();
       }
       group.sceneID=node.id;group.sceneRenderKey=node.renderKey||node.id;group.sceneType='group';
+      group.sceneContainsMaterial=containsMaterial(node.children);
       if(node.vectorMask){
         if(node.localTransform){
           const size=node.layoutBox;
@@ -159,11 +161,12 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         }
       }
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
-      // Groups with physical materials can move and rotate, but cannot scale.
+      // A direct user gesture can resize a physical material within the draft.
       const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked&&
         !containsLocked(node.children);
       group.set({selectable:canvasSelectable,evented:canvasSelectable,lockScalingFlip:true,
-        lockScalingX:containsMaterial(node.children),lockScalingY:containsMaterial(node.children)});
+        lockScalingX:!!node.localTransform&&containsMaterial(node.children),
+        lockScalingY:!!node.localTransform&&containsMaterial(node.children)});
       configureControls(group);
       return group;
     }
@@ -262,23 +265,25 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
           scaleX:node.width/bitmap.width,scaleY:node.height/bitmap.height,
           flipX:!!node.isFlippedHorizontally,
           lockSkewingX:true,lockSkewingY:true,
-          lockScalingX:true,lockScalingY:true});
+          lockScalingX:false,lockScalingY:false});
         if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
           object.width,object.height);
       }else{
       const naturalWidth=positive(object.width),naturalHeight=positive(object.height);
       const crop=node.cropRect||{x:0,y:0,width:1,height:1};
+      const box=materialImageBox(node,naturalWidth,naturalHeight);
       object.set({cropX:finite(crop.x)*naturalWidth,cropY:finite(crop.y)*naturalHeight,
         width:positive(crop.width)*naturalWidth,height:positive(crop.height)*naturalHeight,
-        scaleX:positive(node.width)/(positive(crop.width)*naturalWidth),
-        scaleY:positive(node.height)/(positive(crop.height)*naturalHeight),
+        scaleX:box.scale,scaleY:box.scale,
         originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),
         flipX:!!node.isFlippedHorizontally,
-        lockSkewingX:true,lockSkewingY:true,lockScalingX:true,lockScalingY:true});
+        lockSkewingX:true,lockSkewingY:true,lockScalingX:false,lockScalingY:false});
+      object.sceneMaterialScale=box.scale;
       const material=node.materialMask&&maskGeometry(materialMaskGeometry(node.materialMask));
       const vector=node.vectorMask&&maskGeometry(node.vectorMask);
       if(material||vector)object.clipPath=clipPath(material&&vector?
-        geometryIntersection(material,vector):material||vector,object.width,object.height);
+        geometryIntersection(material,vector):material||vector,
+        node.width/box.scale,node.height/box.scale);
       }
     }else throw Error('不支持的 Scene 图层：'+node.type);
     if(node.type==='shape'&&node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
@@ -293,10 +298,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     // on a phone. Expand only their hit bounds; the Scene and export stay exact.
     if(node.type==='shape')object.set({padding:10});
     if(node.shadow)object.set({shadow:new fabric.Shadow({color:node.shadow.color,blur:node.shadow.blur,offsetX:node.shadow.offsetX,offsetY:node.shadow.offsetY})});
-    if(node.type!=='ink')configureControls(object);
     object.sceneID=node.ownerID||node.id;
     object.sceneRenderKey=node.renderKey||node.id;
     object.sceneType=node.type;
+    if(node.type!=='ink')configureControls(object);
     if(node.type==='ink')object.sceneInkMatrix=object.calcTransformMatrix();
     return object;
   }
@@ -310,9 +315,6 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const before=object.sceneGroupPose;
       if(!before)throw Error('组合缺少上一次画布位置');
       const center=object.getCenterPoint(),angle=finite(object.angle),delta=angle-before.angle;
-      if(containsMaterial(node.children)&&
-        (Math.abs(positive(object.scaleX)-1)>1e-6||Math.abs(positive(object.scaleY)-1)>1e-6))
-        throw Object.assign(Error('真实素材保持原始物理尺寸；包含实物的组合只能移动或旋转'),{code:'PHYSICAL_SIZE_LOCKED'});
       if(node.localTransform){
         if(Math.abs(positive(object.scaleX)-1)>1e-6||Math.abs(positive(object.scaleY)-1)>1e-6)
           throw Error('局部组合不能缩放实体素材；请编辑数字子图层');
@@ -347,9 +349,13 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         node.y=center.y+Math.cos(angle)*offset;
       }else{node.x=center.x;node.y=center.y;if(node.type==='shape'&&object.scenePaintInsets){const p=object.scenePaintInsets,a=finite(object.angle)*Math.PI/180,dx=(p.right-p.left)*object.scaleX/2,dy=(p.bottom-p.top)*object.scaleY/2;node.x-=dx*Math.cos(a)-dy*Math.sin(a);node.y-=dx*Math.sin(a)+dy*Math.cos(a);}}
       const previousWidth=node.width,previousHeight=node.height;
-      node.width=(node.type==='text'?(textChanged?node.width:node.width*object.width/(object.sceneNativeTextWidth||object.width)):node.type==='shape'?object.sceneFrameWidth:object.width)*object.scaleX;
+      node.width=node.type==='material'&&object.sceneMaterialScale?
+        previousWidth*object.scaleX/object.sceneMaterialScale:
+        (node.type==='text'?(textChanged?node.width:node.width*object.width/(object.sceneNativeTextWidth||object.width)):node.type==='shape'?object.sceneFrameWidth:object.width)*object.scaleX;
       node.height=node.type==='text'?textFrame:
-        (node.type==='shape'?object.sceneFrameHeight:object.height)*object.scaleY;
+        node.type==='material'&&object.sceneMaterialScale?
+          previousHeight*object.scaleY/object.sceneMaterialScale:
+          (node.type==='shape'?object.sceneFrameHeight:object.height)*object.scaleY;
       node.rotation=object.angle||0;
       if(node.type==='material'&&
         (Math.abs(node.width-previousWidth)>1e-5||Math.abs(node.height-previousHeight)>1e-5)){
@@ -379,14 +385,13 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     requireScenePolicy(policy);
     const node=findSceneNode(page,object?.sceneID);
     if(!node)throw Error('画布图层不存在');
-    const proposal=proposeObject(structuredClone(node),object),changes=[],resized=[];
+    const proposal=proposeObject(structuredClone(node),object),changes=[];
     const collect=(before,after)=>{
       const values={};
       for(const key of new Set([...Object.keys(before),...Object.keys(after)])){
         if(['children','manualVisualResize','manualVisualCopy','userOverrideFlags'].includes(key))continue;
         if(JSON.stringify(before[key])!==JSON.stringify(after[key]))values[key]=after[key];
       }
-      if(before.type==='material'&&(Math.abs(before.width-after.width)>1e-6||Math.abs(before.height-after.height)>1e-6))resized.push(before);
       if(Object.keys(values).length)changes.push({id:before.id,values});
       if(before.children)before.children.forEach((child,i)=>collect(child,after.children[i]));
     };
@@ -399,7 +404,6 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       // and positioning still run through the SAME kernel used by AI place.
       change.place={reference:'page',unit:'mm',at:[top.x/scale,top.y/scale],anchor:'top-center',rotationDeg:proposal.rotation,rotationSpace:'page'};
     }
-    if(resized.length)throw Object.assign(Error('真实素材保持原始物理尺寸；可移动、旋转、裁剪或使用蒙版调整构图'),{code:'PHYSICAL_SIZE_LOCKED'});
     applyScenePatchBatch(page,changes,{policy,linked:'offset'});
     if(!updatePose)return node; // Scratch-scene preview must not advance the real gesture baseline.
     if(node.type==='group')object.sceneGroupPose={center:object.getCenterPoint(),angle:finite(object.angle)};
