@@ -117,5 +117,6 @@ export function applyAIClassification(old,result,{minConfidence=.7,allowMigratio
   next.categoryEvidence=categoryEvidence;next.tagEvidence=tagEvidence;
   next.autoOrganized=true;
   next.reviewStatus=old.reviewStatusSource==='user'&&old.reviewStatus==='pendingReview'?'pendingReview':'ready';
+  if(old.reclassificationPendingAt)delete next.reclassificationPendingAt;
   return validateMaterialClassification(next);
 }

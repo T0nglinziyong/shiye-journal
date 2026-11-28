@@ -1,10 +1,8 @@
 import {finishSelection} from './library-selection-model.js';
 import {addMatchingFromLibrary} from './matching-selection.js';
-import {applyFreshClassification,classifyCloudAsset} from './cloud-asset-classification.js';
+import {beginAssetReclassification,runAssetReclassification} from './asset-reclassification.js';
 import {withUsageStatus} from './library-model.js';
 import {hiddenAssetCopy} from './asset-retention.js';
-import {explainUserError} from './user-facing-error.js';
-import {recordRuntimeIssue} from './runtime-diagnostics.js';
 import {updateShell} from './react-shell.jsx';
 
 export async function runAssetBatchAction(c,selection,action,value){
@@ -51,25 +49,9 @@ export async function runAssetBatchAction(c,selection,action,value){
       render();c.toast('已设置 '+revised.length+' 件素材为'+(used?'已使用':'未使用'));return;
     }
     case 'classify':{
-      const records=selected().map(asset=>structuredClone(asset)),accountID=state.accountId;
-      let completed=0,failed=0,firstError=null;
-      await db.flushProjects();
-      await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
-        if(state.accountId!==accountID||!isCurrent())return;
-        const result=await classifyCloudAsset(record.id,{db,reclassify:true,skipFlush:true,skipRefresh:true});
-        if(state.accountId===accountID&&isCurrent()){
-          const current=state.assets.find(asset=>asset.id===record.id);
-          applyFreshClassification(current,record,result);
-          completed++;
-          window.dispatchEvent(new Event('shiye-library-refresh'));
-        }
-      },onError:error=>{failed++;firstError||=error;
-        recordRuntimeIssue('handled',error,state.route,{phase:'ai'});}});
-      if(state.accountId===accountID)try{await db.refreshCloud();}
-      catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'sync'});}
-      if(state.accountId===accountID)c.toast(failed?
-        `已整理 ${completed} 件，${failed} 件未完成。${explainUserError(firstError,'素材整理')}`:
-        `已整理 ${completed} 件`);
+      const records=await beginAssetReclassification(selected().map(asset=>structuredClone(asset)),
+        {db,state,render});
+      await runAssetReclassification(records,{...c,db,state,render});
       return;
     }
     default:throw Error('未知素材批量操作：'+action);

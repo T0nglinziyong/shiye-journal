@@ -46,7 +46,7 @@ const THREE_SCORE=Object.freeze({size:.55,role:.2,photoRole:.1,subject:.3,motif:
 function candidate(asset,slot){
  const accepted=rolesFor(slot),match=accepted.findIndex(r=>asset.visualRoles?.includes(r));
  if(match<0)return null;
- if(slot[2]==='sticker'&&asset.kind!=='sticker')return null;
+ if(slot[2]==='sticker'&&asset.kind!=='sticker'&&!(asset.kind==='photo'&&asset.shape==='die-cut'))return null;
  const [w,h]=rectMm(slot[3]),aw=Number(asset.physicalWidthMM),ah=Number(asset.physicalHeightMM);
  if(!(aw>0&&ah>0)||aw>LAYOUT_LEAF_MM[0]||ah>LAYOUT_LEAF_MM[1])return null;
  const rw=aw/w,rh=ah/h,kind=slot[2];
@@ -63,7 +63,7 @@ function candidate(asset,slot){
   // mask; a smaller photograph must not be enlarged to fake a match.
   if(rw<.98||rh<.98||rw>2.15||rh>2.15)return null;
  }else if(kind==='sticker'){
-  if(rw<.5||rw>1.8||rh<.5||rh>1.8)return null;
+  if(rw<.35||rw>2.1||rh<.35||rh>2.1)return null;
  }else if(rw<.72||rw>1.3||rh<.72||rh>1.3)return null;
  const [x,y]=centerMm(slot[3]),bounds=asset.visualBoundsRatio||[0,0,1,1];
  const at=kind==='photo'?[round(x),round(y)]:[round(x-(bounds[0]+bounds[2]-1)*aw/2),round(y-(bounds[1]+bounds[3]-1)*ah/2)];
@@ -75,7 +75,7 @@ function candidate(asset,slot){
  const motif=slot[5]?.motif,title=String(asset.title||'');
  const motifFit=motif==='coffee-cup'&&/咖啡|杯|饮|圆形/.test(title)?1:motif==='doodle-animal'&&/猫|熊|动物|蝴蝶|人物/.test(title)?1:motif==='teddy-bear'&&/熊|猫|动物|玩偶/.test(title)?1:motif==='milk-bottle'&&/奶|瓶|饮/.test(title)?1:motif==='doodle-ghost-pair'&&/猫|熊|动物|人物/.test(title)?1:0;
  const motifSubjectMatch=!motif?null:motif==='coffee-cup'?/咖啡|杯|饮/.test(title):motif==='doodle-animal'||motif==='teddy-bear'||motif==='doodle-ghost-pair'?/猫|熊|动物|人物/.test(title):motif==='milk-bottle'?/奶|瓶|饮/.test(title):false;
- return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&(ah>aw)!==(h>w)?90:0,...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),subjectMatch,motifFit,motifSubjectMatch,score:round(THREE_SCORE.size*fit+THREE_SCORE.role*(1-match*.2)+THREE_SCORE.photoRole*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+THREE_SCORE.subject*(subjectMatch?1:0)+THREE_SCORE.motif*motifFit)};
+ return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&(ah>aw)!==(h>w)?90:0,...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),subjectMatch,motifFit,motifSubjectMatch,score:round(THREE_SCORE.size*fit+THREE_SCORE.role*(1-match*.2)+THREE_SCORE.photoRole*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+THREE_SCORE.subject*(subjectMatch?1:0)+THREE_SCORE.motif*motifFit+(kind==='sticker'&&asset.visualRoles?.includes('figure') ? .15 : 0))};
 }
 export function scoreThreeLayoutSlot(templateId,slotId,asset){
  const template=templates.get(templateId);
@@ -89,14 +89,13 @@ export function describeThreeSlotMatch(templateId,slotId){
  const template=templates.get(templateId);if(!template)throw new RangeError(templateId);
  const slot=template.slots.find(item=>item[0]===slotId);if(!slot)throw new RangeError(`未知槽位：${slotId}`);
  const kind=slot[2],acceptedRoles=rolesFor(slot),[w,h]=rectMm(slot[3]);
- const range=kind==='photo'?[.98,2.15]:kind==='paper'?[.75,1.25]:kind==='sticker'?[.5,1.8]:[.72,1.3];
+ const range=kind==='photo'?[.98,2.15]:kind==='paper'?[.75,1.25]:kind==='sticker'?[.35,2.1]:[.72,1.3];
  const gates=acceptedRoles.length?[{field:'visualRoles',rule:'containsOneOf',value:acceptedRoles},
   {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:LAYOUT_LEAF_MM}]:[];
  if(kind==='strip')gates.push({field:'longSideRatio',rule:'range',value:[.45,1.6]},
   {field:'shortSideRatio',rule:'range',value:[.45,2]});
  else if(acceptedRoles.length)gates.push({field:'sizeRatio',rule:'range',value:range});
  if(kind==='paper')gates.push({field:'writableAreaRatio',rule:'atLeast',value:.45,exception:'pattern-paper'});
- if(kind==='sticker')gates.push({field:'kind',rule:'equals',value:'sticker'});
  if(kind==='strip')gates.push({field:'lengthToWidthRatio',rule:'atLeast',value:3});
  return {targetMm:[round(w),round(h)],acceptedRoles,gates,
   score:{...THREE_SCORE,rolePriority:'1 - roleIndex × 0.2',sizeFit:'exp(-0.5 × (|ln(widthRatio)| + |ln(heightRatio)|))'},
@@ -105,9 +104,9 @@ export function describeThreeSlotMatch(templateId,slotId){
 }
 export function listThreeLayoutSpreads(){return [...templates.keys()];}
 export function describeThreeLayoutSpread(id){const t=templates.get(id);if(!t)throw new RangeError(id);return structuredClone({...t,leafMm:LAYOUT_LEAF_MM,slots:t.slots.map(s=>({id:s[0],page:s[1],role:s[2],box:s[3],targetMm:rectMm(s[3]).map(round),z:s[4],style:s[5]||{},acceptedMaterialRoles:rolesFor(s),defaultInput:['photo','sticker','paper','strip'].includes(s[2])?'generated':s[2]==='body'||s[2]==='title'||s[2]==='micro'||s[2]==='date'||s[2]==='word'?'editable-text':'generated-graphic'}))});}
-export function matchThreeLayoutSpread(id,assets,{bindings={},mustUse=[]}={}){
+export function matchThreeLayoutSpread(id,assets,{bindings={},mustUse=[],pages}={}){
  const t=templates.get(id);if(!t)throw new RangeError(id);
- const slots=t.slots.filter(s=>rolesFor(s).length).map(node=>{const [slotId,page,role,box]=node;
+ const slots=t.slots.filter(s=>rolesFor(s).length&&(!pages||pages.includes(s[1]))).map(node=>{const [slotId,page,role,box]=node;
   return {id:slotId,page,role,box:[box[0]/100,box[1]/100,(box[2]-box[0])/100,(box[3]-box[1])/100],
    sizeMm:rectMm(box).map(round),weight:role==='photo'?1.4:role==='paper'?1.1:1,
    preferredColor:node[5]?.fill||null,
@@ -116,8 +115,8 @@ export function matchThreeLayoutSpread(id,assets,{bindings={},mustUse=[]}={}){
   defaultScore:.38,normalizeScore:value=>Math.max(0,Math.min(1,value/1.25)),scoreCandidate:(asset,slot)=>{
    const fit=candidate(asset,slot.node);return fit&&fit.score>=THREE_SCORE.minimum?fit:null;
   }});
- return {...result,missingPhotos:t.slots.filter(s=>s[2]==='photo'&&!result.assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0]),
-  missingStickers:t.slots.filter(s=>s[2]==='sticker'&&s[5]?.motif&&!result.assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0])};
+ return {...result,missingPhotos:t.slots.filter(s=>s[2]==='photo'&&(!pages||pages.includes(s[1]))&&!result.assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0]),
+  missingStickers:t.slots.filter(s=>s[2]==='sticker'&&(!pages||pages.includes(s[1]))&&s[5]?.motif&&!result.assignments.find(a=>a.slot===s[0])?.asset).map(s=>s[0])};
 }
 function addText(operations,t,slot,content){
  const [id,page,role,box,,special={}]=slot,[w,h]=rectMm(box);

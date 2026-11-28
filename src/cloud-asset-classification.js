@@ -2,6 +2,8 @@ import {cloudApiRequest} from './cloud-api-origin.js';
 
 export function applyFreshClassification(current,requested,result){
   if(!current||current.updatedAt!==requested.updatedAt)return false;
+  if(current.reclassificationPendingAt&&!result.reclassificationPendingAt)
+    delete current.reclassificationPendingAt;
   Object.assign(current,result);
   return true;
 }

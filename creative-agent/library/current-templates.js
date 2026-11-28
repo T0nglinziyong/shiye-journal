@@ -95,7 +95,8 @@ export function materialTemplateProfile(asset){
  const patterned=asset.kindDetail==='paper.patterned'||asset.kindDetail==='paper.grid'||
   asset.kindDetail==='paper.lined'||asset.kindDetail==='paper.dot'||
   (asset.materialTags||[]).some(tag=>/纹样|花纹|图案/.test(tag));
- const roles=Array.isArray(asset.visualRoles)&&asset.visualRoles.length?asset.visualRoles:
+ const subject=/人物|女孩|男孩|儿童|小孩|女人|男人|猫|狗|兔|熊|鸟|蝴蝶|宠物|动物|person|girl|boy|woman|man|cat|dog|rabbit|bear|bird|butterfly|animal/i.test(tags);
+ const roles=Array.isArray(asset.visualRoles)&&asset.visualRoles.length?[...asset.visualRoles]:
   kind==='paper'?['plain-paper',...(patterned?['pattern-paper']:[])]:
   kind==='note'?['writing-card','plain-paper']:
   kind==='card'?['printed-card',...(fits.includes('frame.text')||fits.includes('local.text')?['writing-card']:[])]:
@@ -104,16 +105,20 @@ export function materialTemplateProfile(asset){
     ...(asset.kindDetail==='sticker.subject'||!asset.kindDetail&&asset.role==='focal'?['figure']:[]),
     'accent','sticker']:
   kind==='text'?['printed-card','accent']:['accent'];
+ if(subject&&(kind==='sticker'||kind==='photo'&&asset.shape==='die-cut')&&!roles.includes('figure'))
+  roles.unshift('figure');
  const preservation=asset.preservation||(/不可裁切|不宜裁切|不要裁切|不裁切|保持完整/.test(text)?'whole':
    /可重复|连续纹样|可裁切/.test(text)||fits.includes('repeat.tile')?'repeatable':
    /可拆分|可分段/.test(text)||fits.includes('combine.split')?'splittable':'whole');
  const writableAreaRatio=Number.isFinite(asset.writableAreaRatio)?asset.writableAreaRatio:
-  /不可书写|无留白/.test(text)?0:/大面积留白|可书写/.test(text)?.8:
+  /不可书写|无留白|固定文字.*不宜覆盖|不宜覆盖.*(?:文字|印字)|印字.*不宜覆盖/.test(text)?0:/大面积留白|可书写/.test(text)?.8:
   /局部留白/.test(text)?.45:kind==='paper'?(patterned?.15:.8):kind==='note'?.75:
   fits.includes('frame.text')||fits.includes('local.text')?.65:0;
  const mainColor=asset.mainColor||asset.colorTags?.find(tag=>/^#[0-9a-f]{6}$/i.test(tag))||
   (colorName?colors[colorName]:null);
  const subjectTags=asset.subjectTags||[
+  /人物|女孩|男孩|儿童|小孩|女人|男人|person|girl|boy|woman|man/i.test(tags)&&'people',
+  /猫|狗|兔|熊|鸟|蝴蝶|宠物|动物|cat|dog|rabbit|bear|bird|butterfly|animal/i.test(tags)&&'animals',
   /food|食物|咖啡|面包|甜点|蛋糕|饮品/.test(tags)&&'food-drink',
   /places|建筑|街道|城市/.test(tags)&&'architecture',
   /plants|花朵|植物|花卉/.test(tags)&&'flowers',
@@ -122,19 +127,19 @@ export function materialTemplateProfile(asset){
  return {...asset,alias:asset.alias||asset.id,visualRoles:roles,preservation,
   writableAreaRatio,canWriteOn:asset.canWriteOn??writableAreaRatio>=.6,
   shape:asset.shape||(/矩形|方形/.test(text)?'rect':
-   kind==='sticker'&&asset.kindDetail==='sticker.subject'?'die-cut':'rect'),mainColor,subjectTags};
+   kind==='sticker'&&(asset.kindDetail==='sticker.subject'||/沿.*(?:轮廓|外形).*裁切|异形|不规则外形/.test(text))?'die-cut':'rect'),mainColor,subjectTags};
 }
 
-export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUse=[]}={}){
+export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUse=[],templateIds,pages}={}){
  const profiles=materials.map(materialTemplateProfile).filter(a=>a.alias&&a.physicalWidthMM>0&&a.physicalHeightMM>0);
- const candidates=entries.filter(t=>!pageMode||t.pageMode===pageMode);
+ const candidates=entries.filter(t=>(!pageMode||t.pageMode===pageMode)&&(!templateIds||templateIds.includes(t.id)));
  return candidates.map(template=>{
   const pageFit=paper?templatePageFit(template.pageMm,[paper.width,paper.height],template.pageMode):null;
   const matchingProfiles=pageFit?profiles.map(asset=>matchingProfileOnTemplatePage(asset,pageFit)):profiles;
   let plan;
   if(single.has(template.id))plan=matchMaterialsToTemplates(matchingProfiles,{templateIds:[template.id],mustUse})[0];
-  else if(six.has(template.id))plan=matchSixSpreadMaterials(template.id,matchingProfiles,{mustUse});
-  else plan=matchThreeLayoutSpread(template.id,matchingProfiles,{mustUse});
+  else if(six.has(template.id))plan=matchSixSpreadMaterials(template.id,matchingProfiles,{mustUse,pages});
+  else plan=matchThreeLayoutSpread(template.id,matchingProfiles,{mustUse,pages});
   const used=plan.used||[],assignments=plan.assignments.filter(a=>a.asset).map(a=>({alias:a.asset,slotId:a.slot}));
   const criticalMissing=(plan.missingCritical||plan.missingPhotos||[]).length;
   const fit=plan.score;

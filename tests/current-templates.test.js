@@ -34,6 +34,18 @@ test('only the fourteen measured templates enter current matching',()=>{
  assert.ok(!ranked.some(row=>row.id==='center-1'));
  assert.equal(materialTemplateProfile(asset).preservation,'whole');
  assert.equal(materialTemplateProfile({...asset,templateUseNotes:'印字完整保留，不可裁切'}).preservation,'whole');
+ const cassette=materialTemplateProfile({id:'cassette',title:'蓝色磁带贴纸',kind:'sticker',kindDetail:'sticker.subject',
+  physicalWidthMM:25,physicalHeightMM:18,description:'蓝色磁带造型，白色标签上印有固定文字',
+  templateUseNotes:'磁带轮廓完整保留，白色标签区域含固定文字与条纹，不宜覆盖或裁切'});
+ assert.equal(cassette.preservation,'whole');
+ assert.equal(cassette.writableAreaRatio,0);
+ assert.equal(cassette.canWriteOn,false);
+ const person=materialTemplateProfile({...asset,id:'person',title:'散步女孩贴纸',kindDetail:'sticker.subject'});
+ assert.ok(person.visualRoles.includes('figure'));
+ const cat={id:'cat',title:'小猫异形贴纸',kind:'sticker',kindDetail:'sticker.subject',
+  physicalWidthMM:28,physicalHeightMM:36};
+ assert.equal(rankCurrentTemplates({materials:[cat],pageMode:'single',limit:5})[0].assignments[0].slotId,'bear-monday');
+ assert.ok(rankCurrentTemplates({materials:[cat],pageMode:'spread',limit:9}).some(row=>row.plan.used.includes('cat')));
  assert.ok(!materialTemplateProfile({...asset,kindDetail:'sticker.decoration'}).visualRoles.includes('figure'));
  assert.ok(currentTemplateMaterialScores([asset]).get('flower').utility>0);
  const draft=compileCurrentTemplate({templateId:ranked[0].id,assets:[asset]});

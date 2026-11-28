@@ -67,6 +67,7 @@ import './mobile-material-ui.css';
 import './ui-consistency.css';
 import './material-polish.css';
 import {createAssetOrganization} from './asset-organization.js';
+import {pendingReclassifications,runAssetReclassification} from './asset-reclassification.js';
 import {AssetOrganizationContext} from './react-organization.jsx';
 import {classificationQueue} from './classification-queue.js';
 import {mountIcons,iconMarkup} from './icons.js';
@@ -2340,11 +2341,14 @@ function captureMatchingDirection(){
   state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;
   state.matchRatio=view.querySelector('#match-ratio')?.value||'a4';normalizeMatchingDirection(state);
 }
-function createMatchingProject(automatic=true){
+function createMatchingProject(automatic=true,manualStage=false){
   const scope=matchingScope();
   const selectedIDs=state.basket.filter(id=>state.assets.some(asset=>asset.id===id&&!asset.isProjectInternal));
   if(automatic?!canStartCreation(state.matchCreationMode,scope.candidateAssetIDs.length):!selectedIDs.length)throw Error('请先选择素材');
-  return matchingCreationProject(state,scope,selectedIDs,automatic);
+  const p=matchingCreationProject(manualStage?{...state,matchMode:'spread'}:state,scope,selectedIDs,automatic);
+  if(manualStage){p.drafts[0].matchingTwoPageWorkspace=true;
+    p.drafts[0].inactivePageDimmed=state.matchMode==='single';}
+  return p;
 }
 async function exportOfflineCreation({snapshot:rebuildSnapshot=null}={}){
   if(!rebuildSnapshot&&!canStartCreation(state.matchCreationMode,matchingScope().candidateAssetIDs.length)){toast('请先选择素材');return;}
@@ -2438,17 +2442,19 @@ function openOfflineImportDialog(){
 async function importOfflineProject(p,{aiGenerated=true}={}){await flushSave();if(aiGenerated)p.aiGenerated=true;await db.stageProject(p);state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=null;state.tool='select';if(modal.open)modal.close();closeOverlay();route('editor');toast(p.creationVerification?.preview==='mismatch'?'已暂存可编辑草稿；外部预览或清单有差异，请核对画面':'已暂存可编辑草稿；请核对画面与正文');}
 async function offlineTaskAccount(){return cloudEnabled?(await requireCloudUser()).id:'browser';}
 async function importOfflineText(text){const accountID=state.accountId,{importEditableWork}=await import('./offline-creation.js');if(state.accountId!==accountID)throw Error('账号已变化，未导入旧任务');const p=importEditableWork(text,state.assets);if(p.creationMode==='hybrid'){const references=state.projects.filter(x=>x.isSnapshot&&x.imageCreation&&x.offlineBundleId===p.offlineBundleId);if(references.length===1){p.sourceSnapshotID=references[0].id;p.reconstruction.sourceSnapshotID=references[0].id;}}return importOfflineProject(p);}
-async function createFromBasket(templateID=null){
+async function createFromBasket(selectedTemplate=null){
+  const templateID=typeof selectedTemplate==='object'?selectedTemplate?.id:selectedTemplate;
   await flushSave();
-  const p=createMatchingProject(false),draft=p.drafts[0];
+  const p=createMatchingProject(false,templateID==='stage'),draft=p.drafts[0];
   let result=null;
   if(templateID==='stage')result=applyMatchingStage(draft,state.assets,state.basket,state.matchPlacements);
   else if(templateID)result=await applyManualTemplate(draft,state.assets,state.basket,templateID,
-    {requiredAssetIDs:p.requiredAssetIDs});
+    {requiredAssetIDs:p.requiredAssetIDs,choice:typeof selectedTemplate==='object'?selectedTemplate:null});
   else draft.items=[];
   await db.stageProject(p);
   state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool='select';
-  await matchingSession.persist();route('editor');
+  route('editor');
+  void matchingSession.persist().catch(error=>console.warn('搭配会话暂存失败',error));
   if(result?.remaining)toast(templateID&&templateID!=='stage'
     ?`已预排版 ${result.placed} 件；其余 ${result.remaining} 件已进入待放区，可继续摆放`
     :`已预排版 ${result.placed} 件；其余 ${result.remaining} 件可在画布中手动添加`);
@@ -4204,7 +4210,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
     render();activateNavigation();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);if(state.route==='matching')updateMatchingRegions([],{persist:false});editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();void recoverBackgroundCreation();}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);if(state.route==='matching')updateMatchingRegions([],{persist:false});editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();void recoverBackgroundCreation();const pending=pendingReclassifications(state.assets);if(pending.length)void runAssetReclassification(pending,{db,state,assetOrganization,render,background:true}).catch(error=>recordRuntimeIssue('handled',error,state.route,{phase:'ai'}));}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(createElement('div',{className:'empty'},
