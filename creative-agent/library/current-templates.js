@@ -135,6 +135,9 @@ export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUs
  const candidates=entries.filter(t=>(!pageMode||t.pageMode===pageMode)&&(!templateIds||templateIds.includes(t.id)));
  return candidates.map(template=>{
   const pageFit=paper?templatePageFit(template.pageMm,[paper.width,paper.height],template.pageMode):null;
+  // Dividing a source by the page scale is mathematically the same as
+  // comparing its true millimeters with each scaled target slot. Only this
+  // temporary scoring profile changes; placed assets use `profiles` below.
   const matchingProfiles=pageFit?profiles.map(asset=>matchingProfileOnTemplatePage(asset,pageFit)):profiles;
   let plan;
   if(single.has(template.id))plan=matchMaterialsToTemplates(matchingProfiles,{templateIds:[template.id],mustUse})[0];

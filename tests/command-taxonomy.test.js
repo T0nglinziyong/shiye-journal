@@ -59,7 +59,7 @@ test('mixed position/size cycles, self links and physical resizing fail atomical
  const {run}=await fixture();const d=run([shape(),shape('b',{size:linked('a')}),{op:'material.add',id:'paper',asset:'m1',place:at()}]);
  failed(run,d,[{op:'layer.update',target:'a',place:follow('b')}],/循环/);
  failed(run,d,[{op:'layer.update',target:'a',size:linked('a')}],/循环/);
- failed(run,d,[{op:'layer.update',target:'paper',size:linked('a')}],/确认|实体|持续尺寸/);
+ failed(run,d,[{op:'layer.update',target:'paper',size:linked('a')}],/确认|实体|真实素材|持续尺寸/);
  failed(run,d,[{op:'layer.delete',target:'a'}],/linked/);
  const detached=run([{op:'layer.delete',target:'a',dependentLinks:'detach'}],d);assert.equal(node(detached,'b').layoutConstraint,undefined);
 });

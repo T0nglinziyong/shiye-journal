@@ -57,28 +57,28 @@ test('manual takeover is explicit policy, AI cannot modify a manually changed ma
  assert.throws(()=>applySceneNodeChange(d,'text',{content:'overwrite'}),{code:'MANUAL_EDIT_PROTECTED'});
  assert.equal(JSON.stringify(d),before);applySceneNodeChange(d,'text',{content:'用户继续修改'},user);assert.equal(node.content,'用户继续修改');
 });
-test('physical visual resizing requires a real state-bound human grant and never changes source',()=>{
+test('physical material size remains locked even with a forged resize grant',()=>{
  const item=material(),d=page([item]),before=JSON.stringify(d);
- for(const options of [{},{...user},{...user,confirmation:{capability:'material.visualResize'}}]){
-  assert.throws(()=>applySceneNodeChange(d,'paper',{size:{width:25,height:30,unit:'mm'}},options),{code:'EDIT_CONFIRMATION_REQUIRED'});assert.equal(JSON.stringify(d),before);
+ assert.throws(()=>confirmSceneCapability([item],'material.visualResize'),/未知人工确认能力/);
+ const confirmation={capability:'material.visualResize'};
+ for(const options of [{},{...user},{...user,confirmation}]){
+  assert.throws(()=>applySceneNodeChange(d,'paper',{size:{width:25,height:30,unit:'mm'}},options),{code:'PHYSICAL_SIZE_LOCKED'});
+  assert.equal(JSON.stringify(d),before);
  }
- const confirmation=confirmSceneCapability([item],'material.visualResize');
- assert.throws(()=>applySceneNodeChange(d,'paper',{size:{width:25,unit:'mm'}},{policy:AI_SCENE_POLICY,confirmation}),{code:'EDIT_CONFIRMATION_REQUIRED'});
- applySceneNodeChange(d,'paper',{size:{width:25,height:30,unit:'mm'}},{...user,confirmation});
- assert.equal(item.width,100);assert.equal(item.height,120);assert.equal(item.manualVisualResize,true);assert.equal(item.sourceBlobId,'immutable-source');assert.equal(item.materialUnitIndex,0);
- assert.throws(()=>applySceneNodePatch(d,'paper',{width:110},{...user,confirmation}),{code:'EDIT_CONFIRMATION_REQUIRED'});
+ assert.throws(()=>applySceneNodePatch(d,'paper',{width:110},{...user,confirmation}),{code:'PHYSICAL_SIZE_LOCKED'});
+ assert.equal(item.sourceBlobId,'immutable-source');assert.equal(item.materialUnitIndex,0);
 });
-test('one material confirmation does not authorize a different target or source revision',()=>{
- const a=material('a'),b=material('b'),d=page([a,b]),confirmation=confirmSceneCapability([a],'material.visualResize');
- assert.throws(()=>applySceneNodePatch(d,'b',{width:100},{...user,confirmation}),{code:'EDIT_CONFIRMATION_REQUIRED'});
- a.sourceBlobId='new-revision';assert.throws(()=>applySceneNodePatch(d,'a',{width:100},{...user,confirmation}),{code:'EDIT_CONFIRMATION_REQUIRED'});
+test('a forged resize confirmation cannot authorize another target or source revision',()=>{
+ const a=material('a'),b=material('b'),d=page([a,b]),confirmation={capability:'material.visualResize'};
+ assert.throws(()=>applySceneNodePatch(d,'b',{width:100},{...user,confirmation}),{code:'PHYSICAL_SIZE_LOCKED'});
+ a.sourceBlobId='new-revision';assert.throws(()=>applySceneNodePatch(d,'a',{width:100},{...user,confirmation}),{code:'PHYSICAL_SIZE_LOCKED'});
 });
-test('confirmation cancellation in Fabric keeps Scene and original bookkeeping unchanged',async()=>{
+test('Fabric rejects a physical resize without changing Scene bookkeeping',async()=>{
  const d=page([material()]),bridge=createFabricSceneBridge(fabric,{assetURL:()=>null});
  // Fabric object pose is independent from the source image loading.
  const object=new fabric.Rect({left:200,top:200,width:60,height:80,originX:'center',originY:'center'});
  Object.assign(object,{sceneID:'paper',sceneType:'material'});object.set({scaleX:1.5});
- const before=JSON.stringify(d);assert.throws(()=>bridge.applyObject(d,object,{...user,confirm:()=>false}),{code:'EDIT_CONFIRMATION_REQUIRED'});assert.equal(JSON.stringify(d),before);
+ const before=JSON.stringify(d);assert.throws(()=>bridge.applyObject(d,object,{...user,confirm:()=>false}),{code:'PHYSICAL_SIZE_LOCKED'});assert.equal(JSON.stringify(d),before);
 });
 test('Fabric content reflow matches the shared text update after serialization',async()=>{
  const source=text(),d=page([source]),bridge=createFabricSceneBridge(fabric),object=await bridge.fromNode(source);
@@ -90,7 +90,7 @@ test('Fabric content reflow matches the shared text update after serialization',
 });
 test('mixed multi-node transaction rolls back earlier text reflow when a later material is denied',()=>{
  const d=page([text(),material()]),before=JSON.stringify(d),original=d.layers[0];
- assert.throws(()=>applyScenePatchBatch(d,[{id:'text',values:{fontSize:45}},{id:'paper',values:{width:200}}],user),{code:'EDIT_CONFIRMATION_REQUIRED'});
+ assert.throws(()=>applyScenePatchBatch(d,[{id:'text',values:{fontSize:45}},{id:'paper',values:{width:200}}],user),{code:'PHYSICAL_SIZE_LOCKED'});
  assert.equal(JSON.stringify(d),before);assert.equal(d.layers[0],original);
 });
 test('node and ancestor locks apply equally to manual and AI; only user may unlock the node',()=>{

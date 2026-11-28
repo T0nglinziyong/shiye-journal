@@ -147,8 +147,8 @@ try{
   assert.deepEqual(groupHit,{visible:true,masked:false},
     'Tapping a transparent part of a group frame must not select the group');
   assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
-    ['br','mb','ml','mr','mt'],
-    'One bottom-right control scales and rotates; no second rotate button is drawn');
+    ['br'],
+    'A real material keeps its calibrated size and retains the bottom-right rotate control');
   await evaluate(`(()=>{
     const canvas=window.__fabricCanvas;
     const material=canvas.getObjects().find(object=>object.sceneID==='paper-material');
@@ -394,7 +394,7 @@ try{
     await sleep(25);
   }
   assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
-    ['br','mb','ml','mr','mt'],'A selected group has the same frame controls as other objects');
+    ['br','mb','ml','mr','mt'],'A group of editable objects retains scale and rotate controls');
   const groupStart=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {x:rect.left+190*rect.width/620,y:rect.top+160*rect.height/800}})()`);
   const beforeGroupMove=await evaluate(`(()=>{const children=window.__fabricFixture.draft.layers[0].children;
@@ -444,7 +444,7 @@ try{
     'An undecoded top-level image must never acquire a nested selection proxy');
   await sleep(600);
   assert.deepEqual(await evaluate(`(()=>{const o=window.__fabricCanvas.getActiveObject();return {id:o?.sceneID,proxy:!!o?.sceneSelectionProxy,edges:!!o?.controls.mr};})()`),
-    {id:'delayed-top-level',proxy:false,edges:true},'Decoded top-level image keeps its real stretch controls');
+    {id:'delayed-top-level',proxy:false,edges:false},'Decoded real material stays selectable without scale controls');
   await evaluate(`(()=>{const f=window.__fabricFixture;
     f.draft.layers.push({id:'progressive-material',type:'material',assetID:'fabric-progressive',
       x:430,y:740,width:100,height:100,zIndex:100});f.refresh();f.select(['progressive-material']);})()`);

@@ -487,12 +487,14 @@ try{
     x:materialEdge.x+30,y:materialEdge.y});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     x:materialEdge.x+30,y:materialEdge.y,clickCount:1});
-  const resizedMaterial=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
-    ?.find(layer=>layer.id===originalMaterial.id)?.manualVisualResize))[0].drafts[0].layers
+  await sleep(250);
+  const resizedMaterial=(await projects())[0].drafts[0].layers
     .find(layer=>layer.id===originalMaterial.id);
-  assert.ok(resizedMaterial.width>originalMaterial.width&&resizedMaterial.assetID===originalMaterial.assetID,
-    'Manual material resize must persist without changing its source asset: '+JSON.stringify({originalMaterial,resizedMaterial,materialEdge,ui:await evaluate(`({toast:document.querySelector('#toast')?.textContent,selection:document.querySelector('.fabric-selected-actions')?.outerHTML,hit:document.elementFromPoint(${materialEdge.x},${materialEdge.y})?.outerHTML.slice(0,150)})`)}));
-  assert.equal(await evaluate('window.__resizeConfirmations.length'),1,'A visual material resize requires one explicit human confirmation');
+  assert.equal(resizedMaterial.width,originalMaterial.width);
+  assert.equal(resizedMaterial.height,originalMaterial.height);
+  assert.equal(resizedMaterial.assetID,originalMaterial.assetID);
+  assert.equal(resizedMaterial.manualVisualResize,undefined);
+  assert.equal(await evaluate('window.__resizeConfirmations.length'),0);
   await evaluate('window.confirm=window.__originalConfirm');
   await click('[aria-label="编辑对象"]','.floating-editor-inspector');
   const inspectorGrip=await evaluate('document.querySelector(".floating-editor-inspector .floating-panel-resize").getBoundingClientRect().toJSON()');

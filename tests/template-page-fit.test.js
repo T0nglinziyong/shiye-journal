@@ -11,6 +11,10 @@ test('template page fit scales editable layout uniformly and retains physical so
  const source={id:'source',physicalWidthMM:40,physicalHeightMM:20};
  assert.equal(matchingProfileOnTemplatePage(source,fit).physicalWidthMM,40/fit.scale);
  assert.equal(source.physicalWidthMM,40);
+ const templateSlotWidthMm=30;
+ assert.ok(Math.abs(matchingProfileOnTemplatePage(source,fit).physicalWidthMM/templateSlotWidthMm-
+  source.physicalWidthMM/(templateSlotWidthMm*fit.scale))<1e-12,
+ 'matching compares the real source with the scaled target slot');
  const operations=fitTemplateOperations([
   {op:'paper.add',id:'paper',place:{reference:'page.right',at:[20,30],unit:'mm'},size:{width:30,height:10,unit:'mm'},style:{fill:'#FFFFFF'}},
   {op:'text.add',id:'title',place:{reference:'page.left',at:[10,20],unit:'mm'},size:{width:30,unit:'mm'},style:{fontSizePt:12}},
