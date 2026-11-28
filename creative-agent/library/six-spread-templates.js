@@ -102,7 +102,9 @@ const fit=(asset,node,slot)=>{
  const ratioW=w/tw,ratioH=h/th;
  const paper=/paper|card|note/.test(node[2])&&!photoRoles.test(node[2]);
  const accent=slot.role==='edge-accent';
- if(ratioW<(paper ? .72 : accent ? .7 : .42)||ratioH<(paper ? .72 : accent ? .7 : .42)||ratioW>(paper ? 1.35 : accent ? 1.45 : 1.75)||ratioH>(paper ? 1.35 : accent ? 1.45 : 1.75))return null;
+ const figure=asset.visualRoles?.includes('figure')&&!paper;
+ if(ratioW<(paper ? .72 : figure ? .28 : accent ? .7 : .42)||ratioH<(paper ? .72 : figure ? .28 : accent ? .7 : .42)||
+  ratioW>(paper?1.35:figure?2.1:accent?1.45:1.75)||ratioH>(paper?1.35:figure?2.1:accent?1.45:1.75))return null;
  // Large photographs establish a page's weight. A postage-sized original
  // cannot fill their structural slot without forbidden upscaling.
  if(/^(?:large-scene-photo|large-irregular-photo)$/.test(node[2])&&(ratioW<.65||ratioH<.6))return null;
@@ -126,7 +128,6 @@ const candidate=(asset,node,template)=>{
  // A card carrying template copy must remain writable after replacement;
  // otherwise its title/date silently disappears when a printed card wins.
  if((/writing-card/.test(node[2])||hasCardText(node))&&Number(asset.writableAreaRatio??0)<.6&&asset.canWriteOn!==true)return null;
- if(slot.role==='edge-accent'&&asset.preservation==='whole'&&/人物|蝴蝶/.test(asset.title||''))return null;
  if(/(?:flower|subject)$/.test(node[2])&&!asset.visualRoles?.some(r=>['figure','photo'].includes(r)))return null;
  const title=String(asset.title||'');
  const key=node[0];
@@ -134,7 +135,8 @@ const candidate=(asset,node,template)=>{
  if(/lace/.test(key)&&!/蕾丝|花边|镂空|网纱|胶带/.test(title))return null;
  const semantic=(subject?.test(title)?.24:0)+(/bread/.test(key)&&/面包|吐司/.test(title)?.12:0)+(/dessert|cake/.test(key)&&/甜品|蛋糕/.test(title)?.14:0)+(/flower|lily/.test(key)&&/花/.test(title)?.12:0)-(/irregular-subject/.test(node[2])&&asset.visualRoles?.includes('printed-card') ? .16 : 0);
  const whole=asset.preservation==='whole'&&/flower|subject/.test(node[2])?.09:0;
- return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole),method:'complete',overlayText:hasCardText(node)};
+ const subjectBonus=asset.visualRoles?.includes('figure')&&/flower|subject|accent/.test(node[2]) ? .15 : 0;
+ return {asset:alias(asset),at:f.at,sourceMm:f.size,score:round(SIX_SCORE.size*f.sizeScore+SIX_SCORE.role*(1-matched*.18)+semantic+whole+subjectBonus),method:'complete',overlayText:hasCardText(node)};
 };
 
 export function scoreSixSpreadSlot(templateId,slotId,asset){
@@ -154,14 +156,15 @@ export function describeSixSlotMatch(templateId,slotId){
  const slot=describeSpreadSlot(templateId,node),[w,h]=mm(node[3]);
  const paper=/paper|card|note/.test(node[2])&&!photoRoles.test(node[2]);
  const accent=slot.role==='edge-accent';
+ const irregular=/flower|subject|accent/.test(node[2]);
  const min=paper?.72:accent?.7:.42,max=paper?1.35:accent?1.45:1.75;
  const gates=slot.acceptedMaterialRoles.length?[{field:'visualRoles',rule:'containsOneOf',value:slot.acceptedMaterialRoles},
   {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:[SPREAD_LEAF_MM[0]+4,SPREAD_LEAF_MM[1]+4]},
-  {field:'sizeRatio',rule:'range',value:[min,max]}]:[];
+  {field:'sizeRatio',rule:'range',value:[min,max],...(irregular?{when:'visualRoles excludes figure'}:{})}]:[];
+ if(irregular)gates.push({field:'sizeRatio',rule:'range',value:[.28,2.1],when:'visualRoles includes figure'});
  if(/^(?:large-scene-photo|large-irregular-photo)$/.test(node[2]))gates.push({field:'sizeRatio',rule:'minimum',value:[.65,.6]});
  if(/writing-card|date-card|small-heading-card|pattern-note/.test(node[2]))gates.push({field:'writableAreaRatio',rule:'atLeast',value:.6,exception:'canWriteOn=true'});
  if(/lace/.test(slotId))gates.push({field:'title',rule:'matches',value:'蕾丝|花边|镂空|网纱|胶带'});
- if(slot.role==='edge-accent')gates.push({field:'wholeSubject',rule:'excludesTitle',value:'人物|蝴蝶'});
  if(/(?:flower|subject)$/.test(node[2]))gates.push({field:'visualRoles',rule:'containsOneOf',value:['figure','photo']});
  return {targetMm:[round(w),round(h)],acceptedRoles:slot.acceptedMaterialRoles,gates,
   score:{...SIX_SCORE,rolePriority:'1 - roleIndex × 0.18',sizeFit:'exp(-0.5 × (|ln(widthRatio)| + |ln(heightRatio)|))',semanticBonus:'0–0.62'},
@@ -191,12 +194,12 @@ export function describeSixSpreadTemplate(templateId){
   below:template.occlusion.filter(([,back])=>back===node[0]).map(([front])=>front)
  }))});
 }
-export function matchSixSpreadMaterials(templateId,profiles,{overrides={},calibrationMode=false,mustUse=[]}={}){
+export function matchSixSpreadMaterials(templateId,profiles,{overrides={},calibrationMode=false,mustUse=[],pages}={}){
  const template=byId.get(templateId);if(!template)throw new RangeError(`未知双页模板：${templateId}`);
  // Reference/case art belongs to offline template calibration only. It cannot
  // silently enter a user's draft through automatic matching or a binding.
  const available=profiles.filter(p=>calibrationMode||p.usage!=='calibration-only');
- const nodes=template.nodes.filter(node=>isMaterialSlot(template,node));
+ const nodes=template.nodes.filter(node=>isMaterialSlot(template,node)&&(!pages||pages.includes(node[1])));
  const slots=nodes.map(node=>{const [id,page,role,box]=node,[w,h]=mm(box);
   return {id,role,page,box:[box[0]/100,box[1]/100,(box[2]-box[0])/100,(box[3]-box[1])/100],
    sizeMm:[round(w),round(h)],weight:photoRoles.test(role)?1.4:/backing|support/.test(role)?1.2:1,

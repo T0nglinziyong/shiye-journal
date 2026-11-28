@@ -1,11 +1,9 @@
 import {project,physicalPlacement} from './domain.js';
 
 export function matchingCreationProject(state,scope,selectedIDs,automatic=true){
-  const mode=automatic?(state.matchMode==='spread'?'spread':'single'):'spread';
+  const mode=state.matchMode==='spread'?'spread':'single';
   const p=project('新的手账',{mode,ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];
   if(!automatic){
-    d.matchingTwoPageWorkspace=true;
-    d.inactivePageDimmed=state.matchMode==='single';
     d.items=physicalPlacement(d,state.assets,selectedIDs.slice(0,8));
   }
   p.candidateAssetIDs=automatic?scope.candidateAssetIDs:selectedIDs;

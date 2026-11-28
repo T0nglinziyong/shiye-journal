@@ -106,7 +106,7 @@ export function ManualLayoutDialog({choices,source,onClose,onChoose}){
   return <Dialog title="从模板开始" onClose={onClose} closeId="manual-layout-cancel" className="manual-layout-dialog">
     <h2>从模板开始</h2>
     <p>根据素材真实尺寸、视觉作用与单页／双页结构推荐新模板。模板会生成可编辑纸张、文字和点缀。</p>
-    <div className="manual-layout-choices">{choices.map((item,index)=><button type="button" key={item.id} disabled={busy} className="manual-layout-choice" data-manual-template={item.id} onClick={()=>void choose(item.id)}>
+    <div className="manual-layout-choices">{choices.map((item,index)=><button type="button" key={item.id} disabled={busy} className="manual-layout-choice" data-manual-template={item.id} onClick={()=>void choose(item)}>
       {item.template?.type==='new'?<span className="manual-template-preview" aria-hidden="true" style={{aspectRatio:item.template.aspect}}>
         {item.template.elements.map(slot=><span key={slot.id} className={`manual-template-slot ${item.assignments.some(row=>row.slotId===slot.id)?'filled':'missing'}`}
           style={{left:`${slot.box[0]*100}%`,top:`${slot.box[1]*100}%`,width:`${slot.box[2]*100}%`,height:`${slot.box[3]*100}%`}}/>)}</span>:

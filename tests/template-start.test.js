@@ -79,3 +79,30 @@ test('manual template keeps its generated page colors alongside the layers',asyn
  assert.equal(paperColorFor(spread,'left'),'#F8F8EE');
  assert.equal(paperColorFor(spread,'right'),'#F8F8EE');
 });
+
+test('single page can use one leaf of a spread without importing the other leaf',async()=>{
+ const draft=project('取双页的一页',{mode:'single',ratio:'a4'}).drafts[0];
+ const choice=manualTemplateChoices(draft,[],[]).find(row=>row.mode==='leaf');
+ assert.ok(choice);
+ assert.equal(choice.template.pageMode,'single');
+ assert.ok(choice.template.elements.every(element=>element.page==='single'));
+ await applyManualTemplate(draft,[],[],choice.id,{choice});
+ assert.equal(draft.startTemplateID,choice.id);
+ assert.ok(draft.layers.length>0);
+ assert.ok(draft.layers.every(layer=>layer.page!=='right'&&layer.page!=='left'));
+ assert.ok(draft.layers.some(layer=>layer.type==='text'));
+});
+
+test('spread can combine two singles with independent page colors and unique layer ids',async()=>{
+ const draft=project('双单页',{mode:'spread',ratio:'a4'}).drafts[0];
+ const choice=manualTemplateChoices(draft,[],[]).find(row=>row.mode==='pair'&&row.left.id!==row.right.id);
+ assert.ok(choice);
+ await applyManualTemplate(draft,[],[],choice.id,{choice});
+ assert.equal(draft.startTemplateID,choice.id);
+ assert.equal(new Set(draft.layers.map(layer=>layer.id)).size,draft.layers.length);
+ assert.ok(draft.layers.some(layer=>layer.id.startsWith('left-')));
+ assert.ok(draft.layers.some(layer=>layer.id.startsWith('right-')));
+ assert.ok(draft.layers.some(layer=>layer.type==='text'));
+ assert.ok(paperColorFor(draft,'left'));
+ assert.ok(paperColorFor(draft,'right'));
+});

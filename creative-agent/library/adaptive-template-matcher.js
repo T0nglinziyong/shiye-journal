@@ -38,7 +38,7 @@ const LAYER_RELATIONS={
 const DARK_BACKINGS=new Set(['D143/dark-stripe','D146/dark-top','D146/dark-bottom','D153/gray-paper']);
 const SLOT_ACCEPTS={'D162/clip':['clip']};
 const DIE_CUT_SLOTS=new Set(['D143/girl-head','D143/telephone-girl','D153/banner-girl','D158/manga-girl','D162/bear-monday']);
-const SINGLE_SCORE=Object.freeze({role:.53,size:.32,position:.08,figure:.07,cropPenalty:.08,minimum:.38,defaultScore:.37});
+const SINGLE_SCORE=Object.freeze({role:.53,size:.32,position:.08,figure:.16,cropPenalty:.08,minimum:.38,defaultScore:.37});
 const SLOT_PURPOSE={
  D143:{'dark-stripe':'中下部文字与素材的深色承载面','orange-clip':'上部压住纸边的小连接件','girl-head':'上方局部人物或异形装饰','yellow-label':'侧边短句或数字标签','blue-loop':'下部横向连接带','orange-loop':'底部第二条色彩连接带','telephone-girl':'下部不规则视觉主体'},
  D146:{'dark-top':'顶部深色底纸','dark-bottom':'底部深色底纸','yellow-top':'上方亮色纸角','main-paper':'纵贯版面的书写主体','gray-dot-paper':'左下局部纹样与主纸形成穿插','bottom-writing':'下方问答的书写纸','yellow-number-bar':'大数字后方的封闭色块','stamp-material':'右下印花卡或内容贴纸','top-clip':'上方压住纸角的夹子'},
@@ -106,13 +106,13 @@ function placement(asset,slot,pageMm,{templateId}={}){
  const visualOffsetX=((bounds[0]+bounds[2])/2-.5)*w,visualOffsetY=((bounds[1]+bounds[3])/2-.5)*h;
  const x=Math.max(minX,Math.min(maxX,tx-visualOffsetX)),y=Math.max(minY,Math.min(maxY,ty-visualOffsetY));
  const shift=Math.hypot(x+visualOffsetX-baseX,y+visualOffsetY-ty);
- if(shift>12)return null;
+ if(shift>(slot.role==='figure'?18:12))return null;
  const wr=w*(bounds[2]-bounds[0])/sw,hr=h*(bounds[3]-bounds[1])/sh;
  // A die-cut subject may extend beyond its preferred box; the whole physical
  // piece still has to remain within the page and must never be scaled.
- const upper=asset.preservation==='whole'&&asset.visualRoles.includes('figure')?1.85:slot.role==='writing-card'||slot.role==='date-card'?1.4:slot.role==='connector'||slot.role==='edge-accent'?2.15:1.75;
+ const upper=asset.preservation==='whole'&&asset.visualRoles.includes('figure')?2.15:slot.role==='writing-card'||slot.role==='date-card'?1.4:slot.role==='connector'||slot.role==='edge-accent'?2.15:1.75;
  if((wr>upper||hr>upper)&&!(asset.preservation==='repeatable'&&slot.cropPolicy==='repeatable-only'))return null;
- if(wr<.38||hr<.38)return null;
+ if(wr<(slot.role==='figure'?.28:.38)||hr<(slot.role==='figure'?.28:.38))return null;
  const cropped=asset.preservation==='repeatable'&&slot.cropPolicy==='repeatable-only'&&(w>sw||h>sh);
  const sizeScore=Math.exp(-.55*(Math.abs(Math.log(wr))+Math.abs(Math.log(hr))));
  return {centerMm:[round(x),round(y)],shiftMm:[round(x-baseX),round(y-ty)],physicalSizeMm:[w,h],method:cropped?'crop':'complete',sizeScore,shift};
@@ -179,8 +179,8 @@ export function describeSingleSlotMatch(templateId,slotId){
  if(!slot)throw new RangeError(`未知槽位：${slotId}`);
  const gates=[{field:'visualRoles',rule:'containsOneOf',value:slot.accepts},
   {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:data.pageMm},
-  {field:'visualSizeRatio',rule:'range',value:[.38,slot.role==='figure'?1.85:['writing-card','date-card'].includes(slot.role)?1.4:['connector','edge-accent'].includes(slot.role)?2.15:1.75]},
-  {field:'positionShiftMm',rule:'atMost',value:12}];
+  {field:'visualSizeRatio',rule:'range',value:[slot.role==='figure'?.28:.38,slot.role==='figure'?2.15:['writing-card','date-card'].includes(slot.role)?1.4:['connector','edge-accent'].includes(slot.role)?2.15:1.75]},
+  {field:'positionShiftMm',rule:'atMost',value:slot.role==='figure'?18:12}];
  if(templateId==='D146'&&!['stamp-material','top-clip'].includes(slotId))gates.push({field:'kind',rule:'equals',value:'paper'});
  if(DIE_CUT_SLOTS.has(`${templateId}/${slotId}`))gates.push({field:'shape',rule:'equals',value:'die-cut'});
  if(DARK_BACKINGS.has(`${templateId}/${slotId}`))gates.push({field:'mainColor.lightness',rule:'atMost',value:.34});

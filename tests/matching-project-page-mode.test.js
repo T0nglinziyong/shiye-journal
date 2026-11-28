@@ -19,12 +19,13 @@ test('AI creation submits a real single page when matching selects single',async
   assert.equal(document.source.baseDraft.pageMode,'single');
 });
 
-test('AI spread and manual two-sheet workspace retain their own modes',()=>{
+test('AI and manual projects use the requested page mode',()=>{
   const spread=matchingCreationProject({...state,matchMode:'spread'},scope,[]).drafts[0];
   assert.equal(spread.pageMode,'spread');
   assert.ok(spread.canvas.width>spread.canvas.height);
   const manual=matchingCreationProject(state,scope,[],false).drafts[0];
-  assert.equal(manual.pageMode,'spread');
-  assert.equal(manual.matchingTwoPageWorkspace,true);
-  assert.equal(manual.inactivePageDimmed,true);
+  assert.equal(manual.pageMode,'single');
+  assert.equal(manual.matchingTwoPageWorkspace,undefined);
+  assert.equal(manual.inactivePageDimmed,undefined);
+  assert.equal(matchingCreationProject({...state,matchMode:'spread'},scope,[],false).drafts[0].pageMode,'spread');
 });
