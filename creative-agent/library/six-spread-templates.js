@@ -65,6 +65,22 @@ const colorFor=(template,node)=>{
  return p;
 };
 const accentColor=template=>template.id==='S02-青黄面包'?'#DE5C2C':template.id==='S05-灰黄甜点'?'#FFFFFF':template.id==='S06-白粉果实'?'#AF2929':'#EB9D43';
+// A photographed subject is a replaceable slot, not an optional part of the
+// layout. Empty-input templates retain its measured footprint as editable
+// paper; real materials still take precedence when they match the slot.
+const defaultScenePaper={
+ 'S01-苹果绿白':{'L-apple-photo':['#647E41','plain'],'R-black-photo':['#29312A','plain'],'R-fruit-basket':['#F3E9CE','dots']},
+ 'S02-青黄面包':{'L-bread-photo':['#C5995E','plain'],'R-fruit-basket':['#E6BA83','dots']},
+ 'S03-棕蓝爱心':{'L-heart-photo':['#343136','plain'],'R-cake-illustration':['#F0E8D6','dots']},
+ 'S04-粉黑百合':{'L-flower-photo':['#39383B','plain'],'R-lily':['#C9849A','plain']},
+ 'S05-灰黄甜点':{'L-vase-card':['#F0EBDF','dots'],'L-elephant-card':['#EEEDE7','plain'],'R-dessert-photo':['#F2E5D5','dots']},
+ 'S06-白粉果实':{'L-fruit-photo':['#D6D4CE','plain'],'L-flower':['#C99DB1','plain'],
+  'R-fig-card':['#F4EEE1','dots'],'R-flower':['#B33845','plain']}
+};
+function addDefaultScenePaper(operations,template,node,place,size,visual){
+ const [id]=node,[fill,pattern]=defaultScenePaper[template.id]?.[id]||[visual.fill||'#E9E3D8','plain'];
+ operations.push({op:'paper.add',id,place,size,style:{fill},texture:'subtle',pattern});
+}
 const lightness=hex=>{const n=parseInt(hex.slice(1),16);return ((((n>>16)&255)*.2126)+(((n>>8)&255)*.7152)+((n&255)*.0722))/255;};
 const textContent=(template,node,override)=>{
  if(override!==undefined)return String(override);
@@ -155,7 +171,9 @@ export function matchSixSpreadMaterials(templateId,profiles,{overrides={},calibr
    assignments:[...state.assignments,choice]
   }))).sort((a,b)=>b.score-a.score||b.used.length-a.used.length).slice(0,64);
  }
- const best=beam[0],critical=slots.filter(node=>photoRoles.test(node[2])&&!['small-irregular-flower'].includes(node[2])),missingCritical=critical.filter(node=>!best.assignments.find(a=>a.slot===node[0])?.asset).map(node=>node[0]);
+ const best=beam[0],critical=slots.filter(node=>photoRoles.test(node[2])&&
+  node[2]!=='small-irregular-flower'&&!(templateId==='S06-白粉果实'&&['L-flower','R-flower'].includes(node[0]))),
+  missingCritical=critical.filter(node=>!best.assignments.find(a=>a.slot===node[0])?.asset).map(node=>node[0]);
  return {templateId,assignments:best.assignments,used:best.used,unused:profiles.map(alias).filter(id=>!best.used.includes(id)),score:round(best.score/Math.max(1,slots.length)),compatible:missingCritical.length===0,missingCritical};
 }
 export function selectSixSpreadTemplate(profiles){
@@ -203,11 +221,10 @@ export function compileSixSpreadTemplate({templateId,assets=[],plan,texts={},pal
    if(choice.overlayText)addCardText(operations,template,node,texts,visual.fill||colorFor(template,node));
    continue;
   }
-  if(isMaterialSlot(template,node)){
-   if(photoRoles.test(role)&&role!=='small-irregular-flower'){
-    warnings.push(`${id} 缺少语义、尺寸都合适的输入素材`);
-    continue;
-   }
+  if(isMaterialSlot(template,node)&&photoRoles.test(role)){
+   addDefaultScenePaper(operations,template,node,place,{width:round(width),height:round(height),unit:'mm'},visual);
+   warnings.push(`${id} 缺少语义、尺寸都合适的输入素材，使用可编辑纸卡保留构图`);
+   continue;
   }
   if(/lace/.test(role)){addVectorLace(operations,id,page,box);continue;}
   if(/irregular-flower/.test(role)){

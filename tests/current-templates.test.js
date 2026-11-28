@@ -40,3 +40,22 @@ test('only the fourteen measured templates enter current matching',()=>{
  assert.ok(draft.operations.some(op=>op.op==='page.update'));
  assert.throws(()=>compileCurrentTemplate({templateId:'center-1',assets:[asset]}),/新模板/);
 });
+
+test('all fourteen empty-input templates keep their measured objects as editable defaults',()=>{
+ const composites={'D146':{'stamp-material':['stamp-word'],'top-clip':['clip-ring','clip-body']}};
+ for(const template of listCurrentTemplates()){
+  const {operations}=compileCurrentTemplate({templateId:template.id});
+  const rendered=new Set(operations.flatMap(op=>[op.id,...(op.pieces||[]).map(piece=>piece.id)].filter(Boolean)));
+  for(const element of template.elements){
+   assert.ok(element.defaultInput,`${template.id}/${element.id} must describe its empty-input default`);
+   const parts=composites[template.id]?.[element.id]||[element.id];
+   assert.ok(parts.every(id=>rendered.has(id)),`${template.id}/${element.id} vanished from the empty-input cover`);
+  }
+  assert.equal(operations.some(op=>op.op==='material.add'),false,`${template.id} default must not need private art`);
+ }
+ const fruit=compileCurrentTemplate({templateId:'S06-白粉果实'}).operations;
+ for(const id of ['L-fruit-photo','L-flower','R-fig-card','R-flower'])
+  assert.equal(fruit.find(op=>op.id===id)?.op,'paper.add',`${id} should be an editable card without user art`);
+ assert.ok(!fruit.some(op=>op.op==='graphic.add'&&op.geometry?.kind==='flower'),
+  'the original flower photographs must not become synthetic flower stickers');
+});

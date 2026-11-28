@@ -16,6 +16,19 @@ copy['XHS-排版第四弹'].bySlot['L-upper-writing-top']='今日记事\n从这�
 copy['XHS-排版第四弹'].bySlot['L-upper-writing']='路过咖啡店，停下来。\n几句闲话，一些声音，\n都值得认真记下。\n回家时天还亮。';
 copy['XHS-海岛排版'].bySlot['R-bottom-writing']='傍晚再翻看，\n片刻仍然清晰。\n愿下次也有新发现。';
 const sourceId=a=>a.alias||a.id;
+const defaultSurfaces={
+ 'XHS-满满当当':{'L-upper-photo':'#B7A390','L-lower-photo':'#B2A093','R-upper-photo':'#BBA995','R-lower-photo':'#A9B5AF',
+  'L-upper-sticker':'#F2EBDD','R-lower-sticker':'#F4F0E7','R-milk-bottle':'#D7ACB4'},
+ 'XHS-排版第四弹':{'L-upper-photo':'#D4BFA8','L-lower-photo':'#B7A59A','R-upper-photo':'#B8C49C','R-lower-photo':'#B0BE9B',
+  'L-upper-sticker':'#D9B5AA','L-lower-sticker':'#90A7BF'},
+ 'XHS-海岛排版':{'L-upper-photo':'#B7A89B','L-lower-photo':'#988477','R-top-photo':'#AFC3B7',
+  'R-middle-photo':'#9DB5A9','R-bottom-sticker':'#C8D8D5'}
+};
+function addDefaultSurface(operations,templateId,slot,place,width,height){
+ const [id,,role]=slot,fill=defaultSurfaces[templateId]?.[id]||'#DED7CA';
+ operations.push({op:'paper.add',id,place,size:{width:round(width),height:round(height),unit:'mm'},
+  style:{fill},texture:'subtle',pattern:role==='photo'&&/upper|top/.test(id)?'dots':'plain'});
+}
 function assetSubjects(asset){
  if(Array.isArray(asset.subjectTags))return asset.subjectTags;
  const title=String(asset.title||'');
@@ -61,7 +74,7 @@ function candidate(asset,slot){
  return {asset:sourceId(asset),at,rotationDeg:kind==='strip'&&ah>aw?90:0,...(crop?{crop,visibleMm:[round(w),round(h)]}:{}),subjectMatch,motifFit,motifSubjectMatch,score:round(.55*fit+.2*(1-match*.2)+.1*(kind==='photo'&&asset.visualRoles?.includes('photo')?1:0)+.3*(subjectMatch?1:0)+.28*motifFit)};
 }
 export function listThreeLayoutSpreads(){return [...templates.keys()];}
-export function describeThreeLayoutSpread(id){const t=templates.get(id);if(!t)throw new RangeError(id);return structuredClone({...t,leafMm:LAYOUT_LEAF_MM,slots:t.slots.map(s=>({id:s[0],page:s[1],role:s[2],box:s[3],targetMm:rectMm(s[3]).map(round),z:s[4],style:s[5]||{},acceptedMaterialRoles:rolesFor(s),defaultInput:s[2]==='paper'||s[2]==='strip'?'generated':'material-or-empty'}))});}
+export function describeThreeLayoutSpread(id){const t=templates.get(id);if(!t)throw new RangeError(id);return structuredClone({...t,leafMm:LAYOUT_LEAF_MM,slots:t.slots.map(s=>({id:s[0],page:s[1],role:s[2],box:s[3],targetMm:rectMm(s[3]).map(round),z:s[4],style:s[5]||{},acceptedMaterialRoles:rolesFor(s),defaultInput:['photo','sticker','paper','strip'].includes(s[2])?'generated':s[2]==='body'||s[2]==='title'||s[2]==='micro'||s[2]==='date'||s[2]==='word'?'editable-text':'generated-graphic'}))});}
 export function matchThreeLayoutSpread(id,assets,{bindings={}}={}){
  const t=templates.get(id);if(!t)throw new RangeError(id);
  const slots=t.slots.filter(s=>rolesFor(s).length),used=new Set(),assignments=[];
@@ -99,7 +112,11 @@ export function compileThreeLayoutSpread({templateId,assets=[],plan,texts={},pal
    if(choice.crop&&choice.crop.some((v,i)=>Math.abs(v-[0,0,1,1][i])>.005))operations.push({op:'layer.mask',target:id,mode:'replace',region:{shape:'rect',space:'local',unit:'ratio',box:choice.crop}});
    continue;
   }
-  if(role==='photo'){warnings.push(`${id}: 缺少尺寸与角色合适的真实素材`);continue;}
+  if(role==='photo'){
+   addDefaultSurface(operations,templateId,slot,place,w,h);
+   warnings.push(`${id}: 缺少尺寸与角色合适的真实素材，使用可编辑纸卡保留构图`);
+   continue;
+  }
   if(role==='body'||role==='title'||role==='micro'||role==='date'||role==='word'){
    const fallback=base.bySlot?.[id]??(role==='title'?base.title:role==='micro'?base.micro:role==='date'?'08 / 25':base.body);
    addText(operations,t,slot,texts[id]??fallback);continue;
@@ -110,7 +127,10 @@ export function compileThreeLayoutSpread({templateId,assets=[],plan,texts={},pal
    continue;
   }
   if(role==='sticker'){
-   if(special.motif)warnings.push(`${id}: 没有尺寸合适的真实贴纸，保留空位而不画仿制卡通`);
+   if(special.motif){
+    addDefaultSurface(operations,templateId,slot,place,w,h);
+    warnings.push(`${id}: 没有尺寸合适的真实贴纸，使用可编辑纸卡代位`);
+   }
    else {addText(operations,t,slot,special.glyph||'✿');operations.at(-1).style.color=special.color||'#526B69';operations.at(-1).style.fontSizePt=special.fontSizePt||16;}
    continue;
   }
