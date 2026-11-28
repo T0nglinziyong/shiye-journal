@@ -3,10 +3,18 @@ import {describeTemplateObjects,matchMaterialsToTemplates} from './adaptive-temp
 import {describeSixSpreadTemplate,matchSixSpreadMaterials} from './six-spread-templates.js';
 import {describeThreeLayoutSpread,matchThreeLayoutSpread} from './three-layout-template-matcher.js';
 
-const names={D143:'Q1·Q2·Q3',D146:'数字与问答',D153:'青灰纸页',D158:'灰蓝人物拼贴',D162:'上下撕纸与日期',
- 'S01-苹果绿白':'苹果绿与白','S02-青黄面包':'青黄面包','S03-棕蓝爱心':'棕蓝爱心',
- 'S04-粉黑百合':'粉黑百合','S05-灰黄甜点':'灰黄甜点','S06-白粉果实':'白粉果实',
- 'XHS-满满当当':'满满当当','XHS-排版第四弹':'排版第四弹','XHS-海岛排版':'海岛排版'};
+const names={D143:'蓝色分段问答',D146:'数字交错问答',D153:'青灰纸页与人物',D158:'灰蓝双区日记',D162:'上下撕纸拼贴',
+ 'S01-苹果绿白':'苹果绿与白 · 水果双页','S02-青黄面包':'青黄撞色 · 面包双页','S03-棕蓝爱心':'棕蓝对照 · 爱心双页',
+ 'S04-粉黑百合':'粉黑对照 · 百合双页','S05-灰黄甜点':'灰黄呼应 · 甜点双页','S06-白粉果实':'白粉对照 · 果实双页',
+ 'XHS-满满当当':'满满当当 · 密集图文','XHS-排版第四弹':'排版第四弹 · 上下分区','XHS-海岛排版':'海岛排版 · 错位照片'};
+const singleStructure={D143:'蓝色底页上，顶部短记与深色问答卡分段叠放；数字、人物和横向装饰把上下区域串起来。',
+ D146:'深色底纸、米白主纸与黄色纸片交错；大号数字、三组问答和荧光标记沿页面展开。',
+ D153:'青色页面衬深灰主纸，上方横向标题纸与中段插画叠放；数字、短句和底部横线纸错位分布。',
+ D158:'灰蓝纸片分开承载上下两组文字与插画；日期、星形点缀和人物沿斜向视线连接。',
+ D162:'上、下两张撕边纸分开布置，日期、短问答和照片穿插其间，胶带跨纸边固定。'};
+const caseIndex=['D143','D146','D153','D158','D162','S01-苹果绿白','S02-青黄面包',
+ 'S03-棕蓝爱心','S04-粉黑百合','S05-灰黄甜点','S06-白粉果实',
+ 'XHS-满满当当','XHS-排版第四弹','XHS-海岛排版'];
 const single=new Set(['D143','D146','D153','D158','D162']);
 const six=new Set(['S01-苹果绿白','S02-青黄面包','S03-棕蓝爱心','S04-粉黑百合','S05-灰黄甜点','S06-白粉果实']);
 const roleNames={photo:'照片',figure:'不规则主体',accent:'装饰点缀',tape:'胶带',strip:'纸条或胶带',
@@ -51,7 +59,9 @@ const spreadElements=id=>{
 const entries=listTemplateDrafts().map(id=>{
  const isSingle=single.has(id),{pageMm,elements}=isSingle?singleElements(id):spreadElements(id);
  return {id,title:names[id]||id,type:'new',pageMode:isSingle?'single':'spread',pageMm,
-  structure:isSingle?'按真实案例量测的单页对象位置、尺寸和层级。':
+  templateImagePath:`/template-defaults/${id}.jpg`,
+  examplePresetPath:`journal-presets/template-cases/v1/case-${String(caseIndex.indexOf(id)+1).padStart(2,'0')}.jpg`,
+  structure:isSingle?singleStructure[id]:
     six.has(id)?describeSixSpreadTemplate(id).logic:describeThreeLayoutSpread(id).logic,
   elements,aspect:pageMm[0]/pageMm[1],styles:['彩色拼贴'],purposes:['日常记录'],tags:[isSingle?'单页':'双页','可编辑','实物尺寸']};
 });

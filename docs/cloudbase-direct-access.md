@@ -4,7 +4,7 @@
 
 ## 配置与存储
 
-浏览器配置 `VITE_SHIYE_CLOUDBASE_ENV_ID` 和 `VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY`。`shiye-presets` 存放 70 张预设模板图片；已登录用户只能读取指定的 `journal-presets/source/` 路径。`shiye-private` 存放用户原图、派生图和作品图片；浏览器只能读取和写入自己账号编号前缀下的对象。权限脚本是 `deploy/cloudbase/004-private-storage.sql`。
+浏览器配置 `VITE_SHIYE_CLOUDBASE_ENV_ID` 和 `VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY`。`shiye-presets` 存放 70 张教程预设图及 14 张新模板案例预览；已登录用户只能读取 `journal-presets/source/` 的现有 70 张和 `journal-presets/template-cases/v1/` 的 14 张指定 JPEG。前者由 `deploy/cloudbase/004-private-storage.sql` 授权，后者由 `deploy/cloudbase/012-template-cases.sql` 授权。`shiye-private` 存放用户原图、派生图和作品图片；浏览器只能读取和写入自己账号编号前缀下的对象。
 
 上传先等待云存储确认，再提交 PostgreSQL 图片引用。对象路径按内容哈希固定；失败的原稿和待同步修改仍保存在本机队列中。`storageProvider` 必须是 `cloudbase`；旧 COS 引用已一次性转换，日常读取没有旧存储回退。换网站域名不会共享浏览器 IndexedDB。
 

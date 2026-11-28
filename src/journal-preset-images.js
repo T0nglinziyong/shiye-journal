@@ -2,9 +2,9 @@ import {cloudEnabled,cloudClient,cloudStorage} from './cloud-session.js';
 import {validateJournalPanel} from './journal-source-panels.js';
 import {privateCache} from './private-cache.js';
 
-const cache=new Map(),pending=new Map(),panelCache=new Map(),panelPending=new Map();let owner=null,epoch=0,active=0;const waiters=[];
+const cache=new Map(),pending=new Map(),panelCache=new Map(),panelPending=new Map(),caseCache=new Map(),casePending=new Map();let owner=null,epoch=0,active=0;const waiters=[];
 async function readLane(task){if(active>=4)await new Promise(resolve=>waiters.push(resolve));active++;try{return await task();}finally{active--;waiters.shift()?.();}}
-export function clearJournalPresetImages(){epoch++;for(const url of [...cache.values(),...panelCache.values()])URL.revokeObjectURL(url);cache.clear();pending.clear();panelCache.clear();panelPending.clear();owner=null;}
+export function clearJournalPresetImages(){epoch++;for(const url of [...cache.values(),...panelCache.values(),...caseCache.values()])URL.revokeObjectURL(url);cache.clear();pending.clear();panelCache.clear();panelPending.clear();caseCache.clear();casePending.clear();owner=null;}
 export async function loadJournalPresetImage(number,{accountId}={}){
   if(!Number.isInteger(number)||number<1||number>70)throw Error('预设图编号无效');
   if(!cloudEnabled)return null;
@@ -27,6 +27,34 @@ export async function loadJournalPresetImage(number,{accountId}={}){
   if(blob!==saved&&accountId)void privateCache.put(accountId,cacheKey,blob).catch(()=>{});
   const url=URL.createObjectURL(blob);if(started!==epoch){URL.revokeObjectURL(url);throw Error('账号已切换，停止读取旧账号图片');}cache.set(number,url);return url;
   });pending.set(number,work);try{return await work;}finally{if(pending.get(number)===work)pending.delete(number);}
+}
+
+export async function loadJournalTemplateCase(path,{accountId}={}){
+  if(!/^journal-presets\/template-cases\/v1\/case-\d{2}\.jpg$/.test(path))throw Error('模板案例路径无效');
+  if(!cloudEnabled)return null;
+  if(accountId&&owner!==accountId){clearJournalPresetImages();owner=accountId;}
+  if(caseCache.has(path))return caseCache.get(path);
+  if(casePending.has(path))return casePending.get(path);
+  const started=epoch;
+  const work=readLane(async()=>{
+    const {data,error}=await cloudClient().auth.getSession();
+    if(error||!data.session?.access_token)throw Error('请先登录后查看模板案例');
+    const cacheKey='journal-template-case:'+path;
+    const saved=accountId?await privateCache.get(accountId,cacheKey).catch(()=>null):null;
+    let blob=saved instanceof Blob&&saved.size&&(!saved.type||/^image\/jpeg/.test(saved.type))?saved:null;
+    if(!blob){
+      const result=await cloudStorage().from('shiye-presets').download(path,undefined,{signal:AbortSignal.timeout(30000)});
+      if(result.error)throw Error('模板案例读取失败：'+result.error.message);
+      blob=result.data;
+    }
+    if(!(blob instanceof Blob)||!blob.size||blob.type&&!/^image\/jpeg/.test(blob.type))throw Error('模板案例图片类型或内容无效');
+    if(blob!==saved&&accountId)void privateCache.put(accountId,cacheKey,blob).catch(()=>{});
+    const url=URL.createObjectURL(blob);
+    if(started!==epoch){URL.revokeObjectURL(url);throw Error('账号已切换，停止读取旧账号图片');}
+    caseCache.set(path,url);return url;
+  });
+  casePending.set(path,work);
+  try{return await work;}finally{if(casePending.get(path)===work)casePending.delete(path);}
 }
 
 export function journalPanelPixels(panel,width,height){

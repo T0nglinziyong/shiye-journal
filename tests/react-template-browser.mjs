@@ -22,10 +22,30 @@ try{
   assert.ok(Math.abs(templateCover.height-workCover.height)<2,JSON.stringify({workCover,templateCover}));
   const presetSize=await evaluate('(()=>{const card=document.querySelector(".journal-template-card");return {cover:card.querySelector(".card-image").getBoundingClientRect().height,card:card.getBoundingClientRect().height}})()');
   assert.ok(Math.abs(presetSize.cover-workCover.height)<2&&Math.abs(presetSize.card-workCover.cardHeight)<8,JSON.stringify({workCover,presetSize}));
+  await wait('[data-template-id="D143"] .card-image img');
+  assert.ok(await evaluate('document.querySelector("[data-template-id=D143] .card-image img").getAttribute("src").includes("/template-defaults/D143.jpg")'));
   await click('[data-template-id="D143"]','.journal-template-detail-card');
   assert.ok(await evaluate('document.querySelector(".detail-category").textContent==="新模板"'));
+  assert.ok(await evaluate('document.querySelector(".journal-template-detail-card h1").textContent.includes("蓝色分段问答")'));
+  assert.ok(await evaluate('!!document.querySelector("[data-template-side=case]")'));
+  await wait('.journal-template-detail-image img');
+  await evaluate(`(async()=>{
+    const canvas=document.createElement('canvas');canvas.width=2;canvas.height=2;
+    canvas.getContext('2d').fillRect(0,0,2,2);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg'));
+    window.__SHIYE_UI_CLOUD__.state.objects.set('journal-presets/template-cases/v1/case-01.jpg',blob);
+  })()`);
+  await click('[data-template-side="case"]','.journal-template-detail-image img[alt*="真实案例"]');
+  assert.ok(await evaluate('document.querySelector(".journal-template-detail-image img").alt.includes("真实案例")'));
+  await click('[data-template-side="elements"]','.journal-template-slot-conditions');
   await click('.journal-template-element[data-slot-id]','.journal-template-slot-conditions');
   assert.ok(await evaluate('document.querySelector(".journal-template-slot-conditions").textContent.includes("必须满足")'));
+  assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-elements-view"),details=document.querySelector(".journal-template-slot-conditions");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
+  for(const [width,height] of [[390,844],[768,1024],[1440,900]]){
+    await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),`New template detail overflow at ${width}×${height}`);
+    assert.ok(await evaluate('(()=>{const view=document.querySelector(".journal-template-elements-view"),details=document.querySelector(".journal-template-slot-conditions");return details.getBoundingClientRect().bottom<=view.getBoundingClientRect().bottom+1})()'));
+  }
   await click('[data-template-back]','.journal-template-card');
   await click('[data-template-import]','[data-template-save]');
   await evaluate(`(()=>{
