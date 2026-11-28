@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createCloudStore} from '../src/cloud-store.js';
 import {projectBlobText} from '../src/project-document.js';
 import {projectSemanticFingerprint} from '../src/project-semantic.js';
+import {creativePresetAssets} from '../src/creative-presets.js';
 // All successfully staged project fixtures use the current-only persisted
 // Scene v2 tree. The malformed-outbox tests intentionally bypass this helper.
 function v2(record){
@@ -1026,6 +1027,21 @@ test('a new work cannot reach the cloud before its material, while an existing o
   state.rows=[work];
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...work,title:'metadata edit'}));
   assert.equal(state.calls.length,2);
+});
+test('a new work may reference a bundled preset without an account asset row',async()=>{
+  const {state,db}=fixture(memoryCache());
+  const preset=creativePresetAssets[0];
+  const work={id:'preset-work',activeDraftID:'page',drafts:[{
+    id:'page',sceneVersion:2,canvas:{width:400,height:600},layers:[{
+      id:'tape',type:'material',assetID:preset.id,sourceStaticPath:preset.staticPath,
+      x:50,y:50,width:40,height:10
+    }]
+  }]};
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(work));
+  assert.equal(state.calls.length,1);
+  const saved=state.calls[0].operations.find(op=>op.store==='projects').item;
+  assert.deepEqual(saved.sceneAssetIDs,[preset.id]);
+  assert.equal(state.batchReads||0,0,'bundled preset needs no account asset lookup');
 });
 test('rapid delete followed by explicit restore replays the entire recovery after a stale revision',async()=>{
  const cache=memoryCache(),{db,state}=fixture(cache);

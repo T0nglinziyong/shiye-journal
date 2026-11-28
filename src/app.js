@@ -2475,7 +2475,8 @@ function openManualCreationDialog(){
   const matchingProject=createMatchingProject(false),draft=matchingProject.drafts[0];
   const choices=manualTemplateChoices(draft,state.assets,state.basket,
     {requiredAssetIDs:matchingProject.requiredAssetIDs});
-  openOverlay(createElement(ManualLayoutDialog,{choices,source:image,onClose:closeOverlay,onChoose:id=>createFromBasket(id)}));
+  openOverlay(createElement(ManualLayoutDialog,{choices,source:image,onClose:closeOverlay,
+    onChoose:id=>createFromBasket(choices.find(choice=>choice.id===id)||id)}));
 }
 function openMaterialPicker(){
   openOverlay(createElement(MaterialPickerDialog,{assets:visibleMaterials(state.assets),source:image,

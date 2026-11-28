@@ -43,7 +43,7 @@ const objectCondition=(item,templateId)=>{
  const must=[fixed?`替换素材须属于：${accepts.map(label).join('、')}`:'此位置可由模板生成；若替换，应保留同样的视觉作用',
    size?`实物尺寸接近 ${round(size[0])} × ${round(size[1])} mm，摆放时不放大或缩小用户素材`:'保持该位置的版面比例'];
  if(item.cropPolicy==='never')must.push('主体与轮廓完整保留');
- if(item.cropPolicy==='repeatable-only')must.push('仅连续纹样可安全裁切');
+ if(item.cropPolicy==='repeatable-only')must.push('普通纸张等平面素材可裁切；异形轮廓与明确要求完整的素材保留原样');
  if(/(?:writing|note|body|text)/.test(item.role||''))must.push('文字区域须有足够留白与对比度');
  const prefer=[item.purpose||(item.style?.subject?`内容贴近 ${item.style.subject}`:
   /(?:photo|figure|sticker)/.test(item.role||'')?'与本页叙事主题呼应':'颜色与相邻纸张形成清楚层次')];
@@ -96,6 +96,12 @@ export function materialTemplateProfile(asset){
   asset.kindDetail==='paper.lined'||asset.kindDetail==='paper.dot'||
   (asset.materialTags||[]).some(tag=>/纹样|花纹|图案/.test(tag));
  const subject=/人物|女孩|男孩|儿童|小孩|女人|男人|猫|狗|兔|熊|鸟|蝴蝶|宠物|动物|person|girl|boy|woman|man|cat|dog|rabbit|bear|bird|butterfly|animal/i.test(tags);
+ const bounds=asset.visualBoundsRatio||asset.systemAttributes?.visualBoundsRatio;
+ const boundedArea=Array.isArray(bounds)&&bounds.length===4&&bounds.every(Number.isFinite)?
+  Math.max(0,bounds[2]-bounds[0])*Math.max(0,bounds[3]-bounds[1]):1;
+ const coverage=asset.systemAttributes?.alphaCoverage;
+ const silhouetteCoverage=typeof coverage==='number'&&Number.isFinite(coverage)&&boundedArea>.01?
+  coverage/boundedArea:null;
  const roles=Array.isArray(asset.visualRoles)&&asset.visualRoles.length?[...asset.visualRoles]:
   kind==='paper'?['plain-paper',...(patterned?['pattern-paper']:[])]:
   kind==='note'?['writing-card','plain-paper']:
@@ -107,9 +113,13 @@ export function materialTemplateProfile(asset){
   kind==='text'?['printed-card','accent']:['accent'];
  if(subject&&(kind==='sticker'||kind==='photo'&&asset.shape==='die-cut')&&!roles.includes('figure'))
   roles.unshift('figure');
- const preservation=asset.preservation||(/不可裁切|不宜裁切|不要裁切|不裁切|保持完整/.test(text)?'whole':
-   /可重复|连续纹样|可裁切/.test(text)||fits.includes('repeat.tile')?'repeatable':
-   /可拆分|可分段/.test(text)||fits.includes('combine.split')?'splittable':'whole');
+ const shape=asset.shape||(/异形|不规则轮廓|沿.*(?:轮廓|外形).*裁切/.test(text)||
+   silhouetteCoverage!==null&&silhouetteCoverage<.78&&['paper','note','card','photo','sticker'].includes(kind)||
+   kind==='sticker'&&asset.kindDetail==='sticker.subject'?'die-cut':'rect');
+ const irregular=!['rect','rectangle','square'].includes(shape);
+ const preservation=irregular?'whole':asset.preservation||(/不可裁切|不宜裁切|不要裁切|不裁切|保持完整/.test(text)?'whole':
+   /可拆分|可分段/.test(text)||fits.includes('combine.split')?'splittable':
+   /可重复|连续纹样|可裁切/.test(text)||fits.includes('repeat.tile')||['paper','note','card','photo'].includes(kind)?'repeatable':'whole');
  const writableAreaRatio=Number.isFinite(asset.writableAreaRatio)?asset.writableAreaRatio:
   /不可书写|无留白|固定文字.*不宜覆盖|不宜覆盖.*(?:文字|印字)|印字.*不宜覆盖/.test(text)?0:/大面积留白|可书写/.test(text)?.8:
   /局部留白/.test(text)?.45:kind==='paper'?(patterned?.15:.8):kind==='note'?.75:
@@ -126,8 +136,7 @@ export function materialTemplateProfile(asset){
   /objects|文具|纸品|胶片/.test(tags)&&'stationery'].filter(Boolean);
  return {...asset,alias:asset.alias||asset.id,visualRoles:roles,preservation,
   writableAreaRatio,canWriteOn:asset.canWriteOn??writableAreaRatio>=.6,
-  shape:asset.shape||(/矩形|方形/.test(text)?'rect':
-   kind==='sticker'&&(asset.kindDetail==='sticker.subject'||/沿.*(?:轮廓|外形).*裁切|异形|不规则外形/.test(text))?'die-cut':'rect'),mainColor,subjectTags};
+  shape,mainColor,subjectTags,visualBoundsRatio:asset.visualBoundsRatio||asset.systemAttributes?.visualBoundsRatio};
 }
 
 export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUse=[],templateIds,pages}={}){
@@ -162,19 +171,28 @@ export function compileCurrentTemplate({templateId,assets=[],bindings={},texts={
   six.has(templateId)?matchSixSpreadMaterials(templateId,matchingProfiles,{overrides:bindings,mustUse}):matchThreeLayoutSpread(templateId,matchingProfiles,{bindings,mustUse}));
  const matchedBindings=Object.fromEntries(matched.assignments.filter(choice=>choice.asset).map(choice=>[choice.slot,choice.asset]));
  const matchedValues=single.has(templateId)?Object.fromEntries(matched.assignments.map(choice=>[choice.slot,
-  choice.asset?{asset:choice.asset}:{generated:true}])):{};
+  choice.asset?{asset:choice.asset,fit:choice.method==='crop'?'crop':'none'}:{generated:true}])):{};
+ // A whole source is placed by its visible center; a crop already removes the
+ // transparent padding, so applying the same offset twice would misalign it.
+ const matchedLayout=single.has(templateId)?Object.fromEntries(matched.assignments
+  .filter(choice=>choice.asset&&choice.method!=='crop'&&!slotValues[choice.slot]?.generated&&
+   (!slotValues[choice.slot]?.asset||slotValues[choice.slot].asset===choice.asset)&&
+   (slotValues[choice.slot]?.fit??'none')==='none'&&choice.shiftMm?.some(value=>Math.abs(value)>.01))
+  .map(choice=>[choice.slot,{shiftMm:choice.shiftMm}])):{};
  const result=compileTemplateDraft({templateId,assets:profiles,bindings:{...matchedBindings,...bindings},texts,palette,
-  slotValues:{...matchedValues,...slotValues},plan:matched});
+  layout:matchedLayout,slotValues:{...matchedValues,...slotValues},plan:matched});
  // An initial template draft may leave even a final-required material unused.
  // Keep every unused source as an editable candidate instead of losing it.
- const used=new Set(matched.used||[]);
+ const used=new Set(result.operations.flatMap(op=>
+  (op.op==='material.add'&&op.place?.surface!=='tray')||op.op==='material.split'?[op.asset]:[]).filter(Boolean));
  const parked=profiles.filter(profile=>profile.alias&&profile.usage!=='calibration-only'&&!used.has(profile.alias))
   .map((profile,index)=>({
   op:'material.add',id:`template-candidate-${index+1}`,asset:profile.alias,
   place:{reference:'page',at:[.5,.5],unit:'ratio',surface:'tray'}
  }));
  const operations=[...result.operations,...parked];
- return {...result,operations:fit?fitTemplateOperations(operations,fit):operations};
+ return {...result,report:{...result.report,used:[...used],unused:profiles.map(profile=>profile.alias).filter(alias=>!used.has(alias))},
+  operations:fit?fitTemplateOperations(operations,fit):operations};
 }
 
 export function currentTemplateMaterialScores(candidates=[]){

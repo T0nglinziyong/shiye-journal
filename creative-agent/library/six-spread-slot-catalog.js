@@ -54,5 +54,6 @@ export function describeSpreadSlot(templateId,node){
   mode:spec.mode,acceptedMaterialRoles:[...spec.roles],
   sourceSize:'用户素材按原始毫米尺寸摆放，不缩放',
   fallback:spec.mode==='material'?'无合适素材时生成同尺寸可编辑纸卡，保留槽位与遮挡':spec.mode==='text'||spec.mode==='text-or-number'?'可编辑文字':'按模板生成可编辑对象',
-  crop:'默认保留完整主体；只有纸张或边饰可按槽位安全裁切'};
+  cropPolicy:/paper|card|note/.test(role)?'repeatable-only':'never',
+  crop:'普通纸张与矩形卡片可按槽位裁切；异形主体保持完整'};
 }

@@ -40,6 +40,16 @@ test('only repeatable paper may be physically cut, and unassigned slots stay gen
  assert.equal(compiled.operations.some(o=>o.op==='material.add'&&o.id==='bear-monday'),false);
 });
 
+test('transparent padding does not trigger a cut when the visible paper cannot fill the slot',()=>{
+ const padded={...pattern,visualBoundsRatio:[.2,.1,.8,.9]};
+ const plan=matchMaterialsToTemplates([padded],{templateIds:['D162']})[0];
+ const choice=plan.assignments.find(assignment=>assignment.slot==='heart-memo');
+ assert.equal(choice.asset,'pattern');
+ assert.equal(choice.method,'complete');
+ const draft=compileMatchedTemplate(plan,[padded]);
+ assert.equal(draft.operations.some(op=>op.op==='material.split'&&op.asset==='pattern'),false);
+});
+
 test('bright patterned paper cannot silently replace a dark text backing',()=>{
  const bright=profile('bright','paper',80,110,['pattern-paper'],'repeatable','rectangle',{mainColor:'#EAE3D1'});
  const plan=matchMaterialsToTemplates([bright],{templateIds:['D143']})[0];

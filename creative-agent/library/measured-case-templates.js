@@ -1,4 +1,5 @@
 import {measuredCaseData} from './measured-case-data.js';
+import {visibleCropRegion} from './template-crop-region.js';
 
 const PAGE={D143:[110,200],D153:[110,157],D158:[110,157],D162:[110,157]};
 const PX={D143:[495,900],D153:[630,900],D158:[630,900],D162:[630,900]};
@@ -70,7 +71,7 @@ const fallback=(op,caseId,role,fill,box)=>caseId==='D162'&&op.id==='heart-memo'?
 }:objectKind(role)==='paper'?{
  op:'paper.add',id:op.id,place:{...op.place,at:box.center},size:{width:box.width,height:box.height,unit:'mm'},style:{fill},texture:'medium'
  }:{op:'graphic.add',id:op.id,geometry:{kind:'star'},place:{...op.place,at:box.center},size:{width:Math.min(box.width,9),height:Math.min(box.height,9),unit:'mm'},style:{fill}};
-const cropRegion=(a,w,h)=>({shape:'rect',space:'source',unit:'mm',box:[Math.max(0,(a.physicalWidthMM-w)/2),Math.max(0,(a.physicalHeightMM-h)/2),Math.min(a.physicalWidthMM,w),Math.min(a.physicalHeightMM,h)]});
+const cropRegion=visibleCropRegion;
 const isBindingHole=id=>/^(?:page-|paper-|binding-)?hole-\d+$/.test(id||'');
 // Body copy has one readable default across the single-page collection. The
 // measured headings, dates and oversized numbers keep their own hierarchy.

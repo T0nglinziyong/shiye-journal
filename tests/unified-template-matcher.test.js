@@ -36,6 +36,15 @@ test('裁片必须在源纸内真实排得下；不可裁的主体不会切分',
  assert.equal(solve([paper('printed',80,40,'whole')]).splitGroups.length,0);
 });
 
+test('split candidates use visible paper area when the source has transparent margins',()=>{
+ const padded={...paper('padded',100,50),visualBoundsRatio:[.2,0,.8,1]};
+ assert.equal(solve([padded]).splitGroups.length,0,'two 40 mm pieces cannot fit in 60 mm visible width');
+ const enough={...paper('enough',120,50),visualBoundsRatio:[.1,0,.9,1]};
+ const plan=solve([enough]);
+ assert.equal(plan.splitGroups.length,1);
+ for(const choice of plan.assignments)assert.ok(choice.sourceRegion[0]>=.1-.001);
+});
+
 test('必用素材在初稿提高优先级，但不强塞不合适的来源',()=>{
  const good=paper('good',40,40),wrong=paper('wrong',12,12);
  const plan=solveTemplateAssignments({templateId:'required',slots:[slot('a',0)],assets:[good,wrong],

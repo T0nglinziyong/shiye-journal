@@ -113,7 +113,9 @@ function placement(asset,slot,pageMm,{templateId}={}){
  const upper=asset.preservation==='whole'&&asset.visualRoles.includes('figure')?2.15:slot.role==='writing-card'||slot.role==='date-card'?1.4:slot.role==='connector'||slot.role==='edge-accent'?2.15:1.75;
  if((wr>upper||hr>upper)&&!(asset.preservation==='repeatable'&&slot.cropPolicy==='repeatable-only'))return null;
  if(wr<(slot.role==='figure'?.28:.38)||hr<(slot.role==='figure'?.28:.38))return null;
- const cropped=asset.preservation==='repeatable'&&slot.cropPolicy==='repeatable-only'&&(w>sw||h>sh);
+ const visibleWidth=w*(bounds[2]-bounds[0]),visibleHeight=h*(bounds[3]-bounds[1]);
+ const cropped=asset.preservation==='repeatable'&&slot.cropPolicy==='repeatable-only'&&
+  visibleWidth>=sw&&visibleHeight>=sh&&(visibleWidth>sw*1.08||visibleHeight>sh*1.08);
  const sizeScore=Math.exp(-.55*(Math.abs(Math.log(wr))+Math.abs(Math.log(hr))));
  return {centerMm:[round(x),round(y)],shiftMm:[round(x-baseX),round(y-ty)],physicalSizeMm:[w,h],method:cropped?'crop':'complete',sizeScore,shift};
 }

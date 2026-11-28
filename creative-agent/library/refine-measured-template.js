@@ -4,6 +4,34 @@ import {applyCreationTransaction,creationSceneRevision} from '../../src/creation
 const mmBox=box=>[box[0]*110/630,box[1]*157/900,box[2]*110/630,box[3]*157/900];
 const center=box=>[(box[0]+box[2])/2,(box[1]+box[3])/2];
 
+/** Position rendered text ink inside a measured target, rather than aligning its wider edit frame. */
+export function alignTemplateInkToBoxes(document,boxesMm,assets,canvas,{resize=true,transactionPrefix='template-ink'}={}){
+ if(!canvas?.createCanvas)throw new TypeError('字形对齐需要可测量字体的 canvas');
+ const opts={textLines:true,textContext:canvas.createCanvas(1,1).getContext('2d'),textCanvasFactory:canvas.createCanvas};
+ const inspect=ids=>inspectCreationDocument(document,{ids,...opts}).layers;
+ const ids=Object.keys(boxesMm);
+ const measured=inspect(ids).filter(row=>row.type==='text'&&row.textLines?.lines?.[0]?.inkBoundsMm);
+ if(resize){
+  const operations=measured.flatMap(row=>{
+   const ink=row.textLines.lines[0].inkBoundsMm,desired=boxesMm[row.id];
+   const width=ink[2]-ink[0],height=ink[3]-ink[1];
+   if(width<=0||height<=0)return [];
+   const scale=Math.min((desired[3]-desired[1])/height,(desired[2]-desired[0])/width);
+   return Number.isFinite(scale)&&scale>0?[{op:'layer.update',target:row.id,style:{fontSizePt:row.fontSizePt*scale}}]:[];
+  });
+  if(operations.length)document=applyCreationTransaction(document,{protocolVersion:2,
+   transactionId:`${transactionPrefix}-size`,baseSceneRevision:creationSceneRevision(document),operations},assets).document;
+ }
+ const operations=inspect(measured.map(row=>row.id)).map(row=>{
+  const actual=center(row.textLines.lines[0].inkBoundsMm),desired=center(boxesMm[row.id]);
+  return {op:'layer.update',target:row.id,place:{reference:'page',
+   at:[row.world.centerMm[0]+desired[0]-actual[0],row.world.centerMm[1]+desired[1]-actual[1]],unit:'mm'}};
+ });
+ if(operations.length)document=applyCreationTransaction(document,{protocolVersion:2,
+  transactionId:`${transactionPrefix}-place`,baseSceneRevision:creationSceneRevision(document),operations},assets).document;
+ return {document,aligned:measured.map(row=>row.id)};
+}
+
 /** Align template relationships to the actual rendered glyphs, without a model call. */
 export function refineMeasuredTemplate(document,compiled,assets,canvas){
  if(compiled.templateId!=='D146')throw new RangeError(`没有量测精修规则：${compiled.templateId}`);
@@ -15,16 +43,9 @@ export function refineMeasuredTemplate(document,compiled,assets,canvas){
   document=applyCreationTransaction(document,{protocolVersion:2,transactionId:`${compiled.templateId}-refine-${suffix}`,baseSceneRevision:creationSceneRevision(document),operations},assets).document;
  };
  const slots=compiled.refinement.digitInkBoxes;
- const digits=inspect(Object.keys(slots)).filter(row=>row.type==='text'&&row.textLines?.lines?.[0]);
- apply('digit-size',digits.map(row=>{
-  const ink=row.textLines.lines[0].inkBoundsMm,desired=mmBox(slots[row.id]);
-  const scale=Math.min((desired[3]-desired[1])/(ink[3]-ink[1]),(desired[2]-desired[0])/(ink[2]-ink[0]));
-  return {op:'layer.update',target:row.id,style:{fontSizePt:row.fontSizePt*scale}};
- }));
- apply('digit-place',inspect(digits.map(row=>row.id)).map(row=>{
-  const actual=center(row.textLines.lines[0].inkBoundsMm),desired=center(mmBox(slots[row.id]));
-  return {op:'layer.update',target:row.id,place:{reference:'page',at:[row.world.centerMm[0]+desired[0]-actual[0],row.world.centerMm[1]+desired[1]-actual[1]],unit:'mm',rotationDeg:row.id==='bottom-one'?-4:8}};
- }));
+ const aligned=alignTemplateInkToBoxes(document,Object.fromEntries(Object.entries(slots).map(([id,box])=>[id,mmBox(box)])),
+  assets,canvas,{transactionPrefix:`${compiled.templateId}-refine-digit`});
+ document=aligned.document;
  const bodyIds=Object.keys(compiled.refinement.textRegions||{});
  const orphan=row=>row.textLines?.lines?.length>1&&row.textLines.lines.at(-1).text.trim().length<=2;
  const widen=inspect(bodyIds).filter(orphan).map(row=>({op:'layer.update',target:row.id,size:{width:compiled.refinement.textRegions[row.id].maxWidthMm,unit:'mm'}}));
@@ -41,5 +62,5 @@ export function refineMeasuredTemplate(document,compiled,assets,canvas){
   }
  }
  apply('marker',marker);
- return {document,refinement:{digits:digits.map(row=>row.id),markers:marker.map(op=>op.id),modelCalls:0}};
+ return {document,refinement:{digits:aligned.aligned,markers:marker.map(op=>op.id),modelCalls:0}};
 }

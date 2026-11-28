@@ -33,6 +33,19 @@ test('only the fourteen measured templates enter current matching',()=>{
  assert.ok(ranked.every(row=>templates.some(t=>t.id===row.id)));
  assert.ok(!ranked.some(row=>row.id==='center-1'));
  assert.equal(materialTemplateProfile(asset).preservation,'whole');
+ assert.equal(materialTemplateProfile({id:'plain',kind:'paper',physicalWidthMM:70,physicalHeightMM:90}).preservation,'repeatable');
+ assert.equal(materialTemplateProfile({id:'card',kind:'card',shape:'rect',physicalWidthMM:40,physicalHeightMM:30}).preservation,'repeatable');
+ assert.equal(materialTemplateProfile({id:'irregular',kind:'paper',shape:'die-cut',physicalWidthMM:40,physicalHeightMM:30}).preservation,'whole');
+ assert.equal(materialTemplateProfile({id:'irregular-override',kind:'paper',shape:'die-cut',preservation:'repeatable',
+  physicalWidthMM:40,physicalHeightMM:30}).preservation,'whole');
+ assert.equal(materialTemplateProfile({id:'cutout-cat',title:'小猫',kind:'photo',physicalWidthMM:30,
+  physicalHeightMM:40,systemAttributes:{alphaCoverage:.42}}).preservation,'whole');
+ assert.deepEqual(materialTemplateProfile({id:'alpha-paper',kind:'paper',physicalWidthMM:60,physicalHeightMM:40,
+  systemAttributes:{visualBoundsRatio:[.04,.08,.95,.92]}}).visualBoundsRatio,[.04,.08,.95,.92]);
+ assert.equal(materialTemplateProfile({id:'padded-paper',kind:'paper',physicalWidthMM:60,physicalHeightMM:40,
+  systemAttributes:{alphaCoverage:.64,visualBoundsRatio:[.1,.1,.9,.9]}}).preservation,'repeatable');
+ assert.equal(materialTemplateProfile({id:'cutout-paper',kind:'paper',physicalWidthMM:60,physicalHeightMM:40,
+  systemAttributes:{alphaCoverage:.35,visualBoundsRatio:[.1,.1,.9,.9]}}).preservation,'whole');
  assert.equal(materialTemplateProfile({...asset,templateUseNotes:'印字完整保留，不可裁切'}).preservation,'whole');
  const cassette=materialTemplateProfile({id:'cassette',title:'蓝色磁带贴纸',kind:'sticker',kindDetail:'sticker.subject',
   physicalWidthMM:25,physicalHeightMM:18,description:'蓝色磁带造型，白色标签上印有固定文字',
@@ -70,4 +83,30 @@ test('all fourteen empty-input templates keep their measured objects as editable
   assert.equal(fruit.find(op=>op.id===id)?.op,'paper.add',`${id} should be an editable card without user art`);
  assert.ok(!fruit.some(op=>op.op==='graphic.add'&&op.geometry?.kind==='flower'),
   'the original flower photographs must not become synthetic flower stickers');
+});
+
+test('a planned source replaced by a generated default remains in the candidate tray',()=>{
+ const source={id:'paper-source',title:'深蓝素色纸',kind:'paper',physicalWidthMM:66,physicalHeightMM:70,mainColor:'#171D2A'};
+ const [match]=rankCurrentTemplates({materials:[source],pageMode:'single',templateIds:['D146'],limit:1});
+ assert.ok(match.assignments.length);
+ const slot=match.assignments[0].slotId;
+ const compiled=compileCurrentTemplate({templateId:'D146',assets:[source],plan:match.plan,
+  slotValues:{[slot]:{generated:true}}});
+ assert.equal(compiled.operations.some(op=>op.op==='material.add'&&op.asset===source.id&&op.place?.surface!=='tray'),false);
+ assert.equal(compiled.operations.some(op=>op.op==='material.add'&&op.asset===source.id&&op.place?.surface==='tray'),true);
+ assert.deepEqual(compiled.report.used,[]);
+});
+
+test('a whole rectangular source aligns its visible content when transparent padding is asymmetric',()=>{
+ const source={id:'offset-paper',title:'深蓝素色纸',kind:'paper',physicalWidthMM:53,physicalHeightMM:43,
+  mainColor:'#171D2A',systemAttributes:{visualBoundsRatio:[.1,.1,.8,.9]}};
+ const [match]=rankCurrentTemplates({materials:[source],pageMode:'single',templateIds:['D146'],limit:1});
+ const choice=match.plan.assignments.find(assignment=>assignment.asset===source.id);
+ assert.equal(choice.method,'complete');
+ assert.ok(Math.abs(choice.shiftMm[0])>1);
+ const draft=compileCurrentTemplate({templateId:'D146',assets:[source],plan:match.plan});
+ const placed=draft.operations.find(op=>op.op==='material.add'&&op.asset===source.id&&op.place?.surface!=='tray');
+ assert.ok(placed);
+ assert.ok(Math.abs(placed.place.at[0]-choice.centerMm[0])<.01);
+ assert.ok(Math.abs(placed.place.at[1]-choice.centerMm[1])<.01);
 });

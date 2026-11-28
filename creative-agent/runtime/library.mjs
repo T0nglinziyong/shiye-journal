@@ -142,7 +142,6 @@ export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
    pageMm:[pageWidth,pageHeight],
    mustUse:requiredAliases(document,context.materials),
    bindings:Object.fromEntries((parameters.bindings||[]).map(({slotId,alias})=>[slotId,alias])),
-   slotValues:Object.fromEntries((parameters.bindings||[]).map(({slotId})=>[slotId,{fit:'none'}])),
    texts:parameters.texts||{},palette:parameters.colors||{}});
  }
  const template=templateCatalog.templates.find(t=>t.id===recipeId);
