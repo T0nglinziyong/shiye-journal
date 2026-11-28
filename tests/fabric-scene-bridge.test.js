@@ -7,6 +7,7 @@ import * as fabric from 'fabric/node';
 import {createFabricSceneBridge} from '../src/fabric-scene-bridge.js';
 import {renderSceneCanvas} from '../src/scene-renderer.js';
 import {configureShape,shapeSVG} from '../src/editor-tools-model.js';
+import {materialImageBox} from '../src/material-paint.js';
 
 const bridge=createFabricSceneBridge(fabric);
 
@@ -136,6 +137,21 @@ test('Fabric material projection preserves crop and a compound physical mask',as
   assert.equal(node.height,80);
 });
 
+test('a horizontal photo with swapped physical axes is shown without squeezing',async()=>{
+ const image=createCanvas(150,37);image.getContext('2d').fillRect(0,0,150,37);
+ const node={id:'strip',type:'material',assetID:'cloud-strip',x:100,y:100,width:37,height:150};
+ const projected=createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()});
+ const object=await projected.fromNode(node);
+ assert.equal(object.scaleX,object.scaleY);
+ assert.equal(materialImageBox(node,150,37).height,37*37/150);
+ projected.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY});
+ assert.equal(node.width,37);assert.equal(node.height,150);
+ object.set({scaleX:object.scaleX*2,scaleY:object.scaleY*2});
+ projected.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY});
+ assert.equal(node.width,74);assert.equal(node.height,300);
+ assert.equal(node.manualVisualResize,true);
+});
+
 test('Fabric ink projection retains its editable stroke identity',async()=>{
   const node={id:'ink-1',type:'ink',points:[{x:10,y:20,p:.4},{x:20,y:30,p:.8}],
     width:4,color:'#123456'};
@@ -194,7 +210,7 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   assert.deepEqual(node.children,snapshot);
 });
 
-test('a group with physical material cannot scale its children',async()=>{
+test('a user can scale a group containing a physical material',async()=>{
   const image=createCanvas(20,20);image.getContext('2d').fillRect(0,0,20,20);
   const grouped=createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()});
   const node={id:'arrangement',type:'group',children:[
@@ -202,15 +218,16 @@ test('a group with physical material cannot scale its children',async()=>{
     {id:'letter',type:'text',content:'字',x:200,y:120,width:80,height:40,fontSize:20}
   ]};
   const object=await grouped.fromNode(node);
-  assert.equal(object.lockScalingX,true);
-  assert.equal(object.lockScalingY,true);
+  assert.equal(object.lockScalingX,false);
+  assert.equal(object.lockScalingY,false);
   object.set({scaleX:1.5,scaleY:1.5});
-  assert.throws(()=>grouped.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true}),{code:'PHYSICAL_SIZE_LOCKED'});
-  assert.equal(node.children[0].width,40);
-  assert.equal(node.children[0].height,30);
+  grouped.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY});
+  assert.equal(node.children[0].width,60);
+  assert.equal(node.children[0].height,45);
+  assert.equal(node.children[0].manualVisualResize,true);
   assert.equal(node.children[0].assetID,'a');
-  assert.equal(node.children[1].width,80);
-  assert.equal(node.children[1].fontSize,20);
+  assert.equal(node.children[1].width,120);
+  assert.equal(node.children[1].fontSize,30);
 });
 
 test('a group containing a locked child cannot be transformed through Fabric',async()=>{
@@ -225,24 +242,26 @@ test('a group containing a locked child cannot be transformed through Fabric',as
   assert.equal(node.children[0].x,100);
 });
 
-test('Fabric material controls rotate without resizing its physical placement',async()=>{
+test('Fabric material corner resizes proportionally and rotates without changing source identity',async()=>{
   const image=createCanvas(40,20);
   const node={id:'material-locked-size',type:'material',assetID:'asset-1',x:120,y:100,
     width:200,height:80,rotation:0,opacity:1};
   const object=await createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()}).fromNode(node);
-  assert.equal(object.lockScalingX,true);
-  assert.equal(object.lockScalingY,true);
+  assert.equal(object.lockScalingX,false);
+  assert.equal(object.lockScalingY,false);
   assert.equal(object.controls.br.visible,true);
   assert.deepEqual(Object.keys(object.controls).sort(),['br']);
   const startScale=object.scaleX;
   assert.equal(object.controls.br.actionHandler({},
     {target:object,ex:220,ey:140,theta:0,scaleX:object.scaleX,scaleY:object.scaleY},230,170),true);
-  assert.equal(object.scaleX,startScale);
+  assert.ok(object.scaleX>startScale);
+  assert.equal(object.scaleX,object.scaleY);
   assert.ok(object.angle>3);
   bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
-  assert.equal(node.width,200);assert.equal(node.height,80);
+  assert.ok(node.width>200);assert.ok(node.height>80);
+  assert.ok(Math.abs(node.width/200-node.height/80)<1e-6);
   assert.ok(node.rotation>3);
-  assert.equal(node.manualVisualResize,undefined);
+  assert.equal(node.manualVisualResize,true);
   assert.equal(node.assetID,'asset-1');
 });
 

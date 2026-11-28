@@ -3,6 +3,13 @@
 import {clipMaterial} from './material-mask.js';
 import {sceneLayerStyle,applyVectorMask} from './scene-model.js';
 import {paintTapeStrip} from './tape-strip.js';
+export function materialImageBox(item,imageWidth,imageHeight){
+ const crop=item.cropRect||{width:1,height:1};
+ const sourceWidth=imageWidth*crop.width,sourceHeight=imageHeight*crop.height;
+ if(!(sourceWidth>0&&sourceHeight>0&&item.width>0&&item.height>0))throw Error('素材图像尺寸无效');
+ const scale=Math.min(item.width/sourceWidth,item.height/sourceHeight);
+ return {width:sourceWidth*scale,height:sourceHeight*scale,scale};
+}
 export function paintMaterialImage(ctx,item,image,{createCanvas}={}){
  const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
  if(!(w>0&&h>0))throw Error('素材图像尺寸无效');
@@ -12,7 +19,8 @@ export function paintMaterialImage(ctx,item,image,{createCanvas}={}){
   if(item.tapeStrip){paintTapeStrip(ctx,item,image,{createCanvas});return;}
   clipMaterial(ctx,item);
   const crop=item.cropRect||{x:0,y:0,width:1,height:1};
-  ctx.drawImage(image,crop.x*w,crop.y*h,crop.width*w,crop.height*h,-item.width/2,-item.height/2,item.width,item.height);
+  const box=materialImageBox(item,w,h);
+  ctx.drawImage(image,crop.x*w,crop.y*h,crop.width*w,crop.height*h,-box.width/2,-box.height/2,box.width,box.height);
  }finally{ctx.restore();}
 }
 export function materialPreviewKey(item){

@@ -35,7 +35,7 @@ export function configureFabricEditorFrame(fabric,object){
     return true;
   };
   const controls={},base=object.controls;
-  if(!object.lockScalingX&&!object.lockScalingY)
+  if(!object.lockScalingX&&!object.lockScalingY&&object.sceneType!=='material'&&!object.sceneContainsMaterial)
     for(const side of ['ml','mr','mt','mb'])controls[side]=new fabric.Control({
       ...base[side],render:edgeHandle(side==='mt'||side==='mb')});
   controls.br=new fabric.Control({...base.br,actionName:'rotate',

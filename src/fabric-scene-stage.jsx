@@ -701,8 +701,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             const angle=Math.atan2(next.y-lassoSelection.center.y,next.x-lassoSelection.center.x);
             let degrees=(angle-gesture.lastAngle)*180/Math.PI;
             if(degrees>180)degrees-=360;if(degrees< -180)degrees+=360;
-            const hasMaterial=lassoSelection.ids.some(id=>byID(callbacks.current.draft.layers,id)?.type==='material');
-            const ratio=hasMaterial?1:Math.max(.1,Math.min(10,distance/Math.max(1,gesture.lastDistance)));
+            const ratio=Math.max(.1,Math.min(10,distance/Math.max(1,gesture.lastDistance)));
             if(Math.abs(degrees)>.01||Math.abs(ratio-1)>.001){
               lassoSelection.angle+=degrees;lassoSelection.width*=ratio;lassoSelection.height*=ratio;
               gesture.lastAngle=angle;gesture.lastDistance=distance;gesture.moved=true;
@@ -747,9 +746,6 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             if(finished.moved){
               try{
                 const ratio=lassoSelection.width/finished.beforeFrame.width;
-                const materials=lassoSelection.ids.map(id=>byID(finished.draft.layers,id)).filter(n=>n?.type==='material');
-                if(materials.length&&Math.abs(ratio-1)>1e-6)
-                  throw Object.assign(Error('真实素材保持原始物理尺寸；可移动、旋转、裁剪或使用蒙版调整构图'),{code:'PHYSICAL_SIZE_LOCKED'});
                 finished.scenePreview.restore();
                 if(!transformSceneLasso(finished.draft,lassoSelection.ids,finished.beforeFrame.center,ratio,
                   lassoSelection.angle-finished.beforeFrame.angle,{to:lassoSelection.center,policy:USER_SCENE_POLICY}))throw Error('所选图层不能修改');

@@ -1074,9 +1074,19 @@ function updateEditorInspector(id,value){
   let changed=false;const values={};
   checkpoint();
   if(entry){
+    if(['inspector-material-width-mm','inspector-material-height-mm'].includes(id)&&entry.kind==='material'){
+      const mm=Number(value);
+      if(!(mm>.1&&mm<=1000))return;
+      values[id==='inspector-material-width-mm'?'width':'height']=mm*d.canvas.height/d.physicalPageHeightMM;
+      changed=true;
+    }else if(id==='inspector-material-scale'&&entry.kind==='material'){
+      const percent=Number(value),baseline=entry.value.generationBaseline||entry.value;
+      if(!(percent>=10&&percent<=1000&&baseline.width>0&&baseline.height>0))return;
+      values.width=baseline.width*percent/100;values.height=baseline.height*percent/100;
+      changed=true;
+    }else{
     const key=numeric[id];
     if(key){
-      if(entry.kind==='material'&&['width','height'].includes(key))return;
       if(!['text','shape','material'].includes(entry.kind))return;
       if(['fontSize','curveHeight','letterSpacing','lineSpacing','paragraphSpacing','fixedLineHeight'].includes(key)&&entry.kind!=='text')return;
       if(['lineWidth','fillOpacity','strokeOpacity'].includes(key)&&entry.kind!=='shape')return;
@@ -1120,6 +1130,7 @@ function updateEditorInspector(id,value){
       if(match[1]==='opacity'&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=1){layer.opacity=Number(value);changed=true;}
     }
     else return;
+    }
   }else if(id==='paper-color'&&color.test(value)){applyScenePagePatch(d,{paperColor:value},{policy:USER_SCENE_POLICY});changed=true;}
   else if(/^paper-color-(left|right)$/.test(id)&&d.pageMode==='spread'&&color.test(value)){
     const side=id.endsWith('left')?'left':'right';

@@ -4,6 +4,9 @@ import {itemFromAsset,project} from '../src/domain.js';
 import {manualTemplateChoices,applyManualTemplate} from '../src/template-start.js';
 import {paperColorFor} from '../src/paper-colors.js';
 import {executableJournalTemplates,journalTemplateComposition} from '../src/journal-template-composition.js';
+import {removeEditableScene} from '../src/scene-structure-edit.js';
+import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
+import {standbyMaterialRows} from '../src/material-standby.js';
 
 test('manual creation ranks real templates and preserves physical material sizes',async()=>{
   const draft=project('版式',{mode:'spread',ratio:'a4'}).drafts[0];
@@ -62,6 +65,30 @@ test('manual template initial draft parks an unfit final-required material',asyn
  assert.equal(result.placed,0);
  assert.equal(result.remaining,1);
  assert.ok(draft.layers.some(layer=>layer.assetID==='tiny'&&layer.isParked));
+});
+
+test('template commands use safe aliases for cloud asset IDs while retaining source identity',async()=>{
+ const draft=project('云端素材',{mode:'spread',ratio:'a4'}).drafts[0];
+ const asset={id:'cos/三格复古物品照片条:01',title:'照片条',kind:'photo',physicalWidthMM:37.1,physicalHeightMM:149.7};
+ const choice=manualTemplateChoices(draft,[asset],[asset.id],{requiredAssetIDs:[asset.id]})[0];
+ assert.ok(choice);
+ const result=await applyManualTemplate(draft,[asset],[asset.id],choice.id,
+  {requiredAssetIDs:[asset.id],choice});
+ assert.equal(result.placed+result.remaining,1);
+ assert.ok(draft.items.some(item=>item.assetID===asset.id));
+});
+
+test('deleting a placed required template source makes it available in standby',async()=>{
+ const draft=project('删除后备选',{mode:'spread',ratio:'a4'}).drafts[0];
+ const asset={id:'required-photo',title:'真实照片',kind:'photo',physicalWidthMM:45,physicalHeightMM:60};
+ const choice=manualTemplateChoices(draft,[asset],[asset.id],{requiredAssetIDs:[asset.id]})
+  .find(row=>row.plan.used.length);
+ assert.ok(choice);
+ await applyManualTemplate(draft,[asset],[asset.id],choice.id,{choice,requiredAssetIDs:[asset.id]});
+ const placed=draft.items.find(item=>item.assetID===asset.id&&!item.isParked);
+ assert.ok(placed);
+ removeEditableScene(draft,placed.id,{policy:USER_SCENE_POLICY});
+ assert.deepEqual(standbyMaterialRows(draft,[asset],[asset.id]).map(row=>row.asset.id),[asset.id]);
 });
 
 test('manual template keeps its generated page colors alongside the layers',async()=>{

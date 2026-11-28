@@ -3,7 +3,22 @@ import {currentTemplate,listCurrentTemplates,rankCurrentTemplates,compileCurrent
 
 const paperOf=draft=>({width:draft.canvas.width/draft.canvas.height*draft.physicalPageHeightMM,
   height:draft.physicalPageHeightMM});
-const selectedAssets=(assets,basket)=>basket.map(id=>assets.find(asset=>asset.id===id)).filter(Boolean);
+// Command assets are short aliases, not storage IDs. Cloud material IDs may
+// contain slashes or other characters that are illegal in operation schemas.
+const commandAlias=/^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const selectedAssets=(assets,basket)=>{
+ const selected=basket.map(id=>assets.find(asset=>asset.id===id)).filter(Boolean);
+ const reserved=new Set(selected.map(asset=>asset.id).filter(id=>commandAlias.test(id)));
+ return selected.map((asset,index)=>{
+  if(commandAlias.test(asset.id))return {...asset,alias:asset.id};
+  let alias=`material-${index+1}`;
+  while(reserved.has(alias))alias+='-source';
+  reserved.add(alias);
+  return {...asset,alias};
+ });
+};
+const aliasOf=asset=>asset.alias||asset.id;
+const requiredAliases=(selected,ids)=>ids.map(id=>selected.find(asset=>asset.id===id)?.alias).filter(Boolean);
 
 function leafChoice(match,side,paper){
  const offset=side==='right'?.5:0;
@@ -52,10 +67,10 @@ function rankManualChoices(draft,selected,mustUse){
    const [left]=rankCurrentTemplates({materials:selected,pageMode:'single',templateIds:[leftId],
     paper:leafPaper,limit:1,mustUse});
    if(!left)continue;
-   const available=selected.filter(asset=>!left.plan.used.includes(asset.id));
+   const available=selected.filter(asset=>!left.plan.used.includes(aliasOf(asset)));
    for(const rightId of singles){
     const [right]=rankCurrentTemplates({materials:available,pageMode:'single',templateIds:[rightId],
-     paper:leafPaper,limit:1,mustUse:mustUse.filter(id=>available.some(asset=>asset.id===id))});
+     paper:leafPaper,limit:1,mustUse:mustUse.filter(id=>available.some(asset=>aliasOf(asset)===id))});
     if(right)cross.push(pairChoice(left,right,paper));
    }
   }
@@ -71,7 +86,7 @@ function rankManualChoices(draft,selected,mustUse){
 
 export function manualTemplateChoices(draft,assets,basket,{requiredAssetIDs=[]}={}){
  const selected=selectedAssets(assets,basket),paper=paperOf(draft);
- const ranked=rankManualChoices(draft,selected,requiredAssetIDs.filter(id=>basket.includes(id)));
+ const ranked=rankManualChoices(draft,selected,requiredAliases(selected,requiredAssetIDs));
  return ranked.map(match=>({...match,selected,paper,missing:match.emptySlots,
   description:match.description||match.template.structure,
   reason:`${match.mode==='leaf'?'双页取单页 · ':match.mode==='pair'?'双单页组合 · ':''}匹配 ${Math.max(0,Math.round(match.score))} 分 · 已用 ${match.plan.used.length} 件素材 · 默认对象 ${match.emptySlots.length} 处`}));
@@ -129,7 +144,7 @@ export async function applyManualTemplate(draft,assets,basket,templateID,{requir
  if(!template&&!templateID?.startsWith('leaf:')&&!templateID?.startsWith('pair:'))
   throw Error('旧模板已下线匹配，请选择新模板');
  const selected=selectedAssets(assets,basket),paper=paperOf(draft);
- const mustUse=requiredAssetIDs.filter(id=>basket.includes(id));
+ const mustUse=requiredAliases(selected,requiredAssetIDs);
  let match=choice?.id===templateID?choice:null;
  if(!match&&template?.pageMode===draft.pageMode)
   [match]=rankCurrentTemplates({materials:selected,paper,pageMode:draft.pageMode,
@@ -141,7 +156,7 @@ export async function applyManualTemplate(draft,assets,basket,templateID,{requir
  const [{createCreationDocument},{applyCreationTransaction,creationSceneRevision}]=await Promise.all([
   import('./creation-document.js'),import('./creation-transaction.js')]);
  const document=await createCreationDocument({draft,assets:selected,
-  aliases:Object.fromEntries(selected.map(asset=>[asset.id,asset.id]))});
+  aliases:Object.fromEntries(selected.map(asset=>[aliasOf(asset),asset.id]))});
  const operations=match.mode==='leaf'?leafOperations(match,selected,mustUse,paper):
   match.mode==='pair'?pairOperations(match,selected,mustUse,paper):
   compiledFor(match,selected,mustUse,[paper.width,paper.height]);

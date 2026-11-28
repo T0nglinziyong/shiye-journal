@@ -21,8 +21,12 @@ export function confirmSceneCapability(nodes,capability){
 export function assertSceneCapability(policy,capability,nodes,confirmation){
  requireScenePolicy(policy);
  const materials=nodes.filter(node=>node.type==='material');if(!materials.length)return;
- if(capability==='material.visualResize')
-  throw Object.assign(Error('真实素材保持原始物理尺寸；可移动、旋转、裁剪或使用蒙版调整构图'),{code:'PHYSICAL_SIZE_LOCKED',capability,targets:materials.map(n=>n.id)});
+ if(capability==='material.visualResize'){
+  // A person's direct canvas or inspector gesture changes only this draft's
+  // visual box. It never edits the library's measured physical dimensions.
+  if(policy.actor==='user')return;
+  throw Object.assign(Error('自动创作不能改变真实素材尺寸'),{code:'PHYSICAL_SIZE_LOCKED',capability,targets:materials.map(n=>n.id)});
+ }
  const grant=grants.get(confirmation);
  if(policy.actor!=='user'||grant?.capability!==capability||materials.some(node=>grant.targets.get(node.id)!==sourceState(node)))
   throw Object.assign(Error(capability==='material.visualCopy'?'复制实体素材的视觉参考需要人工确认，不能增加实体库存':'修改素材几何需要本次人工确认'),{code:'EDIT_CONFIRMATION_REQUIRED',capability,targets:materials.map(n=>n.id)});

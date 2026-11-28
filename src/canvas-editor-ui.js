@@ -1,5 +1,6 @@
 import {mountLiveInkStroke} from './ink-live-svg.js';
 import {materialKinds} from './material-taxonomy.js';
+import {standbyMaterialRows} from './material-standby.js';
 import {configureInkBacking} from './ink-raster-scale.js';
 import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
@@ -291,11 +292,12 @@ export function mountCanvasEditor(c){
     const show=()=>{
       controls.hidden=tab!=='all';
       const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,status,sortBasis,sortOrder,
-        d.items.map(i=>[i.id,i.assetID,!!i.isParked,i.cropRect,i.materialMask,i.splitPartIndex]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
+        d.items.map(i=>[i.id,i.assetID,!!i.isParked,i.cropRect,i.materialMask,i.splitPartIndex]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt]),state.activeProject?.requiredAssetIDs||[]]);
       let rows=pickerRows.get(key);
       if(!rows){
         let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
-          :tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :tab==='standby'?standbyMaterialRows(d,state.assets,state.activeProject?.requiredAssetIDs||[])
+            .map(({asset:a,item})=>({a,item}))
           :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)&&
             (status==='all'||(status==='preset'?a.isCreativePreset:status==='ready'?a.reviewStatus==='ready'&&!a.isCreativePreset:status==='pendingReview'?a.reviewStatus!=='ready'&&!a.isCreativePreset:
             status==='used'?a.usageStatus==='used':status==='unused'?a.usageStatus!=='used'&&!a.isCreativePreset:

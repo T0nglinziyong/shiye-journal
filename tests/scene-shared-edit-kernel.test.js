@@ -57,28 +57,32 @@ test('manual takeover is explicit policy, AI cannot modify a manually changed ma
  assert.throws(()=>applySceneNodeChange(d,'text',{content:'overwrite'}),{code:'MANUAL_EDIT_PROTECTED'});
  assert.equal(JSON.stringify(d),before);applySceneNodeChange(d,'text',{content:'用户继续修改'},user);assert.equal(node.content,'用户继续修改');
 });
-test('physical material size remains locked even with a forged resize grant',()=>{
+test('user resizing changes only the draft while AI cannot claim that permission',()=>{
  const item=material(),d=page([item]),before=JSON.stringify(d);
  assert.throws(()=>confirmSceneCapability([item],'material.visualResize'),/未知人工确认能力/);
  const confirmation={capability:'material.visualResize'};
- for(const options of [{},{...user},{...user,confirmation}]){
-  assert.throws(()=>applySceneNodeChange(d,'paper',{size:{width:25,height:30,unit:'mm'}},options),{code:'PHYSICAL_SIZE_LOCKED'});
-  assert.equal(JSON.stringify(d),before);
- }
- assert.throws(()=>applySceneNodePatch(d,'paper',{width:110},{...user,confirmation}),{code:'PHYSICAL_SIZE_LOCKED'});
+ assert.throws(()=>applySceneNodeChange(d,'paper',{size:{width:25,height:30,unit:'mm'}}),{code:'PHYSICAL_SIZE_LOCKED'});
+ assert.equal(JSON.stringify(d),before);
+ applySceneNodeChange(d,'paper',{size:{width:25,height:30,unit:'mm'}},user);
+ assert.equal(item.manualVisualResize,true);
+ assert.ok(item.userOverrideFlags.includes('resized'));
+ assert.equal(item.width,100);assert.equal(item.height,120);
  assert.equal(item.sourceBlobId,'immutable-source');assert.equal(item.materialUnitIndex,0);
 });
-test('a forged resize confirmation cannot authorize another target or source revision',()=>{
+test('forged user policy cannot authorize a visual resize',()=>{
  const a=material('a'),b=material('b'),d=page([a,b]),confirmation={capability:'material.visualResize'};
- assert.throws(()=>applySceneNodePatch(d,'b',{width:100},{...user,confirmation}),{code:'PHYSICAL_SIZE_LOCKED'});
- a.sourceBlobId='new-revision';assert.throws(()=>applySceneNodePatch(d,'a',{width:100},{...user,confirmation}),{code:'PHYSICAL_SIZE_LOCKED'});
+ assert.throws(()=>applySceneNodePatch(d,'b',{width:100},{policy:{actor:'user'},confirmation}),{code:'EDIT_POLICY_INVALID'});
+ assert.equal(b.width,60);
 });
-test('Fabric rejects a physical resize without changing Scene bookkeeping',async()=>{
+test('Fabric user gesture records visual resize without changing material source',async()=>{
  const d=page([material()]),bridge=createFabricSceneBridge(fabric,{assetURL:()=>null});
  // Fabric object pose is independent from the source image loading.
  const object=new fabric.Rect({left:200,top:200,width:60,height:80,originX:'center',originY:'center'});
  Object.assign(object,{sceneID:'paper',sceneType:'material'});object.set({scaleX:1.5});
- const before=JSON.stringify(d);assert.throws(()=>bridge.applyObject(d,object,{...user,confirm:()=>false}),{code:'PHYSICAL_SIZE_LOCKED'});assert.equal(JSON.stringify(d),before);
+ bridge.applyObject(d,object,user);
+ assert.equal(d.layers[0].width,90);assert.equal(d.layers[0].height,80);
+ assert.equal(d.layers[0].manualVisualResize,true);
+ assert.equal(d.layers[0].sourceBlobId,'immutable-source');
 });
 test('Fabric content reflow matches the shared text update after serialization',async()=>{
  const source=text(),d=page([source]),bridge=createFabricSceneBridge(fabric),object=await bridge.fromNode(source);
@@ -88,9 +92,9 @@ test('Fabric content reflow matches the shared text update after serialization',
  for(const key of ['content','width','height','fontSize','textLayout','fixedLineHeight'])assert.deepEqual(source[key],direct.layers[0][key],key);
  const reopened=JSON.parse(JSON.stringify(d));applySceneNodePatch(reopened,'text',{fontSize:30},user);assert.equal(reopened.layers[0].fixedLineHeight,42);
 });
-test('mixed multi-node transaction rolls back earlier text reflow when a later material is denied',()=>{
+test('mixed AI transaction rolls back text reflow when a later material resize is denied',()=>{
  const d=page([text(),material()]),before=JSON.stringify(d),original=d.layers[0];
- assert.throws(()=>applyScenePatchBatch(d,[{id:'text',values:{fontSize:45}},{id:'paper',values:{width:200}}],user),{code:'PHYSICAL_SIZE_LOCKED'});
+ assert.throws(()=>applyScenePatchBatch(d,[{id:'text',values:{fontSize:45}},{id:'paper',values:{width:200}}]),{code:'PHYSICAL_SIZE_LOCKED'});
  assert.equal(JSON.stringify(d),before);assert.equal(d.layers[0],original);
 });
 test('node and ancestor locks apply equally to manual and AI; only user may unlock the node',()=>{
