@@ -124,27 +124,38 @@ export function materialTemplateProfile(asset){
    kind==='sticker'&&asset.kindDetail==='sticker.subject'?'die-cut':'rect'),mainColor,subjectTags};
 }
 
-export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6}={}){
+export function rankCurrentTemplates({materials=[],pageMode,paper,limit=6,mustUse=[]}={}){
  const profiles=materials.map(materialTemplateProfile).filter(a=>a.alias&&a.physicalWidthMM>0&&a.physicalHeightMM>0);
  const candidates=entries.filter(t=>!pageMode||t.pageMode===pageMode);
  return candidates.map(template=>{
   let plan;
-  if(single.has(template.id))plan=matchMaterialsToTemplates(profiles,{templateIds:[template.id]})[0];
-  else if(six.has(template.id))plan=matchSixSpreadMaterials(template.id,profiles);
-  else plan=matchThreeLayoutSpread(template.id,profiles);
+  if(single.has(template.id))plan=matchMaterialsToTemplates(profiles,{templateIds:[template.id],mustUse})[0];
+  else if(six.has(template.id))plan=matchSixSpreadMaterials(template.id,profiles,{mustUse});
+  else plan=matchThreeLayoutSpread(template.id,profiles,{mustUse});
   const used=plan.used||[],assignments=plan.assignments.filter(a=>a.asset).map(a=>({alias:a.asset,slotId:a.slot}));
   const criticalMissing=(plan.missingCritical||plan.missingPhotos||[]).length;
-  const fit=single.has(template.id)?plan.score:six.has(template.id)?plan.score:
-    assignments.length/Math.max(1,plan.assignments.length);
-  const score=round(100*(fit*.55+Math.min(used.length,5)/5*.45)-criticalMissing*15);
+  const fit=plan.score;
+  const score=round(100*(fit*.85+Math.min(used.length,5)/5*.15)-criticalMissing*8);
   return {id:template.id,title:template.title,template,plan,score,assignments,
     emptySlots:plan.assignments.filter(a=>!a.asset).map(a=>a.slot),unused:profiles.map(a=>a.alias).filter(id=>!used.includes(id))};
  }).sort((a,b)=>b.score-a.score||b.assignments.length-a.assignments.length||a.id.localeCompare(b.id)).slice(0,limit);
 }
 
-export function compileCurrentTemplate({templateId,assets=[],bindings={},texts={},palette={},slotValues={}}={}){
+export function compileCurrentTemplate({templateId,assets=[],bindings={},texts={},palette={},slotValues={},plan,mustUse=[]}={}){
  if(!byId.has(templateId))throw new RangeError(`不是已上线的新模板：${templateId}`);
- return compileTemplateDraft({templateId,assets:assets.map(materialTemplateProfile),bindings,texts,palette,slotValues});
+ const profiles=assets.map(materialTemplateProfile);
+ const matched=plan||(single.has(templateId)?matchMaterialsToTemplates(profiles,{templateIds:[templateId],bindings,mustUse})[0]:
+  six.has(templateId)?matchSixSpreadMaterials(templateId,profiles,{overrides:bindings,mustUse}):matchThreeLayoutSpread(templateId,profiles,{bindings,mustUse}));
+ const result=compileTemplateDraft({templateId,assets:profiles,bindings,texts,palette,slotValues,plan:matched});
+ // An initial template draft may leave even a final-required material unused.
+ // Keep every unused source as an editable candidate instead of losing it.
+ const used=new Set(matched.used||[]);
+ const parked=profiles.filter(profile=>profile.alias&&profile.usage!=='calibration-only'&&!used.has(profile.alias))
+  .map((profile,index)=>({
+  op:'material.add',id:`template-candidate-${index+1}`,asset:profile.alias,
+  place:{reference:'page',at:[.5,.5],unit:'ratio',surface:'tray'}
+ }));
+ return {...result,operations:[...result.operations,...parked]};
 }
 
 export function currentTemplateMaterialScores(candidates=[]){

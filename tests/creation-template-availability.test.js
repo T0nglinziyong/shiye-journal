@@ -46,3 +46,15 @@ test('active template recipe compiles from the same measured source as the templ
  assert.ok(compiled.operations.some(operation=>operation.op==='text.add'&&operation.content==='今天'));
  assert.equal(compiled.operations.some(operation=>operation.op==='material.add'),false);
 });
+
+test('active template recipe keeps an unfit required asset in the candidate tray',async()=>{
+ const {draft}=await import('../src/domain.js');
+ const {createCreationDocument}=await import('../src/creation-document.js');
+ const asset={id:'tiny',title:'小纸片',kind:'paper',physicalWidthMM:5,physicalHeightMM:5};
+ const document=await createCreationDocument({draft:draft({mode:'spread',ratio:'custom:125x176'}),
+  assets:[asset],aliases:{m1:'tiny'},requiredAssetIDs:['tiny']});
+ const compiled=compileLibraryRecipe(document,{kind:'template',recipeId:'XHS-海岛排版',
+  parameters:{reference:'page',bindings:[]}});
+ assert.deepEqual(compiled.operations.filter(operation=>operation.asset==='m1')
+  .map(operation=>operation.place?.surface),['tray']);
+});

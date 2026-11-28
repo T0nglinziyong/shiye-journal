@@ -33,11 +33,18 @@ export function libraryContext(document,reference='page'){
  const materials=document.source.materials.filter(m=>!placed.has(m.alias)).map(m=>({alias:m.alias,...assetFromSourceSnapshot(document.source.sourceSnapshots.find(s=>s.assetID===m.assetID),{frozenRevision:true})}));
  return {paper:{width:leaf?width/2:width,height},materials,nodes,reference,styles:document.source.styles||[]};
 }
+function requiredAliases(document,materials){
+ const required=new Set(document.source.requiredAssetIDs||[]);
+ const available=new Set(materials.map(material=>material.alias));
+ return (document.source.materials||[]).filter(material=>required.has(material.assetID)&&available.has(material.alias))
+  .map(material=>material.alias);
+}
 export function matchLibraryTemplates(document,{aliases,reference='page',limit=5}={}){
  const context=libraryContext(document,reference);
  if(aliases){if(new Set(aliases).size!==aliases.length||aliases.some(a=>!context.materials.some(m=>m.alias===a)))throw Error('素材已放置或不在本次授权范围');context.materials=context.materials.filter(m=>aliases.includes(m.alias));}
  return rankCurrentTemplates({materials:context.materials,pageMode:document.page.pageMode,
-  paper:context.paper,limit}).map(({template,plan,...row})=>({...row,reference,paper:context.paper}));
+  paper:context.paper,limit,mustUse:requiredAliases(document,context.materials)})
+  .map(({template,plan,...row})=>({...row,reference,paper:context.paper}));
 }
 const normalized=value=>String(value||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
 const similar=(a,b)=>normalized(a).includes(normalized(b))||normalized(b).includes(normalized(a));
@@ -55,7 +62,8 @@ export function searchLibraryReferences(document,{query='',kind='all',styles=[],
  const context=libraryContext(document,reference),results=[];
  if(!['all','templates','techniques','cases'].includes(kind))throw Error('未知参考类型');
  const rankedCurrent=includeTemplates&&['all','templates'].includes(kind)?
-  rankCurrentTemplates({materials:context.materials,pageMode:document.page.pageMode,limit:14}):[];
+  rankCurrentTemplates({materials:context.materials,pageMode:document.page.pageMode,limit:14,
+   mustUse:requiredAliases(document,context.materials)}):[];
  if(includeTemplates&&['all','templates'].includes(kind))for(const template of listCurrentTemplates().filter(t=>t.pageMode===document.page.pageMode)){
   if(styles.length&&!styles.some(style=>template.styles.some(value=>normalized(value).includes(normalized(style))||normalized(style).includes(normalized(value)))))continue;
   if(content.length&&!content.some(term=>template.purposes.some(value=>normalized(value).includes(normalized(term))||normalized(term).includes(normalized(value)))))continue;
@@ -129,6 +137,7 @@ export function compileLibraryRecipe(document,{kind,recipeId,parameters}){
   const context=libraryContext(document,parameters.reference||'page');
   if(currentTemplate(recipeId).pageMode!==document.page.pageMode)throw Error('模板与单页／双页模式不一致');
   return compileCurrentTemplate({templateId:recipeId,assets:context.materials,
+   mustUse:requiredAliases(document,context.materials),
    bindings:Object.fromEntries((parameters.bindings||[]).map(({slotId,alias})=>[slotId,alias])),
    slotValues:Object.fromEntries((parameters.bindings||[]).map(({slotId})=>[slotId,{fit:'none'}])),
    texts:parameters.texts||{},palette:parameters.colors||{}});

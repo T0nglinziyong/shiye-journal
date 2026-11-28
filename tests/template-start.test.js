@@ -48,3 +48,13 @@ test('template element view uses the exact layout passed to the creation tool',(
   assert.equal(active.type,'new');
   assert.ok(active.elements.some(element=>element.must.length&&element.prefer.length));
 });
+
+test('manual template initial draft parks an unfit final-required material',async()=>{
+ const draft=project('待放素材',{mode:'spread',ratio:'a4'}).drafts[0];
+ const asset={id:'tiny',title:'小纸片',kind:'paper',physicalWidthMM:5,physicalHeightMM:5};
+ const result=await applyManualTemplate(draft,[asset],['tiny'],'S01-苹果绿白',
+  {requiredAssetIDs:['tiny']});
+ assert.equal(result.placed,0);
+ assert.equal(result.remaining,1);
+ assert.ok(draft.layers.some(layer=>layer.assetID==='tiny'&&layer.isParked));
+});

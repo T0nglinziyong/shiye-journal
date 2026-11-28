@@ -2434,17 +2434,21 @@ async function createFromBasket(templateID=null){
   const p=createMatchingProject(false),draft=p.drafts[0];
   let result=null;
   if(templateID==='stage')result=applyMatchingStage(draft,state.assets,state.basket,state.matchPlacements);
-  else if(templateID)result=await applyManualTemplate(draft,state.assets,state.basket,templateID);
+  else if(templateID)result=await applyManualTemplate(draft,state.assets,state.basket,templateID,
+    {requiredAssetIDs:p.requiredAssetIDs});
   else draft.items=[];
   await db.stageProject(p);
   state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool='select';
   await matchingSession.persist();route('editor');
-  if(result?.remaining)toast(`已预排版 ${result.placed} 件；其余 ${result.remaining} 件可在画布中手动添加`);
+  if(result?.remaining)toast(templateID&&templateID!=='stage'
+    ?`已预排版 ${result.placed} 件；其余 ${result.remaining} 件已进入待放区，可继续摆放`
+    :`已预排版 ${result.placed} 件；其余 ${result.remaining} 件可在画布中手动添加`);
 }
 function openManualCreationDialog(){
   captureMatchingDirection();
-  const draft=createMatchingProject(false).drafts[0];
-  const choices=manualTemplateChoices(draft,state.assets,state.basket,{styles:state.matchStyles,purposes:state.matchPurposes});
+  const matchingProject=createMatchingProject(false),draft=matchingProject.drafts[0];
+  const choices=manualTemplateChoices(draft,state.assets,state.basket,
+    {requiredAssetIDs:matchingProject.requiredAssetIDs});
   openOverlay(createElement(ManualLayoutDialog,{choices,source:image,onClose:closeOverlay,onChoose:id=>createFromBasket(id)}));
 }
 function openMaterialPicker(){

@@ -1,6 +1,7 @@
 import {resolveMeasuredCaseGraph,measuredOperations} from './measured-case-templates.js';
 import {resolveD146Graph,D146_PAGE_MM,D146_REFERENCE_PX} from './d146-template-graph.js';
 import {compileTemplateDraft} from './template-draft.js';
+import {solveTemplateAssignments} from './unified-template-matcher.js';
 
 const TEMPLATES=['D143','D146','D153','D158','D162'];
 const MATERIAL_SLOTS={
@@ -37,6 +38,7 @@ const LAYER_RELATIONS={
 const DARK_BACKINGS=new Set(['D143/dark-stripe','D146/dark-top','D146/dark-bottom','D153/gray-paper']);
 const SLOT_ACCEPTS={'D162/clip':['clip']};
 const DIE_CUT_SLOTS=new Set(['D143/girl-head','D143/telephone-girl','D153/banner-girl','D158/manga-girl','D162/bear-monday']);
+const SINGLE_SCORE=Object.freeze({role:.53,size:.32,position:.08,figure:.07,cropPenalty:.08,minimum:.38,defaultScore:.37});
 const SLOT_PURPOSE={
  D143:{'dark-stripe':'中下部文字与素材的深色承载面','orange-clip':'上部压住纸边的小连接件','girl-head':'上方局部人物或异形装饰','yellow-label':'侧边短句或数字标签','blue-loop':'下部横向连接带','orange-loop':'底部第二条色彩连接带','telephone-girl':'下部不规则视觉主体'},
  D146:{'dark-top':'顶部深色底纸','dark-bottom':'底部深色底纸','yellow-top':'上方亮色纸角','main-paper':'纵贯版面的书写主体','gray-dot-paper':'左下局部纹样与主纸形成穿插','bottom-writing':'下方问答的书写纸','yellow-number-bar':'大数字后方的封闭色块','stamp-material':'右下印花卡或内容贴纸','top-clip':'上方压住纸角的夹子'},
@@ -160,31 +162,54 @@ function scoreCandidate(asset,slot,pageMm,{templateId,zones}){
  const identity=asset.visualRoles.includes('figure')&&slot.role==='figure'?1:0;
  const collision=textCollisionPenalty(asset,slot,p,zones);
  if(collision.maxRatio>.48)return null;
- const score=.53*semantic+.32*p.sizeScore+.08*Math.max(0,1-p.shift/12)+.07*identity-(p.method==='crop'?.08:0)-collision.penalty;
- if(score<.38)return null;
+ const score=SINGLE_SCORE.role*semantic+SINGLE_SCORE.size*p.sizeScore+SINGLE_SCORE.position*Math.max(0,1-p.shift/12)+SINGLE_SCORE.figure*identity-(p.method==='crop'?SINGLE_SCORE.cropPenalty:0)-collision.penalty;
+ if(score<SINGLE_SCORE.minimum)return null;
  return {...p,sourcePhysicalSizeMm:mm(asset),score:round(score),asset:id(asset),reason:`${slot.role} ← ${asset.visualRoles.join('/')}; ${slot.id==='title-tape'?'原长条切成两段':p.method==='complete'?'完整保留':'只裁重复纹样'}`};
 }
 
-export function matchMaterialsToTemplates(profiles,{templateIds=TEMPLATES,beamWidth=64}={}){
+export function scoreSingleTemplateSlot(templateId,slotId,asset){
+ const template=describeTemplateObjects(templateId);
+ if(!template.materialSlots.includes(slotId))return null;
+ const slot=template.objects.find(object=>object.id===slotId);
+ return scoreCandidate(asset,slot,template.pageMm,{templateId,zones:textZones(templateId)});
+}
+
+export function describeSingleSlotMatch(templateId,slotId){
+ const data=describeTemplateObjects(templateId),slot=data.objects.find(item=>item.id===slotId);
+ if(!slot)throw new RangeError(`未知槽位：${slotId}`);
+ const gates=[{field:'visualRoles',rule:'containsOneOf',value:slot.accepts},
+  {field:'physicalSizeMm',rule:'nativeSizeWithinPage',value:data.pageMm},
+  {field:'visualSizeRatio',rule:'range',value:[.38,slot.role==='figure'?1.85:['writing-card','date-card'].includes(slot.role)?1.4:['connector','edge-accent'].includes(slot.role)?2.15:1.75]},
+  {field:'positionShiftMm',rule:'atMost',value:12}];
+ if(templateId==='D146'&&!['stamp-material','top-clip'].includes(slotId))gates.push({field:'kind',rule:'equals',value:'paper'});
+ if(DIE_CUT_SLOTS.has(`${templateId}/${slotId}`))gates.push({field:'shape',rule:'equals',value:'die-cut'});
+ if(DARK_BACKINGS.has(`${templateId}/${slotId}`))gates.push({field:'mainColor.lightness',rule:'atMost',value:.34});
+ if(slot.role==='date-card')gates.push({field:'writableAreaRatio',rule:'atLeast',value:.45});
+ if(['writing-card','date-card','writing-field','lower-writing-field'].includes(slot.role))gates.push({field:'writableAreaRatio',rule:'atLeast',value:.3,when:'visualRoles includes writing-card'});
+ if(slotId==='title-tape')gates.push({field:'preservation',rule:'equals',value:'splittable'},
+  {field:'physicalSizeMm',rule:'minimumEitherOrientation',value:[[42,19],[7,32]]});
+ if(slotId==='yellow-label'&&templateId==='D143')gates.push({field:'writableAreaRatio',rule:'atLeast',value:.25});
+ gates.push({field:'textOverlapRatio',rule:'atMost',value:.48,when:'visualRoles includes figure or photo'});
+ return {targetMm:slot.target.sizeMm,acceptedRoles:slot.accepts,slotWeight:slot.weight,
+  gates,score:{...SINGLE_SCORE,rolePriority:[1,.78,.62,.5],sizeFit:'exp(-0.55 × (|ln(widthRatio)| + |ln(heightRatio)|))',positionFit:'max(0, 1 - shiftMm / 12)',textCollisionPenalty:'0–0.4'},
+  fallback:{method:'generated',score:SINGLE_SCORE.defaultScore},cropPolicy:slot.cropPolicy};
+}
+
+export function matchMaterialsToTemplates(profiles,{templateIds=TEMPLATES,beamWidth=64,bindings={},mustUse=[]}={}){
  if(!Array.isArray(profiles))throw new TypeError('素材画像必须是数组');
  profiles.forEach(validateMaterialProfile);
  const duplicate=new Set();for(const p of profiles){if(duplicate.has(id(p)))throw new RangeError(`素材 ID 重复：${id(p)}`);duplicate.add(id(p));}
  return templateIds.map(templateId=>{
- const template=describeTemplateObjects(templateId),slots=template.materialSlots.map(name=>template.objects.find(o=>o.id===name));
-  const zones=textZones(templateId);
-  let beam=[{score:0,used:[],assignments:[]}];
-  for(const slot of slots){
-   const candidates=profiles.map(p=>scoreCandidate(p,slot,template.pageMm,{templateId,zones})).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,12);
-   const fallback={asset:null,method:'generated',score:.37,reason:'使用模板可编辑默认对象',centerMm:slot.target.centerMm,shiftMm:[0,0]};
-   beam=beam.flatMap(state=>[fallback,...candidates.filter(c=>!state.used.includes(c.asset))].map(c=>({
-    score:state.score+(c.score+(c.asset?state.used.reduce((sum,used)=>sum+harmony(profiles.find(p=>id(p)===used),profiles.find(p=>id(p)===c.asset)),0):0))*slot.weight,
-    used:c.asset?[...state.used,c.asset]:state.used,
-    assignments:[...state.assignments,{slot:slot.id,...c}]
-   }))).sort((a,b)=>b.score-a.score||b.used.length-a.used.length).slice(0,beamWidth);
-  }
-  const best=beam[0],denom=slots.reduce((n,s)=>n+s.weight,0);
-  return {templateId,score:round(best.score/denom),used:best.used,assignments:best.assignments,
-   unused:profiles.map(id).filter(x=>!best.used.includes(x)),template};
+  const template=describeTemplateObjects(templateId),zones=textZones(templateId),[pw,ph]=template.pageMm;
+  const slots=template.materialSlots.map(name=>{
+   const object=template.objects.find(o=>o.id===name),[w,h]=object.target.sizeMm,[cx,cy]=object.target.centerMm;
+   return {id:name,role:object.role,page:'single',box:[(cx-w/2)/pw,(cy-h/2)/ph,w/pw,h/ph],
+    sizeMm:[w,h],weight:object.weight||1,preferredColor:object.defaultValue?.color||null,
+    splitKind:object.accepts.some(role=>['plain-paper','pattern-paper','writing-card'].includes(role))&&
+     !['date-card','scene-card','label','numeral-backing','accent-card-content'].includes(object.role)?'paper':null,original:object};
+  });
+  return {...solveTemplateAssignments({templateId,slots,assets:profiles,beamWidth,bindings,mustUse,
+   defaultScore:SINGLE_SCORE.defaultScore,scoreCandidate:(asset,slot)=>scoreCandidate(asset,slot.original,template.pageMm,{templateId,zones})}),template};
  }).sort((a,b)=>b.score-a.score||b.used.length-a.used.length||a.templateId.localeCompare(b.templateId));
 }
 
@@ -201,6 +226,6 @@ export function compileMatchedTemplate(plan,assets){
  // default unless a dedicated splittable asset was actually selected.
  if(plan.templateId==='D162')slotValues['gingham-tape']={generated:true};
  const selected=assets.filter(a=>plan.used.includes(id(a)));
- const draft=compileTemplateDraft({templateId:plan.templateId,assets:selected,bindings,slotValues,layout});
+ const draft=compileTemplateDraft({templateId:plan.templateId,assets:selected,bindings,slotValues,layout,plan});
  return {...draft,matching:{score:plan.score,assignments:plan.assignments,unused:plan.unused}};
 }
